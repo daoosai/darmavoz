@@ -1,78 +1,93 @@
-# Архитектура проекта "Дармавоз.рф" (Core API)
+# Архитектура бэкенда "Дармавоз" (Core API)
 
-## 1. Общая структура проекта (Monorepo)
-Проект использует подход монорепозитория. Бэкенд и Фронтенд изолированы, но находятся в едином пространстве для удобства CI/CD и контекста ИИ.
+Этот файл является единым источником истины (Source of Truth) для структуры и конфигурации серверной части проекта.
 
-/ (Корень репозитория)
-├── /backend                  # Серверная часть (Python, FastAPI)
-│   ├── /app
-│   │   ├── /api              # Эндпоинты (роуты) API
-│   │   ├── /core             # Настройки, конфигурация, безопасность
-│   │   ├── /db               # Подключение к БД и миграции (Alembic)
-│   │   ├── /models           # ORM модели базы данных
-│   │   ├── /schemas          # Pydantic схемы валидации
-│   │   └── /services         # Бизнес-логика, ИИ-модуль, интеграция Avito/MAX
-│   ├── Dockerfile
-│   ├── requirements.txt
-│   └── main.py
-│
-├── /frontend                 # Клиентская часть (React, TypeScript, Vite)
-│   ├── /public               # Статические ассеты (иконки, картинки)
-│   ├── /src
-│   │   ├── /components       # Общие UI компоненты (кнопки, карточки)
-│   │   ├── /pages            # Страницы (Панель логиста, Аналитика)
-│   │   ├── /services         # Запросы к Backend API (axios/fetch)
-│   │   ├── /store            # Управление состоянием (Zustand/Redux)
-│   │   ├── App.tsx           # Главный компонент фронтенда
-│   │   └── main.tsx          # Точка входа
-│   ├── Dockerfile
-│   ├── package.json
-│   └── vite.config.ts
-│
-├── .github/workflows/        # CI/CD Пайплайны (Автодеплой)
-├── docker-compose.yml        # Оркестрация контейнеров (Бэк + Фронт + БД)
-├── architecture.md           # Этот файл (архитектура и БД)
-├── flows.md                  # Описание бизнес-сценариев
-└── README.md                 # Общая инструкция по запуску
-## 2. Структура Базы Данных (PostgreSQL)
+## 1. Структура проекта
 
-Таблица: clients (Клиенты)
-- id (UUID, PK)
-- name (String)
-- phone (String)
-- source (String) # Например: 'avito'
+Бэкенд построен на базе **FastAPI** с асинхронным драйвером для БД.
 
-Таблица: drivers (Водители)
-- id (UUID, PK)
-- name (String)
-- phone (String)
-- status (Enum: online, free, busy, offline)
-- max_integration_id (String) # ID в системе MAX
+```text
+/ (Корень проекта)
+├── alembic/                  # Миграции базы данных (скрипты и настройки)
+├── app/
+│   ├── api/                  # Эндпоинты (роутеры): auth.py, admin.py
+│   ├── core/                 # Базовая конфигурация (config.py)
+│   ├── db/                   # База данных: подключение (database.py), посев данных (seed.py)
+│   ├── models/               # SQLAlchemy 2.0 ORM модели (models.py)
+│   ├── schemas/              # Pydantic схемы для валидации данных (token.py)
+│   ├── security/             # Логика безопасности: JWT, хеширование (auth.py, jwt.py)
+│   └── services/             # Бизнес-логика приложения
+├── .env                      # [LOCAL] Переменные окружения (gitignored)
+├── .gitignore                # Настройки исключений Git
+├── alembic.ini               # Конфигурация Alembic
+├── architecture.md           # Этот файл (Source of Truth)
+├── docker-compose.yml        # Оркестрация контейнеров (Backend, DB, Redis)
+├── Dockerfile                # Сборка образа приложения
+├── main.py                   # Точка входа в FastAPI приложение
+└── requirements.txt          # Список зависимостей Python
+```
 
-Таблица: orders (Заказы)
-- id (UUID, PK)
-- client_id (UUID, FK)
-- material (String) # Сыпучий материал
-- volume (Float)    # Объем
-- address (String)  # Адрес доставки
-- status (Enum: new, processing, assigning, accepted, in_progress, done, canceled)
-- assigned_driver_id (UUID, FK)
-- created_at (DateTime)
+> **Важно:** Папка `postgres_data/` и файл `.env` используются только в локальной среде разработки и добавлены в `.gitignore`. Они не должны попадать в систему контроля версий.
 
-Таблица: order_offers (Предложения заказов водителям)
-- id (UUID, PK)
-- order_id (UUID, FK)
-- driver_id (UUID, FK)
-- status (Enum: pending, accepted, rejected, timeout)
-- expires_at (DateTime) # Таймер ответа
+## 2. Инфраструктура (Docker)
 
-Таблица: event_logs (Журнал событий)
-- id (UUID, PK)
-- order_id (UUID, FK)
-- event_type (String) # Например: order_created, driver_assigned
-- description (Text)
-- created_at (DateTime)
+Проект разворачивается через `docker-compose.yml` и включает три основных сервиса:
 
-## 3. Хранение файлов
-- Временные файлы (парсинг логов/чеков): Локально в контейнере `/tmp/darmavoz_media`
-- Постоянное хранилище (аватары, документы, бэкапы БД): Внешнее S3-хранилище (MinIO/AWS S3). В БД хранятся только ссылки (URL) на файлы.
+- **backend**: Приложение на Python 3.11-slim. Запускается через `uvicorn`. Зависит от `db` и `redis`.
+- **db**: Реляционная база данных **PostgreSQL 15-alpine**.
+- **redis**: Хранилище данных в памяти **Redis 7-alpine** (используется для кэширования и брокера задач).
+
+## 3. Схема базы данных (PostgreSQL)
+
+Схема реализована с использованием SQLAlchemy 2.0 (Mapped/mapped_column).
+
+### Таблица: roles (Роли)
+- `id` (Integer, PK)
+- `name` (String: admin, logist, manager)
+- `description` (String, nullable)
+
+### Таблица: users (Пользователи)
+- `id` (Integer, PK)
+- `username` (String, unique, index)
+- `hashed_password` (String)
+- `role_id` (Integer, FK -> roles.id)
+- `is_active` (Boolean, default: True)
+
+### Таблица: clients (Клиенты)
+- `id` (Integer, PK)
+- `name` (String)
+- `phone` (String, unique, index)
+
+### Таблица: drivers (Водители)
+- `id` (Integer, PK)
+- `name` (String)
+- `phone` (String, unique, index)
+- `status` (String, nullable)
+
+### Таблица: orders (Заказы)
+- `id` (Integer, PK)
+- `client_id` (Integer, FK -> clients.id)
+- `driver_id` (Integer, FK -> drivers.id, nullable)
+- `material` (String)
+- `volume` (Float)
+- `address` (Text)
+- `status` (String)
+
+### Таблица: events (Журнал событий)
+- `id` (Integer, PK)
+- `order_id` (Integer, FK -> orders.id, nullable)
+- `event_type` (String)
+- `description` (Text, nullable)
+- `created_at` (DateTime, timezone=True)
+
+## 4. Безопасность и JWT
+
+- **Хеширование паролей**: Используется `passlib` с алгоритмом `bcrypt`.
+- **Авторизация**: Реализована на базе **OAuth2 Password Flow** с использованием **JWT (JSON Web Token)**.
+- **Токены**: Используется библиотека `python-jose`. Секретный ключ и время жизни токена настраиваются через `app/core/config.py`.
+- **Зависимости**:
+  - `get_current_user`: извлекает пользователя из токена.
+  - `get_current_admin_user`: проверяет наличие роли `admin`.
+
+---
+Архитектура актуализирована по итогам Спринта 2.

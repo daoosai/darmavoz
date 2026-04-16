@@ -4,11 +4,10 @@ from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
-# Database URL from environment or default
-DATABASE_URL = os.getenv(
-    "DATABASE_URL", 
-    "postgresql+asyncpg://postgres:postgres@localhost:5432/darmavoz"
-)
+from app.core.config import settings
+
+# Database URL from settings
+DATABASE_URL = settings.DATABASE_URL
 
 # Create async engine
 engine = create_async_engine(DATABASE_URL, echo=True)

@@ -1,22 +1,19 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.api import auth, admin
-from app.core.config import settings
-from app.db.database import AsyncSessionLocal
 from app.db.seed import seed_data
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Run seed data
-    async with AsyncSessionLocal() as session:
-        await seed_data(session)
+    # Запускаем посев данных
+    await seed_data()
     yield
 
-app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
+app = FastAPI(title="Дармавоз.рф API", lifespan=lifespan)
 
 # Include routers
-app.include_router(auth.router, prefix=f"{settings.API_V1_STR}/auth", tags=["auth"])
-app.include_router(admin.router, prefix=f"{settings.API_V1_STR}/admin", tags=["admin"])
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(admin.router, prefix="/api/v1/admin", tags=["admin"])
 
 @app.get("/ping")
 async def ping():

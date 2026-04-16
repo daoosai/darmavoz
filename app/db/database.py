@@ -1,14 +1,10 @@
-import os
 from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import DeclarativeBase
+from app.core.config import settings
 
-# Database URL from environment or default
-DATABASE_URL = os.getenv(
-    "DATABASE_URL", 
-    "postgresql+asyncpg://postgres:postgres@localhost:5432/darmavoz"
-)
+# Database URL from settings
+DATABASE_URL = settings.DATABASE_URL
 
 # Create async engine
 engine = create_async_engine(DATABASE_URL, echo=True)
@@ -19,10 +15,6 @@ AsyncSessionLocal = async_sessionmaker(
     class_=AsyncSession,
     expire_on_commit=False,
 )
-
-# Base class for models
-class Base(DeclarativeBase):
-    pass
 
 # Dependency to get DB session
 async def get_db() -> AsyncGenerator[AsyncSession, None]:

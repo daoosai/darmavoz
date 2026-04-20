@@ -1,93 +1,105 @@
 # Архитектура бэкенда "Дармавоз" (Core API)
 
-Этот файл является единым источником истины (Source of Truth) для структуры и конфигурации серверной части проекта.
+Этот файл является единым источником истины для текущего состояния серверной части проекта после Спринта 2.
 
 ## 1. Структура проекта
 
-Бэкенд построен на базе **FastAPI** с асинхронным драйвером для БД.
-
 ```text
-/ (Корень проекта)
-├── alembic/                  # Миграции базы данных (скрипты и настройки)
+backend/
+├── alembic/                  # Миграции базы данных
 ├── app/
-│   ├── api/                  # Эндпоинты (роутеры): auth.py, admin.py
-│   ├── core/                 # Базовая конфигурация (config.py)
-│   ├── db/                   # База данных: подключение (database.py), посев данных (seed.py)
-│   ├── models/               # SQLAlchemy 2.0 ORM модели (models.py)
-│   ├── schemas/              # Pydantic схемы для валидации данных (token.py)
-│   ├── security/             # Логика безопасности: JWT, хеширование (auth.py, jwt.py)
-│   └── services/             # Бизнес-логика приложения
-├── .env                      # [LOCAL] Переменные окружения (gitignored)
-├── .gitignore                # Настройки исключений Git
+│   ├── api/                  # FastAPI роутеры
+│   ├── core/                 # Конфигурация приложения
+│   ├── db/                   # Сессии БД и seed
+│   ├── models/               # SQLAlchemy ORM модели
+│   ├── schemas/              # Pydantic схемы
+│   ├── security/             # JWT и хеширование паролей
+│   └── services/             # Бизнес-логика и интеграции
+├── .env                      # Локальная конфигурация окружения
 ├── alembic.ini               # Конфигурация Alembic
-├── architecture.md           # Этот файл (Source of Truth)
-├── docker-compose.yml        # Оркестрация контейнеров (Backend, DB, Redis)
-├── Dockerfile                # Сборка образа приложения
-├── main.py                   # Точка входа в FastAPI приложение
-└── requirements.txt          # Список зависимостей Python
+├── docker-compose.yml        # PostgreSQL, Redis, FastAPI
+├── Dockerfile                # Сборка backend-образа
+├── entrypoint.sh             # Ожидание БД, миграции, запуск uvicorn
+├── main.py                   # Точка входа FastAPI
+├── README.md                 # Быстрый старт и автодокументация API
+└── requirements.txt          # Python-зависимости
 ```
 
-> **Важно:** Папка `postgres_data/` и файл `.env` используются только в локальной среде разработки и добавлены в `.gitignore`. Они не должны попадать в систему контроля версий.
+## 2. Инфраструктура
 
-## 2. Инфраструктура (Docker)
+Сервисный контур поднимается через Docker Compose и включает:
+- `backend`: FastAPI приложение на Python 3.11.
+- `db`: PostgreSQL 15.
+- `redis`: Redis 7.
 
-Проект разворачивается через `docker-compose.yml` и включает три основных сервиса:
+Базовая конфигурация хранится в `.env` и читается через `pydantic-settings`.
 
-- **backend**: Приложение на Python 3.11-slim. Запускается через `uvicorn`. Зависит от `db` и `redis`.
-- **db**: Реляционная база данных **PostgreSQL 15-alpine**.
-- **redis**: Хранилище данных в памяти **Redis 7-alpine** (используется для кэширования и брокера задач).
+## 3. Автодокументирование API
 
-## 3. Схема базы данных (PostgreSQL)
+FastAPI формирует OpenAPI-схему автоматически.
+Доступные точки автодокументации:
+- `/docs` — Swagger UI
+- `/redoc` — ReDoc
+- `/openapi.json` — OpenAPI schema
 
-Схема реализована с использованием SQLAlchemy 2.0 (Mapped/mapped_column).
+## 4. Схема базы данных
 
-### Таблица: roles (Роли)
-- `id` (Integer, PK)
-- `name` (String: admin, logist, manager)
-- `description` (String, nullable)
+Все первичные ключи и внешние ключи реализованы на `UUID`.
 
-### Таблица: users (Пользователи)
-- `id` (Integer, PK)
-- `username` (String, unique, index)
-- `hashed_password` (String)
-- `role_id` (Integer, FK -> roles.id)
-- `is_active` (Boolean, default: True)
+### roles
+- `id` (`UUID`, PK)
+- `name` (`String`, unique): `admin`, `logist`, `manager`
+- `description` (`String`, nullable)
 
-### Таблица: clients (Клиенты)
-- `id` (Integer, PK)
-- `name` (String)
-- `phone` (String, unique, index)
+### users
+- `id` (`UUID`, PK)
+- `username` (`String`, unique, index)
+- `hashed_password` (`String`)
+- `role_id` (`UUID`, FK -> `roles.id`)
+- `is_active` (`Boolean`)
 
-### Таблица: drivers (Водители)
-- `id` (Integer, PK)
-- `name` (String)
-- `phone` (String, unique, index)
-- `status` (String, nullable)
+### clients
+- `id` (`UUID`, PK)
+- `name` (`String`)
+- `phone` (`String`, unique, index)
 
-### Таблица: orders (Заказы)
-- `id` (Integer, PK)
-- `client_id` (Integer, FK -> clients.id)
-- `driver_id` (Integer, FK -> drivers.id, nullable)
-- `material` (String)
-- `volume` (Float)
-- `address` (Text)
-- `status` (String)
+### drivers
+- `id` (`UUID`, PK)
+- `name` (`String`)
+- `phone` (`String`, unique, index)
+- `status` (`String`, nullable)
 
-### Таблица: events (Журнал событий)
-- `id` (Integer, PK)
-- `order_id` (Integer, FK -> orders.id, nullable)
-- `event_type` (String)
-- `description` (Text, nullable)
-- `created_at` (DateTime, timezone=True)
+### orders
+- `id` (`UUID`, PK)
+- `client_id` (`UUID`, FK -> `clients.id`)
+- `driver_id` (`UUID`, FK -> `drivers.id`, nullable)
+- `material` (`String`)
+- `volume` (`Float`)
+- `address` (`Text`)
+- `status` (`String`)
 
-## 4. Безопасность и JWT
+### events
+- `id` (`UUID`, PK)
+- `order_id` (`UUID`, FK -> `orders.id`, nullable)
+- `event_type` (`String`)
+- `description` (`Text`, nullable)
+- `created_at` (`DateTime(timezone=True)`)
 
-- **Хеширование паролей**: Используется `passlib` с алгоритмом `bcrypt`.
-- **Авторизация**: Реализована на базе **OAuth2 Password Flow** с использованием **JWT (JSON Web Token)**.
-- **Токены**: Используется библиотека `python-jose`. Секретный ключ и время жизни токена настраиваются через `app/core/config.py`.
-- **Зависимости**:
-  - `get_current_user`: извлекает пользователя из токена.
-  - `get_current_admin_user`: проверяет наличие роли `admin`.
+### order_offers
+- `id` (`UUID`, PK)
+- `order_id` (`UUID`, FK -> `orders.id`)
+- `driver_id` (`UUID`, FK -> `drivers.id`)
+- `price` (`Float`)
+- `status` (`String`)
+- `created_at` (`DateTime(timezone=True)`)
 
----
-Архитектура актуализирована по итогам Спринта 2.
+## 5. Безопасность и роли
+
+Авторизация построена на OAuth2 Password Flow + JWT.
+
+Поддерживаемые роли Спринта 2:
+- `admin` — полный административный доступ
+- `logist` — операционный доступ логиста
+- `manager` — управленческий read-only контур
+
+Seed при старте приложения создает базовые роли и администратора из `.env`, если их еще нет.

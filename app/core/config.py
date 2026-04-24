@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     ALGORITHM: str
     ADMIN_USERNAME: str
     ADMIN_PASSWORD: str
+    AVITO_WEBHOOK_SECRET: str
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

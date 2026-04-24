@@ -1,6 +1,6 @@
 # Архитектура бэкенда "Дармавоз" (Core API)
 
-Этот файл является единым источником истины для текущего состояния серверной части проекта после Спринта 2.
+Этот файл является единым источником истины для текущего состояния серверной части проекта после Спринта 3 (Интеграция Авито).
 
 ## 1. Структура проекта
 
@@ -93,7 +93,56 @@ FastAPI формирует OpenAPI-схему автоматически.
 - `status` (`String`)
 - `created_at` (`DateTime(timezone=True)`)
 
-## 5. Безопасность и роли
+### integration_events
+- `id` (`UUID`, PK)
+- `source` (`String`): например, 'avito'
+- `external_event_id` (`String`): ID события во внешней системе
+- `payload` (`JSONB`): сырой вебхук
+- `status` (`String`): `received`, `processed`, `failed`
+- `error_message` (`Text`, nullable)
+- `created_at` (`DateTime(timezone=True)`)
+- Уникальный индекс: `source` + `external_event_id`
+
+### channels
+- `id` (`UUID`, PK)
+- `name` (`String`): например, 'avito'
+- `external_account_id` (`String`): ID нашего аккаунта/бота
+- `is_active` (`Boolean`, default=True)
+- Уникальный индекс: `name` + `external_account_id`
+
+### dialogues
+- `id` (`UUID`, PK)
+- `channel_id` (`UUID`, FK -> `channels.id`)
+- `external_dialog_id` (`String`): ID чата в Авито
+- `client_id` (`UUID`, FK -> `clients.id`, nullable)
+- `order_id` (`UUID`, FK -> `orders.id`, nullable)
+- `status` (`String`): `open`, `closed`
+- `last_message_at` (`DateTime(timezone=True)`, nullable)
+- `created_at` (`DateTime(timezone=True)`)
+- Уникальный индекс: `channel_id` + `external_dialog_id`
+
+### messages
+- `id` (`UUID`, PK)
+- `dialogue_id` (`UUID`, FK -> `dialogues.id`)
+- `external_message_id` (`String`): ID сообщения в Авито
+- `direction` (`String`): `inbound`, `outbound`
+- `message_type` (`String`): `text`, `system`, `media`
+- `text` (`Text`, nullable)
+- `raw_payload` (`JSONB`, nullable)
+- `created_at` (`DateTime(timezone=True)`)
+- Уникальный индекс: `dialogue_id` + `external_message_id`
+
+## 5. Интеграции (Спринт 3)
+
+Вся логика интеграций изолирована в модуле `app/integrations`.
+
+**Авито:**
+- Логика находится в `app/integrations/avito`.
+- Точка входа для вебхуков: `POST /api/v1/webhooks/avito`.
+- Реализована строгая идемпотентность через составные уникальные ключи (`UniqueConstraint`).
+- Сырые вебхуки сначала сохраняются в `integration_events`, после чего парсятся и распределяются по сущностям `channels`, `dialogues`, `messages`.
+
+## 6. Безопасность и роли
 
 Авторизация построена на OAuth2 Password Flow + JWT.
 

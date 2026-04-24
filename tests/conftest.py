@@ -1,3 +1,4 @@
+import asyncio
 import os
 import sys
 from typing import AsyncGenerator
@@ -7,6 +8,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 import pytest
 import pytest_asyncio
+from alembic import command
+from alembic.config import Config
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
@@ -16,8 +19,10 @@ from sqlalchemy.pool import NullPool
 from main import app
 from app.core.config import settings
 from app.db.database import get_db
-from app.models.models import Base
 
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+ALEMBIC_INI_PATH = os.path.join(PROJECT_ROOT, "alembic.ini")
+ALEMBIC_SCRIPT_LOCATION = os.path.join(PROJECT_ROOT, "alembic")
 test_db_name = "darmavoz_test_db"
 
 # Строим URL через SQLAlchemy, чтобы менять только имя базы, а не другие части строки.
@@ -42,37 +47,44 @@ async def prepare_database() -> AsyncGenerator[None, None]:
     """
     Создает и удаляет тестовую базу данных для сессии тестов.
     """
-    async with default_engine.connect() as conn:
-        await conn.execute(
-            text(
-                "SELECT pg_terminate_backend(pid) "
-                "FROM pg_stat_activity "
-                "WHERE datname = :db_name AND pid <> pg_backend_pid()"
-            ),
-            {"db_name": test_db_name},
-        )
-        await conn.execute(text(f"DROP DATABASE IF EXISTS {test_db_name}"))
-        await conn.execute(text(f"CREATE DATABASE {test_db_name}"))
+    original_database_url = settings.DATABASE_URL
+    settings.DATABASE_URL = str(test_database_url)
+    try:
+        async with default_engine.connect() as conn:
+            await conn.execute(
+                text(
+                    "SELECT pg_terminate_backend(pid) "
+                    "FROM pg_stat_activity "
+                    "WHERE datname = :db_name AND pid <> pg_backend_pid()"
+                ),
+                {"db_name": test_db_name},
+            )
+            await conn.execute(text(f"DROP DATABASE IF EXISTS {test_db_name}"))
+            await conn.execute(text(f"CREATE DATABASE {test_db_name}"))
 
-    async with engine_test.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        alembic_cfg = Config(ALEMBIC_INI_PATH)
+        alembic_cfg.set_main_option("script_location", ALEMBIC_SCRIPT_LOCATION)
+        alembic_cfg.set_main_option("sqlalchemy.url", str(test_database_url))
 
-    yield
+        await asyncio.to_thread(command.upgrade, alembic_cfg, "head")
 
-    await engine_test.dispose()
+        yield
+    finally:
+        await engine_test.dispose()
 
-    async with default_engine.connect() as conn:
-        await conn.execute(
-            text(
-                "SELECT pg_terminate_backend(pid) "
-                "FROM pg_stat_activity "
-                "WHERE datname = :db_name AND pid <> pg_backend_pid()"
-            ),
-            {"db_name": test_db_name},
-        )
-        await conn.execute(text(f"DROP DATABASE IF EXISTS {test_db_name}"))
+        async with default_engine.connect() as conn:
+            await conn.execute(
+                text(
+                    "SELECT pg_terminate_backend(pid) "
+                    "FROM pg_stat_activity "
+                    "WHERE datname = :db_name AND pid <> pg_backend_pid()"
+                ),
+                {"db_name": test_db_name},
+            )
+            await conn.execute(text(f"DROP DATABASE IF EXISTS {test_db_name}"))
 
-    await default_engine.dispose()
+        await default_engine.dispose()
+        settings.DATABASE_URL = original_database_url
 
 
 async def override_get_db():
@@ -88,12 +100,6 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
-
-
-@pytest_asyncio.fixture
-async def db_session() -> AsyncGenerator[AsyncSession, None]:
-    async with TestingSessionLocal() as session:
-        yield session
 
 
 @pytest.fixture

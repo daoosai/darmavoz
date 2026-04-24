@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     ADMIN_USERNAME: str
     ADMIN_PASSWORD: str
     AVITO_WEBHOOK_SECRET: str
+    AVITO_WEBHOOK_HEADER_NAME: str = "X-Webhook-Secret"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

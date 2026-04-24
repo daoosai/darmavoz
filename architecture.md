@@ -61,7 +61,10 @@ FastAPI формирует OpenAPI-схему автоматически.
 ### clients
 - `id` (`UUID`, PK)
 - `name` (`String`)
-- `phone` (`String`, unique, index)
+- `phone` (`String`, unique, index, nullable=True)
+- `external_source` (`String`, nullable)
+- `external_user_id` (`String`, nullable)
+- Уникальный индекс: `external_source` + `external_user_id`
 
 ### drivers
 - `id` (`UUID`, PK)
@@ -141,6 +144,51 @@ FastAPI формирует OpenAPI-схему автоматически.
 - Точка входа для вебхуков: `POST /api/v1/webhooks/avito`.
 - Реализована строгая идемпотентность через составные уникальные ключи (`UniqueConstraint`).
 - Сырые вебхуки сначала сохраняются в `integration_events`, после чего парсятся и распределяются по сущностям `channels`, `dialogues`, `messages`.
+
+## 5.1 Operational Block: Avito Webhook
+
+### Endpoint
+- `POST /api/v1/webhooks/avito`
+
+### Security Header
+- Заголовок: `X-Webhook-Secret`
+- Значение сравнивается с `AVITO_WEBHOOK_SECRET` через `secrets.compare_digest()`
+- При неверном или отсутствующем секрете сервис возвращает `403`
+
+### Payload Contract
+- Верхний уровень:
+  - `event_id: str`
+  - `account_id: str`
+  - `payload: object`
+- Вложенный `payload`:
+  - `chat_id: str`
+  - `user_id: str`
+  - `message_id: str`
+  - `text: str`
+- Все неизвестные поля игнорируются на уровне Pydantic-схемы, но обязательные поля валидируются строго
+
+### Response Codes
+- `200 OK`:
+  - вебхук успешно обработан
+  - либо пришел дубль события и был безопасно проигнорирован
+- `403 Forbidden`:
+  - отсутствует или неверен секрет вебхука
+- `422 Unprocessable Entity`:
+  - нарушен JSON-контракт входящего payload
+- `500 Internal Server Error`:
+  - событие сохранено в `integration_events`, но дальнейшая бизнес-обработка завершилась ошибкой
+
+### Idempotency Logic
+- Уровень 1: входящее событие уникально по паре `source + external_event_id`
+- Уровень 2: сообщение уникально в рамках диалога по паре `dialogue_id + external_message_id`
+- Один и тот же `message_id` может существовать в разных диалогах
+- Даже при ошибке бизнес-логики исходный webhook сначала фиксируется в `integration_events`
+
+### Processing Flow
+- Сервис логирует этапы `event_received`, `duplicate_event`, `channel_created/reused`, `client_created/reused`, `dialogue_created/reused`, `message_created` и `event_processed`
+- Канал ищется или создается по `name='avito'` и `external_account_id`
+- Клиент ищется или создается по `external_source='avito'` и `external_user_id`
+- Для клиентов из Авито поле `phone` остается `NULL`
 
 ## 6. Безопасность и роли
 

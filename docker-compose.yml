@@ -3,6 +3,7 @@ services:
     image: postgres:15-alpine
     container_name: darmavoz_db
     restart: always
+    profiles: ["local"]
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -16,6 +17,7 @@ services:
     image: redis:7-alpine
     container_name: darmavoz_redis
     restart: always
+    profiles: ["local"]
     ports:
       - "6379:6379"
 
@@ -23,13 +25,14 @@ services:
     build: .
     container_name: darmavoz_backend
     restart: always
-    ports:
-      - "8000:8000"
     env_file:
       - .env
-    depends_on:
-      - db
-      - redis
-    environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/darmavoz
-      - REDIS_URL=redis://redis:6379/0
+    expose:
+      - "8000"
+    networks:
+      - default
+      - daoos_kit_default
+
+networks:
+  daoos_kit_default:
+    external: true

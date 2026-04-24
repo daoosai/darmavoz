@@ -30,6 +30,11 @@ target_metadata = Base.metadata
 # ... etc.
 
 
+def get_database_url() -> str:
+    configured_url = config.get_main_option("sqlalchemy.url")
+    return configured_url or settings.DATABASE_URL
+
+
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
 
@@ -42,7 +47,7 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = settings.DATABASE_URL
+    url = get_database_url()
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -66,8 +71,7 @@ async def run_async_migrations() -> None:
     and associate a connection with the context.
 
     """
-    # Set the sqlalchemy.url from settings
-    config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+    config.set_main_option("sqlalchemy.url", get_database_url())
 
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),

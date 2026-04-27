@@ -9,6 +9,8 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 class AvitoAPIClient:
+    MAX_RETRIES = 3
+
     def __init__(self):
         self.client = AsyncClient(base_url=settings.AVITO_BASE_URL)
         self._token: Optional[str] = None
@@ -44,13 +46,13 @@ class AvitoAPIClient:
             return await self._get_token()
         return self._token
 
-    async def request(self, method: str, endpoint: str, **kwargs) -> Response:
+    async def request(self, method: str, endpoint: str, retries: int = 0, **kwargs) -> Response:
         token = await self._get_valid_token()
         
         headers = kwargs.pop("headers", {})
         headers["Authorization"] = f"Bearer {token}"
         
-        logger.info("avito_api_request", extra={"method": method, "endpoint": endpoint})
+        logger.info("avito_api_request", extra={"method": method, "endpoint": endpoint, "retries": retries})
         
         try:
             response = await self.client.request(method, endpoint, headers=headers, **kwargs)
@@ -58,19 +60,20 @@ class AvitoAPIClient:
             return response
         except HTTPStatusError as e:
             if e.response.status_code == 401:
-                # Token might be invalid, retry once
+                if retries >= self.MAX_RETRIES:
+                    raise
+                # Token might be invalid, retry
                 self._token = None
-                token = await self._get_valid_token()
-                headers["Authorization"] = f"Bearer {token}"
-                
-                response = await self.client.request(method, endpoint, headers=headers, **kwargs)
-                response.raise_for_status()
-                return response
+                headers.pop("Authorization", None)
+                return await self.request(method, endpoint, retries=retries + 1, headers=headers, **kwargs)
             elif e.response.status_code == 429:
+                if retries >= self.MAX_RETRIES:
+                    raise
                 retry_after = int(e.response.headers.get("Retry-After", 5))
-                logger.warning("avito_api_rate_limit", extra={"retry_after": retry_after})
+                logger.warning("avito_api_rate_limit", extra={"retry_after": retry_after, "retries": retries})
                 await asyncio.sleep(retry_after)
-                return await self.request(method, endpoint, headers=headers, **kwargs)
+                headers.pop("Authorization", None)
+                return await self.request(method, endpoint, retries=retries + 1, headers=headers, **kwargs)
             
             logger.error("avito_api_error", extra={"method": method, "endpoint": endpoint, "error": str(e)})
             raise

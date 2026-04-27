@@ -28,6 +28,7 @@ class AvitoWebhookService:
                 "account_id": payload.account_id,
                 "chat_id": payload.payload.chat_id,
                 "external_message_id": payload.payload.message_id,
+                "direction": payload.payload.direction,
             },
         )
 
@@ -62,8 +63,26 @@ class AvitoWebhookService:
         event = await session.get(IntegrationEvent, event_id)
 
         try:
+            if payload.payload.direction != "inbound":
+                event.status = "processed"
+                event.error_message = None
+                session.add(event)
+                await session.commit()
+                logger.info(
+                    "event_ignored_non_inbound",
+                    extra={
+                        "source": self.SOURCE,
+                        "external_event_id": payload.event_id,
+                        "account_id": payload.account_id,
+                        "chat_id": payload.payload.chat_id,
+                        "external_message_id": payload.payload.message_id,
+                        "direction": payload.payload.direction,
+                    },
+                )
+                return
+
             channel, _ = await self._get_or_create_channel(session, payload.account_id)
-            client, _ = await self._get_or_create_client(session, payload.payload.user_id)
+            client, _ = await self._get_or_create_client(session, payload.payload.sender_user_id)
             dialogue, _ = await self._get_or_create_dialogue(
                 session=session,
                 channel=channel,
@@ -101,6 +120,7 @@ class AvitoWebhookService:
                     "account_id": payload.account_id,
                     "chat_id": payload.payload.chat_id,
                     "external_message_id": payload.payload.message_id,
+                    "direction": payload.payload.direction,
                 },
             )
             await session.rollback()
@@ -269,8 +289,8 @@ class AvitoWebhookService:
             .values(
                 dialogue_id=dialogue.id,
                 external_message_id=payload.payload.message_id,
-                direction="inbound",
-                message_type="text",
+                direction=payload.payload.direction,
+                message_type=payload.payload.message_type,
                 text=payload.payload.text,
                 raw_payload=raw_payload,
             )

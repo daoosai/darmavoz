@@ -11,12 +11,22 @@ pytestmark = pytest.mark.asyncio
 WEBHOOK_URL = "/api/v1/webhooks/avito"
 
 
+@pytest.fixture(autouse=True)
+def default_webhook_auth(monkeypatch):
+    monkeypatch.setattr(settings, "AVITO_WEBHOOK_URL_TOKEN", "test-token")
+    monkeypatch.setattr(settings, "AVITO_WEBHOOK_ALLOWED_IPS", "")
+
+
 def build_headers(secret: str | None = None) -> dict[str, str]:
-    return {
-        settings.AVITO_WEBHOOK_HEADER_NAME: (
-            settings.AVITO_WEBHOOK_SECRET if secret is None else secret
-        )
-    }
+    if secret is None:
+        return {}
+    return {settings.AVITO_WEBHOOK_HEADER_NAME: secret}
+
+
+def build_query(token: str | None = None) -> str:
+    if not token:
+        return ""
+    return f"?token={token}"
 
 
 def build_payload(
@@ -34,14 +44,44 @@ def build_payload(
         "payload": {
             "chat_id": chat_id,
             "user_id": user_id,
+            "sender_user_id": user_id,
             "message_id": message_id,
             "text": text_value,
+            "direction": "inbound",
+            "message_type": "text",
+        },
+    }
+
+
+def build_real_avito_payload(
+    *,
+    event_id: str,
+    account_id: str = "acc_1",
+    chat_id: str = "chat_1",
+    author_id: str = "user_1",
+    message_id: str = "msg_1",
+    text_value: str = "Hello",
+    direction: str = "in",
+) -> dict:
+    return {
+        "id": event_id,
+        "payload": {
+            "type": "message",
+            "value": {
+                "id": message_id,
+                "chat_id": chat_id,
+                "user_id": account_id,
+                "author_id": author_id,
+                "content": {"text": text_value},
+                "type": "text",
+                "direction": direction,
+            },
         },
     }
 
 
 async def test_invalid_body(client: AsyncClient):
-    response = await client.post(WEBHOOK_URL, json={"invalid": "data"}, headers=build_headers())
+    response = await client.post(f"{WEBHOOK_URL}?token=test-token", json={"invalid": "data"})
     assert response.status_code == 422
 
 
@@ -59,9 +99,28 @@ async def test_wrong_webhook_secret(client: AsyncClient):
     assert response.status_code == 403
 
 
+async def test_valid_webhook_token(client: AsyncClient, monkeypatch):
+    response = await client.post(
+        f"{WEBHOOK_URL}{build_query('test-token')}",
+        json=build_payload(event_id="test_event_token_ok"),
+    )
+    assert response.status_code == 200
+
+
+async def test_valid_ip_allowlist(client: AsyncClient, monkeypatch):
+    monkeypatch.setattr(settings, "AVITO_WEBHOOK_URL_TOKEN", None)
+    monkeypatch.setattr(settings, "AVITO_WEBHOOK_ALLOWED_IPS", "203.0.113.10")
+    response = await client.post(
+        WEBHOOK_URL,
+        json=build_payload(event_id="test_event_ip_ok"),
+        headers={"X-Forwarded-For": "198.51.100.20, 203.0.113.10"},
+    )
+    assert response.status_code == 200
+
+
 async def test_happy_path(client: AsyncClient, session_factory):
     payload = build_payload(event_id="test_event_happy", message_id="msg_happy")
-    response = await client.post(WEBHOOK_URL, json=payload, headers=build_headers())
+    response = await client.post(f"{WEBHOOK_URL}?token=test-token", json=payload)
     assert response.status_code == 200
     assert response.json() == {"ok": True, "status": "processed"}
 
@@ -74,10 +133,10 @@ async def test_happy_path(client: AsyncClient, session_factory):
 
 async def test_duplicate_event(client: AsyncClient, session_factory):
     payload = build_payload(event_id="test_event_duplicate", message_id="msg_duplicate")
-    response1 = await client.post(WEBHOOK_URL, json=payload, headers=build_headers())
+    response1 = await client.post(f"{WEBHOOK_URL}?token=test-token", json=payload)
     assert response1.status_code == 200
 
-    response2 = await client.post(WEBHOOK_URL, json=payload, headers=build_headers())
+    response2 = await client.post(f"{WEBHOOK_URL}?token=test-token", json=payload)
     assert response2.status_code == 200
 
     async with session_factory() as db_session:
@@ -99,8 +158,8 @@ async def test_duplicate_message_same_dialogue(client: AsyncClient, session_fact
         text_value="Hello again",
     )
 
-    response1 = await client.post(WEBHOOK_URL, json=first_payload, headers=build_headers())
-    response2 = await client.post(WEBHOOK_URL, json=second_payload, headers=build_headers())
+    response1 = await client.post(f"{WEBHOOK_URL}?token=test-token", json=first_payload)
+    response2 = await client.post(f"{WEBHOOK_URL}?token=test-token", json=second_payload)
 
     assert response1.status_code == 200
     assert response2.status_code == 200
@@ -148,8 +207,8 @@ async def test_duplicate_message_different_dialogue(client: AsyncClient, session
         message_id="cross_dialog_message_id",
     )
 
-    response1 = await client.post(WEBHOOK_URL, json=first_payload, headers=build_headers())
-    response2 = await client.post(WEBHOOK_URL, json=second_payload, headers=build_headers())
+    response1 = await client.post(f"{WEBHOOK_URL}?token=test-token", json=first_payload)
+    response2 = await client.post(f"{WEBHOOK_URL}?token=test-token", json=second_payload)
 
     assert response1.status_code == 200
     assert response2.status_code == 200
@@ -171,9 +230,8 @@ async def test_internal_error(client: AsyncClient, session_factory, monkeypatch)
     monkeypatch.setattr(AvitoWebhookService, "_get_or_create_channel", mock_get_or_create_channel)
 
     response = await client.post(
-        WEBHOOK_URL,
+        f"{WEBHOOK_URL}?token=test-token",
         json=build_payload(event_id="test_event_error", message_id="msg_error"),
-        headers=build_headers(),
     )
     assert response.status_code == 500
 
@@ -183,6 +241,74 @@ async def test_internal_error(client: AsyncClient, session_factory, monkeypatch)
     assert event is not None
     assert event.status == "failed"
     assert "Database error on channel" in event.error_message
+
+
+async def test_real_avito_payload_happy_path(client: AsyncClient, session_factory):
+    payload = build_real_avito_payload(
+        event_id="real_event_happy",
+        account_id="acc_real",
+        chat_id="chat_real",
+        author_id="client_real",
+        message_id="msg_real",
+        text_value="Real hello",
+    )
+    response = await client.post(f"{WEBHOOK_URL}?token=test-token", json=payload)
+    assert response.status_code == 200
+    assert response.json() == {"ok": True, "status": "processed"}
+
+    async with session_factory() as db_session:
+        event = (
+            await db_session.execute(
+                select(IntegrationEvent).where(IntegrationEvent.external_event_id == "real_event_happy")
+            )
+        ).scalars().first()
+        dialogue = (
+            await db_session.execute(
+                select(Dialogue).where(Dialogue.external_dialog_id == "chat_real")
+            )
+        ).scalars().first()
+        messages = (
+            await db_session.execute(
+                select(Message).where(Message.external_message_id == "msg_real")
+            )
+        ).scalars().all()
+
+    assert event is not None
+    assert event.status == "processed"
+    assert dialogue is not None
+    assert len(messages) == 1
+    assert messages[0].text == "Real hello"
+    assert messages[0].direction == "inbound"
+
+
+async def test_real_avito_payload_outbound_ignored(client: AsyncClient, session_factory):
+    payload = build_real_avito_payload(
+        event_id="real_event_outbound",
+        account_id="acc_real",
+        chat_id="chat_real_out",
+        author_id="acc_real",
+        message_id="msg_real_out",
+        text_value="Outbound hello",
+        direction="out",
+    )
+    response = await client.post(f"{WEBHOOK_URL}?token=test-token", json=payload)
+    assert response.status_code == 200
+
+    async with session_factory() as db_session:
+        event = (
+            await db_session.execute(
+                select(IntegrationEvent).where(IntegrationEvent.external_event_id == "real_event_outbound")
+            )
+        ).scalars().first()
+        messages = (
+            await db_session.execute(
+                select(Message).where(Message.external_message_id == "msg_real_out")
+            )
+        ).scalars().all()
+
+    assert event is not None
+    assert event.status == "processed"
+    assert len(messages) == 0
 
 
 async def test_migrations_smoke(session_factory):

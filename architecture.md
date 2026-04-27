@@ -1,5 +1,7 @@
 # Архитектура бэкенда "Дармавоз" (Core API)
 
+**Статус:** Спринт 3 завершен. Реализован клиент официального API Авито, webhook-endpoint и интеграционные модели БД.
+
 Этот файл является единым источником истины для текущего состояния серверной части проекта после Спринта 3 (Интеграция Авито).
 
 ## 1. Структура проекта
@@ -11,16 +13,19 @@ backend/
 │   ├── api/                  # FastAPI роутеры
 │   ├── core/                 # Конфигурация приложения
 │   ├── db/                   # Сессии БД и seed
+│   ├── integrations/         # Внешние интеграции (например, Avito API и Webhooks)
 │   ├── models/               # SQLAlchemy ORM модели
 │   ├── schemas/              # Pydantic схемы
 │   ├── security/             # JWT и хеширование паролей
-│   └── services/             # Бизнес-логика и интеграции
+│   └── services/             # Бизнес-логика
+├── tests/                    # Интеграционные и unit-тесты (Pytest)
 ├── .env                      # Локальная конфигурация окружения
 ├── alembic.ini               # Конфигурация Alembic
-├── docker-compose.yml        # PostgreSQL, Redis, FastAPI
+├── docker-compose.yml        # Production-файл для DAOOS Kit (только backend)
 ├── Dockerfile                # Сборка backend-образа
 ├── entrypoint.sh             # Ожидание БД, миграции, запуск uvicorn
 ├── main.py                   # Точка входа FastAPI
+├── pytest.ini                # Конфигурация Pytest
 ├── README.md                 # Быстрый старт и автодокументация API
 └── requirements.txt          # Python-зависимости
 ```

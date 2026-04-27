@@ -1,6 +1,7 @@
 import asyncio
 import os
 import sys
+import uuid
 from typing import AsyncGenerator
 
 # Добавляем корневую директорию проекта в sys.path до любых импортов из app
@@ -23,7 +24,7 @@ from app.db.database import get_db
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 ALEMBIC_INI_PATH = os.path.join(PROJECT_ROOT, "alembic.ini")
 ALEMBIC_SCRIPT_LOCATION = os.path.join(PROJECT_ROOT, "alembic")
-test_db_name = "darmavoz_test_db"
+test_db_name = f"darmavoz_test_db_{uuid.uuid4().hex[:8]}"
 
 # Строим URL через SQLAlchemy, чтобы менять только имя базы, а не другие части строки.
 base_url = make_url(settings.DATABASE_URL)
@@ -47,8 +48,6 @@ async def prepare_database() -> AsyncGenerator[None, None]:
     """
     Создает и удаляет тестовую базу данных для сессии тестов.
     """
-    original_database_url = settings.DATABASE_URL
-    settings.DATABASE_URL = str(test_database_url)
     try:
         async with default_engine.connect() as conn:
             await conn.execute(
@@ -64,7 +63,7 @@ async def prepare_database() -> AsyncGenerator[None, None]:
 
         alembic_cfg = Config(ALEMBIC_INI_PATH)
         alembic_cfg.set_main_option("script_location", ALEMBIC_SCRIPT_LOCATION)
-        alembic_cfg.set_main_option("sqlalchemy.url", str(test_database_url))
+        alembic_cfg.set_main_option("sqlalchemy.url", test_database_url.render_as_string(hide_password=False))
 
         await asyncio.to_thread(command.upgrade, alembic_cfg, "head")
 
@@ -84,7 +83,6 @@ async def prepare_database() -> AsyncGenerator[None, None]:
             await conn.execute(text(f"DROP DATABASE IF EXISTS {test_db_name}"))
 
         await default_engine.dispose()
-        settings.DATABASE_URL = original_database_url
 
 
 async def override_get_db():

@@ -8,13 +8,14 @@ from sqlalchemy.orm import selectinload
 from app.db.database import AsyncSessionLocal
 from app.integrations.openai.client import OpenAIClient
 from app.models.models import (
+    Client,
     Dialogue,
     Message,
     MessageAiAnalysis,
     Order,
     OrderStatus,
 )
-from app.schemas.ai import MessageAnalysisResult, MessageClassificationEnum
+from app.schemas.ai import MessageAnalysisResult
 
 logger = logging.getLogger(__name__)
 
@@ -38,15 +39,19 @@ class MessageAIProcessorService:
     async def process_new_message(self, session: AsyncSession, message_id: uuid.UUID) -> None:
         message: Message | None = None
         dialogue: Dialogue | None = None
+        resolved_message_id: uuid.UUID | None = None
+        resolved_dialogue_id: uuid.UUID | None = None
 
         try:
             message = await self._get_message_with_dialogue(session, message_id)
             if message is None:
                 raise ValueError(f"Message {message_id} not found")
+            resolved_message_id = message.id
 
             dialogue = message.dialogue
             if dialogue is None:
                 raise ValueError(f"Dialogue for message {message_id} not found")
+            resolved_dialogue_id = dialogue.id
 
             context = await self._build_dialogue_context(session, dialogue.id)
             analysis_result = await self.openai_client.analyze_message(
@@ -65,6 +70,7 @@ class MessageAIProcessorService:
                 await self._upsert_order_draft(
                     session=session,
                     dialogue=dialogue,
+                    analysis=analysis,
                     analysis_result=analysis_result,
                 )
 
@@ -76,6 +82,7 @@ class MessageAIProcessorService:
                     "dialogue_id": str(dialogue.id),
                     "classification": analysis_result.classification.value,
                     "should_create_order_draft": analysis_result.should_create_order_draft,
+                    "analysis_status": analysis.status,
                 },
             )
         except Exception as exc:
@@ -85,12 +92,12 @@ class MessageAIProcessorService:
             )
             await session.rollback()
 
-            if message is not None and dialogue is not None:
+            if resolved_message_id is not None and resolved_dialogue_id is not None:
                 failed_analysis = MessageAiAnalysis(
-                    message_id=message.id,
-                    dialogue_id=dialogue.id,
-                    classification=MessageClassificationEnum.irrelevant.value,
-                    raw_llm_response=None,
+                    message_id=resolved_message_id,
+                    dialogue_id=resolved_dialogue_id,
+                    classification=None,
+                    raw_llm_response=self.openai_client.last_raw_response,
                     normalized_json=None,
                     confidence=0.0,
                     missing_fields=None,
@@ -105,12 +112,11 @@ class MessageAIProcessorService:
                     logger.exception(
                         "message_ai_failed_analysis_persist_error",
                         extra={
-                            "message_id": str(message.id),
-                            "dialogue_id": str(dialogue.id),
+                            "message_id": str(resolved_message_id),
+                            "dialogue_id": str(resolved_dialogue_id),
                         },
                     )
-
-            raise
+            return
 
     async def _get_message_with_dialogue(
         self,
@@ -172,11 +178,25 @@ class MessageAIProcessorService:
         self,
         session: AsyncSession,
         dialogue: Dialogue,
+        analysis: MessageAiAnalysis,
         analysis_result: MessageAnalysisResult,
-    ) -> Order:
+    ) -> Order | None:
         order: Order | None = None
         if dialogue.order_id is not None:
             order = await session.get(Order, dialogue.order_id)
+            if order is not None and order.status != OrderStatus.draft.value:
+                analysis.status = "needs_review"
+                analysis.error_message = "Cannot update non-draft order"
+                logger.warning(
+                    "message_ai_non_draft_order_protection",
+                    extra={
+                        "dialogue_id": str(dialogue.id),
+                        "order_id": str(order.id),
+                        "order_status": order.status,
+                    },
+                )
+                session.add(analysis)
+                return None
 
         if order is None:
             if dialogue.client_id is None:
@@ -197,10 +217,46 @@ class MessageAIProcessorService:
             order.volume = extracted.volume
         if extracted.address:
             order.address = extracted.address
-        if analysis_result.client_message_summary.strip():
-            order.notes = analysis_result.client_message_summary.strip()
+        order.notes = self._build_order_notes(analysis_result)
+
+        if dialogue.client_id is not None:
+            client = await session.get(Client, dialogue.client_id)
+            if client is not None:
+                self._update_client_from_extracted_fields(client, extracted)
+                session.add(client)
 
         dialogue.order_id = order.id
         session.add(order)
         session.add(dialogue)
         return order
+
+    @staticmethod
+    def _build_order_notes(analysis_result: MessageAnalysisResult) -> str | None:
+        parts: list[str] = []
+        summary = analysis_result.client_message_summary.strip()
+        extracted = analysis_result.order_fields
+
+        if summary:
+            parts.append(f"Summary: {summary}")
+        if extracted.datetime_str:
+            parts.append(f"Date: {extracted.datetime_str.strip()}")
+        if extracted.notes:
+            parts.append(f"Notes: {extracted.notes.strip()}")
+
+        return " | ".join(parts) if parts else None
+
+    @staticmethod
+    def _update_client_from_extracted_fields(client: Client, extracted_fields) -> None:
+        if extracted_fields.client_name:
+            normalized_name = extracted_fields.client_name.strip()
+            if normalized_name and (
+                not client.name
+                or not client.name.strip()
+                or client.name.startswith("Avito User")
+            ):
+                client.name = normalized_name
+
+        if extracted_fields.client_phone:
+            normalized_phone = extracted_fields.client_phone.strip()
+            if normalized_phone and (not client.phone or not client.phone.strip()):
+                client.phone = normalized_phone

@@ -206,7 +206,7 @@ class MessageAiAnalysis(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     message_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("messages.id"))
     dialogue_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("dialogues.id"))
-    classification: Mapped[str] = mapped_column(String(50))
+    classification: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     raw_llm_response: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     normalized_json: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     confidence: Mapped[float] = mapped_column(Float)

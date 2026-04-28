@@ -1,9 +1,13 @@
+import uuid
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.future import select
 
 from app.core.config import settings
+from app.api.webhooks import background_process_message
 from app.integrations.avito.service import AvitoWebhookService
 from app.models.models import Dialogue, IntegrationEvent, Message
 
@@ -129,6 +133,26 @@ async def test_happy_path(client: AsyncClient, session_factory):
         event = (await db_session.execute(stmt)).scalars().first()
     assert event is not None
     assert event.status == "processed"
+
+
+async def test_webhook_enqueues_background_task(client: AsyncClient):
+    queued_message_id = uuid.uuid4()
+
+    with patch.object(
+        AvitoWebhookService,
+        "process_inbound_webhook",
+        new=AsyncMock(return_value=queued_message_id),
+    ) as mock_process, patch("app.api.webhooks.BackgroundTasks.add_task") as mock_add_task:
+        response = await client.post(
+            f"{WEBHOOK_URL}?token=test-token",
+            json=build_payload(event_id="test_event_background_queue", message_id="msg_background_queue"),
+        )
+
+    assert response.status_code == 200
+    mock_process.assert_awaited_once()
+    mock_add_task.assert_called_once()
+    assert mock_add_task.call_args.args[-2] is background_process_message
+    assert mock_add_task.call_args.args[-1] == queued_message_id
 
 
 async def test_duplicate_event(client: AsyncClient, session_factory):

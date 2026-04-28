@@ -24,7 +24,7 @@ def upgrade() -> None:
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('message_id', sa.UUID(), nullable=False),
     sa.Column('dialogue_id', sa.UUID(), nullable=False),
-    sa.Column('classification', sa.String(length=50), nullable=False),
+    sa.Column('classification', sa.String(length=50), nullable=True),
     sa.Column('raw_llm_response', sa.Text(), nullable=True),
     sa.Column('normalized_json', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('confidence', sa.Float(), nullable=False),

@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from enum import Enum
 from typing import List, Optional
 
 from sqlalchemy import ForeignKey, String, Text, DateTime, Boolean, Float, UniqueConstraint
@@ -60,23 +61,40 @@ class Driver(Base):
     # Relationships
     orders: Mapped[List["Order"]] = relationship("Order", back_populates="driver")
 
+
+class OrderStatus(str, Enum):
+    draft = "draft"
+    pending = "pending"
+    assigned = "assigned"
+    completed = "completed"
+    cancelled = "cancelled"
+
 class Order(Base):
     __tablename__ = 'orders'
+
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     client_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clients.id"))
     driver_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("drivers.id"), nullable=True)
-    material: Mapped[str] = mapped_column(String(255))
-    volume: Mapped[float] = mapped_column(Float)
-    address: Mapped[str] = mapped_column(Text)
-    status: Mapped[str] = mapped_column(String(50))
+    material: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    volume: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(50), default=OrderStatus.draft.value)
+    source: Mapped[Optional[str]] = mapped_column(String(50), default="avito", nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    source_dialogue_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("dialogues.id"), nullable=True)
 
     # Relationships
     client: Mapped["Client"] = relationship("Client", back_populates="orders")
     driver: Mapped[Optional["Driver"]] = relationship("Driver", back_populates="orders")
     events: Mapped[List["EventLog"]] = relationship("EventLog", back_populates="order")
     offers: Mapped[List["OrderOffer"]] = relationship("OrderOffer", back_populates="order")
-    dialogues: Mapped[List["Dialogue"]] = relationship("Dialogue", back_populates="order")
+    dialogues: Mapped[List["Dialogue"]] = relationship(
+        "Dialogue",
+        back_populates="order",
+        foreign_keys="Dialogue.order_id",
+    )
+    source_dialogue: Mapped[Optional["Dialogue"]] = relationship("Dialogue", foreign_keys=[source_dialogue_id])
 
 class EventLog(Base):
     __tablename__ = 'events'
@@ -153,8 +171,13 @@ class Dialogue(Base):
     # Relationships
     channel: Mapped["Channel"] = relationship("Channel", back_populates="dialogues")
     client: Mapped[Optional["Client"]] = relationship("Client", back_populates="dialogues")
-    order: Mapped[Optional["Order"]] = relationship("Order", back_populates="dialogues")
+    order: Mapped[Optional["Order"]] = relationship(
+        "Order",
+        back_populates="dialogues",
+        foreign_keys=[order_id],
+    )
     messages: Mapped[List["Message"]] = relationship("Message", back_populates="dialogue", cascade="all, delete-orphan")
+    ai_analyses: Mapped[List["MessageAiAnalysis"]] = relationship("MessageAiAnalysis", back_populates="dialogue", cascade="all, delete-orphan")
 
 class Message(Base):
     __tablename__ = 'messages'
@@ -174,3 +197,24 @@ class Message(Base):
 
     # Relationships
     dialogue: Mapped["Dialogue"] = relationship("Dialogue", back_populates="messages")
+    ai_analyses: Mapped[List["MessageAiAnalysis"]] = relationship("MessageAiAnalysis", back_populates="message", cascade="all, delete-orphan")
+
+
+class MessageAiAnalysis(Base):
+    __tablename__ = 'message_ai_analyses'
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    message_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("messages.id"))
+    dialogue_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("dialogues.id"))
+    classification: Mapped[str] = mapped_column(String(50))
+    raw_llm_response: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    normalized_json: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    confidence: Mapped[float] = mapped_column(Float)
+    missing_fields: Mapped[Optional[list[str]]] = mapped_column(JSONB, nullable=True)
+    status: Mapped[str] = mapped_column(String(50))
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationships
+    message: Mapped["Message"] = relationship("Message", back_populates="ai_analyses")
+    dialogue: Mapped["Dialogue"] = relationship("Dialogue", back_populates="ai_analyses")

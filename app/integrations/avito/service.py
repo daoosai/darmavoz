@@ -1,4 +1,5 @@
 import logging
+import uuid
 from datetime import datetime, timezone
 from typing import Tuple
 
@@ -15,7 +16,11 @@ logger = logging.getLogger(__name__)
 class AvitoWebhookService:
     SOURCE = "avito"
 
-    async def process_inbound_webhook(self, session: AsyncSession, payload: AvitoWebhookPayload) -> None:
+    async def process_inbound_webhook(
+        self,
+        session: AsyncSession,
+        payload: AvitoWebhookPayload,
+    ) -> uuid.UUID | None:
         """
         Обрабатывает входящий вебхук от Авито со строгой проверкой и идемпотентностью.
         """
@@ -57,7 +62,7 @@ class AvitoWebhookService:
                     "account_id": payload.account_id,
                 },
             )
-            return
+            return None
 
         await session.commit()
         event = await session.get(IntegrationEvent, event_id)
@@ -79,7 +84,7 @@ class AvitoWebhookService:
                         "direction": payload.payload.direction,
                     },
                 )
-                return
+                return None
 
             channel, _ = await self._get_or_create_channel(session, payload.account_id)
             client, _ = await self._get_or_create_client(session, payload.payload.sender_user_id)
@@ -89,7 +94,7 @@ class AvitoWebhookService:
                 client=client,
                 external_dialog_id=payload.payload.chat_id,
             )
-            message_created = await self._create_message_if_not_exists(
+            message_id = await self._create_message_if_not_exists(
                 session=session,
                 dialogue=dialogue,
                 payload=payload,
@@ -108,9 +113,10 @@ class AvitoWebhookService:
                     "account_id": payload.account_id,
                     "chat_id": payload.payload.chat_id,
                     "external_message_id": payload.payload.message_id,
-                    "message_created": message_created,
+                    "message_id": str(message_id) if message_id is not None else None,
                 },
             )
+            return message_id
         except Exception as exc:
             logger.exception(
                 "event_processing_failed",
@@ -283,7 +289,7 @@ class AvitoWebhookService:
         dialogue: Dialogue,
         payload: AvitoWebhookPayload,
         raw_payload: dict,
-    ) -> bool:
+    ) -> uuid.UUID | None:
         stmt = (
             insert(Message)
             .values(
@@ -309,7 +315,7 @@ class AvitoWebhookService:
                     "external_message_id": payload.payload.message_id,
                 },
             )
-            return False
+            return None
 
         logger.info(
             "message_created",
@@ -320,4 +326,4 @@ class AvitoWebhookService:
                 "message_id": str(message_id),
             },
         )
-        return True
+        return message_id

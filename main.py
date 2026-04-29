@@ -1,13 +1,17 @@
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
-from app.api import admin, auth, clients, drivers, webhooks
+from app.api import admin, auth, clients, drivers, orders, webhooks
 from app.core.config import settings
 from app.db.seed import seed_data
 
 logger = logging.getLogger(__name__)
+STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -31,11 +35,20 @@ app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(admin.router, prefix="/api/v1/admin", tags=["admin"])
 app.include_router(clients.router, prefix="/api/v1/clients", tags=["clients"])
 app.include_router(drivers.router, prefix="/api/v1/drivers", tags=["drivers"])
+app.include_router(orders.router, prefix="/api/v1/orders", tags=["orders"])
 app.include_router(webhooks.router, prefix="/api/v1/webhooks")
 
 @app.get("/ping")
 async def ping():
     return {"status": "ok"}
+
+
+@app.get("/demo", include_in_schema=False)
+async def demo_page():
+    return FileResponse(STATIC_DIR / "index.html")
+
+
+app.mount("/demo", StaticFiles(directory=STATIC_DIR, html=True), name="static")
 
 @app.get("/")
 async def root():

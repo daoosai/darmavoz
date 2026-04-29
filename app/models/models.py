@@ -83,6 +83,7 @@ class Order(Base):
     source: Mapped[Optional[str]] = mapped_column(String(50), default="avito", nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     source_dialogue_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("dialogues.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
     client: Mapped["Client"] = relationship("Client", back_populates="orders")

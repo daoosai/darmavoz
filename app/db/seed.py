@@ -26,24 +26,50 @@ async def seed_data() -> None:
 
         await session.commit()
 
-        query = select(User).where(User.username == settings.ADMIN_USERNAME)
-        result = await session.execute(query)
-        admin_user = result.scalar_one_or_none()
+        await ensure_user(session, settings.ADMIN_USERNAME, settings.ADMIN_PASSWORD, "admin")
+        await ensure_optional_user(session, settings.LOGIST_USERNAME, settings.LOGIST_PASSWORD, "logist")
+        await ensure_optional_user(session, settings.MANAGER_USERNAME, settings.MANAGER_PASSWORD, "manager")
 
-        if admin_user is None:
-            query = select(Role).where(Role.name == "admin")
-            result = await session.execute(query)
-            admin_role = result.scalar_one()
 
-            session.add(
-                User(
-                    username=settings.ADMIN_USERNAME,
-                    hashed_password=get_password_hash(settings.ADMIN_PASSWORD),
-                    role_id=admin_role.id,
-                    is_active=True,
-                )
+async def ensure_optional_user(session, username: str | None, password: str | None, role_name: str) -> None:
+    if not username or not password:
+        print(f"Optional user for role '{role_name}' is not configured.")
+        return
+    await ensure_user(session, username, password, role_name)
+
+
+async def ensure_user(session, username: str, password: str, role_name: str) -> None:
+    query = select(User).where(User.username == username)
+    result = await session.execute(query)
+    user = result.scalar_one_or_none()
+
+    role_query = select(Role).where(Role.name == role_name)
+    role_result = await session.execute(role_query)
+    role = role_result.scalar_one()
+
+    if user is None:
+        session.add(
+            User(
+                username=username,
+                hashed_password=get_password_hash(password),
+                role_id=role.id,
+                is_active=True,
             )
-            await session.commit()
-            print(f"Admin user '{settings.ADMIN_USERNAME}' created.")
-        else:
-            print(f"Admin user '{settings.ADMIN_USERNAME}' already exists.")
+        )
+        await session.commit()
+        print(f"User '{username}' with role '{role_name}' created.")
+        return
+
+    updated = False
+    if user.role_id != role.id:
+        user.role_id = role.id
+        updated = True
+    if not user.is_active:
+        user.is_active = True
+        updated = True
+
+    if updated:
+        await session.commit()
+        print(f"User '{username}' with role '{role_name}' updated.")
+    else:
+        print(f"User '{username}' with role '{role_name}' already exists.")

@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from sqlalchemy import select
 
+from app.core.config import settings
 from app.integrations.openai.client import OpenAIClient
 from app.models.models import Channel, Client, Dialogue, Message, MessageAiAnalysis, Order
 from app.schemas.ai import MessageAnalysisResult, MessageClassificationEnum, OrderExtractedFields
@@ -96,6 +97,25 @@ async def fetch_analysis(session, message_id):
             select(MessageAiAnalysis).where(MessageAiAnalysis.message_id == message_id)
         )
     ).scalar_one()
+
+
+@pytest.mark.asyncio
+async def test_openai_client_uses_llm_base_url(monkeypatch):
+    monkeypatch.setattr(settings, "LLM_API_KEY", "proxy-key")
+    monkeypatch.setattr(settings, "LLM_BASE_URL", "https://api.proxyapi.ru/openai/v1")
+    monkeypatch.setattr(settings, "LLM_MAX_RETRIES", 7)
+    monkeypatch.setattr(settings, "LLM_TIMEOUT_SECONDS", 45)
+
+    with patch("app.integrations.openai.client.AsyncOpenAI") as mock_async_openai:
+        client = OpenAIClient()
+
+    mock_async_openai.assert_called_once_with(
+        api_key="proxy-key",
+        base_url="https://api.proxyapi.ru/openai/v1",
+        max_retries=7,
+        timeout=45,
+    )
+    assert client.client is mock_async_openai.return_value
 
 
 async def test_process_new_message_creates_draft(session_factory):

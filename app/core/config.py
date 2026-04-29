@@ -17,11 +17,12 @@ class Settings(BaseSettings):
     AVITO_CLIENT_SECRET: str | None = None
     AVITO_ACCOUNT_ID: str | None = None
     AVITO_BASE_URL: str = "https://api.avito.ru"
-    OPENAI_API_KEY: str | None = None
-    OPENAI_MODEL: str = "gpt-4o-mini"
-    OPENAI_TIMEOUT_SECONDS: int = 30
-    OPENAI_MAX_RETRIES: int = 3
-    OPENAI_TEMPERATURE: float = 0.0
+    LLM_API_KEY: str | None = None
+    LLM_BASE_URL: str = "https://api.proxyapi.ru/openai/v1"
+    LLM_MODEL: str = "gpt-4o-mini"
+    LLM_TIMEOUT_SECONDS: int = 30
+    LLM_MAX_RETRIES: int = 3
+    LLM_TEMPERATURE: float = 0.0
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

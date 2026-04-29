@@ -1,5 +1,22 @@
 # Darmavoz Backend
 
+## LLM ProxyAPI
+
+Для Спринта 4 AI-обработка использует ProxyAPI как совместимый транспорт для официального OpenAI SDK.
+
+Нужно настроить переменные окружения:
+
+```env
+LLM_API_KEY=your-proxyapi-key
+LLM_BASE_URL=https://api.proxyapi.ru/openai/v1
+LLM_MODEL=gpt-4o-mini
+LLM_TIMEOUT_SECONDS=30
+LLM_MAX_RETRIES=3
+LLM_TEMPERATURE=0.0
+```
+
+Пример полного набора переменных находится в `.env.example`.
+
 ## Запуск
 
 ### Локальная разработка

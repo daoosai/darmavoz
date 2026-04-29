@@ -19,21 +19,23 @@ class OpenAIClient:
     def __init__(self) -> None:
         self.last_raw_response: str | None = None
         self.client: AsyncOpenAI | None = None
-        if settings.OPENAI_API_KEY:
+        if settings.LLM_API_KEY:
             self.client = AsyncOpenAI(
-                api_key=settings.OPENAI_API_KEY,
-                max_retries=settings.OPENAI_MAX_RETRIES,
-                timeout=settings.OPENAI_TIMEOUT_SECONDS,
+                api_key=settings.LLM_API_KEY,
+                base_url=settings.LLM_BASE_URL,
+                max_retries=settings.LLM_MAX_RETRIES,
+                timeout=settings.LLM_TIMEOUT_SECONDS,
             )
 
     async def analyze_message(self, text: str, context: str = "") -> MessageAnalysisResult:
-        if not settings.OPENAI_API_KEY:
-            raise ValueError("OPENAI_API_KEY is not configured")
+        if not settings.LLM_API_KEY:
+            raise ValueError("LLM_API_KEY is not configured")
         if self.client is None:
             self.client = AsyncOpenAI(
-                api_key=settings.OPENAI_API_KEY,
-                max_retries=settings.OPENAI_MAX_RETRIES,
-                timeout=settings.OPENAI_TIMEOUT_SECONDS,
+                api_key=settings.LLM_API_KEY,
+                base_url=settings.LLM_BASE_URL,
+                max_retries=settings.LLM_MAX_RETRIES,
+                timeout=settings.LLM_TIMEOUT_SECONDS,
             )
 
         self.last_raw_response = None
@@ -41,14 +43,14 @@ class OpenAIClient:
         logger.info(
             "openai_message_analysis_started",
             extra={
-                "model": settings.OPENAI_MODEL,
+                "model": settings.LLM_MODEL,
                 "has_context": bool(context.strip()),
             },
         )
 
         completion = await self.client.beta.chat.completions.parse(
-            model=settings.OPENAI_MODEL,
-            temperature=settings.OPENAI_TEMPERATURE,
+            model=settings.LLM_MODEL,
+            temperature=settings.LLM_TEMPERATURE,
             response_format=MessageAnalysisResult,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},

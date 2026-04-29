@@ -1,10 +1,25 @@
+import logging
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
+
 from app.api import admin, auth, clients, drivers, webhooks
+from app.core.config import settings
 from app.db.seed import seed_data
+
+logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logger.info(
+        "llm_initializing",
+        extra={
+            "base_url": settings.LLM_BASE_URL,
+            "model": settings.LLM_MODEL,
+        },
+    )
+    if not settings.LLM_API_KEY:
+        logger.warning("LLM_API_KEY is not set. AI processing will fail!")
     # Запускаем посев данных
     await seed_data()
     yield
@@ -37,5 +52,6 @@ async def health_check():
         "status": "online",
         "project": "Darmavoz Core API",
         "version": "0.1.0",
-        "message": "Server is running"
+        "message": "Server is running",
+        "llm_configured": bool(settings.LLM_API_KEY),
     }

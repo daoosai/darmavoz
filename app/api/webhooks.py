@@ -2,13 +2,14 @@ import logging
 import secrets
 from ipaddress import ip_address
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.db.database import get_db
 from app.integrations.avito.schemas import AvitoWebhookPayload
 from app.integrations.avito.service import AvitoWebhookService
+from app.services.message_ai_processor import background_process_message
 
 router = APIRouter(tags=["Webhooks"])
 logger = logging.getLogger(__name__)
@@ -77,15 +78,18 @@ def verify_webhook_secret(
 @router.post("/avito", dependencies=[Depends(verify_webhook_secret)])
 async def avito_webhook(
     payload: AvitoWebhookPayload,
-    session: AsyncSession = Depends(get_db)
+    background_tasks: BackgroundTasks,
+    session: AsyncSession = Depends(get_db),
 ) -> dict[str, str | bool]:
     """
     Эндпоинт для приема вебхуков от Авито.
     Принимает строго типизированный payload и передает в сервис обработки.
     """
     try:
-        service = AvitoWebhookService()
-        await service.process_inbound_webhook(session, payload)
+        avito_service = AvitoWebhookService()
+        message_id = await avito_service.process_inbound_webhook(session, payload)
+        if message_id is not None:
+            background_tasks.add_task(background_process_message, message_id)
         return {"ok": True, "status": "processed"}
     except Exception:
         logger.exception(

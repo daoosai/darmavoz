@@ -5,8 +5,9 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import admin, auth, clients, drivers, orders, webhooks
+from app.api import admin, auth, clients, drivers, orders, products, webhooks, app_version
 from app.core.config import settings
 from app.db.seed import seed_data
 
@@ -30,12 +31,22 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Дармавоз.рф API", lifespan=lifespan)
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Include routers
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(admin.router, prefix="/api/v1/admin", tags=["admin"])
 app.include_router(clients.router, prefix="/api/v1/clients", tags=["clients"])
 app.include_router(drivers.router, prefix="/api/v1/drivers", tags=["drivers"])
 app.include_router(orders.router, prefix="/api/v1/orders", tags=["orders"])
+app.include_router(products.router, prefix="/api/v1/products", tags=["products"])
+app.include_router(app_version.router, prefix="/api/v1/app-version", tags=["system"])
 app.include_router(webhooks.router, prefix="/api/v1/webhooks")
 
 @app.get("/ping")

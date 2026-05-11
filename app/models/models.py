@@ -62,6 +62,17 @@ class Driver(Base):
     orders: Mapped[List["Order"]] = relationship("Order", back_populates="driver")
 
 
+class Product(Base):
+    __tablename__ = 'products'
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    price: Mapped[float] = mapped_column(Float, nullable=False)
+    unit_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    image_url: Mapped[str] = mapped_column(String(500), nullable=False)
+
+
 class OrderStatus(str, Enum):
     draft = "draft"
     pending = "pending"

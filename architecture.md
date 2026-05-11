@@ -1,212 +1,415 @@
 # Архитектура бэкенда "Дармавоз" (Core API)
 
-**Статус:** Спринт 4 в работе. Реализованы интеграция Авито, AI-анализ сообщений и черновики заказов.
+**Статус на 2026-05-01:** Sprint 4 реализован и развернут. В production доступны интеграция Авито, AI-анализ сообщений, создание черновиков заказов и demo UI для проверки контура.
 
-Этот файл является единым источником истины для текущего состояния серверной части проекта после Спринта 4.
+Этот документ фиксирует фактическое состояние backend-проекта на ноде `дармавоз` в каталоге `/opt/darmavoz`.
 
-## 1. Структура проекта
+## 1. Назначение текущего backend
+
+Текущая серверная часть закрывает backend-контур MVP до конца Sprint 4:
+
+- прием входящих сообщений из Авито;
+- сохранение каналов, диалогов, сообщений и интеграционных событий;
+- JWT-авторизацию и базовую ролевую модель;
+- AI-классификацию входящих сообщений;
+- извлечение параметров заказа из свободного текста;
+- создание и обновление черновиков заказов;
+- demo UI для ручной проверки цепочки `webhook -> AI -> draft order`.
+
+Что пока не реализовано в текущем backend:
+
+- автоматическая отправка уточняющих вопросов клиенту;
+- интерфейс логиста для подтверждения карточки заказа;
+- распределение по водителям, таймеры, MAX-интеграция;
+- мобильные клиенты и картографический контур.
+
+## 2. Структура проекта
 
 ```text
-backend/
+/opt/darmavoz
 ├── alembic/                  # Миграции базы данных
 ├── app/
 │   ├── api/                  # FastAPI роутеры
 │   ├── core/                 # Конфигурация приложения
 │   ├── db/                   # Сессии БД и seed
-│   ├── integrations/         # Внешние интеграции (например, Avito API и Webhooks)
+│   ├── integrations/         # Avito и LLM-клиенты
 │   ├── models/               # SQLAlchemy ORM модели
 │   ├── schemas/              # Pydantic схемы
-│   ├── security/             # JWT и хеширование паролей
-│   └── services/             # Бизнес-логика
-├── tests/                    # Интеграционные и unit-тесты (Pytest)
-├── .env                      # Локальная конфигурация окружения
-├── alembic.ini               # Конфигурация Alembic
-├── docker-compose.yml        # Production-файл для DAOOS Kit (только backend)
-├── Dockerfile                # Сборка backend-образа
-├── entrypoint.sh             # Ожидание БД, миграции, запуск uvicorn
-├── main.py                   # Точка входа FastAPI
-├── pytest.ini                # Конфигурация Pytest
-├── README.md                 # Быстрый старт и автодокументация API
-└── requirements.txt          # Python-зависимости
+│   ├── security/             # JWT и пароли
+│   └── services/             # Бизнес-логика AI-обработки
+├── static/                   # Demo UI
+├── tests/                    # Unit и integration tests
+├── .env                      # Локальная конфигурация
+├── README.md                 # Операционная документация
+├── architecture.md           # Этот документ
+├── docker-compose.yml        # Production compose
+├── docker-compose.local.yml  # Локальная разработка
+├── Dockerfile
+├── entrypoint.sh
+├── main.py
+└── requirements.txt
 ```
 
-## 2. Инфраструктура
+## 3. Инфраструктура и деплой
 
-Сервисный контур поднимается через Docker Compose и включает:
-- `backend`: FastAPI приложение на Python 3.11.
-- `db`: PostgreSQL 15.
-- `redis`: Redis 7.
+### Runtime
 
-Базовая конфигурация хранится в `.env` и читается через `pydantic-settings`.
+- Python 3.11
+- FastAPI
+- PostgreSQL
+- Redis
+- Docker Compose
 
-## 3. Автодокументирование API
+### Production deployment
 
-FastAPI формирует OpenAPI-схему автоматически.
-Доступные точки автодокументации:
-- `/docs` — Swagger UI
-- `/redoc` — ReDoc
-- `/openapi.json` — OpenAPI schema
+Текущая production-инсталляция работает на ноде `дармавоз` через `docker compose`.
 
-## 4. Схема базы данных
+Проверенные внешние точки:
 
-Все первичные ключи и внешние ключи реализованы на `UUID`.
+- `https://darmavoz.ru/`
+- `https://darmavoz.ru/health`
+- `https://darmavoz.ru/docs`
+- `https://darmavoz.ru/demo`
+
+`/health` дополнительно возвращает флаг:
+
+- `llm_configured: true|false`
+
+Он показывает, настроен ли `LLM_API_KEY` в окружении контейнера.
+
+## 4. API-поверхность
+
+### Системные endpoints
+
+- `GET /`
+- `GET /ping`
+- `GET /health`
+- `GET /docs`
+- `GET /redoc`
+- `GET /openapi.json`
+- `GET /demo`
+
+### Основные API-модули
+
+- `/api/v1/auth`
+- `/api/v1/admin`
+- `/api/v1/clients`
+- `/api/v1/drivers`
+- `/api/v1/orders`
+- `/api/v1/webhooks`
+
+### Реально используемые в Sprint 4 endpoints
+
+- `POST /api/v1/auth/login`
+- `POST /api/v1/webhooks/avito`
+- `GET /api/v1/orders/`
+
+## 5. Модель данных
+
+Все ключевые таблицы используют `UUID`.
 
 ### roles
-- `id` (`UUID`, PK)
-- `name` (`String`, unique): `admin`, `logist`, `manager`
-- `description` (`String`, nullable)
+
+- `id`
+- `name`
+- `description`
+
+Значения seed:
+
+- `admin`
+- `logist`
+- `manager`
 
 ### users
-- `id` (`UUID`, PK)
-- `username` (`String`, unique, index)
-- `hashed_password` (`String`)
-- `role_id` (`UUID`, FK -> `roles.id`)
-- `is_active` (`Boolean`)
+
+- `id`
+- `username`
+- `hashed_password`
+- `role_id`
+- `is_active`
 
 ### clients
-- `id` (`UUID`, PK)
-- `name` (`String`)
-- `phone` (`String`, unique, index, nullable=True)
-- `external_source` (`String`, nullable)
-- `external_user_id` (`String`, nullable)
-- Уникальный индекс: `external_source` + `external_user_id`
+
+- `id`
+- `name`
+- `phone`
+- `external_source`
+- `external_user_id`
+
+Ограничение:
+
+- уникальная пара `external_source + external_user_id`
 
 ### drivers
-- `id` (`UUID`, PK)
-- `name` (`String`)
-- `phone` (`String`, unique, index)
-- `status` (`String`, nullable)
+
+- `id`
+- `name`
+- `phone`
+- `status`
 
 ### orders
-- `id` (`UUID`, PK)
-- `client_id` (`UUID`, FK -> `clients.id`)
-- `driver_id` (`UUID`, FK -> `drivers.id`, nullable)
-- `material` (`String`)
-- `volume` (`Float`)
-- `address` (`Text`)
-- `status` (`String`)
+
+- `id`
+- `client_id`
+- `driver_id`
+- `material`
+- `volume`
+- `address`
+- `status`
+- `source`
+- `notes`
+- `source_dialogue_id`
+- `created_at`
+
+Фактические статусы, присутствующие в модели:
+
+- `draft`
+- `pending`
+- `assigned`
+- `completed`
+- `cancelled`
 
 ### events
-- `id` (`UUID`, PK)
-- `order_id` (`UUID`, FK -> `orders.id`, nullable)
-- `event_type` (`String`)
-- `description` (`Text`, nullable)
-- `created_at` (`DateTime(timezone=True)`)
+
+- `id`
+- `order_id`
+- `event_type`
+- `description`
+- `created_at`
 
 ### order_offers
-- `id` (`UUID`, PK)
-- `order_id` (`UUID`, FK -> `orders.id`)
-- `driver_id` (`UUID`, FK -> `drivers.id`)
-- `price` (`Float`)
-- `status` (`String`)
-- `created_at` (`DateTime(timezone=True)`)
+
+- `id`
+- `order_id`
+- `driver_id`
+- `price`
+- `status`
+- `created_at`
 
 ### integration_events
-- `id` (`UUID`, PK)
-- `source` (`String`): например, 'avito'
-- `external_event_id` (`String`): ID события во внешней системе
-- `payload` (`JSONB`): сырой вебхук
-- `status` (`String`): `received`, `processed`, `failed`
-- `error_message` (`Text`, nullable)
-- `created_at` (`DateTime(timezone=True)`)
-- Уникальный индекс: `source` + `external_event_id`
+
+- `id`
+- `source`
+- `external_event_id`
+- `payload`
+- `status`
+- `error_message`
+- `created_at`
+
+Ограничение:
+
+- уникальная пара `source + external_event_id`
 
 ### channels
-- `id` (`UUID`, PK)
-- `name` (`String`): например, 'avito'
-- `external_account_id` (`String`): ID нашего аккаунта/бота
-- `is_active` (`Boolean`, default=True)
-- Уникальный индекс: `name` + `external_account_id`
+
+- `id`
+- `name`
+- `external_account_id`
+- `is_active`
+
+Ограничение:
+
+- уникальная пара `name + external_account_id`
 
 ### dialogues
-- `id` (`UUID`, PK)
-- `channel_id` (`UUID`, FK -> `channels.id`)
-- `external_dialog_id` (`String`): ID чата в Авито
-- `client_id` (`UUID`, FK -> `clients.id`, nullable)
-- `order_id` (`UUID`, FK -> `orders.id`, nullable)
-- `status` (`String`): `open`, `closed`
-- `last_message_at` (`DateTime(timezone=True)`, nullable)
-- `created_at` (`DateTime(timezone=True)`)
-- Уникальный индекс: `channel_id` + `external_dialog_id`
+
+- `id`
+- `channel_id`
+- `external_dialog_id`
+- `client_id`
+- `order_id`
+- `status`
+- `last_message_at`
+- `created_at`
+
+Ограничение:
+
+- уникальная пара `channel_id + external_dialog_id`
 
 ### messages
-- `id` (`UUID`, PK)
-- `dialogue_id` (`UUID`, FK -> `dialogues.id`)
-- `external_message_id` (`String`): ID сообщения в Авито
-- `direction` (`String`): `inbound`, `outbound`
-- `message_type` (`String`): `text`, `system`, `media`
-- `text` (`Text`, nullable)
-- `raw_payload` (`JSONB`, nullable)
-- `created_at` (`DateTime(timezone=True)`)
-- Уникальный индекс: `dialogue_id` + `external_message_id`
 
-## 5. Интеграции
+- `id`
+- `dialogue_id`
+- `external_message_id`
+- `direction`
+- `message_type`
+- `text`
+- `raw_payload`
+- `created_at`
 
-Вся логика интеграций изолирована в модуле `app/integrations`.
+Ограничение:
 
-**Авито:**
-- Логика находится в `app/integrations/avito`.
-- Точка входа для вебхуков: `POST /api/v1/webhooks/avito`.
-- Реализована строгая идемпотентность через составные уникальные ключи (`UniqueConstraint`).
-- Сырые вебхуки сначала сохраняются в `integration_events`, после чего парсятся и распределяются по сущностям `channels`, `dialogues`, `messages`.
+- уникальная пара `dialogue_id + external_message_id`
 
-**LLM / ProxyAPI:**
-- В Спринте 4 для LLM-транспорта используется ProxyAPI: `https://api.proxyapi.ru/openai/v1`.
-- ProxyAPI полностью совместим с официальным SDK OpenAI, поэтому приложение продолжает использовать `AsyncOpenAI` и `beta.chat.completions.parse(...)`.
-- Конфигурация задается через переменные `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL`, `LLM_TIMEOUT_SECONDS`, `LLM_MAX_RETRIES`, `LLM_TEMPERATURE`.
+### message_ai_analyses
 
-## 5.1 Operational Block: Avito Webhook
+Таблица Sprint 4.
 
-### Endpoint
+- `id`
+- `message_id`
+- `dialogue_id`
+- `classification`
+- `raw_llm_response`
+- `normalized_json`
+- `confidence`
+- `missing_fields`
+- `status`
+- `error_message`
+- `created_at`
+
+Типовые статусы анализа:
+
+- `processed`
+- `failed`
+- `needs_review`
+
+## 6. Интеграции
+
+### 6.1. Avito webhook
+
+Точка входа:
+
 - `POST /api/v1/webhooks/avito`
 
-### Security Header
-- Заголовок: `X-Webhook-Secret`
-- Значение сравнивается с `AVITO_WEBHOOK_SECRET` через `secrets.compare_digest()`
-- При неверном или отсутствующем секрете сервис возвращает `403`
+Поддерживаемые способы авторизации webhook:
 
-### Payload Contract
-- Верхний уровень:
-  - `event_id: str`
-  - `account_id: str`
-  - `payload: object`
-- Вложенный `payload`:
-  - `chat_id: str`
-  - `user_id: str`
-  - `message_id: str`
-  - `text: str`
-- Все неизвестные поля игнорируются на уровне Pydantic-схемы, но обязательные поля валидируются строго
+- заголовок `X-Webhook-Secret`;
+- query-параметр `token`;
+- allowlist IP через `AVITO_WEBHOOK_ALLOWED_IPS`.
 
-### Response Codes
-- `200 OK`:
-  - вебхук успешно обработан
-  - либо пришел дубль события и был безопасно проигнорирован
-- `403 Forbidden`:
-  - отсутствует или неверен секрет вебхука
-- `422 Unprocessable Entity`:
-  - нарушен JSON-контракт входящего payload
-- `500 Internal Server Error`:
-  - событие сохранено в `integration_events`, но дальнейшая бизнес-обработка завершилась ошибкой
+Фактическая логика:
 
-### Idempotency Logic
-- Уровень 1: входящее событие уникально по паре `source + external_event_id`
-- Уровень 2: сообщение уникально в рамках диалога по паре `dialogue_id + external_message_id`
-- Один и тот же `message_id` может существовать в разных диалогах
-- Даже при ошибке бизнес-логики исходный webhook сначала фиксируется в `integration_events`
+1. Вебхук валидируется.
+2. Сырое событие сохраняется в `integration_events`.
+3. Канал, клиент, диалог и сообщение создаются или переиспользуются.
+4. Для нового входящего сообщения запускается background AI-обработка.
 
-### Processing Flow
-- Сервис логирует этапы `event_received`, `duplicate_event`, `channel_created/reused`, `client_created/reused`, `dialogue_created/reused`, `message_created` и `event_processed`
-- Канал ищется или создается по `name='avito'` и `external_account_id`
-- Клиент ищется или создается по `external_source='avito'` и `external_user_id`
-- Для клиентов из Авито поле `phone` остается `NULL`
+Идемпотентность обеспечивается на двух уровнях:
 
-## 6. Безопасность и роли
+- событие: `source + external_event_id`;
+- сообщение: `dialogue_id + external_message_id`.
 
-Авторизация построена на OAuth2 Password Flow + JWT.
+### 6.2. LLM / ProxyAPI
 
-Поддерживаемые роли Спринта 2:
-- `admin` — полный административный доступ
-- `logist` — операционный доступ логиста
-- `manager` — управленческий read-only контур
+В текущем прод-контуре LLM работает через ProxyAPI как совместимый транспорт OpenAI SDK.
 
-Seed при старте приложения создает базовые роли и администратора из `.env`, если их еще нет.
+Конфигурационные переменные:
+
+- `LLM_API_KEY`
+- `LLM_BASE_URL`
+- `LLM_MODEL`
+- `LLM_TIMEOUT_SECONDS`
+- `LLM_MAX_RETRIES`
+- `LLM_TEMPERATURE`
+
+Текущие defaults:
+
+- `LLM_BASE_URL=https://api.proxyapi.ru/openai/v1`
+- `LLM_MODEL=gpt-4o-mini`
+- `LLM_TEMPERATURE=0.0`
+
+## 7. Логика Sprint 4
+
+### 7.1. Классификация сообщения
+
+Поддерживаемые классы:
+
+- `new_order`
+- `order_update`
+- `question`
+- `irrelevant`
+
+### 7.2. Нормализованный AI-ответ
+
+LLM обязана вернуть валидируемую JSON-структуру, содержащую:
+
+- `classification`
+- `is_order_related`
+- `client_message_summary`
+- `order_fields`
+- `missing_fields`
+- `needs_clarification`
+- `should_create_order_draft`
+- `confidence`
+
+Извлекаемые поля заказа:
+
+- `material`
+- `volume`
+- `address`
+- `datetime_str`
+- `client_name`
+- `client_phone`
+- `notes`
+
+### 7.3. Создание черновика заказа
+
+Если `should_create_order_draft=true`, backend:
+
+1. ищет существующий `dialogue.order_id`;
+2. если заказ draft, обновляет его;
+3. если заказа нет, создает новый `orders.status='draft'`;
+4. связывает заказ с диалогом;
+5. сохраняет summary и доп. детали в `orders.notes`.
+
+### 7.4. Защита от порчи не-draft заказов
+
+Если к диалогу уже привязан заказ не в статусе `draft`, AI не перезаписывает его.
+
+В этом случае:
+
+- анализ сохраняется;
+- `message_ai_analyses.status = needs_review`;
+- `error_message = "Cannot update non-draft order"`.
+
+## 8. Demo UI
+
+`/demo` добавлен как ручной интерфейс проверки Sprint 4.
+
+Он позволяет:
+
+- авторизоваться через `POST /api/v1/auth/login`;
+- отправить тестовый webhook Авито;
+- увидеть последние 10 заказов;
+- проверить, как AI породил или не породил черновик.
+
+Demo UI не является полноценным интерфейсом логиста. Это инструмент проверки контура Sprint 3 + 4.
+
+## 9. Тестовое покрытие
+
+В проекте есть автоматические тесты для:
+
+- webhook-auth и идемпотентности Авито;
+- AI-классификации и draft order logic;
+- protection от изменения non-draft заказов;
+- demo orders endpoint и demo page.
+
+На момент актуализации документации на ноде проходил полный набор:
+
+- `pytest -q` -> `31 passed`
+
+## 10. Известные ограничения
+
+- `needs_clarification` пока только сохраняется в результате AI-анализа и не инициирует отправку вопроса клиенту.
+- Нет отдельного UI логиста для подтверждения и ручного редактирования карточки заказа.
+- `GET /api/v1/orders/` сейчас используется как demo endpoint последних 10 заказов, а не как полноценный реестр заказов.
+- В production сейчас развернута ветка `feature/demo-ui`; это допустимо для стенда, но для формального релиза лучше фиксировать release-ветку или `main`.
+
+## 11. Рекомендуемый порядок ручной проверки
+
+1. Проверить `https://darmavoz.ru/health`.
+2. Открыть `https://darmavoz.ru/docs`.
+3. Авторизоваться в `https://darmavoz.ru/demo`.
+4. Отправить тестовое inbound-сообщение через demo webhook simulator.
+5. Убедиться, что в `/api/v1/orders/` появился или обновился draft order.
+6. Проверить, что при нерелевантном сообщении новый заказ не создается.
+
+## 12. Вывод
+
+Текущее состояние backend соответствует завершенному Sprint 4:
+
+- Авито-интеграция работает;
+- AI-анализ включен;
+- JSON-валидация ответа LLM есть;
+- draft order creation реализован;
+- внешний production URL отвечает.

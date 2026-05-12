@@ -21,6 +21,12 @@ class DriverMainScaffold extends StatelessWidget {
     return Scaffold(
       body: navigationShell,
       bottomNavigationBar: BottomNavigationBar(
+        type: BottomNavigationBarType.fixed,
+        backgroundColor: Colors.white,
+        selectedItemColor: const Color(0xFF3AA9E1),
+        unselectedItemColor: Colors.grey,
+        showUnselectedLabels: true,
+        elevation: 8,
         currentIndex: navigationShell.currentIndex,
         onTap: _onTap,
         items: const [

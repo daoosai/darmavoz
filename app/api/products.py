@@ -9,6 +9,7 @@ from app.schemas.product import ProductResponse
 router = APIRouter()
 
 
+@router.get("", response_model=list[ProductResponse], include_in_schema=False)
 @router.get("/", response_model=list[ProductResponse])
 async def list_products(
     db: AsyncSession = Depends(get_db),

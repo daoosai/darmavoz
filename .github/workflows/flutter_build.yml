@@ -29,12 +29,22 @@ jobs:
         working-directory: ./mobile
         run: flutter pub get
 
-      - name: Build APK
+      - name: Build Client APK
         working-directory: ./mobile
-        run: flutter build apk --release
+        run: flutter build apk --release --flavor client -t lib/main_client.dart
 
-      - name: Upload APK artifact
+      - name: Build Driver APK
+        working-directory: ./mobile
+        run: flutter build apk --release --flavor driver -t lib/main_driver.dart
+
+      - name: Upload Client APK artifact
         uses: actions/upload-artifact@v3
         with:
-          name: app-release
-          path: mobile/build/app/outputs/flutter-apk/app-release.apk
+          name: app-client-release
+          path: mobile/build/app/outputs/flutter-apk/app-client-release.apk
+
+      - name: Upload Driver APK artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: app-driver-release
+          path: mobile/build/app/outputs/flutter-apk/app-driver-release.apk

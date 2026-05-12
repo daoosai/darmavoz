@@ -47,7 +47,7 @@ class RoleSelectionScreen extends StatelessWidget {
                   height: 56,
                   child: OutlinedButton(
                     onPressed: () {
-                      context.go('/driver-stub');
+                      context.go('/driver/home');
                     },
                     style: OutlinedButton.styleFrom(
                       shape: RoundedRectangleBorder(

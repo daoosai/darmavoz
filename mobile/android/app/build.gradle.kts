@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.darmavoz_mobile"
+    namespace = "ru.darmavoz.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -19,9 +19,18 @@ android {
         jvmTarget = JavaVersion.VERSION_17.toString()
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("release-keystore.jks")
+            storePassword = "darmavoz123"
+            keyAlias = "darmavoz"
+            keyPassword = "darmavoz123"
+        }
+    }
+
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.darmavoz_mobile"
+        applicationId = "ru.darmavoz.app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -30,11 +39,26 @@ android {
         versionName = flutter.versionName
     }
 
+    flavorDimensions.add("app_type")
+
+    productFlavors {
+        create("client") {
+            dimension = "app_type"
+            applicationId = "ru.darmavoz.client"
+            resValue("string", "app_name", "Дармавоз")
+        }
+        create("driver") {
+            dimension = "app_type"
+            applicationId = "ru.darmavoz.driver"
+            resValue("string", "app_name", "Дармавоз Водитель")
+        }
+    }
+
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }

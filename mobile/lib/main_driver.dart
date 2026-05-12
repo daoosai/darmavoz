@@ -4,6 +4,7 @@ import 'router/driver_router.dart';
 import 'theme/app_theme.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const DarmavozDriverApp());
 }
 

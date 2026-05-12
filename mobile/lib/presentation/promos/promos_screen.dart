@@ -21,18 +21,11 @@ class PromosScreen extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             const Text(
-              'В разработке',
+              'В разработке. Будет доступно в версии 2.0',
+              textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Функционал будет доступен в версии 2.0',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey.shade600,
+                fontSize: 16,
+                color: Colors.grey,
               ),
             ),
           ],

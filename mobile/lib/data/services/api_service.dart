@@ -1,21 +1,14 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import '../models/product.dart';
+import 'package:darmavoz_mobile/data/models/category.dart' as model;
+import '../../core/constants.dart';
+import '../models/material_item.dart';
+import '../models/cart_item.dart';
 
 class ApiService {
   late final Dio _dio;
-  
-  String get baseUrl {
-    if (kReleaseMode) {
-      return 'https://darmavoz.ru';
-    } else {
-      if (kIsWeb) {
-        return 'http://localhost:8000';
-      } else {
-        return 'http://10.0.2.2:8000';
-      }
-    }
-  }
+
+  String get baseUrl => Constants.baseUrl;
 
   ApiService() {
     _dio = Dio(BaseOptions(
@@ -25,17 +18,82 @@ class ApiService {
     ));
   }
 
-  Future<List<Product>> getProducts() async {
+  Future<List<model.Category>> getCategories() async {
     try {
-      final response = await _dio.get('/api/v1/products');
+      final response = await _dio.get('/api/v1/catalog/categories/');
       if (response.statusCode == 200) {
         final List<dynamic> data = response.data;
-        return data.map((json) => Product.fromJson(json)).toList();
+        return data.map((json) => model.Category.fromJson(json)).toList();
       } else {
-        throw Exception('Не удалось загрузить товары');
+        throw Exception('Не удалось загрузить категории');
       }
     } catch (e) {
-      throw Exception('Ошибка загрузки: $e');
+      throw Exception('Ошибка загрузки категорий: $e');
+    }
+  }
+
+  Future<List<MaterialItem>> getMaterials({String? categoryId}) async {
+    try {
+      final response = await _dio.get(
+        '/api/v1/catalog/materials/',
+        queryParameters: categoryId != null ? {'category_id': categoryId} : null,
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> data = response.data;
+        return data.map((json) => MaterialItem.fromJson(json)).toList();
+      } else {
+        throw Exception('Не удалось загрузить материалы');
+      }
+    } catch (e) {
+      throw Exception('Ошибка загрузки материалов: $e');
+    }
+  }
+
+  Future<List<CartItem>> getCartItems(String sessionKey) async {
+    try {
+      final response = await _dio.get(
+        '/api/v1/cart/',
+        options: Options(headers: {'session_key': sessionKey}),
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> data = response.data;
+        return data.map((json) => CartItem.fromJson(json)).toList();
+      } else {
+        throw Exception('Не удалось загрузить корзину');
+      }
+    } catch (e) {
+      throw Exception('Ошибка загрузки корзины: $e');
+    }
+  }
+
+  Future<void> addCartItem(String sessionKey, String materialId, double volume) async {
+    try {
+      await _dio.post(
+        '/api/v1/cart/items',
+        data: {'material_id': materialId, 'volume': volume},
+        options: Options(headers: {'session_key': sessionKey}),
+      );
+    } catch (e) {
+      throw Exception('Ошибка добавления в корзину: $e');
+    }
+  }
+
+  Future<void> updateCartItem(String itemId, double volume) async {
+    try {
+      await _dio.patch(
+        '/api/v1/cart/items/$itemId',
+        data: {'volume': volume},
+      );
+    } catch (e) {
+      throw Exception('Ошибка обновления корзины: $e');
+    }
+  }
+
+  Future<void> deleteCartItem(String itemId) async {
+    try {
+      await _dio.delete('/api/v1/cart/items/$itemId');
+    } catch (e) {
+      throw Exception('Ошибка удаления из корзины: $e');
     }
   }
 

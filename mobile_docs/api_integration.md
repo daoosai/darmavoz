@@ -2,31 +2,55 @@
 
 ## 1. Базовый URL
 Для выполнения запросов используется класс `ApiService` (`mobile/lib/data/services/api_service.dart`).
-Паттерн выбора URL реализован с учетом среды выполнения (через константу `kIsWeb` и проверку `Platform.isAndroid`):
-- Если приложение запущено в Web-версии (например, Flutter Web): используется `http://127.0.0.1:8000`.
-- Если приложение запущено на Android-эмуляторе: используется `http://10.0.2.2:8000` (так как 127.0.0.1 для эмулятора — это сам эмулятор, а 10.0.2.2 — это хост-машина).
-- Для остальных случаев (iOS-симулятор) по умолчанию пока остается `http://127.0.0.1:8000`.
+Паттерн выбора URL реализован с учетом среды выполнения:
+- **Release**: `https://darmavoz.ru`
+- **Debug (Web)**: `http://localhost:8000`
+- **Debug (Android/iOS)**: `http://10.0.2.2:8000`
 
-*Примечание:* В бэкенде (FastAPI) в `main.py` настроен `CORSMiddleware` с `allow_origins=["*"]`, чтобы Web-версия Flutter могла получать данные без ошибок CORS.
+## 2. Модели данных (Freezed)
+Модели сгенерированы с использованием `freezed` и `json_serializable`.
 
-## 2. Модель Product
-Сгенерирована с использованием пакетов `freezed` и `json_serializable`. Находится в `mobile/lib/data/models/product.dart`.
+### Category (`category.dart`)
+- `id` (String)
+- `name` (String)
+- `slug` (String)
+- `sortOrder` (int)
+- `isActive` (bool)
 
-**Структура полей:**
-- `id` (String) — Уникальный UUID.
-- `name` (String) — Название (например, "Песок строительный").
-- `description` (String) — Описание товара.
-- `price` (double) — Цена.
-- `unitType` (String) — Единица измерения. В JSON от бэкенда приходит как `unit_type` (используется `@JsonKey(name: 'unit_type')`).
-- `imageUrl` (String) — Ссылка на изображение. В JSON приходит как `image_url`.
+### MaterialItem (`material_item.dart`)
+- `id` (String)
+- `categoryId` (String)
+- `name` (String)
+- `description` (String?)
+- `price` (double?)
+- `unit` (String)
+- `minVolume` (double)
+- `imageUrl` (String?)
+- `isActive` (bool)
 
-## 3. Стейт-менеджмент (Экран Каталога)
-На экране `/home` (`HomeScreen`) используется паттерн управления состоянием через `StatefulWidget` + `FutureBuilder`.
+### CartItem (`cart_item.dart`)
+- `id` (String)
+- `materialId` (String)
+- `volume` (double)
+- `unitPrice` (double?)
+- `amount` (double?)
+- `material` (MaterialItem) - вложенный объект
 
-**Как это работает:**
-1. При инициализации виджета (`initState`) вызывается метод `_fetchProducts()`, который сохраняет результат вызова `_apiService.getProducts()` в переменную `_productsFuture`.
-2. В методе `build` используется `FutureBuilder<List<Product>>`.
-3. Реализованы 3 состояния UI:
-   - **Загрузка:** Пока `snapshot.connectionState == ConnectionState.waiting`, отображается `CircularProgressIndicator`.
-   - **Ошибка:** Если `snapshot.hasError` (например, сервер недоступен), отображается иконка ошибки, текст и кнопка "Повторить", которая заново вызывает `_fetchProducts()` (вызывая `setState`).
-   - **Успех:** Если данные получены, строится `GridView.builder`, который рендерит переиспользуемый виджет `ProductCardWidget`, передавая в него объект `Product`.
+## 3. ApiService
+Находится в `mobile/lib/data/services/api_service.dart`.
+
+### Методы каталога:
+- `Future<List<Category>> getCategories()`: Запрос на `GET /api/v1/catalog/categories/`.
+- `Future<List<MaterialItem>> getMaterials({String? categoryId})`: Запрос на `GET /api/v1/catalog/materials/` с опциональным query-параметром `category_id`.
+
+### Методы корзины:
+- `Future<List<CartItem>> getCartItems(String sessionKey)`: Запрос на `GET /api/v1/cart/` с передачей `session_key` в заголовках.
+- `Future<void> addCartItem(String sessionKey, String materialId, double volume)`: Запрос `POST /api/v1/cart/items`.
+- `Future<void> updateCartItem(String itemId, double volume)`: Запрос `PATCH /api/v1/cart/items/{itemId}`.
+- `Future<void> deleteCartItem(String itemId)`: Запрос `DELETE /api/v1/cart/items/{itemId}`.
+
+## 4. SessionService
+Сервис `SessionService` (`mobile/lib/data/services/session_service.dart`) отвечает за управление анонимной сессией пользователя для привязки к корзине.
+- При первом запуске генерирует `UUIDv4` и сохраняет его в `SharedPreferences`.
+- При последующих запусках использует сохраненный ключ.
+- Ключ `sessionKey` доступен через свойство сервиса и передается в заголовках запросов к API корзины.

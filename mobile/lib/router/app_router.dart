@@ -12,6 +12,7 @@ import '../presentation/role_selection/role_selection_screen.dart';
 import '../presentation/driver_home/driver_home_screen.dart';
 import '../presentation/driver_orders/driver_orders_screen.dart';
 import '../presentation/driver_profile/driver_profile_screen.dart';
+import '../presentation/material_detail/material_detail_screen.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -44,6 +45,15 @@ final GoRouter appRouter = GoRouter(
             GoRoute(
               path: '/home',
               builder: (context, state) => const HomeScreen(),
+              routes: [
+                GoRoute(
+                  path: 'material/:id',
+                  builder: (context, state) {
+                    final id = state.pathParameters['id']!;
+                    return MaterialDetailScreen(materialId: id);
+                  },
+                ),
+              ],
             ),
           ],
         ),

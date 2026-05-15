@@ -22,6 +22,26 @@ class CategoryOut(BaseModel):
 # Material Schemas
 # =====================================================================================
 
+class MaterialCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    price: Optional[float] = None
+    unit: str
+    min_volume: float = 1.0
+    image_url: Optional[str] = None
+    category_id: uuid.UUID
+    is_active: bool = True
+
+class MaterialUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    price: Optional[float] = None
+    unit: Optional[str] = None
+    min_volume: Optional[float] = None
+    image_url: Optional[str] = None
+    category_id: Optional[uuid.UUID] = None
+    is_active: Optional[bool] = None
+
 class MaterialOut(BaseModel):
     id: uuid.UUID
     name: str
@@ -44,6 +64,9 @@ class CartItemCreate(BaseModel):
     material_id: uuid.UUID
     volume: float
 
+
+class CartItemUpdate(BaseModel):
+    volume: float
 
 class CartItemOut(BaseModel):
     id: uuid.UUID

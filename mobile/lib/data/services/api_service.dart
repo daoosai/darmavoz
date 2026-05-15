@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:darmavoz_mobile/data/models/category.dart' as model;
 import '../../core/constants.dart';
 import '../models/material_item.dart';
@@ -78,20 +77,24 @@ class ApiService {
     }
   }
 
-  Future<void> updateCartItem(String itemId, double volume) async {
+  Future<void> updateCartItem(String sessionKey, String itemId, double volume) async {
     try {
       await _dio.patch(
         '/api/v1/cart/items/$itemId',
         data: {'volume': volume},
+        options: Options(headers: {'session_key': sessionKey}),
       );
     } catch (e) {
       throw Exception('Ошибка обновления корзины: $e');
     }
   }
 
-  Future<void> deleteCartItem(String itemId) async {
+  Future<void> deleteCartItem(String sessionKey, String itemId) async {
     try {
-      await _dio.delete('/api/v1/cart/items/$itemId');
+      await _dio.delete(
+        '/api/v1/cart/items/$itemId',
+        options: Options(headers: {'session_key': sessionKey}),
+      );
     } catch (e) {
       throw Exception('Ошибка удаления из корзины: $e');
     }

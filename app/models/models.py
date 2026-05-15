@@ -87,9 +87,8 @@ class Order(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     client_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clients.id"))
     driver_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("drivers.id"), nullable=True)
-    material: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    volume: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    total_amount: Mapped[float] = mapped_column(Float, default=0.0)
     status: Mapped[str] = mapped_column(String(50), default=OrderStatus.draft.value)
     source: Mapped[Optional[str]] = mapped_column(String(50), default="avito", nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -99,6 +98,7 @@ class Order(Base):
     # Relationships
     client: Mapped["Client"] = relationship("Client", back_populates="orders")
     driver: Mapped[Optional["Driver"]] = relationship("Driver", back_populates="orders")
+    items: Mapped[List["OrderItem"]] = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
     events: Mapped[List["EventLog"]] = relationship("EventLog", back_populates="order")
     offers: Mapped[List["OrderOffer"]] = relationship("OrderOffer", back_populates="order")
     dialogues: Mapped[List["Dialogue"]] = relationship(
@@ -107,6 +107,20 @@ class Order(Base):
         foreign_keys="Dialogue.order_id",
     )
     source_dialogue: Mapped[Optional["Dialogue"]] = relationship("Dialogue", foreign_keys=[source_dialogue_id])
+
+class OrderItem(Base):
+    __tablename__ = 'order_items'
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orders.id"))
+    material_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("materials.id"))
+    volume: Mapped[float] = mapped_column(Float, nullable=False)
+    price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    amount: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    # Relationships
+    order: Mapped["Order"] = relationship("Order", back_populates="items")
+    material: Mapped["Material"] = relationship("Material")
 
 class EventLog(Base):
     __tablename__ = 'events'

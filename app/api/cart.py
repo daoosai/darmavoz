@@ -8,14 +8,14 @@ from sqlalchemy.orm import selectinload
 
 from app.db.database import get_db
 from app.models.models import CartItem, Material
-from app.schemas.catalog import CartItemCreate, CartItemOut
+from app.schemas.catalog import CartItemCreate, CartItemUpdate, CartItemOut
 
 router = APIRouter()
 
 
 @router.get("/", response_model=List[CartItemOut])
 async def get_cart_items(
-    session_key: str = Header(...),
+    session_key: str = Header(alias="session_key"),
     db: AsyncSession = Depends(get_db)
 ):
     """Returns a list of cart items for a given session_key."""
@@ -31,7 +31,7 @@ async def get_cart_items(
 @router.post("/items", response_model=CartItemOut)
 async def add_cart_item(
     item: CartItemCreate,
-    session_key: str = Header(...),
+    session_key: str = Header(alias="session_key"),
     db: AsyncSession = Depends(get_db)
 ):
     """Adds a material to the cart or updates its volume if it already exists."""
@@ -76,7 +76,7 @@ async def add_cart_item(
 @router.patch("/items/{id}", response_model=CartItemOut)
 async def update_cart_item(
     id: uuid.UUID,
-    volume: float,
+    item_update: CartItemUpdate,
     db: AsyncSession = Depends(get_db)
 ):
     """Updates the volume of a cart item."""
@@ -85,12 +85,12 @@ async def update_cart_item(
         raise HTTPException(status_code=404, detail="Cart item not found")
 
     material = cart_item.material
-    if volume < material.min_volume:
+    if item_update.volume < material.min_volume:
         raise HTTPException(status_code=400, detail=f"Volume must be at least {material.min_volume}")
 
-    cart_item.volume = volume
+    cart_item.volume = item_update.volume
     if material.price:
-        cart_item.amount = volume * material.price
+        cart_item.amount = item_update.volume * material.price
 
     await db.commit()
     await db.refresh(cart_item)

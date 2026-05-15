@@ -6,7 +6,7 @@ from sqlalchemy import select
 
 from app.core.config import settings
 from app.integrations.openai.client import OpenAIClient
-from app.models.models import Channel, Client, Dialogue, Message, MessageAiAnalysis, Order
+from app.models.models import Channel, Client, Dialogue, Message, MessageAiAnalysis, Order, Material, Category, OrderItem
 from app.schemas.ai import MessageAnalysisResult, MessageClassificationEnum, OrderExtractedFields
 from app.services.message_ai_processor import MessageAIProcessorService
 
@@ -120,6 +120,20 @@ async def test_openai_client_uses_llm_base_url(monkeypatch):
 
 async def test_process_new_message_creates_draft(session_factory):
     async with session_factory() as session:
+        # Create category and material for matching
+        category = Category(name="Test Category", slug=f"test_cat_{uuid.uuid4().hex[:8]}")
+        session.add(category)
+        await session.flush()
+        
+        material = Material(
+            name="Песок строительный",
+            category_id=category.id,
+            price=1000.0,
+            unit="м3",
+            min_volume=1.0
+        )
+        session.add(material)
+        
         _, dialogue, message = await create_dialogue_message(session)
         analysis_result = build_analysis_result(
             classification=MessageClassificationEnum.new_order,
@@ -139,25 +153,44 @@ async def test_process_new_message_creates_draft(session_factory):
         db_analysis = await fetch_analysis(session, message.id)
         db_dialogue = await session.get(Dialogue, dialogue.id)
         db_order = await session.get(Order, db_dialogue.order_id)
+        # Fetch order items
+        result = await session.execute(select(OrderItem).where(OrderItem.order_id == db_order.id))
+        order_items = result.scalars().all()
 
     assert db_analysis.status == "processed"
     assert db_analysis.classification == MessageClassificationEnum.new_order.value
     assert db_order is not None
     assert db_order.status == "draft"
-    assert db_order.material == "Песок"
-    assert db_order.volume == 10.0
+    assert len(order_items) == 1
+    assert order_items[0].volume == 10.0
+    assert order_items[0].price == 1000.0
+    assert order_items[0].amount == 10000.0
+    assert db_order.total_amount == 10000.0
     assert db_order.notes == "Summary: Клиент просит песок 10 кубов."
     assert db_dialogue.order_id == db_order.id
 
 
 async def test_order_update_updates_existing_draft(session_factory):
     async with session_factory() as session:
+        # Create category and material for matching
+        category = Category(name="Test Category 2", slug=f"test_cat_{uuid.uuid4().hex[:8]}")
+        session.add(category)
+        await session.flush()
+        
+        material = Material(
+            name="Песок речной",
+            category_id=category.id,
+            price=1500.0,
+            unit="м3",
+            min_volume=1.0
+        )
+        session.add(material)
+
         client, dialogue, message = await create_dialogue_message(session)
         existing_order = Order(
             client_id=client.id,
             status="draft",
-            material="Щебень",
-            volume=5.0,
+            total_amount=0.0,
             source_dialogue_id=dialogue.id,
         )
         session.add(existing_order)
@@ -169,7 +202,7 @@ async def test_order_update_updates_existing_draft(session_factory):
             classification=MessageClassificationEnum.order_update,
             should_create_order_draft=True,
             client_message_summary="Клиент уточнил заказ.",
-            material="Песок",
+            material="Песок речной",
             volume=12.0,
             address="ул. Ленина, 1",
             datetime_str="завтра 10:00",
@@ -187,11 +220,15 @@ async def test_order_update_updates_existing_draft(session_factory):
         db_dialogue = await session.get(Dialogue, dialogue.id)
         db_order = await session.get(Order, existing_order.id)
         db_analysis = await fetch_analysis(session, message.id)
+        result = await session.execute(select(OrderItem).where(OrderItem.order_id == db_order.id))
+        order_items = result.scalars().all()
 
     assert db_analysis.status == "processed"
     assert db_order.id == existing_order.id
-    assert db_order.material == "Песок"
-    assert db_order.volume == 12.0
+    assert len(order_items) == 1
+    assert order_items[0].volume == 12.0
+    assert order_items[0].price == 1500.0
+    assert db_order.total_amount == 18000.0
     assert db_order.address == "ул. Ленина, 1"
     assert db_order.notes == "Summary: Клиент уточнил заказ. | Date: завтра 10:00 | Notes: Позвонить за час"
     assert db_client.name == "Иван"
@@ -280,8 +317,7 @@ async def test_non_draft_protection(session_factory):
         protected_order = Order(
             client_id=client.id,
             status="in_progress",
-            material="Щебень",
-            volume=7.0,
+            total_amount=5000.0,
             address="Старый адрес",
             notes="Старые заметки",
             source_dialogue_id=dialogue.id,
@@ -312,7 +348,6 @@ async def test_non_draft_protection(session_factory):
 
     assert db_analysis.status == "needs_review"
     assert db_analysis.error_message == "Cannot update non-draft order"
-    assert db_order.material == "Щебень"
-    assert db_order.volume == 7.0
+    assert db_order.total_amount == 5000.0
     assert db_order.address == "Старый адрес"
     assert db_order.notes == "Старые заметки"

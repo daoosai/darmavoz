@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.database import get_db
-from app.models.models import Order, User
+from app.models.models import Order, OrderItem, User
 from app.schemas.order import OrderDemoResponse
 from app.security.auth import get_current_user
 
@@ -18,7 +18,10 @@ async def list_orders(
 ) -> list[Order]:
     stmt = (
         select(Order)
-        .options(selectinload(Order.client))
+        .options(
+            selectinload(Order.client),
+            selectinload(Order.items).selectinload(OrderItem.material)
+        )
         .order_by(Order.created_at.desc())
         .limit(10)
     )

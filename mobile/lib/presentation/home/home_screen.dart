@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import '../../data/models/category.dart' as app_models;
 import '../../data/models/material_item.dart';
+import '../../data/models/cart_item.dart';
 import '../../data/services/api_service.dart';
+import '../../data/services/session_service.dart';
 import '../../data/services/update_service.dart';
 import '../core/widgets/material_card_widget.dart';
+import '../providers/cart_provider.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -15,6 +19,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final ApiService _apiService = ApiService();
+  final SessionService _sessionService = SessionService();
   late Future<List<app_models.Category>> _categoriesFuture;
   late Future<List<MaterialItem>> _materialsFuture;
 
@@ -24,6 +29,11 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _sessionService.init().then((_) {
+      if (mounted) {
+        context.read<CartProvider>().fetchCart(_sessionService.sessionKey);
+      }
+    });
     _fetchCategories();
     _fetchMaterials();
 
@@ -47,6 +57,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final cartProvider = context.watch<CartProvider>();
+    final totalAmount = cartProvider.totalAmount;
+    final _cartItems = cartProvider.cartItems;
+
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -56,10 +70,49 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 16),
             _buildCategoryChips(),
             const SizedBox(height: 16),
-            _buildMaterialsGrid(),
+            _buildMaterialsGrid(cartProvider, _cartItems),
           ],
         ),
       ),
+      bottomNavigationBar: totalAmount > 0
+          ? Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              color: Colors.transparent,
+              child: SafeArea(
+                child: InkWell(
+                  onTap: () => context.go('/cart'),
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF3AA9E1),
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Перейти в корзину',
+                          style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          '${totalAmount.toStringAsFixed(2)} ₽',
+                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            )
+          : null,
     );
   }
 
@@ -168,7 +221,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildMaterialsGrid() {
+  Widget _buildMaterialsGrid(CartProvider cartProvider, List<CartItem> cartItems) {
     return Expanded(
       child: FutureBuilder<List<MaterialItem>>(
         future: _materialsFuture,
@@ -208,19 +261,48 @@ class _HomeScreenState extends State<HomeScreen> {
           }
 
           return GridView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                      maxCrossAxisExtent: 300,
-                      mainAxisSpacing: 16,
-                      crossAxisSpacing: 16,
-                      childAspectRatio: 0.65,
-                    ),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 300,
+              mainAxisSpacing: 16,
+              crossAxisSpacing: 16,
+              childAspectRatio: 0.65,
+            ),
             itemCount: materials.length,
             itemBuilder: (context, index) {
               final material = materials[index];
+              final cartItemIndex = cartItems.indexWhere((item) => item.materialId == material.id);
+              final cartItem = cartItemIndex != -1 ? cartItems[cartItemIndex] : null;
+
               return MaterialCardWidget(
                 material: material,
                 onTap: () => context.go('/home/material/${material.id}'),
+                initialVolume: cartItem?.volume ?? 0.0,
+                onAddToCart: () async {
+                  try {
+                    await cartProvider.addToCart(_sessionService.sessionKey, material, material.minVolume);
+                  } catch (e) {
+                    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(cartProvider.error ?? 'Ошибка')));
+                  }
+                },
+                onUpdateVolume: (newVolume) async {
+                  if (cartItem != null) {
+                    try {
+                      await cartProvider.updateVolume(_sessionService.sessionKey, cartItem.id, newVolume);
+                    } catch (e) {
+                      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(cartProvider.error ?? 'Ошибка')));
+                    }
+                  }
+                },
+                onDeleteFromCart: () async {
+                  if (cartItem != null) {
+                    try {
+                      await cartProvider.removeFromCart(_sessionService.sessionKey, cartItem.id);
+                    } catch (e) {
+                      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(cartProvider.error ?? 'Ошибка')));
+                    }
+                  }
+                },
               );
             },
           );

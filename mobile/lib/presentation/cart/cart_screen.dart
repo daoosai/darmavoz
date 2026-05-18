@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import '../../data/models/cart_item.dart';
-import '../../data/services/api_service.dart';
 import '../../data/services/session_service.dart';
+import '../providers/cart_provider.dart';
 
 class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
@@ -11,158 +13,215 @@ class CartScreen extends StatefulWidget {
 }
 
 class _CartScreenState extends State<CartScreen> {
-  final ApiService _apiService = ApiService();
   final SessionService _sessionService = SessionService();
-  late Future<List<CartItem>> _cartItemsFuture;
 
   @override
   void initState() {
     super.initState();
     _sessionService.init().then((_) {
-      _fetchCartItems();
-    });
-  }
-
-  void _fetchCartItems() {
-    setState(() {
-      _cartItemsFuture = _apiService.getCartItems(_sessionService.sessionKey);
+      if (mounted) {
+        context.read<CartProvider>().fetchCart(_sessionService.sessionKey);
+      }
     });
   }
 
   Future<void> _updateVolume(CartItem item, double newVolume) async {
     if (newVolume < item.material.minVolume) return;
     try {
-      await _apiService.updateCartItem(_sessionService.sessionKey, item.id, newVolume);
-      _fetchCartItems();
+      await context.read<CartProvider>().updateVolume(_sessionService.sessionKey, item.id, newVolume);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.read<CartProvider>().error ?? 'Ошибка')));
       }
     }
   }
 
   Future<void> _deleteItem(CartItem item) async {
     try {
-      await _apiService.deleteCartItem(_sessionService.sessionKey, item.id);
-      _fetchCartItems();
+      await context.read<CartProvider>().removeFromCart(_sessionService.sessionKey, item.id);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.read<CartProvider>().error ?? 'Ошибка')));
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final cartProvider = context.watch<CartProvider>();
+    final isLoading = cartProvider.isLoading;
+    final items = cartProvider.cartItems;
+    final error = cartProvider.error;
+    final totalAmount = cartProvider.totalAmount;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Корзина'),
         centerTitle: true,
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        elevation: 2,
+        shadowColor: Colors.black.withOpacity(0.2),
       ),
-      body: FutureBuilder<List<CartItem>>(
-        future: _cartItemsFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          } else if (snapshot.hasError) {
-            return Center(child: Text('Ошибка загрузки: ${snapshot.error}'));
-          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.shopping_cart_outlined, size: 80, color: Colors.grey.shade400),
-                  const SizedBox(height: 24),
-                  const Text('Ваша корзина пуста', style: TextStyle(fontSize: 16, color: Colors.grey)),
-                ],
-              ),
-            );
-          }
-
-          final items = snapshot.data!;
-          final totalAmount = items.fold<double>(0, (sum, item) => sum + (item.amount ?? 0));
-
-          return Column(
-            children: [
-              Expanded(
-                child: ListView.separated(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: items.length,
-                  separatorBuilder: (context, index) => const SizedBox(height: 12),
-                  itemBuilder: (context, index) {
-                    final item = items[index];
-                    return _buildCartItem(item);
-                  },
-                ),
-              ),
-              _buildBottomBar(totalAmount),
-            ],
-          );
-        },
-      ),
+      body: isLoading && items.isEmpty
+          ? const Center(child: CircularProgressIndicator())
+          : error != null && items.isEmpty
+              ? Center(child: Text(error))
+              : items.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'Добавьте товары в корзину',
+                            style: TextStyle(fontSize: 18, color: Colors.grey.shade700),
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton(
+                            onPressed: () {
+                              context.go('/home');
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                            ),
+                            child: const Text('К списку товаров'),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.separated(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: items.length,
+                      separatorBuilder: (context, index) => const SizedBox(height: 12),
+                      itemBuilder: (context, index) {
+                        final item = items[index];
+                        return _buildCartItem(item);
+                      },
+                    ),
+      bottomNavigationBar: items.isEmpty
+          ? const SizedBox.shrink()
+          : _buildBottomBar(totalAmount),
     );
   }
 
   Widget _buildCartItem(CartItem item) {
     final material = item.material;
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 2),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Картинка
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade200,
-                borderRadius: BorderRadius.circular(8),
+            // ЛЕВЫЙ БЛОК (Картинка)
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: SizedBox(
+                width: 60,
+                height: 80,
+                child: material.imageUrl != null && material.imageUrl!.isNotEmpty
+                    ? Image.network(
+                        material.imageUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          color: Colors.grey.shade200,
+                          child: const Icon(Icons.image_not_supported, color: Colors.grey),
+                        ),
+                      )
+                    : Container(
+                        color: Colors.grey.shade200,
+                        child: const Icon(Icons.image_not_supported, color: Colors.grey),
+                      ),
               ),
-              clipBehavior: Clip.antiAlias,
-              child: material.imageUrl != null
-                  ? Image.network(material.imageUrl!, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.image, color: Colors.grey))
-                  : const Icon(Icons.image, color: Colors.grey),
             ),
             const SizedBox(width: 12),
-            // Инфо
+            // ПРАВЫЙ БЛОК
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(material.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16), maxLines: 2, overflow: TextOverflow.ellipsis),
-                  const SizedBox(height: 4),
-                  Text('${item.unitPrice ?? 0} руб/${material.unit}', style: TextStyle(color: Colors.grey.shade600, fontSize: 14)),
-                  const SizedBox(height: 8),
-                  // Контроллер и удаление
+                  // ВЕРХНЯЯ СТРОКА
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
+                      Expanded(
+                        child: Text(
+                          material.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () => _deleteItem(item),
+                        child: const Icon(Icons.close, color: Colors.grey, size: 24),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  // ПОДЗАГОЛОВОК
+                  Text(
+                    '${item.unitPrice ?? 0} ₽ за 1 ${material.unit}',
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                  ),
+                  const SizedBox(height: 12),
+                  // НИЖНЯЯ СТРОКА
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          IconButton(
-                            icon: const Icon(Icons.remove_circle_outline),
-                            onPressed: () => _updateVolume(item, item.volume - 1),
-                            constraints: const BoxConstraints(),
-                            padding: EdgeInsets.zero,
-                          ),
-                          const SizedBox(width: 8),
-                          Text('${item.volume} ${material.unit}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                          const SizedBox(width: 8),
-                          IconButton(
-                            icon: const Icon(Icons.add_circle_outline),
-                            onPressed: () => _updateVolume(item, item.volume + 1),
-                            constraints: const BoxConstraints(),
-                            padding: EdgeInsets.zero,
+                          Text('Сумма:', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                          Text(
+                            '${item.amount ?? 0} ₽',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                           ),
                         ],
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline, color: Colors.red),
-                        onPressed: () => _deleteItem(item),
-                        constraints: const BoxConstraints(),
-                        padding: EdgeInsets.zero,
+                      const Spacer(),
+                      // КОНТРОЛЛЕР ОБЪЕМА
+                      Container(
+                        decoration: ShapeDecoration(
+                          shape: StadiumBorder(
+                            side: BorderSide(color: Colors.grey.shade300),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.remove, size: 20),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                              onPressed: () {
+                                if (item.volume <= material.minVolume) {
+                                  _deleteItem(item);
+                                } else {
+                                  _updateVolume(item, item.volume - 1.0);
+                                }
+                              },
+                              color: Colors.grey.shade700,
+                            ),
+                            Text(
+                              '${item.volume}',
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.add, size: 20),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                              onPressed: () => _updateVolume(item, item.volume + 1.0),
+                              color: const Color(0xFF3AA9E1),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -180,16 +239,26 @@ class _CartScreenState extends State<CartScreen> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -4))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, -4),
+          ),
+        ],
       ),
       child: SafeArea(
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Итого:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                Text('${totalAmount.toStringAsFixed(2)} руб', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF3AA9E1))),
+                const Text('Итого к оплате', style: TextStyle(fontSize: 16)),
+                Text(
+                  '${totalAmount.toStringAsFixed(2)} руб',
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
               ],
             ),
             const SizedBox(height: 16),
@@ -198,14 +267,16 @@ class _CartScreenState extends State<CartScreen> {
               height: 50,
               child: ElevatedButton(
                 onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Функция в разработке')));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Переход к оформлению заказа...')),
+                  );
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF3AA9E1),
+                  backgroundColor: Colors.blue,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                child: const Text('Оформить заказ', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                child: const Text('Перейти к оформлению', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               ),
             ),
           ],
@@ -214,3 +285,4 @@ class _CartScreenState extends State<CartScreen> {
     );
   }
 }
+

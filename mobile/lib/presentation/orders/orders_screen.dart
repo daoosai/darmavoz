@@ -9,6 +9,10 @@ class OrdersScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Заказы'),
         centerTitle: true,
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        elevation: 2,
+        shadowColor: Colors.black.withOpacity(0.2),
       ),
       body: Center(
         child: Column(
@@ -21,7 +25,7 @@ class OrdersScreen extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             const Text(
-              'В разработке. Будет доступно в версии 2.0',
+              'Здесь будут ваши заказы',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 16,

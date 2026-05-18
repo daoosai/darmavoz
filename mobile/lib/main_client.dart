@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import 'router/app_router.dart';
 import 'theme/app_theme.dart';
+import 'presentation/providers/cart_provider.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -13,11 +15,16 @@ class DarmavozApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp.router(
-      title: 'Дармавоз',
-      theme: AppTheme.lightTheme,
-      routerConfig: appRouter,
-      debugShowCheckedModeBanner: false,
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => CartProvider()),
+      ],
+      child: MaterialApp.router(
+        title: 'Дармавоз',
+        theme: AppTheme.lightTheme,
+        routerConfig: appRouter,
+        debugShowCheckedModeBanner: false,
+      ),
     );
   }
 }

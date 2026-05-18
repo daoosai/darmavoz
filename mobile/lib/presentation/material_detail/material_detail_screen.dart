@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
+import 'package:collection/collection.dart';
 import '../../data/models/material_item.dart';
 import '../../data/services/api_service.dart';
 import '../../data/services/session_service.dart';
+import '../providers/cart_provider.dart';
 
 class MaterialDetailScreen extends StatefulWidget {
   final String materialId;
@@ -16,7 +19,6 @@ class _MaterialDetailScreenState extends State<MaterialDetailScreen> {
   final ApiService _apiService = ApiService();
   final SessionService _sessionService = SessionService();
   late Future<MaterialItem> _materialFuture;
-  double _volume = 1.0;
 
   @override
   void initState() {
@@ -26,151 +28,308 @@ class _MaterialDetailScreenState extends State<MaterialDetailScreen> {
   }
 
   Future<MaterialItem> _fetchMaterial() async {
-    // В реальном приложении здесь был бы запрос к API для получения одного материала
-    // но так как у нас уже есть список, мы можем найти его там
-    // Это упрощение для примера
     final materials = await _apiService.getMaterials();
     final material = materials.firstWhere((m) => m.id == widget.materialId);
-    setState(() {
-      _volume = material.minVolume;
-    });
     return material;
-  }
-
-  void _updateVolume(double newVolume, double minVolume) {
-    if (newVolume >= minVolume) {
-      setState(() {
-        _volume = newVolume;
-      });
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Карточка товара')),
-      body: FutureBuilder<MaterialItem>(
-        future: _materialFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          } else if (snapshot.hasError) {
-            return Center(child: Text('Ошибка: ${snapshot.error}'));
-          } else if (!snapshot.hasData) {
-            return const Center(child: Text('Материал не найден'));
-          }
+    return FutureBuilder<MaterialItem>(
+      future: _materialFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            backgroundColor: Colors.white,
+            body: Center(child: CircularProgressIndicator()),
+          );
+        } else if (snapshot.hasError) {
+          return Scaffold(
+            backgroundColor: Colors.white,
+            body: Center(child: Text('Ошибка: ${snapshot.error}')),
+          );
+        } else if (!snapshot.hasData) {
+          return const Scaffold(
+            backgroundColor: Colors.white,
+            body: Center(child: Text('Материал не найден')),
+          );
+        }
 
-          final material = snapshot.data!;
-          final total = material.price != null ? _volume * material.price! : 0.0;
+        final material = snapshot.data!;
+        
+        final cartProvider = context.watch<CartProvider>();
+        final cartItem = cartProvider.cartItems.firstWhereOrNull((item) => item.materialId == material.id);
 
-          return Column(
-            children: [
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+        return Scaffold(
+          backgroundColor: Colors.white,
+          body: SafeArea(
+            child: Column(
+              children: [
+                // Кнопка закрытия
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      _buildImage(material),
-                      _buildInfo(material),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 28),
+                        onPressed: () => context.pop(),
+                      ),
                     ],
                   ),
                 ),
-              ),
-              _buildBottomBar(material, total),
-            ],
-          );
-        },
-      ),
+                // Скроллящийся контент
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Изображение
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(24.0),
+                            child: SizedBox(
+                              height: 300,
+                              width: double.infinity,
+                              child: material.imageUrl != null && material.imageUrl!.isNotEmpty
+                                  ? Image.network(
+                                      material.imageUrl!,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => _buildPlaceholder(),
+                                    )
+                                  : _buildPlaceholder(),
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          // Название
+                          Text(
+                            material.name,
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          // Минимальный объем
+                          Text(
+                            'Минимальный объем: ${material.minVolume} ${material.unit}',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: Color(0xFF3AA9E1),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          // Описание
+                          Text(
+                            material.description ?? 'Описание отсутствует',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.grey.shade700,
+                              height: 1.5,
+                            ),
+                          ),
+                          const SizedBox(height: 32),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          bottomNavigationBar: _buildBottomBar(context, material, cartItem, cartProvider),
+        );
+      },
     );
   }
 
-  Widget _buildImage(MaterialItem material) {
-    return AspectRatio(
-      aspectRatio: 16 / 9,
-      child: Container(
-        width: double.infinity,
-        color: Colors.grey.shade200,
-        child: material.imageUrl != null
-            ? Image.network(
-                material.imageUrl!,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => const Icon(Icons.error),
-              )
-            : const Icon(Icons.image, size: 100, color: Colors.grey),
-      ),
-    );
-  }
-
-  Widget _buildInfo(MaterialItem material) {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(material.name, style: Theme.of(context).textTheme.headlineSmall),
-          const SizedBox(height: 8),
-          Text(material.description ?? 'Описание отсутствует', style: Theme.of(context).textTheme.bodyMedium),
-          const SizedBox(height: 16),
-          Text('Минимальный объем: ${material.minVolume} ${material.unit}', style: Theme.of(context).textTheme.labelLarge),
-          const SizedBox(height: 24),
-          _buildVolumeController(material),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildVolumeController(MaterialItem material) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        IconButton(
-          icon: const Icon(Icons.remove_circle_outline),
-          onPressed: () => _updateVolume(_volume - 1, material.minVolume),
+  Widget _buildBottomBar(BuildContext context, MaterialItem material, dynamic cartItem, CartProvider cartProvider) {
+    if (cartItem == null) {
+      return Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              offset: const Offset(0, -4),
+              blurRadius: 16,
+            ),
+          ],
         ),
-        SizedBox(
-          width: 80,
-          child: TextField(
-            controller: TextEditingController(text: _volume.toString()),
-            textAlign: TextAlign.center,
-            keyboardType: TextInputType.number,
-            onSubmitted: (value) => _updateVolume(double.tryParse(value) ?? material.minVolume, material.minVolume),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton(
+                onPressed: () async {
+                  try {
+                    await cartProvider.addToCart(_sessionService.sessionKey, material, material.minVolume);
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(cartProvider.error ?? 'Ошибка')),
+                      );
+                    }
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF3AA9E1),
+                  shape: const StadiumBorder(),
+                  elevation: 0,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '${material.price ?? 0} ₽ / ${material.unit}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Text(
+                      'В корзину',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
-        IconButton(
-          icon: const Icon(Icons.add_circle_outline),
-          onPressed: () => _updateVolume(_volume + 1, material.minVolume),
-        ),
-      ],
-    );
-  }
+      );
+    }
 
-  Widget _buildBottomBar(MaterialItem material, double total) {
     return Container(
-      padding: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
         color: Colors.white,
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10)],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            offset: const Offset(0, -4),
+            blurRadius: 16,
+          ),
+        ],
       ),
       child: SafeArea(
-        child: ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            minimumSize: const Size(double.infinity, 50),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              // Счетчик
+              Container(
+                height: 56,
+                decoration: ShapeDecoration(
+                  shape: StadiumBorder(
+                    side: BorderSide(color: Colors.grey.shade300),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.remove),
+                      onPressed: () async {
+                        try {
+                          if (cartItem.volume <= material.minVolume) {
+                            await cartProvider.removeFromCart(_sessionService.sessionKey, cartItem.id);
+                          } else {
+                            await cartProvider.updateVolume(_sessionService.sessionKey, cartItem.id, cartItem.volume - 1.0);
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(cartProvider.error ?? 'Ошибка')),
+                            );
+                          }
+                        }
+                      },
+                      color: Colors.black87,
+                    ),
+                    Text(
+                      '${cartItem.volume}',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.add),
+                      onPressed: () async {
+                        try {
+                          await cartProvider.updateVolume(_sessionService.sessionKey, cartItem.id, cartItem.volume + 1.0);
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(cartProvider.error ?? 'Ошибка')),
+                            );
+                          }
+                        }
+                      },
+                      color: Colors.black87,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Кнопка перехода
+              Expanded(
+                child: SizedBox(
+                  height: 56,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      context.go('/cart');
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF3AA9E1),
+                      shape: const StadiumBorder(),
+                      elevation: 0,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '${cartItem.amount ?? 0} ₽',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Badge(
+                          label: Text(cartProvider.cartItems.length.toString()),
+                          child: const Icon(
+                            Icons.shopping_cart_outlined,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-          onPressed: () async {
-            try {
-              await _apiService.addCartItem(_sessionService.sessionKey, material.id, _volume);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Добавлено в корзину')),
-              );
-              context.pop();
-            } catch (e) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Ошибка: $e')),
-              );
-            }
-          },
-          child: Text('Добавить в корзину (Итого: ${total.toStringAsFixed(2)} руб)'),
         ),
+      ),
+    );
+  }
+
+  Widget _buildPlaceholder() {
+    return Container(
+      color: Colors.grey.shade200,
+      child: Icon(
+        Icons.image_outlined,
+        size: 80,
+        color: Colors.grey.shade400,
       ),
     );
   }

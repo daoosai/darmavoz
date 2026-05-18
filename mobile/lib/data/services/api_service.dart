@@ -95,6 +95,11 @@ class ApiService {
         '/api/v1/cart/items/$itemId',
         options: Options(headers: {'session_key': sessionKey}),
       );
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        return; // Элемент уже удален на сервере
+      }
+      throw Exception('Ошибка удаления из корзины: $e');
     } catch (e) {
       throw Exception('Ошибка удаления из корзины: $e');
     }

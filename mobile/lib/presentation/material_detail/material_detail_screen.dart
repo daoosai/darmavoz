@@ -28,9 +28,7 @@ class _MaterialDetailScreenState extends State<MaterialDetailScreen> {
   }
 
   Future<MaterialItem> _fetchMaterial() async {
-    final materials = await _apiService.getMaterials();
-    final material = materials.firstWhere((m) => m.id == widget.materialId);
-    return material;
+    return await _apiService.getMaterial(widget.materialId);
   }
 
   @override

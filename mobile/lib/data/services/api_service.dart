@@ -48,6 +48,19 @@ class ApiService {
     }
   }
 
+  Future<MaterialItem> getMaterial(String id) async {
+    try {
+      final response = await _dio.get('/api/v1/catalog/materials/$id');
+      if (response.statusCode == 200) {
+        return MaterialItem.fromJson(response.data);
+      } else {
+        throw Exception('Не удалось загрузить материал');
+      }
+    } catch (e) {
+      throw Exception('Ошибка загрузки материала: $e');
+    }
+  }
+
   Future<List<CartItem>> getCartItems(String sessionKey) async {
     try {
       final response = await _dio.get(

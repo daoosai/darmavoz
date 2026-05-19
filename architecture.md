@@ -96,9 +96,26 @@
 - `/api/v1/drivers`
 - `/api/v1/orders`
 - `/api/v1/webhooks`
+- `/api/v1/catalog`
+- `/api/v1/cart`
 
-### Реально используемые в Sprint 4 endpoints
+### Реально используемые в Sprint 6 endpoints
 
+**Каталог и Корзина:**
+- `GET /api/v1/catalog/categories/`
+- `GET /api/v1/catalog/materials/`
+- `GET /api/v1/catalog/materials/{id}`
+- `GET /api/v1/cart/`
+- `POST /api/v1/cart/items`
+- `PATCH /api/v1/cart/items/{id}`
+- `DELETE /api/v1/cart/items/{id}`
+
+**Админка:**
+- `GET /api/v1/admin/materials/`
+- `POST /api/v1/admin/materials/`
+- `PATCH /api/v1/admin/materials/{id}`
+
+**Авторизация и Webhooks:**
 - `POST /api/v1/auth/login`
 - `POST /api/v1/webhooks/avito`
 - `GET /api/v1/orders/`
@@ -361,7 +378,15 @@ LLM обязана вернуть валидируемую JSON-структур
 - `message_ai_analyses.status = needs_review`;
 - `error_message = "Cannot update non-draft order"`.
 
-## 8. Demo UI
+## 8. Логика работы Каталога (Sprint 6)
+
+### 8.1. Скрытие неактивных материалов
+Материалы имеют флаг `is_active` (boolean). 
+- Если `is_active=false`, материал не возвращается в публичном списке `GET /api/v1/catalog/materials/`. Таким образом он пропадает из витрины клиентского приложения.
+- При этом он остается доступным при запросе по конкретному ID `GET /api/v1/catalog/materials/{id}`, а также возвращается в `GET /api/v1/admin/materials/`.
+**Почему так сделано:** Это необходимо для сохранения ссылочной целостности (referential integrity) в уже существующих заказах и корзинах. Если материал был заказан, а затем скрыт менеджером (например, временно нет в наличии), старые заказы и элементы корзины продолжат корректно отображать информацию о материале, не вызывая ошибок `404 Not Found`.
+
+## 9. Demo UI
 
 `/demo` добавлен как ручной интерфейс проверки Sprint 4.
 

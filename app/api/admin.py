@@ -88,3 +88,17 @@ async def update_material(
     await db.commit()
     await db.refresh(material)
     return material
+
+@router.delete("/materials/{id}")
+async def delete_material(
+    id: str,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user)
+):
+    material = await db.get(Material, id)
+    if not material:
+        raise HTTPException(status_code=404, detail="Material not found")
+    
+    await db.delete(material)
+    await db.commit()
+    return {"status": "ok", "message": "Material deleted successfully"}

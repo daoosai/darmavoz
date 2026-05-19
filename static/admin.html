@@ -53,7 +53,8 @@
             <label class="block text-sm text-slate-300 mb-1">URL картинки</label>
             <input id="matImage" class="w-full rounded-2xl border border-white/10 bg-slate-800 px-4 py-2 text-white outline-none transition focus:border-blue-400">
           </div>
-          <button type="submit" class="w-full rounded-2xl bg-blue-500 px-4 py-3 font-semibold text-white transition hover:bg-blue-400">Добавить</button>
+          <button type="submit" id="submitBtn" class="w-full rounded-2xl bg-blue-500 px-4 py-3 font-semibold text-white transition hover:bg-blue-400">Добавить</button>
+          <button type="button" id="cancelEditBtn" class="hidden w-full rounded-2xl bg-slate-600 px-4 py-3 font-semibold text-white transition hover:bg-slate-500">Отмена</button>
         </form>
       </article>
 
@@ -86,6 +87,18 @@
   <script>
     const TOKEN_KEY = "jwt_token";
     const API_ADMIN_MATERIALS_URL = "/api/v1/admin/materials/";
+    let editingMaterialId = null;
+    let materialsData = [];
+
+    function escapeHtml(value) {
+      if (!value) return "";
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
 
     document.addEventListener("DOMContentLoaded", () => {
       const savedToken = localStorage.getItem(TOKEN_KEY);
@@ -103,6 +116,13 @@
 
     document.getElementById("refreshMaterialsButton").addEventListener("click", loadMaterials);
 
+    document.getElementById("cancelEditBtn").addEventListener("click", () => {
+      editingMaterialId = null;
+      document.getElementById("addMaterialForm").reset();
+      document.getElementById("submitBtn").textContent = "Добавить";
+      document.getElementById("cancelEditBtn").classList.add("hidden");
+    });
+
     document.getElementById("addMaterialForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const token = localStorage.getItem(TOKEN_KEY);
@@ -117,17 +137,34 @@
       };
 
       try {
-        const response = await fetch(API_ADMIN_MATERIALS_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": "Bearer " + token
-          },
-          body: JSON.stringify(payload)
-        });
+        let response;
+        if (editingMaterialId) {
+          // Exclude is_active to avoid accidentally activating hidden items
+          delete payload.is_active;
+          response = await fetch(API_ADMIN_MATERIALS_URL + editingMaterialId, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer " + token
+            },
+            body: JSON.stringify(payload)
+          });
+        } else {
+          response = await fetch(API_ADMIN_MATERIALS_URL, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer " + token
+            },
+            body: JSON.stringify(payload)
+          });
+        }
 
-        if (!response.ok) throw new Error("Ошибка добавления материала");
+        if (!response.ok) throw new Error("Ошибка сохранения материала");
         e.target.reset();
+        editingMaterialId = null;
+        document.getElementById("submitBtn").textContent = "Добавить";
+        document.getElementById("cancelEditBtn").classList.add("hidden");
         loadMaterials();
       } catch (err) {
         alert(err.message);
@@ -142,8 +179,8 @@
         });
         if (!response.ok) throw new Error("Ошибка загрузки материалов");
         
-        const materials = await response.json();
-        renderMaterials(materials);
+        materialsData = await response.json();
+        renderMaterials(materialsData);
       } catch (err) {
         console.error(err);
       }
@@ -167,22 +204,57 @@
       }
     }
 
+    async function deleteMaterial(id) {
+      if (!confirm("Вы уверены, что хотите удалить этот материал?")) return;
+      const token = localStorage.getItem(TOKEN_KEY);
+      try {
+        const response = await fetch(API_ADMIN_MATERIALS_URL + id, {
+          method: "DELETE",
+          headers: {
+            "Authorization": "Bearer " + token
+          }
+        });
+        if (!response.ok) throw new Error("Ошибка удаления материала");
+        loadMaterials();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    function editMaterial(id) {
+      const material = materialsData.find(m => m.id === id);
+      if (!material) return;
+      
+      editingMaterialId = id;
+      document.getElementById("matName").value = material.name || "";
+      document.getElementById("matCategory").value = material.category_id || "";
+      document.getElementById("matPrice").value = material.price || "";
+      document.getElementById("matUnit").value = material.unit || "";
+      document.getElementById("matMinVolume").value = material.min_volume || "1.0";
+      document.getElementById("matImage").value = material.image_url || "";
+      
+      document.getElementById("submitBtn").textContent = "Сохранить";
+      document.getElementById("cancelEditBtn").classList.remove("hidden");
+    }
+
     function renderMaterials(materials) {
       const list = document.getElementById("materialsList");
       list.innerHTML = materials.map(m => `
         <tr class="hover:bg-slate-800/30 transition">
-          <td class="px-4 py-3">${m.name}</td>
-          <td class="px-4 py-3">${m.price} ₽</td>
-          <td class="px-4 py-3">${m.unit}</td>
+          <td class="px-4 py-3">${escapeHtml(m.name)}</td>
+          <td class="px-4 py-3">${escapeHtml(m.price)} ₽</td>
+          <td class="px-4 py-3">${escapeHtml(m.unit)}</td>
           <td class="px-4 py-3">
             <span class="inline-flex rounded-full px-2 py-1 text-xs font-medium ${m.is_active ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}">
               ${m.is_active ? 'Активен' : 'Скрыт'}
             </span>
           </td>
-          <td class="px-4 py-3">
+          <td class="px-4 py-3 flex gap-2">
+            <button onclick="editMaterial('${m.id}')" class="text-xs rounded border border-blue-600 px-3 py-1 text-blue-400 hover:bg-blue-600/20 transition">Ред.</button>
             <button onclick="toggleActiveStatus('${m.id}', ${m.is_active})" class="text-xs rounded border border-slate-600 px-3 py-1 hover:bg-slate-700 transition">
-              ${m.is_active ? 'Деактивировать' : 'Активировать'}
+              ${m.is_active ? 'Деакт.' : 'Акт.'}
             </button>
+            <button onclick="deleteMaterial('${m.id}')" class="text-xs rounded border border-red-600 px-3 py-1 text-red-400 hover:bg-red-600/20 transition">Удал.</button>
           </td>
         </tr>
       `).join("");

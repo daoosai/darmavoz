@@ -19,12 +19,22 @@ class _MaterialDetailScreenState extends State<MaterialDetailScreen> {
   final ApiService _apiService = ApiService();
   final SessionService _sessionService = SessionService();
   late Future<MaterialItem> _materialFuture;
+  bool _isSessionReady = false;
 
   @override
   void initState() {
     super.initState();
-    _sessionService.init();
-    _materialFuture = _fetchMaterial();
+    _initSessionAndFetch();
+  }
+
+  Future<void> _initSessionAndFetch() async {
+    await _sessionService.init();
+    if (mounted) {
+      setState(() {
+        _isSessionReady = true;
+        _materialFuture = _fetchMaterial();
+      });
+    }
   }
 
   Future<MaterialItem> _fetchMaterial() async {
@@ -33,6 +43,13 @@ class _MaterialDetailScreenState extends State<MaterialDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_isSessionReady) {
+      return const Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return FutureBuilder<MaterialItem>(
       future: _materialFuture,
       builder: (context, snapshot) {

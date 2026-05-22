@@ -62,6 +62,17 @@ class Driver(Base):
     orders: Mapped[List["Order"]] = relationship("Order", back_populates="driver")
 
 
+class Product(Base):
+    __tablename__ = 'products'
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    price: Mapped[float] = mapped_column(Float, nullable=False)
+    unit_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    image_url: Mapped[str] = mapped_column(String(500), nullable=False)
+
+
 class OrderStatus(str, Enum):
     draft = "draft"
     pending = "pending"
@@ -76,17 +87,18 @@ class Order(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     client_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clients.id"))
     driver_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("drivers.id"), nullable=True)
-    material: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    volume: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    total_amount: Mapped[float] = mapped_column(Float, default=0.0)
     status: Mapped[str] = mapped_column(String(50), default=OrderStatus.draft.value)
     source: Mapped[Optional[str]] = mapped_column(String(50), default="avito", nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     source_dialogue_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("dialogues.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
     client: Mapped["Client"] = relationship("Client", back_populates="orders")
     driver: Mapped[Optional["Driver"]] = relationship("Driver", back_populates="orders")
+    items: Mapped[List["OrderItem"]] = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
     events: Mapped[List["EventLog"]] = relationship("EventLog", back_populates="order")
     offers: Mapped[List["OrderOffer"]] = relationship("OrderOffer", back_populates="order")
     dialogues: Mapped[List["Dialogue"]] = relationship(
@@ -95,6 +107,20 @@ class Order(Base):
         foreign_keys="Dialogue.order_id",
     )
     source_dialogue: Mapped[Optional["Dialogue"]] = relationship("Dialogue", foreign_keys=[source_dialogue_id])
+
+class OrderItem(Base):
+    __tablename__ = 'order_items'
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orders.id"))
+    material_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("materials.id"))
+    volume: Mapped[float] = mapped_column(Float, nullable=False)
+    price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    amount: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    # Relationships
+    order: Mapped["Order"] = relationship("Order", back_populates="items")
+    material: Mapped["Material"] = relationship("Material")
 
 class EventLog(Base):
     __tablename__ = 'events'
@@ -218,3 +244,51 @@ class MessageAiAnalysis(Base):
     # Relationships
     message: Mapped["Message"] = relationship("Message", back_populates="ai_analyses")
     dialogue: Mapped["Dialogue"] = relationship("Dialogue", back_populates="ai_analyses")
+
+
+class Category(Base):
+    __tablename__ = 'categories'
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    slug: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    sort_order: Mapped[int] = mapped_column(default=0)
+    is_active: Mapped[bool] = mapped_column(default=True)
+
+    # Relationships
+    materials: Mapped[List["Material"]] = relationship("Material", back_populates="category", cascade="all, delete-orphan")
+
+
+class Material(Base):
+    __tablename__ = 'materials'
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    category_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("categories.id"))
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    unit: Mapped[str] = mapped_column(String(50), nullable=False)
+    min_volume: Mapped[float] = mapped_column(Float, default=1.0)
+    image_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    is_active: Mapped[bool] = mapped_column(default=True)
+    sort_order: Mapped[int] = mapped_column(default=0)
+
+    # Relationships
+    category: Mapped["Category"] = relationship("Category", back_populates="materials")
+    cart_items: Mapped[List["CartItem"]] = relationship("CartItem", back_populates="material")
+
+
+class CartItem(Base):
+    __tablename__ = 'cart_items'
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    session_key: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
+    material_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("materials.id"))
+    volume: Mapped[float] = mapped_column(Float, nullable=False)
+    unit_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    amount: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    material: Mapped["Material"] = relationship("Material", back_populates="cart_items")

@@ -99,6 +99,29 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
 
+@pytest_asyncio.fixture
+async def admin_token(session_factory) -> str:
+    from app.models.models import Role, User
+    from app.security.auth import get_password_hash
+    from app.security.jwt import create_access_token
+    from sqlalchemy import select
+    async with session_factory() as session:
+        result = await session.execute(select(Role).where(Role.name == "admin"))
+        role = result.scalar_one_or_none()
+        if not role:
+            role = Role(name="admin", description="Admin role")
+            session.add(role)
+        
+        user = User(
+            username=f"admin_{uuid.uuid4().hex[:8]}",
+            hashed_password=get_password_hash("admin-password"),
+            role=role,
+            is_active=True
+        )
+        session.add(user)
+        await session.commit()
+        return create_access_token(data={"sub": user.username})
+
 
 @pytest.fixture
 def session_factory():

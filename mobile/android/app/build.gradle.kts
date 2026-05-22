@@ -1,0 +1,70 @@
+plugins {
+    id("com.android.application")
+    id("kotlin-android")
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id("dev.flutter.flutter-gradle-plugin")
+}
+
+android {
+    namespace = "ru.darmavoz.app"
+    compileSdk = flutter.compileSdkVersion
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_17.toString()
+    }
+
+    signingConfigs {
+        create("release") {
+            storeFile = file("release-keystore.jks")
+            storePassword = "darmavoz123"
+            keyAlias = "darmavoz"
+            keyPassword = "darmavoz123"
+        }
+    }
+
+    defaultConfig {
+        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        applicationId = "ru.darmavoz.app"
+        // You can update the following values to match your application needs.
+        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        minSdk = flutter.minSdkVersion
+        targetSdk = flutter.targetSdkVersion
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+    }
+
+    flavorDimensions.add("app_type")
+
+    productFlavors {
+        create("client") {
+            dimension = "app_type"
+            applicationId = "ru.darmavoz.client"
+            resValue("string", "app_name", "Дармавоз")
+        }
+        create("driver") {
+            dimension = "app_type"
+            applicationId = "ru.darmavoz.driver"
+            resValue("string", "app_name", "Дармавоз Водитель")
+        }
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            // TODO: Add your own signing config for the release build.
+            // Signing with the debug keys for now, so `flutter run --release` works.
+            signingConfig = signingConfigs.getByName("release")
+        }
+    }
+}
+
+flutter {
+    source = "../.."
+}

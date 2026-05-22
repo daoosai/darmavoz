@@ -1,0 +1,23 @@
+[
+  {
+    "name": "Песок строительный",
+    "description": "Отличный строительный песок для любых видов работ.",
+    "price": 800.0,
+    "unit_type": "куб",
+    "image_url": "https://images.unsplash.com/photo-1541427468627-a89a96e5ca1d?w=400&q=80"
+  },
+  {
+    "name": "Щебень 5-20",
+    "description": "Щебень гранитный фракции 5-20 мм.",
+    "price": 1500.0,
+    "unit_type": "тонна",
+    "image_url": "https://images.unsplash.com/photo-1518002054494-3a6f94352e9d?w=400&q=80"
+  },
+  {
+    "name": "Керамзит",
+    "description": "Керамзит высокого качества для теплоизоляции.",
+    "price": 2000.0,
+    "unit_type": "куб",
+    "image_url": "https://images.unsplash.com/photo-1621245030230-07a829ba8bc3?w=400&q=80"
+  }
+]

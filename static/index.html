@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Darmavoz Demo</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100">
+  <div class="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.22),_transparent_35%),radial-gradient(circle_at_bottom,_rgba(16,185,129,0.16),_transparent_30%)]"></div>
+
+  <div id="loginOverlay" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
+    <div class="w-full max-w-md rounded-3xl border border-white/10 bg-slate-900/95 shadow-2xl shadow-blue-950/40 p-6 sm:p-8">
+      <div class="mb-6">
+        <p class="text-sm font-medium uppercase tracking-[0.3em] text-blue-300">Darmavoz Demo</p>
+        <h1 class="mt-2 text-2xl font-semibold text-white">Вход в демо-панель</h1>
+        <p class="mt-2 text-sm text-slate-400">Авторизуйтесь, чтобы отправлять тестовые сообщения Авито и просматривать распознанные ИИ заказы.</p>
+      </div>
+
+      <form id="loginForm" class="space-y-4">
+        <div>
+          <label for="username" class="mb-2 block text-sm text-slate-300">Логин</label>
+          <input id="username" name="username" type="text" required class="w-full rounded-2xl border border-white/10 bg-slate-800 px-4 py-3 text-white outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/30" placeholder="admin">
+        </div>
+        <div>
+          <label for="password" class="mb-2 block text-sm text-slate-300">Пароль</label>
+          <input id="password" name="password" type="password" required class="w-full rounded-2xl border border-white/10 bg-slate-800 px-4 py-3 text-white outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/30" placeholder="Введите пароль">
+        </div>
+        <div>
+          <label for="webhookSecret" class="mb-2 block text-sm text-slate-300">Webhook Secret</label>
+          <input id="webhookSecret" name="webhookSecret" type="text" required class="w-full rounded-2xl border border-white/10 bg-slate-800 px-4 py-3 text-white outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/30" placeholder="X-Webhook-Secret">
+        </div>
+        <button type="submit" class="w-full rounded-2xl bg-blue-500 px-4 py-3 font-semibold text-white transition hover:bg-blue-400">Войти</button>
+        <p id="loginError" class="hidden rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200"></p>
+      </form>
+    </div>
+  </div>
+
+  <main class="relative mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+    <header class="mb-6 flex flex-col gap-4 rounded-3xl border border-white/10 bg-slate-900/75 p-6 shadow-xl shadow-slate-950/40 backdrop-blur">
+      <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p class="text-sm font-medium uppercase tracking-[0.3em] text-blue-300">Спринт 3 + 4</p>
+          <h1 class="mt-2 text-3xl font-semibold text-white">DEMO: Авито + ИИ обработка заказов</h1>
+          <p class="mt-2 max-w-3xl text-sm text-slate-400">Отправьте сообщение клиента как тестовый webhook Авито и обновите диспетчерскую, чтобы увидеть черновики заказов и заметки, извлеченные ИИ.</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <span id="authState" class="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-200">Авторизация не проверена</span>
+          <button id="logoutButton" class="rounded-2xl border border-white/10 bg-slate-800 px-4 py-2 text-sm text-slate-200 transition hover:bg-slate-700">Выйти</button>
+        </div>
+      </div>
+    </header>
+
+    <section class="grid gap-6 lg:grid-cols-2">
+      <article class="rounded-3xl border border-white/10 bg-slate-900/75 p-6 shadow-xl shadow-slate-950/40 backdrop-blur">
+        <div class="mb-5 flex items-start justify-between gap-4">
+          <div>
+            <p class="text-sm font-medium uppercase tracking-[0.3em] text-emerald-300">Клиент</p>
+            <h2 class="mt-2 text-2xl font-semibold text-white">Авито</h2>
+            <p class="mt-2 text-sm text-slate-400">Введите сообщение клиента. Оно будет отправлено в backend как webhook Авито.</p>
+          </div>
+          <div class="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">Webhook Simulator</div>
+        </div>
+
+        <label for="messageInput" class="mb-2 block text-sm text-slate-300">Сообщение клиента</label>
+        <textarea id="messageInput" rows="8" class="w-full rounded-3xl border border-white/10 bg-slate-800 px-4 py-4 text-white outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/30" placeholder="Например: Нужен песок 10 кубов на завтра, ул. Ленина 1"></textarea>
+
+        <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p class="text-xs text-slate-500">Будет отправлен `POST /api/v1/webhooks/avito` с фейковым payload.</p>
+          <button id="sendWebhookButton" class="rounded-2xl bg-emerald-500 px-5 py-3 font-semibold text-slate-950 transition hover:bg-emerald-400">Отправить</button>
+        </div>
+
+        <div id="webhookStatus" class="mt-4 hidden rounded-2xl border px-4 py-3 text-sm"></div>
+      </article>
+
+      <article class="rounded-3xl border border-white/10 bg-slate-900/75 p-6 shadow-xl shadow-slate-950/40 backdrop-blur">
+        <div class="mb-5 flex items-start justify-between gap-4">
+          <div>
+            <p class="text-sm font-medium uppercase tracking-[0.3em] text-blue-300">Диспетчерская</p>
+            <h2 class="mt-2 text-2xl font-semibold text-white">Последние заказы</h2>
+            <p class="mt-2 text-sm text-slate-400">Панель показывает 10 последних заказов, включая AI notes и текущий статус.</p>
+          </div>
+          <button id="refreshOrdersButton" class="rounded-2xl bg-blue-500 px-5 py-3 font-semibold text-white transition hover:bg-blue-400">Обновить</button>
+        </div>
+
+        <div id="ordersMeta" class="mb-4 text-sm text-slate-500">Список заказов еще не загружен.</div>
+        <div id="ordersList" class="space-y-4"></div>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    const TOKEN_KEY = "jwt_token";
+    const WEBHOOK_SECRET_KEY = "demo_webhook_secret";
+    const API_LOGIN_URL = "/api/v1/auth/login";
+    const API_ORDERS_URL = "/api/v1/orders/";
+    const API_WEBHOOK_URL = "/api/v1/webhooks/avito";
+
+    const loginOverlay = document.getElementById("loginOverlay");
+    const loginForm = document.getElementById("loginForm");
+    const loginError = document.getElementById("loginError");
+    const authState = document.getElementById("authState");
+    const logoutButton = document.getElementById("logoutButton");
+    const sendWebhookButton = document.getElementById("sendWebhookButton");
+    const refreshOrdersButton = document.getElementById("refreshOrdersButton");
+    const messageInput = document.getElementById("messageInput");
+    const webhookStatus = document.getElementById("webhookStatus");
+    const ordersList = document.getElementById("ordersList");
+    const ordersMeta = document.getElementById("ordersMeta");
+    const webhookSecretInput = document.getElementById("webhookSecret");
+
+    document.addEventListener("DOMContentLoaded", () => {
+      const savedToken = localStorage.getItem(TOKEN_KEY);
+      const savedWebhookSecret = localStorage.getItem(WEBHOOK_SECRET_KEY);
+
+      if (savedWebhookSecret) {
+        webhookSecretInput.value = savedWebhookSecret;
+      }
+
+      if (savedToken) {
+        hideLoginOverlay();
+        setAuthState(true);
+        refreshOrders();
+      } else {
+        showLoginOverlay();
+        setAuthState(false);
+      }
+    });
+
+    loginForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      loginError.classList.add("hidden");
+
+      const username = document.getElementById("username").value.trim();
+      const password = document.getElementById("password").value;
+      const webhookSecret = webhookSecretInput.value.trim();
+
+      const body = new URLSearchParams();
+      body.set("username", username);
+      body.set("password", password);
+
+      try {
+        const response = await fetch(API_LOGIN_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded"
+          },
+          body
+        });
+
+        if (!response.ok) {
+          throw new Error("Не удалось выполнить вход. Проверьте логин и пароль.");
+        }
+
+        const data = await response.json();
+        localStorage.setItem(TOKEN_KEY, data.access_token);
+        localStorage.setItem(WEBHOOK_SECRET_KEY, webhookSecret);
+        hideLoginOverlay();
+        setAuthState(true);
+        showWebhookStatus("Успешный вход. DEMO-панель готова к работе.", "success");
+        await refreshOrders();
+      } catch (error) {
+        loginError.textContent = error.message || "Ошибка авторизации.";
+        loginError.classList.remove("hidden");
+      }
+    });
+
+    logoutButton.addEventListener("click", () => {
+      localStorage.removeItem(TOKEN_KEY);
+      setAuthState(false);
+      showLoginOverlay();
+      ordersList.innerHTML = "";
+      ordersMeta.textContent = "Требуется авторизация.";
+      showWebhookStatus("Вы вышли из системы.", "info");
+    });
+
+    sendWebhookButton.addEventListener("click", async () => {
+      const text = messageInput.value.trim();
+      const webhookSecret = localStorage.getItem(WEBHOOK_SECRET_KEY) || webhookSecretInput.value.trim();
+
+      if (!text) {
+        showWebhookStatus("Введите текст сообщения клиента.", "error");
+        return;
+      }
+
+      if (!webhookSecret) {
+        showWebhookStatus("Укажите Webhook Secret в форме входа.", "error");
+        showLoginOverlay();
+        return;
+      }
+
+      const payload = buildWebhookPayload(text);
+
+      try {
+        toggleButton(sendWebhookButton, true, "Отправка...");
+        const response = await fetch(API_WEBHOOK_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Webhook-Secret": webhookSecret
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error("Webhook отклонен: " + errorText);
+        }
+
+        const data = await response.json();
+        showWebhookStatus("Webhook отправлен. Статус backend: " + (data.status || "processed"), "success");
+      } catch (error) {
+        showWebhookStatus(error.message || "Ошибка при отправке webhook.", "error");
+      } finally {
+        toggleButton(sendWebhookButton, false, "Отправить");
+      }
+    });
+
+    refreshOrdersButton.addEventListener("click", async () => {
+      await refreshOrders();
+    });
+
+    async function refreshOrders() {
+      const token = localStorage.getItem(TOKEN_KEY);
+
+      if (!token) {
+        setAuthState(false);
+        showLoginOverlay();
+        return;
+      }
+
+      try {
+        toggleButton(refreshOrdersButton, true, "Загрузка...");
+        const response = await fetch(API_ORDERS_URL, {
+          headers: {
+            "Authorization": "Bearer " + token
+          }
+        });
+
+        if (response.status === 401) {
+          localStorage.removeItem(TOKEN_KEY);
+          setAuthState(false);
+          showLoginOverlay();
+          throw new Error("Сессия истекла. Выполните вход повторно.");
+        }
+
+        if (!response.ok) {
+          throw new Error("Не удалось загрузить список заказов.");
+        }
+
+        const orders = await response.json();
+        renderOrders(orders);
+        ordersMeta.textContent = "Показано заказов: " + orders.length;
+      } catch (error) {
+        ordersMeta.textContent = error.message || "Ошибка загрузки заказов.";
+      } finally {
+        toggleButton(refreshOrdersButton, false, "Обновить");
+      }
+    }
+
+    function renderOrders(orders) {
+      if (!orders.length) {
+        ordersList.innerHTML = "<div class='rounded-2xl border border-dashed border-white/10 bg-slate-800/50 p-6 text-sm text-slate-400'>Заказов пока нет. Отправьте сообщение клиента из блока Авито.</div>";
+        return;
+      }
+
+      ordersList.innerHTML = orders.map((order) => {
+        const statusBadge = getStatusBadge(order.status);
+        return `
+          <div class="rounded-3xl border border-white/10 bg-slate-800/80 p-5 shadow-lg shadow-slate-950/20">
+            <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h3 class="text-lg font-semibold text-white">${escapeHtml(order.material || "Не распознано")}</h3>
+                <p class="mt-1 text-xs text-slate-500">ID: ${escapeHtml(order.id)}</p>
+              </div>
+              <span class="${statusBadge.className}">${statusBadge.label}</span>
+            </div>
+            <dl class="grid gap-3 text-sm text-slate-300 sm:grid-cols-2">
+              <div class="rounded-2xl bg-slate-900/70 p-3">
+                <dt class="text-xs uppercase tracking-wide text-slate-500">Объем</dt>
+                <dd class="mt-1 text-base text-white">${order.volume ?? "Не указан"}</dd>
+              </div>
+              <div class="rounded-2xl bg-slate-900/70 p-3">
+                <dt class="text-xs uppercase tracking-wide text-slate-500">Создан</dt>
+                <dd class="mt-1 text-base text-white">${formatDate(order.created_at)}</dd>
+              </div>
+              <div class="rounded-2xl bg-slate-900/70 p-3 sm:col-span-2">
+                <dt class="text-xs uppercase tracking-wide text-slate-500">Адрес</dt>
+                <dd class="mt-1 text-base text-white">${escapeHtml(order.address || "Не указан")}</dd>
+              </div>
+              <div class="rounded-2xl bg-slate-900/70 p-3 sm:col-span-2">
+                <dt class="text-xs uppercase tracking-wide text-slate-500">Заметки ИИ</dt>
+                <dd class="mt-1 whitespace-pre-wrap text-base text-white">${escapeHtml(order.notes || "Пока нет заметок")}</dd>
+              </div>
+            </dl>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function buildWebhookPayload(text) {
+      const randomId = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
+      const accountSuffix = randomId.slice(0, 8);
+      return {
+        event_id: "demo_event_" + randomId,
+        account_id: "demo_account_" + accountSuffix,
+        payload: {
+          chat_id: "demo_chat_" + accountSuffix,
+          user_id: "demo_user_" + accountSuffix,
+          sender_user_id: "demo_user_" + accountSuffix,
+          message_id: "demo_message_" + randomId,
+          text: text,
+          direction: "inbound",
+          message_type: "text"
+        }
+      };
+    }
+
+    function getStatusBadge(status) {
+      const normalized = (status || "").toLowerCase();
+      if (normalized === "draft") {
+        return {
+          label: "Черновик (draft)",
+          className: "inline-flex rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-200"
+        };
+      }
+      if (normalized === "pending") {
+        return {
+          label: "Ожидает (pending)",
+          className: "inline-flex rounded-full border border-sky-400/30 bg-sky-500/10 px-3 py-1 text-xs font-medium text-sky-200"
+        };
+      }
+      if (normalized === "assigned") {
+        return {
+          label: "Назначен (assigned)",
+          className: "inline-flex rounded-full border border-violet-400/30 bg-violet-500/10 px-3 py-1 text-xs font-medium text-violet-200"
+        };
+      }
+      if (normalized === "completed") {
+        return {
+          label: "Завершен (completed)",
+          className: "inline-flex rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-200"
+        };
+      }
+      if (normalized === "cancelled") {
+        return {
+          label: "Отменен (cancelled)",
+          className: "inline-flex rounded-full border border-rose-400/30 bg-rose-500/10 px-3 py-1 text-xs font-medium text-rose-200"
+        };
+      }
+      return {
+        label: status || "Неизвестно",
+        className: "inline-flex rounded-full border border-white/10 bg-slate-700 px-3 py-1 text-xs font-medium text-slate-200"
+      };
+    }
+
+    function formatDate(value) {
+      if (!value) {
+        return "Не указано";
+      }
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        return value;
+      }
+      return new Intl.DateTimeFormat("ru-RU", {
+        dateStyle: "short",
+        timeStyle: "short"
+      }).format(date);
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function showLoginOverlay() {
+      loginOverlay.classList.remove("hidden");
+    }
+
+    function hideLoginOverlay() {
+      loginOverlay.classList.add("hidden");
+    }
+
+    function setAuthState(isAuthorized) {
+      authState.textContent = isAuthorized ? "JWT активен" : "Требуется вход";
+      authState.className = isAuthorized
+        ? "rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-200"
+        : "rounded-full border border-amber-400/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-200";
+    }
+
+    function showWebhookStatus(message, type) {
+      webhookStatus.textContent = message;
+      webhookStatus.classList.remove("hidden", "border-red-500/30", "bg-red-500/10", "text-red-200", "border-emerald-500/30", "bg-emerald-500/10", "text-emerald-200", "border-blue-500/30", "bg-blue-500/10", "text-blue-200");
+
+      if (type === "error") {
+        webhookStatus.classList.add("border-red-500/30", "bg-red-500/10", "text-red-200");
+        return;
+      }
+      if (type === "success") {
+        webhookStatus.classList.add("border-emerald-500/30", "bg-emerald-500/10", "text-emerald-200");
+        return;
+      }
+      webhookStatus.classList.add("border-blue-500/30", "bg-blue-500/10", "text-blue-200");
+    }
+
+    function toggleButton(button, disabled, text) {
+      button.disabled = disabled;
+      button.textContent = text;
+      button.classList.toggle("opacity-60", disabled);
+      button.classList.toggle("cursor-not-allowed", disabled);
+    }
+  </script>
+</body>
+</html>

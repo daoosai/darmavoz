@@ -14,6 +14,8 @@ from app.models.models import (
     MessageAiAnalysis,
     Order,
     OrderStatus,
+    Material,
+    OrderItem,
 )
 from app.schemas.ai import MessageAnalysisResult
 
@@ -211,10 +213,43 @@ class MessageAIProcessorService:
             await session.flush()
 
         extracted = analysis_result.order_fields
-        if extracted.material:
-            order.material = extracted.material
-        if extracted.volume is not None:
-            order.volume = extracted.volume
+        
+        if extracted.material and extracted.volume is not None:
+            stmt = select(Material).where(Material.name.ilike(f"%{extracted.material}%")).limit(1)
+            result = await session.execute(stmt)
+            material = result.scalar_one_or_none()
+            
+            if material:
+                # Check if an order item already exists for this material
+                stmt_item = select(OrderItem).where(
+                    OrderItem.order_id == order.id,
+                    OrderItem.material_id == material.id
+                )
+                item_result = await session.execute(stmt_item)
+                order_item = item_result.scalar_one_or_none()
+                
+                if order_item:
+                    order_item.volume = extracted.volume
+                    if material.price:
+                        order_item.amount = extracted.volume * material.price
+                else:
+                    new_item = OrderItem(
+                        order_id=order.id,
+                        material_id=material.id,
+                        volume=extracted.volume,
+                        price=material.price,
+                        amount=(extracted.volume * material.price) if material.price else None
+                    )
+                    session.add(new_item)
+                
+                await session.flush()
+                
+                # Recalculate total_amount
+                stmt_total = select(OrderItem).where(OrderItem.order_id == order.id)
+                total_result = await session.execute(stmt_total)
+                items = total_result.scalars().all()
+                order.total_amount = sum((item.amount or 0.0) for item in items)
+                
         if extracted.address:
             order.address = extracted.address
         order.notes = self._build_order_notes(analysis_result)

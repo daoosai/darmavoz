@@ -10,7 +10,7 @@ async function startServer() {
   app.use(express.json());
 
   // API proxy routes
-  app.get("/api/v1/catalog/categories", async (req, res) => {
+  app.get("/api/v1/catalog/categories/", async (req, res) => {
     try {
       const response = await fetch("https://darmavoz.ru/api/v1/catalog/categories/");
       const data = await response.json();
@@ -43,7 +43,7 @@ async function startServer() {
     }
   });
 
-  app.get("/api/v1/orders", async (req, res) => {
+  app.get("/api/v1/orders/", async (req, res) => {
     try {
       const response = await fetch("https://darmavoz.ru/api/v1/orders/", {
         headers: {

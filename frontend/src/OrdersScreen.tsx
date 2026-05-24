@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Package, MapPin, Calendar, Truck, List } from 'lucide-react';
+import { baseURL } from "./utils";
 
 interface OrderItem {
   material_name?: string;
@@ -39,7 +40,7 @@ export default function OrdersScreen() {
     const fetchOrders = async () => {
       try {
         setIsLoading(true);
-        const res = await fetch('/api/v1/orders', {
+        const res = await fetch(`${baseURL}/orders/`, {
           headers: {
             'Authorization': 'Bearer demo-token'
           }

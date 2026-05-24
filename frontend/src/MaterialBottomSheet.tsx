@@ -3,7 +3,7 @@ import { X, ImageIcon, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { MaterialProps, DeliveryOption } from "./MaterialDetailScreen";
 import { useCartStore } from "./store";
-import { getImageUrl } from "./utils";
+import { getImageUrl, baseURL } from "./utils";
 import toast from "react-hot-toast";
 
 interface MaterialBottomSheetProps {
@@ -36,7 +36,7 @@ export default function MaterialBottomSheet({
     const fetchOptions = async () => {
       try {
         setIsLoadingOptions(true);
-        const res = await fetch("/api/v1/catalog/delivery-options");
+        const res = await fetch(`${baseURL}/catalog/delivery-options/`);
         if (res.ok) {
           const data = await res.json();
           setDeliveryOptions(Array.isArray(data) ? data : data.results || []);

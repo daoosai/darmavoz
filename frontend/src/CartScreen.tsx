@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { ShoppingCart, X, ImageIcon, Loader2, MapPin } from "lucide-react";
 import { useCartStore } from "./store";
-import { getImageUrl } from "./utils";
+import { getImageUrl, baseURL } from "./utils";
 import toast from "react-hot-toast";
 
 export default function CartScreen({
@@ -23,7 +23,7 @@ export default function CartScreen({
       setIsSubmitting(true);
 
       const requests = cartItems.map((item) =>
-        fetch("/api/v1/orders/checkout", {
+        fetch(`${baseURL}/orders/checkout`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

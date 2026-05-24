@@ -12,7 +12,7 @@ import {
 import { MaterialProps } from "./MaterialDetailScreen";
 import OrdersScreen from "./OrdersScreen";
 import WelcomeScreen from "./WelcomeScreen";
-import { getImageUrl } from "./utils";
+import { getImageUrl, baseURL } from "./utils";
 
 import CartScreen from "./CartScreen";
 import ProfileScreen from "./ProfileScreen";
@@ -50,8 +50,8 @@ export default function App() {
       try {
         setIsLoading(true);
         const [categoriesRes, materialsRes] = await Promise.all([
-          fetch("/api/v1/catalog/categories"),
-          fetch("/api/v1/catalog/materials"),
+          fetch(`${baseURL}/catalog/categories/`),
+          fetch(`${baseURL}/catalog/materials/`),
         ]);
 
         if (categoriesRes.ok && materialsRes.ok) {

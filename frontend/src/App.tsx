@@ -1,0 +1,335 @@
+import React, { useState, useEffect } from "react";
+import {
+  Home,
+  List,
+  ShoppingCart,
+  Tag,
+  User,
+  MapPin,
+  Search,
+  ImageIcon,
+} from "lucide-react";
+import { MaterialProps } from "./MaterialDetailScreen";
+import OrdersScreen from "./OrdersScreen";
+import WelcomeScreen from "./WelcomeScreen";
+import { getImageUrl } from "./utils";
+
+import CartScreen from "./CartScreen";
+import ProfileScreen from "./ProfileScreen";
+import PromosScreen from "./PromosScreen";
+import MaterialBottomSheet from "./MaterialBottomSheet";
+import { useCartStore } from "./store";
+import { Toaster } from "react-hot-toast";
+
+interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  sort_order: number;
+}
+
+// Reuse Material type as MaterialProps by exporting it from MaterialDetailScreen or type matching
+export default function App() {
+  const [currentRoute, setCurrentRoute] = useState<"welcome" | "main">(
+    "welcome",
+  );
+  const [activeTab, setActiveTab] = useState("home");
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
+    null,
+  );
+  const [selectedMaterial, setSelectedMaterial] =
+    useState<MaterialProps | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [materials, setMaterials] = useState<MaterialProps[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        const [categoriesRes, materialsRes] = await Promise.all([
+          fetch("/api/v1/catalog/categories"),
+          fetch("/api/v1/catalog/materials"),
+        ]);
+
+        if (categoriesRes.ok && materialsRes.ok) {
+          const categoriesData = await categoriesRes.json();
+          const materialsData = await materialsRes.json();
+          setCategories(
+            Array.isArray(categoriesData)
+              ? categoriesData
+              : categoriesData.results || [],
+          );
+          setMaterials(
+            Array.isArray(materialsData)
+              ? materialsData
+              : materialsData.results || [],
+          );
+        } else {
+          console.error("Failed to fetch data");
+        }
+      } catch (err) {
+        console.error("Error fetching data:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  const cartItemsCount = useCartStore((state) => state.cartItems.length);
+
+  if (currentRoute === "welcome") {
+    return <WelcomeScreen onSelectClient={() => setCurrentRoute("main")} />;
+  }
+
+  const tabs = [
+    { id: "home", label: "Главная", icon: Home },
+    { id: "orders", label: "Заказы", icon: List },
+    {
+      id: "cart",
+      label: "Корзина",
+      icon: ShoppingCart,
+      badge: cartItemsCount > 0 ? cartItemsCount : undefined,
+    },
+    { id: "promotions", label: "Акции", icon: Tag },
+    { id: "profile", label: "Профиль", icon: User },
+  ];
+
+  return (
+    <div className="min-h-screen bg-slate-100 flex sm:items-center justify-center font-sans text-slate-900">
+      <Toaster 
+        position="top-right"
+        toastOptions={{
+          duration: 2000,
+          style: {
+            background: "#10B981", 
+            color: "#fff",
+            zIndex: 999
+          }
+        }} 
+      />
+      {/* Mobile container aligned and constrained on large screens */}
+      <div className="w-full max-w-md bg-white min-h-screen sm:min-h-0 sm:h-[85vh] relative shadow-2xl flex flex-col overflow-hidden sm:rounded-[32px] sm:border-8 border-slate-900">
+        {/* Main Content Area */}
+        <main className="flex-1 overflow-y-auto pb-[90px] pt-4">
+          {activeTab === "home" && (
+            <>
+              {/* Top Address Button */}
+              <div className="px-4 mb-4">
+                <button className="w-full bg-[#2DB0E6] text-white rounded-2xl p-3 flex items-center justify-start gap-2 flex-row font-medium active:opacity-80 transition-opacity">
+                  <MapPin className="w-[18px] h-[18px] flex-shrink-0" />
+                  <span className="truncate text-sm">
+                    Укажите адрес доставки
+                  </span>
+                </button>
+              </div>
+
+              {/* Search Bar */}
+              <div className="px-4 mb-6">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-[18px] h-[18px]" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Поиск товаров..."
+                    className="w-full bg-slate-100 border-none rounded-xl py-3 pl-10 pr-4 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-brand-blue/20 transition-all text-sm"
+                  />
+                </div>
+              </div>
+
+              {/* Horizontal Categories List */}
+              <div
+                className="pl-4 mb-6 overflow-x-auto"
+                style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+              >
+                <div className="flex gap-2 pr-4">
+                  <button
+                    onClick={() => setSelectedCategoryId(null)}
+                    className={`px-5 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all duration-200 border ${
+                      selectedCategoryId === null
+                        ? "bg-white border-black text-black"
+                        : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
+                    }`}
+                  >
+                    Все
+                  </button>
+                  {categories.map((cat) => (
+                    <button
+                      key={cat.id}
+                      onClick={() => setSelectedCategoryId(cat.id)}
+                      className={`px-5 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all duration-200 border ${
+                        selectedCategoryId === cat.id
+                          ? "bg-white border-black text-black"
+                          : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
+                      }`}
+                    >
+                      {cat.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Product Grid Area */}
+              <div className="px-4 flex flex-col gap-6 pb-6">
+                {isLoading ? (
+                  <div className="flex justify-center py-10">
+                    <span className="text-slate-500 text-sm font-medium animate-pulse">
+                      Загрузка...
+                    </span>
+                  </div>
+                ) : (
+                  materials
+                    .filter(
+                      (m: any) =>
+                        selectedCategoryId === null ||
+                        m.category_id === selectedCategoryId,
+                    )
+                    .filter((m: any) =>
+                      m.name.toLowerCase().includes(searchQuery.toLowerCase()),
+                    )
+                    .map((material) => (
+                      <ProductCard
+                        key={material.id}
+                        material={material}
+                        onClick={() => setSelectedMaterial(material)}
+                      />
+                    ))
+                )}
+              </div>
+            </>
+          )}
+
+          {activeTab === "orders" && <OrdersScreen />}
+
+          {activeTab === "cart" && (
+            <CartScreen
+              onGoToHome={() => setActiveTab("home")}
+              onGoToOrders={() => setActiveTab("orders")}
+            />
+          )}
+
+          {activeTab === "promotions" && <PromosScreen />}
+
+          {activeTab === "profile" && <ProfileScreen />}
+        </main>
+
+        {/* Bottom Navigation */}
+        <nav className="fixed z-50 bottom-0 w-full max-w-md bg-white border-t border-slate-100 flex flex-col px-2 pb-2 sm:rounded-b-[32px]">
+          <div className="flex items-center justify-around h-[72px]">
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex flex-col items-center gap-1 transition-opacity cursor-pointer relative ${
+                    isActive ? "opacity-100" : "opacity-40 hover:opacity-70"
+                  }`}
+                >
+                  <Icon
+                    className={`w-5 h-5 ${isActive ? "text-[#2DB0E6]" : "text-slate-500"}`}
+                    strokeWidth={isActive ? 2.5 : 2}
+                  />
+                  {tab.badge !== undefined && (
+                    <span className="absolute -top-1 -right-2 bg-red-500 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full">
+                      {tab.badge}
+                    </span>
+                  )}
+                  <span
+                    className={`text-[10px] leading-none ${isActive ? "font-bold text-[#2DB0E6]" : "font-medium text-slate-500"}`}
+                  >
+                    {tab.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {/* Home Indicator */}
+          <div className="w-full flex justify-center pb-2 pt-1">
+            <div className="w-32 h-1 bg-slate-200 rounded-full"></div>
+          </div>
+        </nav>
+
+        {/* Bottom Sheet */}
+        <MaterialBottomSheet
+          material={selectedMaterial}
+          onClose={() => setSelectedMaterial(null)}
+        />
+      </div>
+    </div>
+  );
+}
+
+interface ProductCardProps {
+  key?: React.Key;
+  material: MaterialProps;
+  onClick: () => void;
+}
+
+function ProductCard({ material, onClick }: ProductCardProps) {
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+
+  const images = material.media_files?.length
+    ? material.media_files.map((m) => m.public_url)
+    : [
+        getImageUrl(material),
+        "https://placehold.co/400x300/e2e8f0/64748b?text=Photo+2",
+        "https://placehold.co/400x300/e2e8f0/64748b?text=Photo+3",
+      ];
+
+  return (
+    <div
+      onClick={onClick}
+      className="bg-white rounded-3xl overflow-hidden flex flex-col border border-slate-100 shadow-sm cursor-pointer hover:shadow-md transition-shadow relative"
+    >
+      <div className="relative w-full aspect-[4/3] bg-slate-100 group">
+        <div
+          className="flex w-full h-full overflow-x-auto snap-x snap-mandatory hide-scrollbar"
+          onScroll={(e) => {
+            const scrollLeft = e.currentTarget.scrollLeft;
+            const width = e.currentTarget.clientWidth;
+            setActiveImageIndex(Math.round(scrollLeft / width));
+          }}
+        >
+          {images.map((src, i) => (
+            <div
+              key={i}
+              className="w-full h-full shrink-0 snap-center relative"
+            >
+              <img
+                src={src}
+                className="w-full h-full object-cover"
+                alt={`${material.name} ${i + 1}`}
+              />
+            </div>
+          ))}
+        </div>
+
+        {/* Pagination Dots */}
+        <div className="absolute bottom-3 left-0 w-full flex justify-center gap-1.5">
+          {images.map((_, i) => (
+            <div
+              key={i}
+              className={`h-1.5 rounded-full transition-all ${i === activeImageIndex ? "w-4 bg-white" : "w-1.5 bg-white/50"}`}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="p-4 flex flex-col gap-1.5">
+        <h3 className="font-bold text-[18px] text-slate-900 leading-tight">
+          {material.name}
+        </h3>
+        <p className="text-[14px] font-bold text-[#2DB0E6]">
+          от {material.price} ₽ / {material.unit}
+        </p>
+      </div>
+    </div>
+  );
+}

@@ -7,14 +7,7 @@ from sqlalchemy.orm import selectinload
 
 from app.db.database import AsyncSessionLocal
 from app.integrations.openai.client import OpenAIClient
-from app.models.models import (
-    Client,
-    Dialogue,
-    Message,
-    MessageAiAnalysis,
-    Order,
-    OrderStatus,
-)
+from app.models.models import Client, Dialogue, Message, MessageAiAnalysis, Order, OrderStatus
 from app.schemas.ai import MessageAnalysisResult
 
 logger = logging.getLogger(__name__)
@@ -123,23 +116,12 @@ class MessageAIProcessorService:
         session: AsyncSession,
         message_id: uuid.UUID,
     ) -> Message | None:
-        stmt = (
-            select(Message)
-            .options(
-                selectinload(Message.dialogue),
-            )
-            .where(Message.id == message_id)
-        )
+        stmt = select(Message).options(selectinload(Message.dialogue)).where(Message.id == message_id)
         result = await session.execute(stmt)
         return result.scalar_one_or_none()
 
     async def _build_dialogue_context(self, session: AsyncSession, dialogue_id: uuid.UUID) -> str:
-        stmt = (
-            select(Message)
-            .where(Message.dialogue_id == dialogue_id)
-            .order_by(Message.created_at.desc())
-            .limit(5)
-        )
+        stmt = select(Message).where(Message.dialogue_id == dialogue_id).order_by(Message.created_at.desc()).limit(5)
         result = await session.execute(stmt)
         messages = list(result.scalars().all())
         messages.reverse()
@@ -206,15 +188,12 @@ class MessageAIProcessorService:
                 client_id=dialogue.client_id,
                 status=OrderStatus.draft.value,
                 source_dialogue_id=dialogue.id,
+                total_amount=0.0,
             )
             session.add(order)
             await session.flush()
 
         extracted = analysis_result.order_fields
-        if extracted.material:
-            order.material = extracted.material
-        if extracted.volume is not None:
-            order.volume = extracted.volume
         if extracted.address:
             order.address = extracted.address
         order.notes = self._build_order_notes(analysis_result)
@@ -238,6 +217,10 @@ class MessageAIProcessorService:
 
         if summary:
             parts.append(f"Summary: {summary}")
+        if extracted.material:
+            parts.append(f"Material: {extracted.material.strip()}")
+        if extracted.volume is not None:
+            parts.append(f"Volume: {extracted.volume}")
         if extracted.datetime_str:
             parts.append(f"Date: {extracted.datetime_str.strip()}")
         if extracted.notes:

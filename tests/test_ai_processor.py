@@ -99,6 +99,12 @@ async def fetch_analysis(session, message_id):
     ).scalar_one()
 
 
+def assert_note_parts(actual_notes: str | None, expected_parts: list[str]) -> None:
+    assert actual_notes is not None
+    for part in expected_parts:
+        assert part in actual_notes
+
+
 @pytest.mark.asyncio
 async def test_openai_client_uses_llm_base_url(monkeypatch):
     monkeypatch.setattr(settings, "LLM_API_KEY", "proxy-key")
@@ -144,9 +150,16 @@ async def test_process_new_message_creates_draft(session_factory):
     assert db_analysis.classification == MessageClassificationEnum.new_order.value
     assert db_order is not None
     assert db_order.status == "draft"
-    assert db_order.material == "Песок"
-    assert db_order.volume == 10.0
-    assert db_order.notes == "Summary: Клиент просит песок 10 кубов."
+    assert db_order.address is None
+    assert db_order.total_amount == 0.0
+    assert_note_parts(
+        db_order.notes,
+        [
+            "Summary: Клиент просит песок 10 кубов.",
+            "Material: Песок",
+            "Volume: 10.0",
+        ],
+    )
     assert db_dialogue.order_id == db_order.id
 
 
@@ -156,9 +169,9 @@ async def test_order_update_updates_existing_draft(session_factory):
         existing_order = Order(
             client_id=client.id,
             status="draft",
-            material="Щебень",
-            volume=5.0,
+            notes="Summary: Старый заказ | Material: Щебень | Volume: 5.0",
             source_dialogue_id=dialogue.id,
+            total_amount=0.0,
         )
         session.add(existing_order)
         await session.flush()
@@ -190,10 +203,17 @@ async def test_order_update_updates_existing_draft(session_factory):
 
     assert db_analysis.status == "processed"
     assert db_order.id == existing_order.id
-    assert db_order.material == "Песок"
-    assert db_order.volume == 12.0
     assert db_order.address == "ул. Ленина, 1"
-    assert db_order.notes == "Summary: Клиент уточнил заказ. | Date: завтра 10:00 | Notes: Позвонить за час"
+    assert_note_parts(
+        db_order.notes,
+        [
+            "Summary: Клиент уточнил заказ.",
+            "Material: Песок",
+            "Volume: 12.0",
+            "Date: завтра 10:00",
+            "Notes: Позвонить за час",
+        ],
+    )
     assert db_client.name == "Иван"
     assert db_client.phone == "+79990001122"
     assert db_dialogue.order_id == existing_order.id
@@ -280,11 +300,10 @@ async def test_non_draft_protection(session_factory):
         protected_order = Order(
             client_id=client.id,
             status="in_progress",
-            material="Щебень",
-            volume=7.0,
             address="Старый адрес",
-            notes="Старые заметки",
+            notes="Summary: Старые заметки | Material: Щебень | Volume: 7.0",
             source_dialogue_id=dialogue.id,
+            total_amount=0.0,
         )
         session.add(protected_order)
         await session.flush()
@@ -312,7 +331,5 @@ async def test_non_draft_protection(session_factory):
 
     assert db_analysis.status == "needs_review"
     assert db_analysis.error_message == "Cannot update non-draft order"
-    assert db_order.material == "Щебень"
-    assert db_order.volume == 7.0
     assert db_order.address == "Старый адрес"
-    assert db_order.notes == "Старые заметки"
+    assert db_order.notes == "Summary: Старые заметки | Material: Щебень | Volume: 7.0"

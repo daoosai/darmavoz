@@ -27,6 +27,19 @@ class Settings(BaseSettings):
     LLM_TIMEOUT_SECONDS: int = 30
     LLM_MAX_RETRIES: int = 3
     LLM_TEMPERATURE: float = 0.0
+    S3_ENABLED: bool = False
+    S3_ENDPOINT: str | None = None
+    S3_REGION: str = "us-east-1"
+    S3_BUCKET: str = "darmavoz-media"
+    S3_ACCESS_KEY: str | None = None
+    S3_SECRET_KEY: str | None = None
+    S3_USE_SSL: bool = False
+    S3_USE_PATH_STYLE: bool = True
+    S3_PUBLIC_BASE_URL: str | None = None
+    S3_PRESIGN_ENDPOINT: str | None = None
+    S3_PRESIGN_TTL_SECONDS: int = 900
+    S3_PREFIX: str = "prod"
+    MEDIA_MAX_FILE_SIZE_BYTES: int = 10485760
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -37,5 +50,11 @@ class Settings(BaseSettings):
             for item in self.AVITO_WEBHOOK_ALLOWED_IPS.split(",")
             if item.strip()
         }
+
+    @property
+    def s3_public_base_url(self) -> str:
+        if not self.S3_PUBLIC_BASE_URL:
+            return ""
+        return self.S3_PUBLIC_BASE_URL.rstrip("/") + "/"
 
 settings = Settings()

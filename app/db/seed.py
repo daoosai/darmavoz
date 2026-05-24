@@ -2,6 +2,7 @@ from sqlalchemy.future import select
 
 from app.core.config import settings
 from app.db.database import AsyncSessionLocal
+from app.db.seed_catalog import seed_catalog
 from app.models.models import Role, User
 from app.security.auth import get_password_hash
 
@@ -29,11 +30,12 @@ async def seed_data() -> None:
         await ensure_user(session, settings.ADMIN_USERNAME, settings.ADMIN_PASSWORD, "admin")
         await ensure_optional_user(session, settings.LOGIST_USERNAME, settings.LOGIST_PASSWORD, "logist")
         await ensure_optional_user(session, settings.MANAGER_USERNAME, settings.MANAGER_PASSWORD, "manager")
+        await seed_catalog(session)
 
 
 async def ensure_optional_user(session, username: str | None, password: str | None, role_name: str) -> None:
     if not username or not password:
-        print(f"Optional user for role '{role_name}' is not configured.")
+        print(f"Optional user for role {role_name} is not configured.")
         return
     await ensure_user(session, username, password, role_name)
 
@@ -57,7 +59,7 @@ async def ensure_user(session, username: str, password: str, role_name: str) -> 
             )
         )
         await session.commit()
-        print(f"User '{username}' with role '{role_name}' created.")
+        print(f"User {username} with role {role_name} created.")
         return
 
     updated = False
@@ -70,6 +72,6 @@ async def ensure_user(session, username: str, password: str, role_name: str) -> 
 
     if updated:
         await session.commit()
-        print(f"User '{username}' with role '{role_name}' updated.")
+        print(f"User {username} with role {role_name} updated.")
     else:
-        print(f"User '{username}' with role '{role_name}' already exists.")
+        print(f"User {username} with role {role_name} already exists.")

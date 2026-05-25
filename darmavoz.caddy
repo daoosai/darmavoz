@@ -5,7 +5,7 @@ darmavoz.ru {
 
   @rootFlutterAssets path /flutter_bootstrap.js /flutter.js /main.dart.js /manifest.json /favicon.png /version.json /flutter_service_worker.js /assets/* /icons/* /canvaskit/*
   handle @rootFlutterAssets {
-    root * /srv/darmavoz/web
+    root * /opt/darmavoz/react_web
     file_server
   }
 
@@ -15,7 +15,7 @@ darmavoz.ru {
   }
 
   handle_path /app* {
-    root * /srv/darmavoz/web
+    root * /opt/darmavoz/react_web
     try_files {path} /index.html
     file_server
   }

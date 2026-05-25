@@ -1,76 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import { Package, MapPin, Calendar, Truck, List } from 'lucide-react';
-import { baseURL } from "./utils";
+import { Package, MapPin, Calendar, Truck, List, Info } from 'lucide-react';
 
-interface OrderItem {
-  material_name?: string;
-  capacity_m3?: number;
-}
-
-interface Order {
+interface GuestOrder {
   id: string;
-  status: string;
-  total_amount: number;
-  created_at: string;
+  materialName: string;
+  volume: string;
   address: string;
-  items?: OrderItem[];
-  delivery_option?: {
-    capacity_m3?: number;
-    title?: string;
-  };
-  material?: {
-    name?: string;
-  };
+  totalPrice: number;
+  status: string;
+  date: string;
 }
-
-const statusMap: Record<string, { label: string, color: string }> = {
-  'draft': { label: 'Черновик', color: 'bg-yellow-100 text-yellow-800' },
-  'pending': { label: 'В обработке', color: 'bg-blue-100 text-blue-800' },
-  'accepted': { label: 'Принят', color: 'bg-indigo-100 text-indigo-800' },
-  'in_progress': { label: 'В работе', color: 'bg-purple-100 text-purple-800' },
-  'done': { label: 'Завершен', color: 'bg-green-100 text-green-800' },
-  'canceled': { label: 'Отменен', color: 'bg-red-100 text-red-800' },
-};
 
 export default function OrdersScreen() {
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<GuestOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const fetchOrders = async () => {
-      try {
-        setIsLoading(true);
-        const res = await fetch(`${baseURL}/orders/`, {
-          headers: {
-            'Authorization': 'Bearer demo-token'
-          }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          // Assuming API returns array or { results: array }
-          setOrders(Array.isArray(data) ? data : data.results || []);
-        } else {
-          console.error("Failed to fetch orders, status: " + res.status);
-          alert("Ошибка загрузки заказов: " + res.status);
-        }
-      } catch (err) {
-        console.error("Error fetching orders:", err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchOrders();
+    // Simulate slight loading for better UX
+    const timer = setTimeout(() => {
+      const storedOrders = JSON.parse(localStorage.getItem("guest_orders") || "[]");
+      setOrders(storedOrders);
+      setIsLoading(false);
+    }, 400);
+    return () => clearTimeout(timer);
   }, []);
-
-  const getStatusBadge = (status: string) => {
-    const mapped = statusMap[status] || { label: status, color: 'bg-slate-100 text-slate-700' };
-    
-    return (
-      <span className={`px-2 py-1 ${mapped.color} text-[10px] font-bold rounded-full uppercase tracking-wider`}>
-        {mapped.label}
-      </span>
-    );
-  };
 
   const formatDate = (dateString: string) => {
     try {
@@ -109,19 +62,26 @@ export default function OrdersScreen() {
   return (
     <div className="px-4 pb-6 relative">
       <h2 className="text-2xl font-bold text-slate-900 mb-4 pt-2">Ваши заказы</h2>
+      
+      {/* Guest Mode Banner */}
+      <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 flex items-start gap-3 mb-5">
+        <Info className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+        <p className="text-sm text-blue-800 leading-snug font-medium">
+          Гостевой режим. Ваши заказы сохранены на этом устройстве.
+        </p>
+      </div>
+
       <div className="flex flex-col gap-4">
         {orders.map((order) => {
           const shortId = order.id ? order.id.slice(-4).toUpperCase() : '????';
-          const capacity = order.items?.[0]?.capacity_m3 || order.delivery_option?.capacity_m3;
-          const materialName = order.items?.[0]?.material_name || order.material?.name || order.items?.[0]?.material?.name;
-          const materialDisplay = materialName || 'Нет данных';
-          const capacityDisplay = capacity ? `${capacity} м³` : 'Нет данных';
 
           return (
             <div key={order.id} className="bg-white rounded-[20px] p-4 shadow-sm border border-slate-100 flex flex-col gap-3">
               <div className="flex items-center justify-between border-b border-slate-50 pb-3">
                 <span className="font-bold text-slate-900 text-sm">Заказ № {shortId}</span>
-                {getStatusBadge(order.status)}
+                <span className="px-2 py-1 bg-blue-100 text-blue-800 text-[10px] font-bold rounded-full uppercase tracking-wider">
+                  {order.status}
+                </span>
               </div>
               
               <div className="flex flex-col gap-2.5">
@@ -130,7 +90,7 @@ export default function OrdersScreen() {
                     <Truck className="w-4 h-4 text-slate-500" />
                   </div>
                   <div className="flex-1">
-                    <span className="text-sm font-medium text-slate-900">{materialDisplay} • {capacityDisplay}</span>
+                    <span className="text-sm font-medium text-slate-900">{order.materialName} • {order.volume}</span>
                   </div>
                 </div>
                 
@@ -147,10 +107,10 @@ export default function OrdersScreen() {
               <div className="flex items-center justify-between border-t border-slate-50 pt-3 mt-1">
                 <div className="flex items-center gap-1.5 text-slate-500">
                   <Calendar className="w-4 h-4" />
-                  <span className="text-xs font-medium">{formatDate(order.created_at)}</span>
+                  <span className="text-xs font-medium">{formatDate(order.date)}</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <span className="font-bold text-[#2DB0E6] text-base">{order.total_amount ? `${order.total_amount} ₽` : '...'}</span>
+                  <span className="font-bold text-[#2DB0E6] text-base">{order.totalPrice ? `${order.totalPrice} ₽` : '...'}</span>
                 </div>
               </div>
             </div>

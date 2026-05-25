@@ -23,7 +23,7 @@ export default function CartScreen({
       setIsSubmitting(true);
 
       const requests = cartItems.map((item) =>
-        fetch(`${baseURL}/orders/checkout/`, {
+        fetch(`${baseURL}/orders/checkout`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

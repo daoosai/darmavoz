@@ -70,7 +70,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/v1/orders/checkout/", async (req, res) => {
+  app.post("/api/v1/orders/checkout", async (req, res) => {
     try {
       const response = await fetch(
         "https://darmavoz.ru/api/v1/orders/checkout",

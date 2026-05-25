@@ -1,169 +1,125 @@
-# Darmavoz Backend
+# Darmavoz
 
-Текущий backend проекта находится на ноде в каталоге `/opt/darmavoz`.
+Актуальная рабочая копия проекта находится в `/opt/darmavoz`.
 
-## Что реально закрыто по спринтам 1-4
+## Что есть сейчас
 
-- Спринт 1: FastAPI backend, Docker, PostgreSQL, Redis, Alembic, health/docs endpoints.
-- Спринт 2: JWT-аутентификация, роли `admin` / `logist` / `manager`, защищенные роуты для admin/logist/manager, базовые операции `create + list` для клиентов и водителей.
-- Спринт 3: интеграция Avito webhook, идемпотентная запись `integration_events/channels/dialogues/messages`, admin endpoint для регистрации webhook.
-- Спринт 4: AI-анализ входящих сообщений, запись `message_ai_analyses`, создание/обновление draft-заказа по результату анализа.
+- `backend` на FastAPI
+- PostgreSQL + Redis
+- каталог материалов и вариантов доставки `5/10/17/20/25/30 м3`
+- оформление заказа через `POST /api/v1/orders/checkout`
+- S3/MinIO для медиа и таблица `media_files`
+- React SPA в `frontend/`
+- собранный web-клиент в `react_web/`
+- Caddy-маршрутизация домена `darmavoz.ru`
 
-Важно: на текущий момент для `clients` и `drivers` реализованы только `create` и `list`. Полного CRUD пока нет, и это нужно учитывать при закрытии спринтов.
+## Структура
 
-## Структура запуска
+```text
+/opt/darmavoz
+├── alembic/
+├── app/
+│   ├── api/
+│   ├── core/
+│   ├── db/
+│   ├── integrations/
+│   ├── models/
+│   ├── schemas/
+│   ├── security/
+│   └── services/
+├── frontend/          # исходники React SPA
+├── react_web/         # собранный web-клиент для отдачи Caddy
+├── scripts/
+├── tests/
+├── architecture.md
+├── darmavoz.caddy
+├── docker-compose.local.yml
+├── docker-compose.yml
+├── full_task.md
+├── main.py
+└── README.md
+```
 
-### Local development
-Поднимает локальные `db`, `redis`, `backend`:
+## Запуск
+
+### Local backend
 
 ```bash
 docker compose -f docker-compose.local.yml up -d --build
 ```
 
-### Production
-Поднимает только `backend`, который подключается к внешней сети `daoos_kit_default` и использует внешние Postgres/Redis из окружения:
+### Production services
 
 ```bash
 docker compose up -d --build
 ```
 
-## Публичные и локальные URL
+`docker-compose.yml` поднимает:
 
-- Local API: `http://localhost:8000`
-- Local Swagger UI: `http://localhost:8000/docs`
-- Local ReDoc: `http://localhost:8000/redoc`
-- Local OpenAPI: `http://localhost:8000/openapi.json`
-- Prod API/docs: `https://darmavoz.ru`, `https://darmavoz.ru/docs`
+- `backend`
+- `minio`
 
-## Основные endpoints
+Внешний HTTP(S) терминируется Caddy из DAOOS Kit.
+
+## Frontend
+
+Исходники React-клиента лежат в `frontend/`.
+
+Основные команды:
+
+```bash
+cd frontend
+npm ci
+npm run build
+```
+
+Результат сборки публикуется в `frontend/dist/`, а на прод-ноде раздается из `/opt/darmavoz/react_web`.
+
+## Публичные URL
+
+- `https://darmavoz.ru/app` - web-клиент
+- `https://darmavoz.ru/api/v1/catalog/categories/`
+- `https://darmavoz.ru/api/v1/catalog/materials/`
+- `https://darmavoz.ru/api/v1/catalog/delivery-options/`
+- `https://darmavoz.ru/api/v1/orders/checkout`
+- `https://darmavoz.ru/health`
+- `https://darmavoz.ru/docs`
+
+## Ключевые backend endpoints
 
 - `GET /ping`
 - `GET /health`
 - `POST /api/v1/auth/login`
-- `GET /api/v1/admin/stats`
-- `GET /api/v1/admin/logist-area`
-- `GET /api/v1/admin/manager-area`
-- `POST /api/v1/admin/avito/webhook/register`
-- `POST /api/v1/clients/`
-- `GET /api/v1/clients/`
-- `POST /api/v1/drivers/`
-- `GET /api/v1/drivers/`
+- `GET /api/v1/catalog/categories/`
+- `GET /api/v1/catalog/materials/`
+- `GET /api/v1/catalog/delivery-options/`
+- `POST /api/v1/orders/checkout`
+- `POST /api/v1/media/presign-upload`
+- `POST /api/v1/media/confirm`
 - `POST /api/v1/webhooks/avito`
 
-## Avito webhook: фактический контракт
+## Sprint 7
 
-Эндпоинт:
+По фактическому состоянию проекта Sprint 7 закрывает:
 
-```text
-POST /api/v1/webhooks/avito
-```
+- выбор категории и материала
+- выбор варианта доставки `5/10/17/20/25/30 м3`
+- оформление заказа с адресом и комментарием
+- гостевой сценарий без авторизации
+- локальную историю заказов на клиенте
 
-Сервис принимает webhook, если выполнено хотя бы одно условие:
+## Медиа и S3
 
-- query-параметр `token` совпадает с `AVITO_WEBHOOK_URL_TOKEN`
-- заголовок `X-Webhook-Secret` (или имя из `AVITO_WEBHOOK_HEADER_NAME`) совпадает с `AVITO_WEBHOOK_SECRET`
-- source IP входит в `AVITO_WEBHOOK_ALLOWED_IPS`
-
-Поддерживаются два формата payload:
-
-1. Уже нормализованный внутренний:
-
-```json
-{
-  "event_id": "evt_1",
-  "account_id": "acc_1",
-  "payload": {
-    "chat_id": "chat_1",
-    "user_id": "recipient_or_account_user_id",
-    "sender_user_id": "author_user_id",
-    "message_id": "msg_1",
-    "text": "hello",
-    "direction": "inbound",
-    "message_type": "text"
-  }
-}
-```
-
-2. Реальный Avito-like payload, который сервер сам нормализует:
-
-```json
-{
-  "id": "evt_1",
-  "payload": {
-    "type": "message",
-    "value": {
-      "id": "msg_1",
-      "chat_id": "chat_1",
-      "user_id": "acc_1",
-      "author_id": "user_1",
-      "content": {"text": "hello"},
-      "type": "text",
-      "direction": "in"
-    }
-  }
-}
-```
-
-Обязательные поля после нормализации: `event_id`, `account_id`, `chat_id`, `sender_user_id`, `message_id`.
-
-Не-`inbound` сообщения сохраняются как обработанные события, но не создают сущности сообщения для AI pipeline.
-
-## Seed пользователей
-
-При старте приложение всегда создает роли `admin`, `logist`, `manager` и администратора из `.env`:
-
-```env
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=admin
-```
-
-Отдельные учетные записи ролей создаются, если в `.env` заданы:
-
-```env
-LOGIST_USERNAME=logist
-LOGIST_PASSWORD=logist
-MANAGER_USERNAME=manager
-MANAGER_PASSWORD=manager
-```
-
-Если эти переменные не заданы, пользователи `logist` и `manager` не создаются. На прод-ноде Darmavoz на 2026-04-29 они уже заведены и проходят login/smoke-проверку.
+- S3-совместимое хранилище: MinIO
+- backend-сервис: `app/services/storage.py`
+- API медиа: `app/api/media.py`
+- метаданные файлов: таблица `media_files`
 
 ## Быстрая проверка
 
-Есть короткий smoke script:
-
 ```bash
 cd /opt/darmavoz
-chmod +x scripts/smoke_check.sh
 ./scripts/smoke_check.sh
 ```
 
-По умолчанию он проверяет:
-
-- `GET /health`
-- login `admin` и доступ к `/api/v1/admin/stats`
-- `create + list` для `clients`
-- `create + list` для `drivers`
-- login `logist` и доступ к `/api/v1/admin/logist-area`
-- login `manager` и доступ к `/api/v1/admin/manager-area`
-- тестовый `POST /api/v1/webhooks/avito`
-
-Скрипт сам подхватывает `.env` и по умолчанию использует:
-
-- `BASE_URL=${BASE_URL:-${APP_BASE_URL:-https://darmavoz.ru}}`
-- credentials/secret из `.env`
-
-Если нужно переопределить окружение вручную:
-
-```bash
-BASE_URL=http://localhost:8000 \
-ADMIN_USERNAME=admin \
-ADMIN_PASSWORD=admin \
-LOGIST_USERNAME=logist \
-LOGIST_PASSWORD=logist \
-MANAGER_USERNAME=manager \
-MANAGER_PASSWORD=manager \
-WEBHOOK_TOKEN=... \
-WEBHOOK_SECRET=... \
-./scripts/smoke_check.sh
-```
+Smoke-проверка покрывает базовое здоровье backend, login и основные API старших спринтов.

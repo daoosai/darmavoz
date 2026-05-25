@@ -3,8 +3,8 @@ darmavoz.ru {
     reverse_proxy minio:9000
   }
 
-  @rootFlutterAssets path /flutter_bootstrap.js /flutter.js /main.dart.js /manifest.json /favicon.png /version.json /flutter_service_worker.js /assets/* /icons/* /canvaskit/*
-  handle @rootFlutterAssets {
+  @webAssets path /assets/*
+  handle @webAssets {
     root * /opt/darmavoz/react_web
     file_server
   }

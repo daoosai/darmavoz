@@ -32,7 +32,7 @@ jobs:
         working-directory: ./frontend
         run: |
           npm install
-          npm install -D @capacitor/cli
+          npm install @capacitor/core @capacitor/android @capacitor/cli
           npm run build
 
       - name: Sync Capacitor

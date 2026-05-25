@@ -31,7 +31,8 @@ jobs:
       - name: Install dependencies & Build Web
         working-directory: ./frontend
         run: |
-          npm ci
+          npm install
+          npm install -D @capacitor/cli
           npm run build
 
       - name: Sync Capacitor

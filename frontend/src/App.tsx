@@ -49,6 +49,7 @@ export default function App() {
     const fetchData = async () => {
       try {
         setIsLoading(true);
+        alert("URL API: " + baseURL);
         const [categoriesRes, materialsRes] = await Promise.all([
           fetch(`${baseURL}/catalog/categories/`),
           fetch(`${baseURL}/catalog/materials/`),
@@ -72,6 +73,7 @@ export default function App() {
         }
       } catch (err) {
         console.error("Error fetching data:", err);
+        alert("Ошибка загрузки: " + String(err));
       } finally {
         setIsLoading(false);
       }

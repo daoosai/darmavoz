@@ -23,7 +23,7 @@ export default function CartScreen({
       setIsSubmitting(true);
 
       const requests = cartItems.map((item) =>
-        fetch(`${baseURL}/orders/checkout`, {
+        fetch(`${baseURL}/orders/checkout/`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -44,21 +44,26 @@ export default function CartScreen({
 
       if (!hasErrors) {
         toast.success("Заказ успешно оформлен");
-        
+
         // Save to guest_orders in localStorage
-        const existingOrders = JSON.parse(localStorage.getItem("guest_orders") || "[]");
-        
-        const newOrders = cartItems.map(item => ({
+        const existingOrders = JSON.parse(
+          localStorage.getItem("guest_orders") || "[]",
+        );
+
+        const newOrders = cartItems.map((item) => ({
           id: Date.now().toString() + Math.random().toString(36).substring(7),
           materialName: item.material.name,
           volume: `${item.deliveryOption.capacity_m3} м³`,
           address: globalAddress,
           totalPrice: item.material.price * item.deliveryOption.capacity_m3,
           status: "Создан",
-          date: new Date().toISOString()
+          date: new Date().toISOString(),
         }));
-        
-        localStorage.setItem("guest_orders", JSON.stringify([...newOrders, ...existingOrders]));
+
+        localStorage.setItem(
+          "guest_orders",
+          JSON.stringify([...newOrders, ...existingOrders]),
+        );
 
         clearCart();
         setGlobalAddress("");

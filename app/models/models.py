@@ -6,6 +6,7 @@ from typing import List, Optional
 from sqlalchemy import (
     Boolean,
     DateTime,
+    Enum as SQLEnum,
     Float,
     ForeignKey,
     Integer,
@@ -70,7 +71,11 @@ class Driver(Base):
     phone: Mapped[str] = mapped_column(String(20), unique=True, index=True)
     user_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"), nullable=True, unique=True)
     vehicle_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("vehicles.id"), nullable=True)
-    status: Mapped[str] = mapped_column(String(50), default="offline", nullable=False)
+    status: Mapped[str] = mapped_column(
+        SQLEnum("available", "busy", "offline", name="driver_status"),
+        default="offline",
+        nullable=False,
+    )
     is_auto_dispatch_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     dispatch_priority: Mapped[int] = mapped_column(Integer, default=100, nullable=False)
     temporary_penalty_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

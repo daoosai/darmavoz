@@ -42,7 +42,14 @@ async def ensure_optional_user(session, username: str | None, password: str | No
     await ensure_user(session, username, password, role_name)
 
 
-async def ensure_user(session, username: str, password: str, role_name: str) -> User:
+async def ensure_user(
+    session,
+    username: str,
+    password: str,
+    role_name: str,
+    *,
+    reset_password: bool = False,
+) -> User:
     query = select(User).where(User.username == username)
     result = await session.execute(query)
     user = result.scalar_one_or_none()
@@ -64,6 +71,9 @@ async def ensure_user(session, username: str, password: str, role_name: str) -> 
         return user
 
     updated = False
+    if reset_password:
+        user.hashed_password = get_password_hash(password)
+        updated = True
     if user.role_id != role.id:
         user.role_id = role.id
         updated = True
@@ -118,6 +128,7 @@ async def ensure_test_dispatch_drivers(session) -> None:
             definition["username"],
             settings.DRIVER_TEST_PASSWORD,
             "driver",
+            reset_password=True,
         )
         vehicle = await ensure_vehicle(
             session,

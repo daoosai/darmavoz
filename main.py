@@ -7,9 +7,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import admin, auth, catalog, clients, drivers, media, orders, webhooks
+from app.api import admin, auth, catalog, clients, driver_dispatch, drivers, logist_orders, media, orders, webhooks
 from app.core.config import settings
 from app.db.seed import seed_data
+from app.services.dispatch_worker import start_dispatch_worker, stop_dispatch_worker
+from app.services.redis_client import close_redis
 
 logger = logging.getLogger(__name__)
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -28,7 +30,12 @@ async def lifespan(app: FastAPI):
     if not settings.LLM_API_KEY:
         logger.warning("LLM_API_KEY is not set. AI processing will fail!")
     await seed_data()
-    yield
+    stop_event, task = await start_dispatch_worker()
+    try:
+        yield
+    finally:
+        await stop_dispatch_worker(stop_event, task)
+        await close_redis()
 
 
 app = FastAPI(title="Дармавоз.рф API", lifespan=lifespan)
@@ -46,6 +53,8 @@ app.include_router(admin.router, prefix="/api/v1/admin", tags=["admin"])
 app.include_router(catalog.router, prefix="/api/v1/catalog", tags=["catalog"])
 app.include_router(clients.router, prefix="/api/v1/clients", tags=["clients"])
 app.include_router(drivers.router, prefix="/api/v1/drivers", tags=["drivers"])
+app.include_router(logist_orders.router, prefix="/api/v1/logist", tags=["logist"])
+app.include_router(driver_dispatch.router, prefix="/api/v1/driver", tags=["driver"])
 app.include_router(media.router, prefix="/api/v1/media", tags=["media"])
 app.include_router(orders.router, prefix="/api/v1/orders", tags=["orders"])
 app.include_router(webhooks.router, prefix="/api/v1/webhooks")

@@ -42,6 +42,7 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     role: Mapped["Role"] = relationship("Role", back_populates="users")
+    driver_profile: Mapped[Optional["Driver"]] = relationship("Driver", back_populates="user", uselist=False)
 
 
 class Client(Base):
@@ -67,9 +68,33 @@ class Driver(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255))
     phone: Mapped[str] = mapped_column(String(20), unique=True, index=True)
-    status: Mapped[Optional[str]] = mapped_column(String(50))
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"), nullable=True, unique=True)
+    vehicle_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("vehicles.id"), nullable=True)
+    status: Mapped[str] = mapped_column(String(50), default="offline", nullable=False)
+    is_auto_dispatch_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    dispatch_priority: Mapped[int] = mapped_column(Integer, default=100, nullable=False)
+    temporary_penalty_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_offer_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    user: Mapped[Optional["User"]] = relationship("User", back_populates="driver_profile")
+    vehicle: Mapped[Optional["Vehicle"]] = relationship("Vehicle", back_populates="drivers")
     orders: Mapped[List["Order"]] = relationship("Order", back_populates="driver")
+    offers: Mapped[List["OrderOffer"]] = relationship("OrderOffer", back_populates="driver")
+
+
+class Vehicle(Base):
+    __tablename__ = "vehicles"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    plate_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    delivery_option_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("delivery_options.id"), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    delivery_option: Mapped["DeliveryOption"] = relationship("DeliveryOption", back_populates="vehicles")
+    drivers: Mapped[List["Driver"]] = relationship("Driver", back_populates="vehicle")
 
 
 class Product(Base):
@@ -145,6 +170,7 @@ class DeliveryOption(Base):
     image_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
     orders: Mapped[List["Order"]] = relationship("Order", back_populates="delivery_option")
+    vehicles: Mapped[List["Vehicle"]] = relationship("Vehicle", back_populates="delivery_option")
 
 
 class MediaFile(Base):
@@ -165,9 +191,27 @@ class MediaFile(Base):
 
 class OrderStatus(str, Enum):
     draft = "draft"
-    pending = "pending"
-    assigned = "assigned"
+    created = "created"
+    searching_driver = "searching_driver"
+    offered_to_driver = "offered_to_driver"
+    driver_assigned = "driver_assigned"
+    in_progress = "in_progress"
     completed = "completed"
+    cancelled = "cancelled"
+    no_driver_found = "no_driver_found"
+
+
+class DriverStatus(str, Enum):
+    available = "available"
+    busy = "busy"
+    offline = "offline"
+
+
+class OrderOfferStatus(str, Enum):
+    pending = "pending"
+    accepted = "accepted"
+    declined = "declined"
+    expired = "expired"
     cancelled = "cancelled"
 
 
@@ -180,14 +224,18 @@ class Order(Base):
     delivery_option_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         ForeignKey("delivery_options.id"), nullable=True
     )
+    current_offer_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("order_offers.id"), nullable=True)
     address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     total_amount: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     status: Mapped[str] = mapped_column(String(50), default=OrderStatus.draft.value)
     source: Mapped[Optional[str]] = mapped_column(String(50), default="avito", nullable=True)
+    created_by_source: Mapped[Optional[str]] = mapped_column(String(50), default="client_app", nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     source_dialogue_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         ForeignKey("dialogues.id"), nullable=True
     )
+    dispatch_started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    assigned_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     client: Mapped["Client"] = relationship("Client", back_populates="orders")
@@ -199,7 +247,14 @@ class Order(Base):
         "OrderItem", back_populates="order", cascade="all, delete-orphan"
     )
     events: Mapped[List["EventLog"]] = relationship("EventLog", back_populates="order")
-    offers: Mapped[List["OrderOffer"]] = relationship("OrderOffer", back_populates="order")
+    offers: Mapped[List["OrderOffer"]] = relationship(
+        "OrderOffer",
+        back_populates="order",
+        foreign_keys="OrderOffer.order_id",
+    )
+    current_offer: Mapped[Optional["OrderOffer"]] = relationship(
+        "OrderOffer", foreign_keys=[current_offer_id], post_update=True
+    )
     dialogues: Mapped[List["Dialogue"]] = relationship(
         "Dialogue",
         back_populates="order",
@@ -209,6 +264,10 @@ class Order(Base):
         "Dialogue", foreign_keys=[source_dialogue_id]
     )
 
+    @property
+    def quantity(self) -> int:
+        return sum(item.quantity for item in self.items)
+
 
 class OrderItem(Base):
     __tablename__ = "order_items"
@@ -216,6 +275,7 @@ class OrderItem(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orders.id"))
     material_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("materials.id"))
+    quantity: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     volume: Mapped[float] = mapped_column(Float, nullable=False)
     price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     amount: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
@@ -242,12 +302,18 @@ class OrderOffer(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orders.id"))
     driver_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("drivers.id"))
-    price: Mapped[float] = mapped_column(Float)
-    status: Mapped[str] = mapped_column(String(50))
+    price: Mapped[float] = mapped_column(Float, default=0.0)
+    sequence_no: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default=OrderOfferStatus.pending.value, nullable=False)
+    offered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    responded_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    decision_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    priority_snapshot: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    order: Mapped["Order"] = relationship("Order", back_populates="offers")
-    driver: Mapped["Driver"] = relationship("Driver")
+    order: Mapped["Order"] = relationship("Order", back_populates="offers", foreign_keys=[order_id])
+    driver: Mapped["Driver"] = relationship("Driver", back_populates="offers")
 
 
 class IntegrationEvent(Base):

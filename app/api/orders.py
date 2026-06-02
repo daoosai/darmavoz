@@ -1,19 +1,15 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.db.database import get_db
-from app.models.models import Client, DeliveryOption, Material, Order, OrderItem, OrderStatus, User
+from app.models.models import Order, User
 from app.schemas.order import CheckoutRequest, OrderOut
 from app.security.auth import get_current_user
+from app.services.dispatch_service import create_checkout_order, get_order_by_id, list_recent_orders
 
 router = APIRouter()
-
-GUEST_CLIENT_PHONE = "00000000000"
-GUEST_CLIENT_NAME = "Гость (Демо)"
 
 
 @router.get("/", response_model=list[OrderOut])
@@ -22,17 +18,7 @@ async def list_orders(
     db: AsyncSession = Depends(get_db),
 ) -> list[Order]:
     del current_user
-    stmt = (
-        select(Order)
-        .options(
-            selectinload(Order.delivery_option),
-            selectinload(Order.items).selectinload(OrderItem.material),
-        )
-        .order_by(Order.created_at.desc())
-        .limit(20)
-    )
-    result = await db.execute(stmt)
-    return list(result.scalars().all())
+    return await list_recent_orders(db)
 
 
 @router.delete("/{order_id}")
@@ -53,61 +39,23 @@ async def delete_order(
 
 @router.post("/checkout", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
 async def checkout_order(payload: CheckoutRequest, db: AsyncSession = Depends(get_db)) -> Order:
-    client_id = payload.client_id
-
-    if not payload.client_id:
-        result = await db.execute(select(Client).where(Client.phone == GUEST_CLIENT_PHONE))
-        guest_client = result.scalar_one_or_none()
-        if guest_client is None:
-            guest_client = Client(name=GUEST_CLIENT_NAME, phone=GUEST_CLIENT_PHONE)
-            db.add(guest_client)
-            await db.flush()
-        client_id = guest_client.id
-    else:
-        client = await db.get(Client, payload.client_id)
-        if client is None:
-            raise HTTPException(status_code=404, detail="Client not found")
-
-    material = await db.get(Material, payload.material_id)
-    if material is None or not material.is_active:
-        raise HTTPException(status_code=404, detail="Material not found")
-
-    delivery_option = await db.get(DeliveryOption, payload.delivery_option_id)
-    if delivery_option is None or not delivery_option.is_active:
-        raise HTTPException(status_code=404, detail="Delivery option not found")
-
-    volume = delivery_option.capacity_m3
-    unit_price = material.price
-    amount = volume * unit_price if unit_price is not None else None
-
-    order = Order(
-        client_id=client_id,
-        delivery_option_id=delivery_option.id,
+    return await create_checkout_order(
+        db,
+        client_id=payload.client_id,
+        material_id=payload.material_id,
+        delivery_option_id=payload.delivery_option_id,
         address=payload.address,
         notes=payload.notes,
-        source=payload.source or "mobile",
-        status=OrderStatus.pending.value,
-        total_amount=amount or 0.0,
+        source=payload.source,
+        quantity=payload.quantity,
     )
-    db.add(order)
-    await db.flush()
 
-    order_item = OrderItem(
-        order_id=order.id,
-        material_id=material.id,
-        volume=volume,
-        price=unit_price,
-        amount=amount,
-    )
-    db.add(order_item)
-    await db.commit()
 
-    result = await db.execute(
-        select(Order)
-        .options(
-            selectinload(Order.delivery_option),
-            selectinload(Order.items).selectinload(OrderItem.material),
-        )
-        .where(Order.id == order.id)
-    )
-    return result.scalar_one()
+@router.get("/{order_id}", response_model=OrderOut)
+async def get_order(
+    order_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Order:
+    del current_user
+    return await get_order_by_id(db, order_id)

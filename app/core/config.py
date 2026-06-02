@@ -40,6 +40,12 @@ class Settings(BaseSettings):
     S3_PRESIGN_TTL_SECONDS: int = 900
     S3_PREFIX: str = "prod"
     MEDIA_MAX_FILE_SIZE_BYTES: int = 10485760
+    DISPATCH_POLL_INTERVAL_SECONDS: int = 5
+    DISPATCH_OFFER_TIMEOUT_SECONDS: int = 120
+    DISPATCH_DECLINE_PENALTY_SECONDS: int = 900
+    DISPATCH_TIMEOUT_PENALTY_SECONDS: int = 1800
+    DISPATCH_LOCK_TTL_SECONDS: int = 30
+    DRIVER_TEST_PASSWORD: str = "driver123"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

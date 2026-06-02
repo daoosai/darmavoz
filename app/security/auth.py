@@ -10,7 +10,7 @@ from passlib.context import CryptContext
 
 from app.core.config import settings
 from app.db.database import get_db
-from app.models.models import User
+from app.models.models import Driver, User
 from app.schemas.token import TokenData
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -43,7 +43,11 @@ async def get_current_user(
     except JWTError:
         raise credentials_exception
 
-    query = select(User).where(User.username == token_data.username).options(selectinload(User.role))
+    query = (
+        select(User)
+        .where(User.username == token_data.username)
+        .options(selectinload(User.role), selectinload(User.driver_profile))
+    )
     result = await db.execute(query)
     user = result.scalar_one_or_none()
 
@@ -68,3 +72,14 @@ def require_roles(*allowed_roles: str) -> Callable:
 get_current_admin_user = require_roles("admin")
 get_current_logist_user = require_roles("admin", "logist")
 get_current_manager_user = require_roles("admin", "manager")
+get_current_driver_user = require_roles("driver")
+
+
+async def get_current_driver(current_user: User = Depends(get_current_driver_user)) -> Driver:
+    driver = current_user.driver_profile
+    if driver is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Driver profile is not linked to the current user",
+        )
+    return driver

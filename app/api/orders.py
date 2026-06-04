@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_db
 from app.models.models import Order, User
 from app.schemas.order import CheckoutRequest, OrderOut
-from app.security.auth import get_current_user
+from app.security.auth import get_current_logist_user, get_current_user
 from app.services.dispatch_service import create_checkout_order, get_order_by_id, list_recent_orders
 
 router = APIRouter()
@@ -15,6 +15,15 @@ router = APIRouter()
 @router.get("/", response_model=list[OrderOut])
 async def list_orders(
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[Order]:
+    del current_user
+    return await list_recent_orders(db)
+
+
+@router.get("/admin", response_model=list[OrderOut])
+async def list_admin_orders(
+    current_user: User = Depends(get_current_logist_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[Order]:
     del current_user

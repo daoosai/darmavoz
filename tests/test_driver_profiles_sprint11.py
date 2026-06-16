@@ -215,6 +215,31 @@ async def test_driver_order_endpoints_require_approved_driver(client, session_fa
 
 
 @pytest.mark.asyncio
+async def test_driver_register_normalizes_phone_and_login_accepts_normalized_phone(client):
+    response = await client.post(
+        "/api/v1/auth/driver/register",
+        json={
+            "name": "Masked Driver",
+            "phone": "+7 (999) 000-11-22",
+            "password": "driver123",
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["driver"]["phone"] == "+79990001122"
+
+    login_response = await client.post(
+        "/api/v1/auth/login",
+        data={"username": "+79990001122", "password": "driver123"},
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+
+    assert login_response.status_code == 200
+    assert login_response.json()["role"] == "driver"
+
+
+@pytest.mark.asyncio
 async def test_admin_can_approve_reject_and_suspend_driver_and_vehicle(client, session_factory):
     async with session_factory() as session:
         admin_role = await ensure_role(session, "admin")
@@ -285,3 +310,31 @@ async def test_admin_can_approve_reject_and_suspend_driver_and_vehicle(client, s
     assert driver.moderation_status == ModerationStatus.suspended.value
     assert driver.moderated_by_user_id is not None
     assert vehicle.moderation_status == ModerationStatus.approved.value
+
+
+@pytest.mark.asyncio
+async def test_admin_moderation_endpoints_allow_empty_body(client, session_factory):
+    async with session_factory() as session:
+        admin_role = await ensure_role(session, "admin")
+        driver_role = await ensure_role(session, "driver")
+        admin_user = await create_user(session, username="sprint11_admin_empty_body", role=admin_role)
+        driver_user = await create_user(session, username="+79990007788", role=driver_role)
+        driver = Driver(
+            name="Pending Driver",
+            phone="+79990007788",
+            user_id=driver_user.id,
+            status="offline",
+            moderation_status=ModerationStatus.pending_moderation.value,
+        )
+        session.add(driver)
+        await session.commit()
+        driver_id = driver.id
+        admin_username = admin_user.username
+
+    response = await client.post(
+        f"/api/v1/admin/drivers/{driver_id}/approve",
+        headers=auth_headers(admin_username),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["moderation_status"] == ModerationStatus.approved.value

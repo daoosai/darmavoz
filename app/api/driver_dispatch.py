@@ -29,6 +29,7 @@ from app.services.dispatch_service import (
     list_orders_for_driver,
     mask_phone,
 )
+from app.utils.phones import normalize_phone
 
 router = APIRouter()
 
@@ -271,25 +272,28 @@ async def update_driver_profile(
     db: AsyncSession = Depends(get_db),
     current_driver: Driver = Depends(get_current_driver),
 ) -> Driver:
+    normalized_phone = normalize_phone(payload.phone) if payload.phone is not None else None
+
     if payload.phone is not None:
         await _validate_unique_driver_phone(
             db,
-            phone=payload.phone,
+            phone=normalized_phone,
             current_driver_id=current_driver.id,
             current_user_id=current_driver.user_id,
         )
 
-    if _has_driver_critical_changes(current_driver, payload):
+    normalized_payload = payload.model_copy(update={"phone": normalized_phone})
+    if _has_driver_critical_changes(current_driver, normalized_payload):
         _reset_driver_moderation(current_driver)
 
     if payload.name is not None:
         current_driver.name = payload.name
     if payload.phone is not None:
-        current_driver.phone = payload.phone
+        current_driver.phone = normalized_phone
         if current_driver.user_id is not None:
             user = await db.get(User, current_driver.user_id)
             if user is not None:
-                user.username = payload.phone
+                user.username = normalized_phone
 
     await db.commit()
     return await _load_driver_with_vehicle(db, current_driver.id)

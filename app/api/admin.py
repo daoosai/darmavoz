@@ -1,7 +1,7 @@
 from datetime import datetime, UTC
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,6 +39,7 @@ from app.security.auth import (
     get_current_manager_user,
     get_password_hash,
 )
+from app.utils.phones import normalize_phone
 
 router = APIRouter()
 
@@ -246,7 +247,8 @@ async def create_admin_driver(
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin_user),
 ):
-    await _ensure_unique_driver_phone(db, payload.phone)
+    normalized_phone = normalize_phone(payload.phone)
+    await _ensure_unique_driver_phone(db, normalized_phone)
 
     vehicle = await _assign_vehicle_by_delivery_option(
         db,
@@ -256,7 +258,7 @@ async def create_admin_driver(
     role = await _get_driver_role(db)
     await _ensure_vehicle_is_free(db, vehicle.id)
     user = User(
-        username=payload.phone,
+        username=normalized_phone,
         hashed_password=get_password_hash(payload.password),
         role_id=role.id,
         is_active=True,
@@ -266,7 +268,7 @@ async def create_admin_driver(
 
     driver = Driver(
         name=payload.name,
-        phone=payload.phone,
+        phone=normalized_phone,
         user_id=user.id,
         vehicle_id=vehicle.id,
         status=payload.status,
@@ -292,7 +294,7 @@ async def update_admin_driver(
     del current_admin
     driver = await _load_driver_or_404(db, driver_id)
 
-    next_phone = payload.phone or driver.phone
+    next_phone = normalize_phone(payload.phone) if payload.phone is not None else driver.phone
     await _ensure_unique_driver_phone(
         db,
         next_phone,
@@ -325,7 +327,7 @@ async def update_admin_driver(
     if payload.name is not None:
         driver.name = payload.name
     if payload.phone is not None:
-        driver.phone = payload.phone
+        driver.phone = next_phone
     if payload.status is not None:
         driver.status = payload.status
     if payload.is_auto_dispatch_enabled is not None:
@@ -350,7 +352,7 @@ class ModerationDecisionPayload(BaseModel):
 @router.post("/drivers/{driver_id}/approve", response_model=DriverResponse)
 async def approve_driver(
     driver_id: UUID,
-    payload: ModerationDecisionPayload,
+    payload: ModerationDecisionPayload | None = Body(default=None),
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin_user),
 ):
@@ -358,7 +360,7 @@ async def approve_driver(
     _set_driver_moderation(
         driver,
         ModerationStatus.approved.value,
-        comment=payload.comment,
+        comment=payload.comment if payload else None,
         admin_user_id=current_admin.id,
     )
     await db.commit()
@@ -368,7 +370,7 @@ async def approve_driver(
 @router.post("/drivers/{driver_id}/reject", response_model=DriverResponse)
 async def reject_driver(
     driver_id: UUID,
-    payload: ModerationDecisionPayload,
+    payload: ModerationDecisionPayload | None = Body(default=None),
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin_user),
 ):
@@ -376,7 +378,7 @@ async def reject_driver(
     _set_driver_moderation(
         driver,
         ModerationStatus.rejected.value,
-        comment=payload.comment,
+        comment=payload.comment if payload else None,
         admin_user_id=current_admin.id,
     )
     await db.commit()
@@ -386,7 +388,7 @@ async def reject_driver(
 @router.post("/drivers/{driver_id}/suspend", response_model=DriverResponse)
 async def suspend_driver(
     driver_id: UUID,
-    payload: ModerationDecisionPayload,
+    payload: ModerationDecisionPayload | None = Body(default=None),
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin_user),
 ):
@@ -394,7 +396,7 @@ async def suspend_driver(
     _set_driver_moderation(
         driver,
         ModerationStatus.suspended.value,
-        comment=payload.comment,
+        comment=payload.comment if payload else None,
         admin_user_id=current_admin.id,
     )
     await db.commit()
@@ -404,7 +406,7 @@ async def suspend_driver(
 @router.post("/vehicles/{vehicle_id}/approve", response_model=dict[str, str | bool])
 async def approve_vehicle(
     vehicle_id: UUID,
-    payload: ModerationDecisionPayload,
+    payload: ModerationDecisionPayload | None = Body(default=None),
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin_user),
 ):
@@ -412,7 +414,7 @@ async def approve_vehicle(
     _set_vehicle_moderation(
         vehicle,
         ModerationStatus.approved.value,
-        comment=payload.comment,
+        comment=payload.comment if payload else None,
         admin_user_id=current_admin.id,
     )
     await db.commit()
@@ -422,7 +424,7 @@ async def approve_vehicle(
 @router.post("/vehicles/{vehicle_id}/reject", response_model=dict[str, str | bool])
 async def reject_vehicle(
     vehicle_id: UUID,
-    payload: ModerationDecisionPayload,
+    payload: ModerationDecisionPayload | None = Body(default=None),
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin_user),
 ):
@@ -430,7 +432,7 @@ async def reject_vehicle(
     _set_vehicle_moderation(
         vehicle,
         ModerationStatus.rejected.value,
-        comment=payload.comment,
+        comment=payload.comment if payload else None,
         admin_user_id=current_admin.id,
     )
     await db.commit()
@@ -440,7 +442,7 @@ async def reject_vehicle(
 @router.post("/vehicles/{vehicle_id}/suspend", response_model=dict[str, str | bool])
 async def suspend_vehicle(
     vehicle_id: UUID,
-    payload: ModerationDecisionPayload,
+    payload: ModerationDecisionPayload | None = Body(default=None),
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin_user),
 ):
@@ -448,7 +450,7 @@ async def suspend_vehicle(
     _set_vehicle_moderation(
         vehicle,
         ModerationStatus.suspended.value,
-        comment=payload.comment,
+        comment=payload.comment if payload else None,
         admin_user_id=current_admin.id,
     )
     await db.commit()

@@ -379,7 +379,7 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
       }
     } else if (type === "driver") {
       try {
-        const res = await fetch(`${baseURL}/drivers/${id}`, {
+        const res = await fetch(`${baseURL}/admin/drivers/${id}`, {
           method: "DELETE",
           headers: { "Authorization": `Bearer ${token}` }
         });
@@ -594,7 +594,9 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
         return;
       }
       
-      const url = isEdit ? `${baseURL}/drivers/${editingDriver.id}` : `${baseURL}/drivers/`;
+      const url = isEdit
+        ? `${baseURL}/admin/drivers/${editingDriver.id}`
+        : `${baseURL}/admin/drivers`;
       const method = isEdit ? "PATCH" : "POST";
       
       let fullPhone = cleanPhone(editingDriver.phone);

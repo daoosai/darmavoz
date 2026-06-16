@@ -70,6 +70,9 @@ interface AdminDriver {
   };
   vehicle?: {
     title: string;
+    brand?: string;
+    model?: string;
+    vehicle_type?: string;
     delivery_option_id?: string;
     delivery_option?: {
       id?: string;
@@ -106,6 +109,13 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
   const [editingDriver, setEditingDriver] = useState<Partial<AdminDriver> & { password?: string }>({});
   const [isSavingDriver, setIsSavingDriver] = useState(false);
   const [showDriverPassword, setShowDriverPassword] = useState(false);
+
+  const getVehicleString = (driver: AdminDriver) => {
+    const vehicleString = driver.vehicle
+      ? `${driver.vehicle.brand || ""} ${driver.vehicle.vehicle_type || ""} (${driver.vehicle.delivery_option?.capacity_m3 || "?"} м³)`.trim()
+      : "Автомобиль не назначен";
+    return vehicleString || "Автомобиль не назначен";
+  };
 
   const handleLogout = () => {
     logout();
@@ -1168,13 +1178,7 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                             <td className="px-6 py-4 font-semibold text-slate-800">{d.name}</td>
                             <td className="px-6 py-4 text-sm whitespace-nowrap">{d.phone}</td>
                             <td className="px-6 py-4 text-sm text-slate-500">
-                              {d.vehicle ? (
-                                `${d.vehicle.title || d.vehicle.delivery_option?.title || "Неизвестный тип"} (${d.vehicle.delivery_option?.capacity_m3 || "?"} м³)`
-                              ) : d.delivery_option ? (
-                                `${d.delivery_option.title || "Неизвестный тип"} (${d.delivery_option.capacity_m3} м³)`
-                              ) : (
-                                "Автомобиль не назначен"
-                              )}
+                              {getVehicleString(d)}
                             </td>
                             <td className="px-6 py-4">
                               {d.is_active === false ? (
@@ -1282,13 +1286,7 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                           <h3 className="font-bold text-slate-800 text-base truncate pr-2">{d.name}</h3>
                           <div className="flex flex-col gap-0.5 mt-1">
                             <span className="text-sm font-medium text-slate-700">Телефон: {d.phone}</span>
-                            <span className="text-sm text-slate-500">Авто: {d.vehicle ? (
-                                `${d.vehicle.title || d.vehicle.delivery_option?.title || "Неизвестный тип"} (${d.vehicle.delivery_option?.capacity_m3 || "?"} м³)`
-                              ) : d.delivery_option ? (
-                                `${d.delivery_option.title || "Неизвестный тип"} (${d.delivery_option.capacity_m3} м³)`
-                              ) : (
-                                "Не назначен"
-                              )}</span>
+                            <span className="text-sm text-slate-500">Авто: {getVehicleString(d)}</span>
                             {d.moderation_status === "pending_moderation" && (
                               <span className="text-sm font-bold text-amber-600 mt-1">На проверке</span>
                             )}

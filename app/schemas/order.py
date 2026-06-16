@@ -41,6 +41,10 @@ class LogistOrderCreate(BaseModel):
     auto_dispatch: bool = True
 
 
+class ManualAssignRequest(BaseModel):
+    driver_id: UUID
+
+
 class DispatchHistoryAttemptOut(BaseModel):
     offer_id: UUID
     sequence_no: int

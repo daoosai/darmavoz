@@ -5,9 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
 from app.models.models import Client, Order, User
-from app.schemas.order import CheckoutRequest, OrderDeleteOut, OrderOut
+from app.schemas.order import CheckoutRequest, ManualAssignRequest, OrderDeleteOut, OrderOut
 from app.security.auth import get_current_logist_user, get_current_user, get_optional_current_client
 from app.services.dispatch_service import (
+    assign_order_to_driver,
     create_checkout_order,
     delete_order_by_id,
     get_order_by_id,
@@ -44,6 +45,17 @@ async def delete_order(
     del current_user
     await delete_order_by_id(session, order_id)
     return OrderDeleteOut(ok=True, message="Order deleted successfully")
+
+
+@router.post("/{order_id}/assign", response_model=OrderOut)
+async def assign_order(
+    order_id: UUID,
+    payload: ManualAssignRequest,
+    current_user: User = Depends(get_current_logist_user),
+    session: AsyncSession = Depends(get_db),
+) -> Order:
+    del current_user
+    return await assign_order_to_driver(session, order_id=order_id, driver_id=payload.driver_id)
 
 
 @router.post("/checkout", response_model=OrderOut, status_code=status.HTTP_201_CREATED)

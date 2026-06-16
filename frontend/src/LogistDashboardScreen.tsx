@@ -53,6 +53,19 @@ interface AdminDriver {
   };
 }
 
+const manualAssignableStatuses = new Set([
+  "created",
+  "searching_driver",
+  "offered_to_driver",
+  "no_driver_found",
+]);
+
+const driverStatusLabelMap: Record<string, string> = {
+  available: "Свободен",
+  busy: "Занят",
+  offline: "Недоступен",
+};
+
 interface LogistDashboardScreenProps {
   onLogout: () => void;
 }
@@ -67,6 +80,9 @@ export default function LogistDashboardScreen({
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingDrivers, setIsLoadingDrivers] = useState(true);
   const [assigningOrderId, setAssigningOrderId] = useState<string | null>(null);
+  const [manualAssignOrder, setManualAssignOrder] = useState<AdminOrder | null>(null);
+  const [selectedDriverId, setSelectedDriverId] = useState("");
+  const [isManualAssignSaving, setIsManualAssignSaving] = useState(false);
 
   // Create Order State
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -348,6 +364,56 @@ export default function LogistDashboardScreen({
     }
   };
 
+  const openManualAssignModal = async (order: AdminOrder) => {
+    setManualAssignOrder(order);
+    setSelectedDriverId("");
+    if (drivers.length === 0) {
+      await fetchDrivers();
+    }
+  };
+
+  const closeManualAssignModal = () => {
+    if (isManualAssignSaving) {
+      return;
+    }
+    setManualAssignOrder(null);
+    setSelectedDriverId("");
+  };
+
+  const handleManualAssign = async () => {
+    if (!manualAssignOrder || !selectedDriverId) {
+      toast.error("Выберите водителя");
+      return;
+    }
+
+    try {
+      setIsManualAssignSaving(true);
+      const res = await fetch(`${baseURL}/orders/${manualAssignOrder.id}/assign`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ driver_id: selectedDriverId }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.detail || err?.message || "Ошибка при назначении водителя");
+      }
+
+      toast.success("Водитель назначен вручную");
+      closeManualAssignModal();
+      fetchOrders(true);
+      fetchDrivers(true);
+    } catch (error: any) {
+      console.error("Error assigning driver manually:", error);
+      toast.error(error.message || "Ошибка при назначении водителя");
+    } finally {
+      setIsManualAssignSaving(false);
+    }
+  };
+
   const handleLogout = () => {
     logout();
     onLogout();
@@ -566,6 +632,17 @@ export default function LogistDashboardScreen({
                               <Loader2 className="w-4 h-4 animate-spin" />
                               Автопоиск водителя...
                             </div>
+                          )}
+
+                          {manualAssignableStatuses.has(order.status) && (
+                            <button
+                              disabled={isManualAssignSaving && manualAssignOrder?.id === order.id}
+                              onClick={() => openManualAssignModal(order)}
+                              className="w-full py-3 rounded-xl font-bold flex flex-row items-center justify-center gap-2 transition-all border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 shadow-sm active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed"
+                            >
+                              <Users className="w-4 h-4" />
+                              Назначить вручную
+                            </button>
                           )}
 
                           {order.status !== "created" && (
@@ -794,6 +871,82 @@ export default function LogistDashboardScreen({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {manualAssignOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+            <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <div>
+                <h3 className="text-xl font-bold text-slate-800">Назначить водителя</h3>
+                <p className="text-sm text-slate-500 mt-1">Заказ #{manualAssignOrder.id.slice(0, 8)}</p>
+              </div>
+              <button
+                onClick={closeManualAssignModal}
+                className="p-2 text-slate-400 hover:bg-slate-200 hover:text-slate-600 rounded-full transition-colors bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 flex flex-col gap-4">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-400 mb-2">Адрес</p>
+                <p className="text-sm font-semibold text-slate-800">{manualAssignOrder.address}</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                  Водитель
+                </label>
+                <select
+                  value={selectedDriverId}
+                  onChange={(e) => setSelectedDriverId(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] text-sm bg-white"
+                >
+                  <option value="" disabled>
+                    Выберите водителя...
+                  </option>
+                  {drivers.map((driver) => {
+                    const vehicleTitle = driver.vehicle?.title || "Без машины";
+                    const statusLabel = driverStatusLabelMap[driver.status] || driver.status;
+                    return (
+                      <option key={driver.id} value={driver.id}>
+                        {`${driver.name} • ${statusLabel} • ${vehicleTitle}`}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {drivers.length === 0 && !isLoadingDrivers && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                  Список водителей пуст. Проверьте, что в системе есть активные водители.
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  onClick={closeManualAssignModal}
+                  className="px-4 py-3 rounded-xl font-semibold border border-slate-200 text-slate-600 bg-white hover:bg-slate-50 transition-colors"
+                >
+                  Отмена
+                </button>
+                <button
+                  disabled={!selectedDriverId || isManualAssignSaving}
+                  onClick={handleManualAssign}
+                  className={`px-4 py-3 rounded-xl font-semibold text-white transition-colors ${
+                    !selectedDriverId || isManualAssignSaving
+                      ? "bg-slate-300 cursor-not-allowed"
+                      : "bg-[#2DB0E6] hover:bg-[#209BD6]"
+                  }`}
+                >
+                  {isManualAssignSaving ? "Сохраняем..." : "Сохранить"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

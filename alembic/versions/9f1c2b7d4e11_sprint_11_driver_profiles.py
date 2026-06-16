@@ -1,7 +1,7 @@
 """Sprint 11 driver profiles and vehicle moderation
 
 Revision ID: 9f1c2b7d4e11
-Revises: e6b3f9a8c1d2
+Revises: 8d4a1c2d5b61
 Create Date: 2026-06-16 00:00:00.000000
 """
 
@@ -12,7 +12,7 @@ from alembic import op
 
 
 revision: str = "9f1c2b7d4e11"
-down_revision: Union[str, None] = "e6b3f9a8c1d2"
+down_revision: Union[str, None] = "8d4a1c2d5b61"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

@@ -1,3 +1,4 @@
+from sqlalchemy import or_
 from sqlalchemy.future import select
 
 from app.core.config import settings
@@ -172,7 +173,11 @@ async def ensure_vehicle(session, *, title: str, delivery_option_id) -> Vehicle:
 
 
 async def ensure_driver(session, *, user_id, vehicle_id, name: str, phone: str) -> Driver:
-    result = await session.execute(select(Driver).where(Driver.phone == phone))
+    result = await session.execute(
+        select(Driver).where(
+            or_(Driver.phone == phone, Driver.user_id == user_id)
+        )
+    )
     driver = result.scalar_one_or_none()
     if driver is None:
         driver = Driver(

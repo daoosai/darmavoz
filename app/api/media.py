@@ -13,7 +13,7 @@ from app.schemas.media import (
     PresignUploadRequest,
     PresignUploadResponse,
 )
-from app.security.auth import get_current_user
+from app.security.auth import get_current_admin_user, get_current_user
 from app.services.storage import (
     StorageNotConfiguredError,
     StorageValidationError,

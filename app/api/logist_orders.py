@@ -11,7 +11,7 @@ from app.services.dispatch_service import (
     build_dispatch_history,
     create_logist_order,
     get_order_by_id,
-    process_dispatch_for_order,
+    restart_dispatch_for_order,
 )
 
 router = APIRouter()
@@ -54,5 +54,4 @@ async def redispatch_order(
     current_user: User = Depends(get_current_logist_user),
 ) -> Order:
     del current_user
-    await process_dispatch_for_order(db, order_id)
-    return await get_order_by_id(db, order_id)
+    return await restart_dispatch_for_order(db, order_id)

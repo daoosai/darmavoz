@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Select, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -12,6 +12,7 @@ from app.core.config import settings
 from app.models.models import (
     Client,
     DeliveryOption,
+    Dialogue,
     Driver,
     DriverStatus,
     EventLog,
@@ -225,14 +226,41 @@ async def list_recent_orders(session: AsyncSession, limit: int = 20) -> list[Ord
     return list(result.scalars().unique().all())
 
 
-async def get_matching_drivers(session: AsyncSession, order: Order) -> list[Driver]:
-    now = utcnow()
-    attempted_driver_ids = (
-        select(OrderOffer.driver_id)
-        .where(OrderOffer.order_id == order.id)
-        .scalar_subquery()
+async def list_orders_for_client(session: AsyncSession, client_id: UUID) -> list[Order]:
+    result = await session.execute(
+        select(Order)
+        .options(*order_load_options())
+        .where(Order.client_id == client_id)
+        .order_by(Order.created_at.desc())
     )
-    stmt: Select[tuple[Driver]] = (
+    return list(result.scalars().unique().all())
+
+
+async def delete_order_by_id(session: AsyncSession, order_id: UUID) -> None:
+    order = await session.get(Order, order_id)
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    if order.current_offer_id is not None:
+        order.current_offer_id = None
+
+    if order.source_dialogue_id is not None:
+        order.source_dialogue_id = None
+
+    await session.execute(
+        update(Dialogue)
+        .where(Dialogue.order_id == order_id)
+        .values(order_id=None)
+    )
+    await session.execute(delete(EventLog).where(EventLog.order_id == order_id))
+    await session.execute(delete(OrderOffer).where(OrderOffer.order_id == order_id))
+    await session.flush()
+    await session.delete(order)
+    await session.commit()
+
+
+def _matching_drivers_base_query(order: Order) -> Select[tuple[Driver]]:
+    return (
         select(Driver)
         .join(Driver.vehicle)
         .options(selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option))
@@ -241,17 +269,77 @@ async def get_matching_drivers(session: AsyncSession, order: Order) -> list[Driv
         .where(Driver.vehicle_id.is_not(None))
         .where(Vehicle.is_active.is_(True))
         .where(Vehicle.delivery_option_id == order.delivery_option_id)
-        .where(
-            or_(
-                Driver.temporary_penalty_until.is_(None),
-                Driver.temporary_penalty_until <= now,
-            )
-        )
-        .where(Driver.id.not_in(attempted_driver_ids))
-        .order_by(Driver.dispatch_priority.desc(), Driver.last_offer_at.asc().nullsfirst(), Driver.id.asc())
     )
-    result = await session.execute(stmt)
-    return list(result.scalars().all())
+
+
+def _current_cycle_offer_driver_ids(
+    order: Order,
+    *,
+    statuses: tuple[str, ...] | None = None,
+):
+    stmt = select(OrderOffer.driver_id).where(OrderOffer.order_id == order.id)
+    if order.dispatch_started_at is not None:
+        stmt = stmt.where(OrderOffer.offered_at >= order.dispatch_started_at)
+    if statuses:
+        stmt = stmt.where(OrderOffer.status.in_(statuses))
+    return stmt.scalar_subquery()
+
+
+async def get_matching_drivers(
+    session: AsyncSession,
+    order: Order,
+    *,
+    exclude_attempted_drivers: bool = True,
+    allow_attempted_fallback: bool = False,
+    excluded_driver_ids: set[UUID] | None = None,
+) -> list[Driver]:
+    now = utcnow()
+    excluded_driver_ids = excluded_driver_ids or set()
+    attempted_driver_ids = _current_cycle_offer_driver_ids(order)
+    rejected_driver_ids = _current_cycle_offer_driver_ids(
+        order,
+        statuses=(OrderOfferStatus.declined.value, OrderOfferStatus.expired.value),
+    )
+
+    preferred_stmt = _matching_drivers_base_query(order).where(
+        or_(
+            Driver.temporary_penalty_until.is_(None),
+            Driver.temporary_penalty_until <= now,
+        )
+    )
+    fallback_stmt = _matching_drivers_base_query(order)
+
+    preferred_stmt = preferred_stmt.where(Driver.id.not_in(rejected_driver_ids))
+    fallback_stmt = fallback_stmt.where(Driver.id.not_in(rejected_driver_ids))
+
+    if exclude_attempted_drivers:
+        preferred_stmt = preferred_stmt.where(Driver.id.not_in(attempted_driver_ids))
+        fallback_stmt = fallback_stmt.where(Driver.id.not_in(attempted_driver_ids))
+
+    if excluded_driver_ids:
+        preferred_stmt = preferred_stmt.where(Driver.id.not_in(excluded_driver_ids))
+        fallback_stmt = fallback_stmt.where(Driver.id.not_in(excluded_driver_ids))
+
+    preferred_stmt = preferred_stmt.order_by(
+        Driver.dispatch_priority.desc(),
+        Driver.last_offer_at.asc().nullsfirst(),
+        Driver.id.asc(),
+    )
+    fallback_stmt = fallback_stmt.order_by(
+        Driver.dispatch_priority.desc(),
+        Driver.temporary_penalty_until.asc().nullslast(),
+        Driver.last_offer_at.asc().nullsfirst(),
+        Driver.id.asc(),
+    )
+
+    preferred_result = await session.execute(preferred_stmt)
+    preferred = list(preferred_result.scalars().all())
+    if preferred:
+        return preferred
+
+    fallback_result = await session.execute(fallback_stmt)
+    fallback = list(fallback_result.scalars().all())
+    return fallback
 
 
 async def create_offer_for_driver(session: AsyncSession, order: Order, driver: Driver) -> OrderOffer:
@@ -291,7 +379,14 @@ async def mark_no_driver_found(session: AsyncSession, order: Order) -> Order:
     return order
 
 
-async def advance_dispatch_for_order(session: AsyncSession, order_id: UUID) -> Order:
+async def advance_dispatch_for_order(
+    session: AsyncSession,
+    order_id: UUID,
+    *,
+    exclude_attempted_drivers: bool = True,
+    allow_attempted_fallback: bool = False,
+    excluded_driver_ids: set[UUID] | None = None,
+) -> Order:
     order = await get_order_by_id(session, order_id)
     if order.driver_id is not None or order.status in {
         OrderStatus.driver_assigned.value,
@@ -306,7 +401,13 @@ async def advance_dispatch_for_order(session: AsyncSession, order_id: UUID) -> O
         if pending_offer.expires_at and pending_offer.expires_at > utcnow():
             return order
 
-    candidates = await get_matching_drivers(session, order)
+    candidates = await get_matching_drivers(
+        session,
+        order,
+        exclude_attempted_drivers=exclude_attempted_drivers,
+        allow_attempted_fallback=allow_attempted_fallback,
+        excluded_driver_ids=excluded_driver_ids,
+    )
     if not candidates:
         return await mark_no_driver_found(session, order)
 
@@ -335,7 +436,12 @@ async def expire_offer(session: AsyncSession, offer: OrderOffer) -> Order:
     order.current_offer_id = None
     order.status = OrderStatus.searching_driver.value
     await add_event(session, order.id, "driver_offer_expired", f"Driver {offer.driver_id} did not respond")
-    return await advance_dispatch_for_order(session, order.id)
+    return await advance_dispatch_for_order(
+        session,
+        order.id,
+        allow_attempted_fallback=True,
+        excluded_driver_ids={offer.driver_id},
+    )
 
 
 async def accept_offer(session: AsyncSession, *, offer_id: UUID, driver_id: UUID) -> Order:
@@ -437,7 +543,41 @@ async def decline_offer(session: AsyncSession, *, offer_id: UUID, driver_id: UUI
     order.status = OrderStatus.searching_driver.value
     await add_event(session, order.id, "driver_declined", f"Driver {driver_id} declined the order")
 
-    await advance_dispatch_for_order(session, order.id)
+    await advance_dispatch_for_order(
+        session,
+        order.id,
+        allow_attempted_fallback=True,
+        excluded_driver_ids={driver_id},
+    )
+    await session.commit()
+    return await get_order_by_id(session, order.id)
+
+
+async def restart_dispatch_for_order(session: AsyncSession, order_id: UUID) -> Order:
+    order = await get_order_by_id(session, order_id)
+    if order.status in {
+        OrderStatus.driver_assigned.value,
+        OrderStatus.in_progress.value,
+        OrderStatus.completed.value,
+        OrderStatus.cancelled.value,
+    }:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Order cannot be redispatched")
+
+    now = utcnow()
+    current_offer = order.current_offer
+    if current_offer is not None and current_offer.status == OrderOfferStatus.pending.value:
+        current_offer.status = OrderOfferStatus.cancelled.value
+        current_offer.responded_at = now
+        current_offer.decision_reason = "Dispatch restarted by logist"
+
+    order.driver_id = None
+    order.assigned_at = None
+    order.current_offer_id = None
+    order.status = OrderStatus.searching_driver.value
+    order.dispatch_started_at = now
+    await add_event(session, order.id, "dispatch_started", "Dispatch restarted by logist")
+
+    await advance_dispatch_for_order(session, order.id, exclude_attempted_drivers=False)
     await session.commit()
     return await get_order_by_id(session, order.id)
 
@@ -472,6 +612,17 @@ async def get_current_assigned_order_for_driver(session: AsyncSession, driver_id
     return result.scalar_one_or_none()
 
 
+async def list_orders_for_driver(session: AsyncSession, driver_id: UUID, limit: int = 50) -> list[Order]:
+    result = await session.execute(
+        select(Order)
+        .options(*order_load_options())
+        .where(Order.driver_id == driver_id)
+        .order_by(Order.assigned_at.desc().nullslast(), Order.created_at.desc())
+        .limit(limit)
+    )
+    return list(result.scalars().unique().all())
+
+
 async def build_dispatch_history(session: AsyncSession, order_id: UUID) -> DispatchHistoryOut:
     order = await get_order_by_id(session, order_id)
     offers = await session.scalars(
@@ -486,6 +637,7 @@ async def build_dispatch_history(session: AsyncSession, order_id: UUID) -> Dispa
             sequence_no=offer.sequence_no,
             driver_id=offer.driver_id,
             driver_name=offer.driver.name,
+            driver_phone=offer.driver.phone,
             vehicle_title=offer.driver.vehicle.title if offer.driver and offer.driver.vehicle else None,
             status=offer.status,
             offered_at=offer.offered_at,

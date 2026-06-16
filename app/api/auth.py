@@ -5,12 +5,69 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
 from app.db.database import get_db
-from app.models.models import User
-from app.security.auth import verify_password
+from app.models.models import Driver, ModerationStatus, Role, User
+from app.schemas.driver import DriverRegistrationResponse
+from app.schemas.driver import DriverRegisterRequest
+from app.security.auth import get_password_hash, verify_password
 from app.security.jwt import create_access_token
 from app.schemas.token import Token
 
 router = APIRouter()
+
+
+async def _get_or_create_driver_role(db: AsyncSession) -> Role:
+    role = await db.scalar(select(Role).where(Role.name == "driver"))
+    if role is None:
+        role = Role(name="driver", description="Driver application user")
+        db.add(role)
+        await db.flush()
+    return role
+
+
+@router.post("/driver/register", response_model=DriverRegistrationResponse, status_code=status.HTTP_201_CREATED)
+async def driver_register(
+    payload: DriverRegisterRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    existing_user = await db.scalar(select(User).where(User.username == payload.phone))
+    if existing_user is not None:
+        raise HTTPException(status_code=409, detail="User with this phone already exists")
+
+    existing_driver = await db.scalar(select(Driver).where(Driver.phone == payload.phone))
+    if existing_driver is not None:
+        raise HTTPException(status_code=409, detail="Driver with this phone already exists")
+
+    role = await _get_or_create_driver_role(db)
+    user = User(
+        username=payload.phone,
+        hashed_password=get_password_hash(payload.password),
+        role_id=role.id,
+        is_active=True,
+    )
+    db.add(user)
+    await db.flush()
+
+    driver = Driver(
+        name=(payload.name or "Новый водитель").strip() or "Новый водитель",
+        phone=payload.phone,
+        user_id=user.id,
+        status="offline",
+        is_auto_dispatch_enabled=True,
+        dispatch_priority=100,
+        moderation_status=ModerationStatus.pending_moderation.value,
+    )
+    db.add(driver)
+    await db.commit()
+    await db.refresh(driver)
+
+    access_token = create_access_token(data={"sub": user.username, "role": role.name})
+    return DriverRegistrationResponse(
+        access_token=access_token,
+        token_type="bearer",
+        role=role.name,
+        driver_id=driver.id,
+        driver=driver,
+    )
 
 @router.post("/login", response_model=Token)
 async def login(
@@ -36,7 +93,12 @@ async def login(
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
     
-    access_token = create_access_token(data={"sub": user.username})
+    access_token = create_access_token(
+        data={
+            "sub": user.username,
+            "role": user.role.name if user.role else None,
+        }
+    )
     return {
         "access_token": access_token,
         "token_type": "bearer",

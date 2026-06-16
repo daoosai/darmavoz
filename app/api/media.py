@@ -6,7 +6,7 @@ from sqlalchemy import and_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
-from app.models.models import DeliveryOption, Material, MediaFile, Order, User
+from app.models.models import DeliveryOption, Material, MediaFile, Order, User, Vehicle
 from app.schemas.media import (
     ConfirmUploadRequest,
     ConfirmUploadResponse,
@@ -28,6 +28,7 @@ async def _ensure_entity_exists(entity_type: str, entity_id: UUID, db: AsyncSess
         "material": Material,
         "delivery_option": DeliveryOption,
         "order": Order,
+        "vehicle": Vehicle,
     }
     model = model_map[entity_type]
     entity = await db.get(model, entity_id)

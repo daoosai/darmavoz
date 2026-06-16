@@ -2,7 +2,7 @@ from typing import List
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -12,6 +12,42 @@ from app.schemas.driver import DriverCreate, DriverResponse
 from app.security.auth import get_current_logist_user
 
 router = APIRouter()
+
+
+def build_driver_list_query(
+    *,
+    delivery_option_id: UUID | None = None,
+    status_filter: str | None = None,
+) -> Select[tuple[Driver]]:
+    stmt = (
+        select(Driver)
+        .join(Driver.user)
+        .where(User.is_active.is_(True))
+        .options(selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option))
+        .order_by(Driver.name.asc())
+    )
+
+    if status_filter:
+        stmt = stmt.where(Driver.status == status_filter)
+    if delivery_option_id:
+        stmt = stmt.join(Driver.vehicle).where(Vehicle.delivery_option_id == delivery_option_id)
+
+    return stmt
+
+
+async def fetch_drivers(
+    db: AsyncSession,
+    *,
+    delivery_option_id: UUID | None = None,
+    status_filter: str | None = None,
+) -> list[Driver]:
+    result = await db.execute(
+        build_driver_list_query(
+            delivery_option_id=delivery_option_id,
+            status_filter=status_filter,
+        )
+    )
+    return list(result.scalars().all())
 
 
 @router.post("/", response_model=DriverResponse, status_code=status.HTTP_201_CREATED)
@@ -59,16 +95,8 @@ async def list_drivers(
     current_user: User = Depends(get_current_logist_user),
 ):
     del current_user
-    stmt = (
-        select(Driver)
-        .options(selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option))
-        .order_by(Driver.name.asc())
+    return await fetch_drivers(
+        db,
+        delivery_option_id=delivery_option_id,
+        status_filter=status_filter,
     )
-
-    if status_filter:
-        stmt = stmt.where(Driver.status == status_filter)
-    if delivery_option_id:
-        stmt = stmt.join(Driver.vehicle).where(Vehicle.delivery_option_id == delivery_option_id)
-
-    result = await db.execute(stmt)
-    return list(result.scalars().all())

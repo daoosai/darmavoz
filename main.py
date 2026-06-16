@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import admin, auth, catalog, clients, driver_dispatch, drivers, logist_orders, media, orders, webhooks
+from app.api import admin, auth, catalog, client_auth, clients, driver_dispatch, drivers, logist_orders, media, orders, system, webhooks
 from app.core.config import settings
 from app.db.seed import seed_data
 from app.services.dispatch_worker import start_dispatch_worker, stop_dispatch_worker
@@ -49,6 +49,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(client_auth.router, prefix="/api/v1/auth", tags=["client-auth"])
 app.include_router(admin.router, prefix="/api/v1/admin", tags=["admin"])
 app.include_router(catalog.router, prefix="/api/v1/catalog", tags=["catalog"])
 app.include_router(clients.router, prefix="/api/v1/clients", tags=["clients"])
@@ -57,6 +58,7 @@ app.include_router(logist_orders.router, prefix="/api/v1/logist", tags=["logist"
 app.include_router(driver_dispatch.router, prefix="/api/v1/driver", tags=["driver"])
 app.include_router(media.router, prefix="/api/v1/media", tags=["media"])
 app.include_router(orders.router, prefix="/api/v1/orders", tags=["orders"])
+app.include_router(system.router, prefix="/api/v1/system", tags=["system"])
 app.include_router(webhooks.router, prefix="/api/v1/webhooks")
 
 

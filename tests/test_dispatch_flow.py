@@ -186,6 +186,9 @@ async def test_dispatch_skips_wrong_vehicle_and_moves_to_next_driver(client, ses
         first_offer = await session.scalar(select(OrderOffer).where(OrderOffer.order_id == order_id))
         assert first_offer is not None
         assert first_offer.driver_id == driver_1.id
+        refreshed_driver_2 = await session.get(Driver, driver_2.id)
+        assert refreshed_driver_2 is not None
+        refreshed_driver_2.temporary_penalty_until = datetime.now(UTC) + timedelta(minutes=10)
         first_offer.expires_at = datetime.now(UTC) - timedelta(seconds=5)
         await session.commit()
 
@@ -213,6 +216,20 @@ async def test_dispatch_skips_wrong_vehicle_and_moves_to_next_driver(client, ses
     assert accept_response.json()["offer_status"] == "accepted"
     assert accept_response.json()["order_status"] == OrderStatus.driver_assigned.value
 
+    assigned_response = await client.get(
+        "/api/v1/driver/orders/assigned/current",
+        headers=auth_headers("dispatch_driver_2"),
+    )
+    assert assigned_response.status_code == 200
+    assigned_payload = assigned_response.json()
+    assert assigned_payload["order_id"] == order_id
+    assert assigned_payload["status"] == OrderStatus.driver_assigned.value
+    assert assigned_payload["order"]["status"] == OrderStatus.driver_assigned.value
+    assert assigned_payload["order"]["total_amount"] == 20000.0
+    assert assigned_payload["order"]["created_at"] is not None
+    assert assigned_payload["order"]["items"][0]["material"]["name"] == "Речной песок"
+    assert assigned_payload["order"]["delivery_option"]["capacity_m3"] == 10.0
+
     history_response = await client.get(
         f"/api/v1/logist/orders/{order_id}/dispatch-history",
         headers=auth_headers("dispatch_logist"),
@@ -234,3 +251,408 @@ async def test_dispatch_skips_wrong_vehicle_and_moves_to_next_driver(client, ses
         refreshed_driver_2 = await session.get(Driver, driver_2.id)
         assert refreshed_driver_2 is not None
         assert refreshed_driver_2.status == DriverStatus.busy.value
+
+
+@pytest.mark.asyncio
+async def test_decline_immediately_offers_next_driver_even_if_next_driver_is_penalized(client, session_factory):
+    fake_redis = FakeRedis()
+    async with session_factory() as session:
+        driver_role = await ensure_role(session, "driver")
+        logist_role = await ensure_role(session, "logist")
+
+        category = Category(name="Щебень", slug="gravel-dispatch", sort_order=0, is_active=True)
+        material = Material(
+            category=category,
+            name="Щебень 5-20",
+            description="",
+            price=2500.0,
+            unit="m3",
+            min_volume=5.0,
+            is_active=True,
+            sort_order=0,
+        )
+        option_10 = DeliveryOption(
+            capacity_m3=10.0,
+            title="10 м3",
+            description="",
+            base_price=0.0,
+            is_active=True,
+            sort_order=0,
+        )
+        session.add_all([category, material, option_10])
+        await session.flush()
+
+        user_1 = await create_driver_user(session, username="decline_driver_1", role=driver_role)
+        user_2 = await create_driver_user(session, username="decline_driver_2", role=driver_role)
+        await create_driver_user(session, username="decline_logist", role=logist_role)
+
+        vehicle_1 = Vehicle(title="Самосвал 10 м3 #1", delivery_option_id=option_10.id, is_active=True)
+        vehicle_2 = Vehicle(title="Самосвал 10 м3 #2", delivery_option_id=option_10.id, is_active=True)
+        session.add_all([vehicle_1, vehicle_2])
+        await session.flush()
+
+        driver_1 = Driver(
+            user_id=user_1.id,
+            vehicle_id=vehicle_1.id,
+            name="Водитель на первом оффере",
+            phone="+79000001001",
+            status=DriverStatus.available.value,
+            dispatch_priority=200,
+            is_auto_dispatch_enabled=True,
+        )
+        driver_2 = Driver(
+            user_id=user_2.id,
+            vehicle_id=vehicle_2.id,
+            name="Водитель со штрафом",
+            phone="+79000001002",
+            status=DriverStatus.available.value,
+            dispatch_priority=100,
+            is_auto_dispatch_enabled=True,
+            temporary_penalty_until=datetime.now(UTC) + timedelta(minutes=15),
+        )
+        session.add_all([driver_1, driver_2])
+        await session.commit()
+        await session.refresh(material)
+        await session.refresh(option_10)
+        await session.refresh(driver_1)
+        await session.refresh(driver_2)
+
+    response = await client.post(
+        "/api/v1/logist/orders",
+        json={
+            "client_name": "Петр Сидоров",
+            "client_phone": "+79990002233",
+            "material_id": str(material.id),
+            "delivery_option_id": str(option_10.id),
+            "address": "Томск, Учебная 15",
+            "notes": "Тест decline",
+            "quantity": 1,
+            "auto_dispatch": True,
+        },
+        headers=auth_headers("decline_logist"),
+    )
+    assert response.status_code == 201
+    order_id = response.json()["id"]
+
+    processed = await run_dispatch_tick(fake_redis, session_factory)
+    assert processed >= 1
+
+    incoming_driver_1 = await client.get(
+        "/api/v1/driver/orders/incoming/current",
+        headers=auth_headers("decline_driver_1"),
+    )
+    first_offer = incoming_driver_1.json()
+    assert first_offer["order_id"] == order_id
+
+    decline_response = await client.post(
+        f"/api/v1/driver/order-offers/{first_offer['offer_id']}/decline",
+        json={"reason": "manual"},
+        headers=auth_headers("decline_driver_1"),
+    )
+    assert decline_response.status_code == 200
+    assert decline_response.json()["offer_status"] == "declined"
+    assert decline_response.json()["order_status"] == OrderStatus.offered_to_driver.value
+    assert decline_response.json()["next_attempt_started"] is True
+
+    incoming_driver_2 = await client.get(
+        "/api/v1/driver/orders/incoming/current",
+        headers=auth_headers("decline_driver_2"),
+    )
+    second_offer = incoming_driver_2.json()
+    assert second_offer["order_id"] == order_id
+
+    history_response = await client.get(
+        f"/api/v1/logist/orders/{order_id}/dispatch-history",
+        headers=auth_headers("decline_logist"),
+    )
+    assert history_response.status_code == 200
+    history = history_response.json()
+    assert [attempt["status"] for attempt in history["attempts"]] == [
+        OrderOfferStatus.declined.value,
+        OrderOfferStatus.pending.value,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_logist_redispatch_restarts_search_and_reuses_previous_candidates(client, session_factory):
+    fake_redis = FakeRedis()
+    async with session_factory() as session:
+        driver_role = await ensure_role(session, "driver")
+        logist_role = await ensure_role(session, "logist")
+
+        category = Category(name="ПГС", slug="redispatch-dispatch", sort_order=0, is_active=True)
+        material = Material(
+            category=category,
+            name="ПГС",
+            description="",
+            price=1800.0,
+            unit="m3",
+            min_volume=5.0,
+            is_active=True,
+            sort_order=0,
+        )
+        option_10 = DeliveryOption(
+            capacity_m3=10.0,
+            title="10 м3",
+            description="",
+            base_price=0.0,
+            is_active=True,
+            sort_order=0,
+        )
+        session.add_all([category, material, option_10])
+        await session.flush()
+
+        user_1 = await create_driver_user(session, username="redispatch_driver_1", role=driver_role)
+        user_2 = await create_driver_user(session, username="redispatch_driver_2", role=driver_role)
+        await create_driver_user(session, username="redispatch_logist", role=logist_role)
+
+        vehicle_1 = Vehicle(title="Камаз redispatch #1", delivery_option_id=option_10.id, is_active=True)
+        vehicle_2 = Vehicle(title="Камаз redispatch #2", delivery_option_id=option_10.id, is_active=True)
+        session.add_all([vehicle_1, vehicle_2])
+        await session.flush()
+
+        driver_1 = Driver(
+            user_id=user_1.id,
+            vehicle_id=vehicle_1.id,
+            name="Redispatch Driver 1",
+            phone="+79000002001",
+            status=DriverStatus.available.value,
+            dispatch_priority=200,
+            is_auto_dispatch_enabled=True,
+        )
+        driver_2 = Driver(
+            user_id=user_2.id,
+            vehicle_id=vehicle_2.id,
+            name="Redispatch Driver 2",
+            phone="+79000002002",
+            status=DriverStatus.available.value,
+            dispatch_priority=100,
+            is_auto_dispatch_enabled=True,
+        )
+        session.add_all([driver_1, driver_2])
+        await session.commit()
+        await session.refresh(material)
+        await session.refresh(option_10)
+        await session.refresh(driver_1)
+        await session.refresh(driver_2)
+
+    response = await client.post(
+        "/api/v1/logist/orders",
+        json={
+            "client_name": "Мария Смирнова",
+            "client_phone": "+79990003344",
+            "material_id": str(material.id),
+            "delivery_option_id": str(option_10.id),
+            "address": "Томск, Советская 7",
+            "notes": "Тест redispatch",
+            "quantity": 1,
+            "auto_dispatch": True,
+        },
+        headers=auth_headers("redispatch_logist"),
+    )
+    assert response.status_code == 201
+    order_id = response.json()["id"]
+
+    processed = await run_dispatch_tick(fake_redis, session_factory)
+    assert processed >= 1
+
+    first_offer = (
+        await client.get(
+            "/api/v1/driver/orders/incoming/current",
+            headers=auth_headers("redispatch_driver_1"),
+        )
+    ).json()
+    assert first_offer["order_id"] == order_id
+
+    decline_first = await client.post(
+        f"/api/v1/driver/order-offers/{first_offer['offer_id']}/decline",
+        json={"reason": "manual"},
+        headers=auth_headers("redispatch_driver_1"),
+    )
+    assert decline_first.status_code == 200
+
+    second_offer = (
+        await client.get(
+            "/api/v1/driver/orders/incoming/current",
+            headers=auth_headers("redispatch_driver_2"),
+        )
+    ).json()
+    assert second_offer["order_id"] == order_id
+
+    decline_second = await client.post(
+        f"/api/v1/driver/order-offers/{second_offer['offer_id']}/decline",
+        json={"reason": "manual"},
+        headers=auth_headers("redispatch_driver_2"),
+    )
+    assert decline_second.status_code == 200
+    assert decline_second.json()["order_status"] == OrderStatus.no_driver_found.value
+
+    redispatch_response = await client.post(
+        f"/api/v1/logist/orders/{order_id}/redispatch",
+        headers=auth_headers("redispatch_logist"),
+    )
+    assert redispatch_response.status_code == 200
+    assert redispatch_response.json()["status"] == OrderStatus.offered_to_driver.value
+
+    incoming_after_redispatch = await client.get(
+        "/api/v1/driver/orders/incoming/current",
+        headers=auth_headers("redispatch_driver_1"),
+    )
+    assert incoming_after_redispatch.status_code == 200
+    assert incoming_after_redispatch.json()["order_id"] == order_id
+
+    history_response = await client.get(
+        f"/api/v1/logist/orders/{order_id}/dispatch-history",
+        headers=auth_headers("redispatch_logist"),
+    )
+    history = history_response.json()
+    statuses = [attempt["status"] for attempt in history["attempts"]]
+    assert statuses[:2] == [
+        OrderOfferStatus.declined.value,
+        OrderOfferStatus.declined.value,
+    ]
+    assert statuses[-1] == OrderOfferStatus.pending.value
+
+
+@pytest.mark.asyncio
+async def test_decline_finishes_with_no_driver_found_when_unique_candidates_are_exhausted(client, session_factory):
+    fake_redis = FakeRedis()
+    async with session_factory() as session:
+        driver_role = await ensure_role(session, "driver")
+        logist_role = await ensure_role(session, "logist")
+
+        category = Category(name="Грунт", slug="retry-previous-driver", sort_order=0, is_active=True)
+        material = Material(
+            category=category,
+            name="Грунт",
+            description="",
+            price=1500.0,
+            unit="m3",
+            min_volume=5.0,
+            is_active=True,
+            sort_order=0,
+        )
+        option_10 = DeliveryOption(
+            capacity_m3=10.0,
+            title="10 м3",
+            description="",
+            base_price=0.0,
+            is_active=True,
+            sort_order=0,
+        )
+        session.add_all([category, material, option_10])
+        await session.flush()
+
+        user_1 = await create_driver_user(session, username="retry_chain_driver_1", role=driver_role)
+        user_2 = await create_driver_user(session, username="retry_chain_driver_2", role=driver_role)
+        await create_driver_user(session, username="retry_chain_logist", role=logist_role)
+
+        vehicle_1 = Vehicle(title="Retry chain 10 м3 #1", delivery_option_id=option_10.id, is_active=True)
+        vehicle_2 = Vehicle(title="Retry chain 10 м3 #2", delivery_option_id=option_10.id, is_active=True)
+        session.add_all([vehicle_1, vehicle_2])
+        await session.flush()
+
+        driver_1 = Driver(
+            user_id=user_1.id,
+            vehicle_id=vehicle_1.id,
+            name="Retry Driver 1",
+            phone="+79000003001",
+            status=DriverStatus.available.value,
+            dispatch_priority=200,
+            is_auto_dispatch_enabled=True,
+        )
+        driver_2 = Driver(
+            user_id=user_2.id,
+            vehicle_id=vehicle_2.id,
+            name="Retry Driver 2",
+            phone="+79000003002",
+            status=DriverStatus.available.value,
+            dispatch_priority=100,
+            is_auto_dispatch_enabled=True,
+        )
+        session.add_all([driver_1, driver_2])
+        await session.commit()
+        await session.refresh(material)
+        await session.refresh(option_10)
+        await session.refresh(driver_1)
+        await session.refresh(driver_2)
+
+    response = await client.post(
+        "/api/v1/logist/orders",
+        json={
+            "client_name": "Алексей Орлов",
+            "client_phone": "+79990004455",
+            "material_id": str(material.id),
+            "delivery_option_id": str(option_10.id),
+            "address": "Томск, Киевская 1",
+            "notes": "Тест retry exhausted chain",
+            "quantity": 1,
+            "auto_dispatch": True,
+        },
+        headers=auth_headers("retry_chain_logist"),
+    )
+    assert response.status_code == 201
+    order_id = response.json()["id"]
+
+    processed = await run_dispatch_tick(fake_redis, session_factory)
+    assert processed >= 1
+
+    first_offer_payload = (
+        await client.get(
+            "/api/v1/driver/orders/incoming/current",
+            headers=auth_headers("retry_chain_driver_1"),
+        )
+    ).json()
+    assert first_offer_payload["order_id"] == order_id
+
+    async with session_factory() as session:
+        first_offer = await session.scalar(
+            select(OrderOffer).where(OrderOffer.id == first_offer_payload["offer_id"])
+        )
+        assert first_offer is not None
+        first_offer.expires_at = datetime.now(UTC) - timedelta(seconds=5)
+        await session.commit()
+
+    processed = await run_dispatch_tick(fake_redis, session_factory)
+    assert processed >= 1
+
+    second_offer_payload = (
+        await client.get(
+            "/api/v1/driver/orders/incoming/current",
+            headers=auth_headers("retry_chain_driver_2"),
+        )
+    ).json()
+    assert second_offer_payload["order_id"] == order_id
+
+    decline_response = await client.post(
+        f"/api/v1/driver/order-offers/{second_offer_payload['offer_id']}/decline",
+        json={"reason": "manual"},
+        headers=auth_headers("retry_chain_driver_2"),
+    )
+    assert decline_response.status_code == 200
+    assert decline_response.json()["order_status"] == OrderStatus.no_driver_found.value
+
+    retried_offer_payload = (
+        await client.get(
+            "/api/v1/driver/orders/incoming/current",
+            headers=auth_headers("retry_chain_driver_1"),
+        )
+    ).json()
+    assert retried_offer_payload["order_id"] is None
+
+    order_response = await client.get(
+        f"/api/v1/logist/orders/{order_id}",
+        headers=auth_headers("retry_chain_logist"),
+    )
+    assert order_response.status_code == 200
+    assert order_response.json()["status"] == OrderStatus.no_driver_found.value
+
+    history_response = await client.get(
+        f"/api/v1/logist/orders/{order_id}/dispatch-history",
+        headers=auth_headers("retry_chain_logist"),
+    )
+    history = history_response.json()
+    assert [attempt["status"] for attempt in history["attempts"]] == [
+        OrderOfferStatus.expired.value,
+        OrderOfferStatus.declined.value,
+    ]

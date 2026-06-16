@@ -10,11 +10,12 @@ from passlib.context import CryptContext
 
 from app.core.config import settings
 from app.db.database import get_db
-from app.models.models import Driver, User
+from app.models.models import Client, Driver, ModerationStatus, User
 from app.schemas.token import TokenData
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+optional_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -39,14 +40,21 @@ async def get_current_user(
         username: str = payload.get("sub")
         if username is None:
             raise credentials_exception
-        token_data = TokenData(username=username)
+        token_data = TokenData(
+            username=username,
+            role=payload.get("role"),
+            client_id=payload.get("client_id"),
+        )
     except JWTError:
         raise credentials_exception
 
     query = (
         select(User)
         .where(User.username == token_data.username)
-        .options(selectinload(User.role), selectinload(User.driver_profile))
+        .options(
+            selectinload(User.role),
+            selectinload(User.driver_profile).selectinload(Driver.vehicle),
+        )
     )
     result = await db.execute(query)
     user = result.scalar_one_or_none()
@@ -54,6 +62,43 @@ async def get_current_user(
     if user is None or not user.is_active:
         raise credentials_exception
     return user
+
+
+async def get_current_client(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> Client:
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate client credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        token_data = TokenData(
+            username=payload.get("sub"),
+            role=payload.get("role"),
+            client_id=payload.get("client_id"),
+        )
+    except JWTError:
+        raise credentials_exception
+
+    if token_data.role != "client" or token_data.client_id is None:
+        raise credentials_exception
+
+    client = await db.get(Client, token_data.client_id)
+    if client is None:
+        raise credentials_exception
+    return client
+
+
+async def get_optional_current_client(
+    token: str | None = Depends(optional_oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> Client | None:
+    if token is None:
+        return None
+    return await get_current_client(token=token, db=db)
 
 
 def require_roles(*allowed_roles: str) -> Callable:
@@ -83,3 +128,18 @@ async def get_current_driver(current_user: User = Depends(get_current_driver_use
             detail="Driver profile is not linked to the current user",
         )
     return driver
+
+
+async def get_current_approved_driver(current_driver: Driver = Depends(get_current_driver)) -> Driver:
+    vehicle = current_driver.vehicle
+    if current_driver.moderation_status != ModerationStatus.approved.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Driver moderation is not approved",
+        )
+    if vehicle is not None and vehicle.moderation_status != ModerationStatus.approved.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Vehicle moderation is not approved",
+        )
+    return current_driver

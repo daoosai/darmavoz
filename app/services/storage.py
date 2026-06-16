@@ -24,6 +24,7 @@ ALLOWED_ENTITY_TYPES = {
     "material",
     "delivery_option",
     "order",
+    "vehicle",
 }
 
 

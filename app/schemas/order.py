@@ -46,6 +46,7 @@ class DispatchHistoryAttemptOut(BaseModel):
     sequence_no: int
     driver_id: UUID
     driver_name: str
+    driver_phone: str
     vehicle_title: str | None = None
     status: str
     offered_at: datetime | None = None
@@ -82,3 +83,15 @@ class OrderOut(BaseModel):
     items: list[OrderItemOut] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class DriverAssignedOrderOut(BaseModel):
+    order_id: UUID | None = None
+    status: str | None = None
+    assigned_at: datetime | None = None
+    order: OrderOut | None = None
+
+
+class OrderDeleteOut(BaseModel):
+    ok: bool
+    message: str

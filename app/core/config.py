@@ -45,7 +45,11 @@ class Settings(BaseSettings):
     DISPATCH_DECLINE_PENALTY_SECONDS: int = 900
     DISPATCH_TIMEOUT_PENALTY_SECONDS: int = 1800
     DISPATCH_LOCK_TTL_SECONDS: int = 30
+    DRIVER_TEST_USERNAME: str = "driver1"
     DRIVER_TEST_PASSWORD: str = "driver123"
+    ANDROID_VERSION: str = "1.0.1"
+    APK_DOWNLOAD_URL: str = "https://darmavoz.ru/static/darmavoz.apk"
+    APK_FORCE_UPDATE: bool = False
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

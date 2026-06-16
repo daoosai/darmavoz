@@ -3,13 +3,20 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.schemas.catalog import DeliveryOptionOut
+from app.schemas.catalog import DeliveryOptionOut, MediaFileOut
 
 
 class VehicleCreate(BaseModel):
     title: str
+    brand: str | None = None
+    model: str | None = None
     plate_number: str | None = None
+    vehicle_type: str | None = None
+    body_volume_m3: float | None = None
     delivery_option_id: UUID
+    rate_mode: str | None = None
+    rate_per_ton_km: float | None = None
+    fixed_rate: float | None = None
     is_active: bool = True
     notes: str | None = None
 
@@ -17,11 +24,22 @@ class VehicleCreate(BaseModel):
 class VehicleOut(BaseModel):
     id: UUID
     title: str
+    brand: str | None = None
+    model: str | None = None
     plate_number: str | None = None
+    vehicle_type: str | None = None
+    body_volume_m3: float | None = None
     delivery_option_id: UUID
+    rate_mode: str | None = None
+    rate_per_ton_km: float | None = None
+    fixed_rate: float | None = None
     is_active: bool
     notes: str | None = None
+    moderation_status: str
+    moderation_comment: str | None = None
+    moderated_at: datetime | None = None
     created_at: datetime
+    media_files: list[MediaFileOut] = Field(default_factory=list)
     delivery_option: DeliveryOptionOut | None = None
 
     model_config = ConfigDict(from_attributes=True)
@@ -34,6 +52,52 @@ class DriverCreate(BaseModel):
     vehicle_id: UUID | None = None
     is_auto_dispatch_enabled: bool = True
     dispatch_priority: int = 100
+
+
+class AdminDriverCreate(BaseModel):
+    name: str
+    phone: str
+    password: str = Field(min_length=6, max_length=128)
+    delivery_option_id: UUID
+    status: str = "offline"
+    is_auto_dispatch_enabled: bool = True
+    dispatch_priority: int = 100
+
+
+class AdminDriverUpdate(BaseModel):
+    name: str | None = None
+    phone: str | None = None
+    password: str | None = Field(default=None, min_length=6, max_length=128)
+    delivery_option_id: UUID | None = None
+    vehicle_id: UUID | None = None
+    status: str | None = None
+    is_auto_dispatch_enabled: bool | None = None
+    dispatch_priority: int | None = None
+
+
+class DriverRegisterRequest(BaseModel):
+    phone: str
+    password: str = Field(min_length=6, max_length=128)
+    name: str | None = None
+
+
+class DriverProfileUpdate(BaseModel):
+    name: str | None = None
+    phone: str | None = None
+
+
+class DriverVehicleUpdate(BaseModel):
+    brand: str | None = None
+    model: str | None = None
+    plate_number: str | None = None
+    vehicle_type: str | None = None
+    body_volume_m3: float | None = None
+    delivery_option_id: UUID | None = None
+    rate_mode: str | None = None
+    rate_per_ton_km: float | None = None
+    fixed_rate: float | None = None
+    is_active: bool | None = None
+    notes: str | None = None
 
 
 class DriverStatusUpdate(BaseModel):
@@ -50,9 +114,24 @@ class DriverResponse(BaseModel):
     dispatch_priority: int = 100
     temporary_penalty_until: datetime | None = None
     last_offer_at: datetime | None = None
+    moderation_status: str
+    moderation_comment: str | None = None
+    moderated_at: datetime | None = None
     vehicle: VehicleOut | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class DriverRegistrationResponse(BaseModel):
+    access_token: str
+    token_type: str
+    role: str | None = None
+    driver_id: UUID | None = None
+    driver: DriverResponse
+
+
+class DriverFullProfileResponse(DriverResponse):
+    pass
 
 
 class DriverDispatchCandidateOut(BaseModel):
@@ -97,10 +176,3 @@ class DriverOfferDecisionOut(BaseModel):
     order_status: str | None = None
     driver_status: str | None = None
     next_attempt_started: bool | None = None
-
-
-class DriverAssignedOrderOut(BaseModel):
-    order_id: UUID | None = None
-    status: str | None = None
-    assigned_at: datetime | None = None
-    order: DriverOfferOrderOut | None = None

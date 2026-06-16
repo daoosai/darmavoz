@@ -1,13 +1,18 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
-from app.models.models import Order, User
-from app.schemas.order import CheckoutRequest, OrderOut
-from app.security.auth import get_current_logist_user, get_current_user
-from app.services.dispatch_service import create_checkout_order, get_order_by_id, list_recent_orders
+from app.models.models import Client, Order, User
+from app.schemas.order import CheckoutRequest, OrderDeleteOut, OrderOut
+from app.security.auth import get_current_logist_user, get_current_user, get_optional_current_client
+from app.services.dispatch_service import (
+    create_checkout_order,
+    delete_order_by_id,
+    get_order_by_id,
+    list_recent_orders,
+)
 
 router = APIRouter()
 
@@ -30,27 +35,26 @@ async def list_admin_orders(
     return await list_recent_orders(db)
 
 
-@router.delete("/{order_id}")
+@router.delete("/{order_id}", response_model=OrderDeleteOut)
 async def delete_order(
     order_id: UUID,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_logist_user),
     session: AsyncSession = Depends(get_db),
-) -> dict[str, str | bool]:
+) -> OrderDeleteOut:
     del current_user
-    order = await session.get(Order, order_id)
-    if order is None:
-        raise HTTPException(status_code=404, detail="Order not found")
-
-    await session.delete(order)
-    await session.commit()
-    return {"ok": True, "message": "Order deleted successfully"}
+    await delete_order_by_id(session, order_id)
+    return OrderDeleteOut(ok=True, message="Order deleted successfully")
 
 
 @router.post("/checkout", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
-async def checkout_order(payload: CheckoutRequest, db: AsyncSession = Depends(get_db)) -> Order:
+async def checkout_order(
+    payload: CheckoutRequest,
+    db: AsyncSession = Depends(get_db),
+    current_client: Client | None = Depends(get_optional_current_client),
+) -> Order:
     return await create_checkout_order(
         db,
-        client_id=payload.client_id,
+        client_id=current_client.id if current_client is not None else payload.client_id,
         material_id=payload.material_id,
         delivery_option_id=payload.delivery_option_id,
         address=payload.address,

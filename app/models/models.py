@@ -43,7 +43,12 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     role: Mapped["Role"] = relationship("Role", back_populates="users")
-    driver_profile: Mapped[Optional["Driver"]] = relationship("Driver", back_populates="user", uselist=False)
+    driver_profile: Mapped[Optional["Driver"]] = relationship(
+        "Driver",
+        back_populates="user",
+        uselist=False,
+        foreign_keys="Driver.user_id",
+    )
 
 
 class Client(Base):
@@ -51,7 +56,9 @@ class Client(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255))
+    email: Mapped[Optional[str]] = mapped_column(String(255), unique=True, index=True, nullable=True)
     phone: Mapped[Optional[str]] = mapped_column(String(20), unique=True, index=True, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     external_source: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     external_user_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
@@ -80,8 +87,26 @@ class Driver(Base):
     dispatch_priority: Mapped[int] = mapped_column(Integer, default=100, nullable=False)
     temporary_penalty_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     last_offer_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    moderation_status: Mapped[str] = mapped_column(
+        SQLEnum(
+            "pending_moderation",
+            "approved",
+            "rejected",
+            "suspended",
+            name="moderation_status",
+        ),
+        default="approved",
+        nullable=False,
+    )
+    moderation_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    moderated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    moderated_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"), nullable=True)
 
-    user: Mapped[Optional["User"]] = relationship("User", back_populates="driver_profile")
+    user: Mapped[Optional["User"]] = relationship(
+        "User",
+        back_populates="driver_profile",
+        foreign_keys=[user_id],
+    )
     vehicle: Mapped[Optional["Vehicle"]] = relationship("Vehicle", back_populates="drivers")
     orders: Mapped[List["Order"]] = relationship("Order", back_populates="driver")
     offers: Mapped[List["OrderOffer"]] = relationship("OrderOffer", back_populates="driver")
@@ -92,10 +117,34 @@ class Vehicle(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
+    brand: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    model: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     plate_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    vehicle_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    body_volume_m3: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     delivery_option_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("delivery_options.id"), nullable=False)
+    rate_mode: Mapped[Optional[str]] = mapped_column(
+        SQLEnum("per_ton_km", "fixed", name="vehicle_rate_mode"),
+        nullable=True,
+    )
+    rate_per_ton_km: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    fixed_rate: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    moderation_status: Mapped[str] = mapped_column(
+        SQLEnum(
+            "pending_moderation",
+            "approved",
+            "rejected",
+            "suspended",
+            name="moderation_status",
+        ),
+        default="approved",
+        nullable=False,
+    )
+    moderation_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    moderated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    moderated_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     delivery_option: Mapped["DeliveryOption"] = relationship("DeliveryOption", back_populates="vehicles")
@@ -210,6 +259,18 @@ class DriverStatus(str, Enum):
     available = "available"
     busy = "busy"
     offline = "offline"
+
+
+class ModerationStatus(str, Enum):
+    pending_moderation = "pending_moderation"
+    approved = "approved"
+    rejected = "rejected"
+    suspended = "suspended"
+
+
+class VehicleRateMode(str, Enum):
+    per_ton_km = "per_ton_km"
+    fixed = "fixed"
 
 
 class OrderOfferStatus(str, Enum):

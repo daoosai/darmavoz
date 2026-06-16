@@ -15,6 +15,8 @@ class MediaFileOut(BaseModel):
     content_type: str
     file_name: str
     file_size: int
+    sort_order: int | None = None
+    slot_key: str | None = None
     is_primary: bool
     created_at: datetime
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuthStore } from "./store";
 import { baseURL, formatPhoneNumber } from "./utils";
 import { LogOut, Truck, User as UserIcon, Phone, Star, AlertCircle, Camera, Loader2, CheckCircle2 } from "lucide-react";
@@ -14,7 +14,6 @@ interface DriverProfile {
   vehicle: {
     id: string;
     brand: string;
-    model: string;
     plate_number: string;
     vehicle_type: string;
     body_volume_m3: number;
@@ -27,6 +26,8 @@ interface DriverProfile {
 }
 
 export default function DriverProfileScreen({ onLogout }: { onLogout: () => void }) {
+  const brandOptions = ["КамАЗ", "Shacman", "FAW", "HOWO", "ЗИЛ", "МАЗ", "Volvo", "Scania", "MAN", "DAF", "Другое"];
+  const vehicleTypeOptions = ["Самосвал", "Тонар", "Полуприцеп"];
   const { token, logout } = useAuthStore();
   const [profile, setProfile] = useState<DriverProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -35,9 +36,7 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [brand, setBrand] = useState("");
-  const [model, setModel] = useState("");
   const [plate, setPlate] = useState("");
-  const [capacity, setCapacity] = useState("");
   const [vehicleType, setVehicleType] = useState("Самосвал");
   const [deliveryOptionId, setDeliveryOptionId] = useState("");
   const [rateType, setRateType] = useState("per_ton_km");
@@ -91,9 +90,7 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
         setPhone(formatPhoneNumber(p.phone) || "");
         if (p.vehicle) {
           setBrand(p.vehicle.brand || "");
-          setModel(p.vehicle.model || "");
           setPlate(p.vehicle.plate_number || "");
-          setCapacity(p.vehicle.body_volume_m3?.toString() || "");
           setVehicleType(p.vehicle.vehicle_type || "");
           setDeliveryOptionId(p.vehicle.delivery_option_id || "");
           setRateType(p.vehicle.rate_mode || "per_ton_km");
@@ -141,18 +138,18 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
 
       // Update vehicle
       const rateVal = parseFloat(rateValue) || 0;
+      const selectedDeliveryOption = deliveryOptions.find((option) => option.id === deliveryOptionId);
       const vehRes = await fetch(`${baseURL}/driver/vehicle`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${currentToken}`
+          "Authorization": "Bearer " + useAuthStore.getState().token
         },
         body: JSON.stringify({
           brand: brand,
-          model: model,
           plate_number: plate,
           vehicle_type: vehicleType,
-          body_volume_m3: parseFloat(capacity) || 0,
+          body_volume_m3: Number(selectedDeliveryOption?.capacity_m3 || 0),
           delivery_option_id: deliveryOptionId || null,
           rate_mode: rateType,
           fixed_rate: rateType === "fixed" ? rateVal : 0,
@@ -368,71 +365,54 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
         
         <div className="flex flex-col gap-3">
           <div>
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Марка (напр., КАМАЗ)</label>
-            <input
-              type="text"
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Марка</label>
+            <select
               value={brand}
               onChange={(e) => setBrand(e.target.value)}
-              className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-semibold text-slate-900 outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] transition-all"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Модель</label>
-              <input
-                type="text"
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-semibold text-slate-900 outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] transition-all"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Гос. номер</label>
-              <input
-                type="text"
-                value={plate}
-                onChange={(e) => setPlate(e.target.value)}
-                className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-mono font-black text-slate-900 uppercase pr-8 outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] transition-all"
-              />
-            </div>
+              className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-semibold text-slate-900 outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] transition-all appearance-none"
+            >
+              <option value="">Выберите марку</option>
+              {brandOptions.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
           </div>
           <div>
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Тип машины / Назначение</label>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Гос. номер</label>
             <input
               type="text"
-              value={vehicleType}
-              onChange={(e) => setVehicleType(e.target.value)}
-              className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-semibold text-slate-900 outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] transition-all"
-              placeholder="Самосвал, Тонар..."
+              value={plate}
+              onChange={(e) => setPlate(e.target.value)}
+              className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-mono font-black text-slate-900 uppercase pr-8 outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] transition-all"
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Категория (ТС)</label>
-              <select
-                value={deliveryOptionId}
-                onChange={(e) => {
-                  setDeliveryOptionId(e.target.value);
-                  const opt = deliveryOptions.find(o => o.id === e.target.value);
-                  if (opt && opt.volume_m3) setCapacity(opt.volume_m3.toString());
-                }}
-                className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-semibold text-slate-900 outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] transition-all appearance-none"
-              >
-                <option value="">Выберите...</option>
-                {deliveryOptions.map(o => (
-                  <option key={o.id} value={o.id}>{o.title}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Точная Кубатура (м³)</label>
-              <input
-                type="number"
-                value={capacity}
-                onChange={(e) => setCapacity(e.target.value)}
-                className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-semibold text-slate-900 outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] transition-all"
-              />
-            </div>
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Тип машины</label>
+            <select
+              value={vehicleType}
+              onChange={(e) => setVehicleType(e.target.value)}
+              className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-semibold text-slate-900 outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] transition-all appearance-none"
+            >
+              <option value="">Выберите тип машины</option>
+              {vehicleTypeOptions.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Кубатура</label>
+            <select
+              value={deliveryOptionId}
+              onChange={(e) => setDeliveryOptionId(e.target.value)}
+              className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-semibold text-slate-900 outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] transition-all appearance-none"
+            >
+              <option value="">Выберите кубатуру</option>
+              {deliveryOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.title} ({option.capacity_m3} м3)
+                </option>
+              ))}
+            </select>
           </div>
           
           <div className="grid grid-cols-2 gap-3">

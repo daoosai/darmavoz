@@ -8,11 +8,12 @@ import {
   MapPin,
   Search,
   ImageIcon,
+  RefreshCw,
 } from "lucide-react";
 import { MaterialProps } from "./MaterialDetailScreen";
 import OrdersScreen from "./OrdersScreen";
 import WelcomeScreen from "./WelcomeScreen";
-import { getImageUrl, baseURL } from "./utils";
+import { getImageUrl, baseURL, APP_VERSION } from "./utils";
 
 import CartScreen from "./CartScreen";
 import ProfileScreen from "./ProfileScreen";
@@ -28,11 +29,23 @@ interface Category {
   sort_order: number;
 }
 
+import LoginScreen from "./LoginScreen";
+import DriverOrdersScreen from "./DriverOrdersScreen";
+import LogistDashboardScreen from "./LogistDashboardScreen";
+import AdminDashboardScreen from "./AdminDashboardScreen";
+import DriverRegistrationScreen from "./DriverRegistrationScreen";
+import { useAuthStore } from "./store";
+import ClientAuthBottomSheet from "./ClientAuthBottomSheet";
+import ClientProfileScreen from "./ClientProfileScreen";
+import InstallPWA from "./InstallPWA";
+
 // Reuse Material type as MaterialProps by exporting it from MaterialDetailScreen or type matching
 export default function App() {
-  const [currentRoute, setCurrentRoute] = useState<"welcome" | "main">(
-    "welcome",
-  );
+  const { role } = useAuthStore();
+  const [currentRoute, setCurrentRoute] = useState<
+    "welcome" | "main" | "login" | "driver" | "logist" | "admin" | "driver_register"
+  >(role === "driver" ? "driver" : role === "logist" ? "logist" : role === "admin" ? "admin" : "welcome");
+
   const [activeTab, setActiveTab] = useState("home");
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
     null,
@@ -44,12 +57,12 @@ export default function App() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [materials, setMaterials] = useState<MaterialProps[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [showAuthSheet, setShowAuthSheet] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setIsLoading(true);
-        alert("URL API: " + baseURL);
         const [categoriesRes, materialsRes] = await Promise.all([
           fetch(`${baseURL}/catalog/categories/`),
           fetch(`${baseURL}/catalog/materials/`),
@@ -72,8 +85,7 @@ export default function App() {
           console.error("Failed to fetch data");
         }
       } catch (err) {
-        console.error("Error fetching data:", err);
-        alert("Ошибка загрузки: " + String(err));
+        // Silent error for release
       } finally {
         setIsLoading(false);
       }
@@ -84,10 +96,123 @@ export default function App() {
 
   const cartItemsCount = useCartStore((state) => state.cartItems.length);
 
-  if (currentRoute === "welcome") {
-    return <WelcomeScreen onSelectClient={() => setCurrentRoute("main")} />;
-  }
+  const renderContent = () => {
+    if (currentRoute === "welcome") {
+      return (
+        <WelcomeScreen
+          onSelectClient={() => {
+            setCurrentRoute("main");
+          }}
+          onSelectEmployee={() => setCurrentRoute("login")}
+          onSelectDriverRegister={() => setCurrentRoute("driver_register")}
+        />
+      );
+    }
 
+    if (currentRoute === "driver_register") {
+      return (
+        <DriverRegistrationScreen
+          onRegister={(r) =>
+            setCurrentRoute(r === "driver" ? "driver" : "main")
+          }
+          onBack={() => setCurrentRoute("welcome")}
+        />
+      );
+    }
+
+    if (currentRoute === "login") {
+      return (
+        <LoginScreen
+          onLogin={(r) =>
+            setCurrentRoute(r === "driver" ? "driver" : r === "logist" ? "logist" : r === "admin" ? "admin" : "main")
+          }
+          onBack={() => setCurrentRoute("welcome")}
+        />
+      );
+    }
+
+    if (currentRoute === "driver") {
+      return role === "driver" ? (
+        <DriverOrdersScreen onLogout={() => setCurrentRoute("login")} />
+      ) : (
+        <LoginScreen
+          onLogin={(r) =>
+            setCurrentRoute(r === "driver" ? "driver" : r === "logist" ? "logist" : r === "admin" ? "admin" : "main")
+          }
+          onBack={() => setCurrentRoute("welcome")}
+        />
+      );
+    }
+
+    if (currentRoute === "logist") {
+      return role === "logist" ? (
+        <LogistDashboardScreen onLogout={() => setCurrentRoute("login")} />
+      ) : (
+        <LoginScreen
+          onLogin={(r) =>
+            setCurrentRoute(r === "driver" ? "driver" : r === "logist" ? "logist" : r === "admin" ? "admin" : "main")
+          }
+          onBack={() => setCurrentRoute("welcome")}
+        />
+      );
+    }
+
+    if (currentRoute === "admin") {
+      return role === "admin" ? (
+        <AdminDashboardScreen onLogout={() => setCurrentRoute("login")} />
+      ) : (
+        <LoginScreen
+          onLogin={(r) =>
+            setCurrentRoute(r === "driver" ? "driver" : r === "logist" ? "logist" : r === "admin" ? "admin" : "main")
+          }
+          onBack={() => setCurrentRoute("welcome")}
+        />
+      );
+    }
+
+    return (
+      <MainContent 
+        currentRoute={currentRoute}
+        setCurrentRoute={setCurrentRoute}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        categories={categories}
+        materials={materials}
+        selectedMaterial={selectedMaterial}
+        setSelectedMaterial={setSelectedMaterial}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        cartItemsCount={cartItemsCount}
+        selectedCategoryId={selectedCategoryId}
+        setSelectedCategoryId={setSelectedCategoryId}
+        isLoading={isLoading}
+        showAuthSheet={showAuthSheet}
+        setShowAuthSheet={setShowAuthSheet}
+        role={role}
+      />
+    );
+  };
+
+  return (
+    <>
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 2000,
+          style: {
+            background: "#10B981",
+            color: "#fff",
+            zIndex: 999,
+          },
+        }}
+      />
+      <InstallPWA />
+      {renderContent()}
+    </>
+  );
+}
+
+function MainContent({ currentRoute, setCurrentRoute, activeTab, setActiveTab, categories, materials, selectedMaterial, setSelectedMaterial, searchQuery, setSearchQuery, cartItemsCount, selectedCategoryId, setSelectedCategoryId, isLoading, showAuthSheet, setShowAuthSheet, role }: any) {
   const tabs = [
     { id: "home", label: "Главная", icon: Home },
     { id: "orders", label: "Заказы", icon: List },
@@ -101,21 +226,19 @@ export default function App() {
     { id: "profile", label: "Профиль", icon: User },
   ];
 
+  const handleCartClick = () => {
+    setActiveTab("cart");
+  };
+
+  const handleProfileClick = () => {
+    setActiveTab("profile");
+  };
+
   return (
-    <div className="min-h-screen bg-slate-100 flex sm:items-center justify-center font-sans text-slate-900">
-      <Toaster 
-        position="top-right"
-        toastOptions={{
-          duration: 2000,
-          style: {
-            background: "#10B981", 
-            color: "#fff",
-            zIndex: 999
-          }
-        }} 
-      />
+    <div className="min-h-screen w-full bg-slate-100 flex sm:items-center justify-center font-sans text-slate-900">
       {/* Mobile container aligned and constrained on large screens */}
       <div className="w-full max-w-md bg-white min-h-screen sm:min-h-0 sm:h-[85vh] relative shadow-2xl flex flex-col overflow-hidden sm:rounded-[32px] sm:border-8 border-slate-900">
+        
         {/* Main Content Area */}
         <main className="flex-1 overflow-y-auto pb-[90px] pt-4">
           {activeTab === "home" && (
@@ -170,7 +293,7 @@ export default function App() {
                           : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
                       }`}
                     >
-                      {cat.name}
+                      {cat?.name}
                     </button>
                   ))}
                 </div>
@@ -192,7 +315,7 @@ export default function App() {
                         m.category_id === selectedCategoryId,
                     )
                     .filter((m: any) =>
-                      m.name.toLowerCase().includes(searchQuery.toLowerCase()),
+                      (m?.name || "").toLowerCase().includes(searchQuery.toLowerCase()),
                     )
                     .map((material) => (
                       <ProductCard
@@ -206,18 +329,25 @@ export default function App() {
             </>
           )}
 
-          {activeTab === "orders" && <OrdersScreen />}
+          {activeTab === "orders" && <OrdersScreen onOpenAuth={() => setShowAuthSheet(true)} />}
 
           {activeTab === "cart" && (
             <CartScreen
               onGoToHome={() => setActiveTab("home")}
               onGoToOrders={() => setActiveTab("orders")}
+              onOpenAuth={() => setShowAuthSheet(true)}
             />
           )}
 
           {activeTab === "promotions" && <PromosScreen />}
 
-          {activeTab === "profile" && <ProfileScreen />}
+          {activeTab === "profile" && (
+            role === "client" ? (
+              <ClientProfileScreen />
+            ) : (
+              <ProfileScreen onOpenAuth={() => setShowAuthSheet(true)} />
+            )
+          )}
         </main>
 
         {/* Bottom Navigation */}
@@ -263,6 +393,12 @@ export default function App() {
           material={selectedMaterial}
           onClose={() => setSelectedMaterial(null)}
         />
+        
+        {/* Auth Bottom Sheet */}
+        <ClientAuthBottomSheet
+          isOpen={showAuthSheet}
+          onClose={() => setShowAuthSheet(false)}
+        />
       </div>
     </div>
   );
@@ -307,7 +443,7 @@ function ProductCard({ material, onClick }: ProductCardProps) {
               <img
                 src={src}
                 className="w-full h-full object-cover"
-                alt={`${material.name} ${i + 1}`}
+                alt={`${material?.name} ${i + 1}`}
               />
             </div>
           ))}
@@ -326,7 +462,7 @@ function ProductCard({ material, onClick }: ProductCardProps) {
 
       <div className="p-4 flex flex-col gap-1.5">
         <h3 className="font-bold text-[18px] text-slate-900 leading-tight">
-          {material.name}
+          {material?.name}
         </h3>
         <p className="text-[14px] font-bold text-[#2DB0E6]">
           от {material.price} ₽ / {material.unit}

@@ -1,11 +1,18 @@
 import React from 'react';
 import { User, MessageSquare, Share2, Info, ChevronRight } from 'lucide-react';
+import { APP_VERSION } from './utils';
+import UpdateBanner from './UpdateBanner';
 
-export default function ProfileScreen() {
+export default function ProfileScreen({ onOpenAuth }: { onOpenAuth?: () => void }) {
   return (
     <div className="flex flex-col h-full bg-slate-50 p-4 pb-24">
+      <UpdateBanner />
+      
       {/* Auth Card */}
-      <div className="bg-[#2DB0E6] rounded-[24px] p-5 flex items-center gap-4 text-white mb-6 shadow-md shadow-blue-500/20 active:opacity-90 cursor-pointer transition-opacity">
+      <div 
+        onClick={onOpenAuth}
+        className="bg-[#2DB0E6] rounded-[24px] p-5 flex items-center gap-4 text-white mb-6 shadow-md shadow-blue-500/20 active:opacity-90 cursor-pointer transition-opacity"
+      >
         <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center shrink-0">
           <User className="w-7 h-7 text-white" />
         </div>
@@ -25,7 +32,7 @@ export default function ProfileScreen() {
 
       {/* Version */}
       <div className="flex justify-center mt-8">
-        <span className="text-sm text-slate-400 font-medium font-mono">Версия 1.0.1</span>
+        <span className="text-sm text-slate-400 font-medium font-mono">Версия приложения {APP_VERSION}</span>
       </div>
     </div>
   );

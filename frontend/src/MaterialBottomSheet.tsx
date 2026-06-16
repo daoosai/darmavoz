@@ -97,7 +97,7 @@ export default function MaterialBottomSheet({
 
             <button
               onClick={onClose}
-              className="absolute right-4 top-4 p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200"
+              className="absolute right-4 top-4 z-50 p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200 shadow-sm"
             >
               <X className="w-5 h-5" />
             </button>
@@ -109,7 +109,7 @@ export default function MaterialBottomSheet({
               {/* Header and Images */}
               <div>
                 <h2 className="text-2xl font-bold text-slate-900 mb-3">
-                  {material.name}
+                  {material?.name}
                 </h2>
                 <div className="relative w-full aspect-[4/3] rounded-2xl overflow-hidden bg-slate-100 group">
                   <div
@@ -128,7 +128,7 @@ export default function MaterialBottomSheet({
                         <img
                           src={src}
                           className="w-full h-full object-cover"
-                          alt={`${material.name} ${i + 1}`}
+                          alt={`${material?.name} ${i + 1}`}
                         />
                       </div>
                     ))}

@@ -1,23 +1,45 @@
 import React, { useState } from "react";
-import { ShoppingCart, X, ImageIcon, Loader2, MapPin } from "lucide-react";
-import { useCartStore } from "./store";
+import {
+  ShoppingCart,
+  X,
+  ImageIcon,
+  Loader2,
+  MapPin,
+  Minus,
+  Plus,
+} from "lucide-react";
+import { useAuthStore, useCartStore } from "./store";
 import { getImageUrl, baseURL } from "./utils";
 import toast from "react-hot-toast";
 
 export default function CartScreen({
   onGoToHome,
   onGoToOrders,
+  onOpenAuth,
 }: {
   onGoToHome: () => void;
   onGoToOrders: () => void;
+  onOpenAuth: () => void;
 }) {
-  const { cartItems, removeFromCart, getTotalPrice, clearCart } =
-    useCartStore();
+  const {
+    cartItems,
+    removeFromCart,
+    getTotalPrice,
+    clearCart,
+    increaseQuantity,
+    decreaseQuantity,
+  } = useCartStore();
+  const { role, token } = useAuthStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [globalAddress, setGlobalAddress] = useState("");
 
   const handleCheckout = async () => {
     if (cartItems.length === 0 || !globalAddress.trim()) return;
+    
+    if (role !== "client") {
+      onOpenAuth();
+      return;
+    }
 
     try {
       setIsSubmitting(true);
@@ -27,7 +49,7 @@ export default function CartScreen({
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            session_key: "demo-session",
+            "Authorization": `Bearer ${token}`
           },
           body: JSON.stringify({
             material_id: item.material.id,
@@ -35,6 +57,7 @@ export default function CartScreen({
             address: globalAddress,
             notes: item.comment || "",
             source: "web",
+            quantity: item.quantity,
           }),
         }),
       );
@@ -44,27 +67,6 @@ export default function CartScreen({
 
       if (!hasErrors) {
         toast.success("Заказ успешно оформлен");
-
-        // Save to guest_orders in localStorage
-        const existingOrders = JSON.parse(
-          localStorage.getItem("guest_orders") || "[]",
-        );
-
-        const newOrders = cartItems.map((item) => ({
-          id: Date.now().toString() + Math.random().toString(36).substring(7),
-          materialName: item.material.name,
-          volume: `${item.deliveryOption.capacity_m3} м³`,
-          address: globalAddress,
-          totalPrice: item.material.price * item.deliveryOption.capacity_m3,
-          status: "Создан",
-          date: new Date().toISOString(),
-        }));
-
-        localStorage.setItem(
-          "guest_orders",
-          JSON.stringify([...newOrders, ...existingOrders]),
-        );
-
         clearCart();
         setGlobalAddress("");
         onGoToOrders();
@@ -120,7 +122,7 @@ export default function CartScreen({
                 {getImageUrl(item.material) !== "/placeholder.jpg" ? (
                   <img
                     src={getImageUrl(item.material)}
-                    alt={item.material.name}
+                    alt={item.material?.name}
                     className="w-full h-full object-cover"
                   />
                 ) : (
@@ -130,7 +132,7 @@ export default function CartScreen({
               <div className="flex flex-col justify-between flex-1 ml-3 h-[80px]">
                 <div className="flex justify-between items-start">
                   <h3 className="font-bold text-[16px] text-slate-900 leading-tight line-clamp-1">
-                    {item.material.name}
+                    {item.material?.name}
                   </h3>
                   <button
                     onClick={() => removeFromCart(item.id)}
@@ -151,8 +153,32 @@ export default function CartScreen({
                   </div>
                 )}
 
-                <div className="font-bold text-[#2DB0E6] text-[16px] mt-auto">
-                  {item.material.price * item.deliveryOption.capacity_m3} ₽
+                <div className="flex justify-between items-center mt-auto">
+                  <div className="font-bold text-[#2DB0E6] text-[16px]">
+                    {item.material.price *
+                      item.deliveryOption.capacity_m3 *
+                      item.quantity}{" "}
+                    ₽
+                  </div>
+                  <div className="flex items-center gap-2.5 bg-slate-50 rounded-full px-2 py-0.5 border border-slate-100">
+                    <button
+                      onClick={() => decreaseQuantity(item.id)}
+                      disabled={item.quantity <= 1}
+                      className="p-0.5 text-slate-400 hover:text-[#2DB0E6] disabled:opacity-50 disabled:hover:text-slate-400 transition-colors"
+                    >
+                      <Minus className="w-4 h-4" />
+                    </button>
+                    <span className="text-sm font-semibold text-slate-700 w-4 text-center">
+                      {item.quantity}
+                    </span>
+                    <button
+                      onClick={() => increaseQuantity(item.id)}
+                      disabled={item.quantity >= 10}
+                      className="p-0.5 text-slate-400 hover:text-[#2DB0E6] disabled:opacity-50 disabled:hover:text-slate-400 transition-colors"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

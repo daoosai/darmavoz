@@ -8,7 +8,7 @@ export default function PromosScreen() {
         <Tag className="w-10 h-10 text-slate-300 transform -rotate-12" />
       </div>
       <h3 className="text-lg font-semibold text-slate-900 mb-1">Здесь будут ваши акции</h3>
-      <p className="text-sm text-slate-500">Пока что тут пусто, но скоро появятся выгодные предложения со скидками.</p>
+      <p className="text-sm text-slate-500">Пока что тут пусто, но скоро появятся предложения со скидками.</p>
     </div>
   );
 }

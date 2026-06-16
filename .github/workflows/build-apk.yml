@@ -54,6 +54,21 @@ jobs:
           set -euo pipefail
           npx cap sync android
 
+      - name: Install dependencies & Build Web
+        working-directory: ./frontend
+        run: |
+          set -euo pipefail
+          npm install
+          npm install -D @capacitor/cli @capacitor/core @capacitor/android @capacitor/assets
+          npm run build
+
+      - name: Generate Icons & Sync Capacitor
+        working-directory: ./frontend
+        run: |
+          set -euo pipefail
+          npx capacitor-assets generate --android
+          npx cap sync android
+
       - name: Build APK (Debug)
         working-directory: ./frontend/android
         run: |

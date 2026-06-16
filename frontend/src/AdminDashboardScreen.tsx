@@ -505,7 +505,7 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
     setIsSavingDelivery(true);
     try {
       const isEdit = !!editingDelivery.id;
-      const url = isEdit ? `${baseURL}/admin/delivery-options/${editingDelivery.id}/` : `${baseURL}/admin/delivery-options/`;
+      const url = isEdit ? `${baseURL}/admin/delivery-options/${editingDelivery.id}` : `${baseURL}/admin/delivery-options`;
       const method = isEdit ? "PATCH" : "POST";
       
       const payload: any = {

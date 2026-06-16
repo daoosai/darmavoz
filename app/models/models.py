@@ -239,6 +239,8 @@ class MediaFile(Base):
     content_type: Mapped[str] = mapped_column(String(255), nullable=False)
     file_name: Mapped[str] = mapped_column(String(255), nullable=False)
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    slot_key: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     is_primary: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

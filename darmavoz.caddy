@@ -3,22 +3,19 @@ darmavoz.ru {
     reverse_proxy minio:9000
   }
 
-  @webAssets path /assets/*
-  handle @webAssets {
-    root * /opt/darmavoz/react_web
-    file_server
-  }
-
   handle_path /static/* {
     root * /srv/darmavoz/static
     file_server
   }
 
-  handle_path /app* {
-    root * /opt/darmavoz/react_web
+  @api path /api/* /health /ping
+  handle @api {
+    reverse_proxy darmavoz_backend:8000
+  }
+
+  handle {
+    root * /opt/darmavoz/frontend/dist
     try_files {path} /index.html
     file_server
   }
-
-  reverse_proxy darmavoz_backend:8000
 }

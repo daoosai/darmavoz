@@ -60,7 +60,10 @@ class S3StorageService:
             use_ssl=settings.S3_USE_SSL,
             config=BotoConfig(signature_version="s3v4", s3={"addressing_style": "path"}),
         )
-        presign_endpoint = settings.S3_PRESIGN_ENDPOINT or settings.S3_ENDPOINT
+        # Browser uploads must use a publicly reachable endpoint. Prefer the
+        # dedicated presign endpoint, then the external public base URL, and
+        # only fall back to the internal S3 endpoint for non-browser setups.
+        presign_endpoint = settings.S3_PRESIGN_ENDPOINT or settings.s3_public_base_url or settings.S3_ENDPOINT
         self._presign_client = boto3.client(
             "s3",
             endpoint_url=presign_endpoint,

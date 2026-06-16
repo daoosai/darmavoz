@@ -12,6 +12,8 @@ class PresignUploadRequest(BaseModel):
     entity_type: str
     entity_id: UUID | None = None
     is_primary: bool = False
+    sort_order: int = 0
+    slot_key: str | None = None
 
 
 class PresignUploadResponse(BaseModel):
@@ -30,6 +32,8 @@ class ConfirmUploadRequest(BaseModel):
     content_type: str
     file_size: int = Field(gt=0)
     is_primary: bool = False
+    sort_order: int = 0
+    slot_key: str | None = None
 
 
 class ConfirmUploadResponse(BaseModel):

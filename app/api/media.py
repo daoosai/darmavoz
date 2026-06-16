@@ -104,6 +104,16 @@ async def confirm_upload(
 
     result = await db.execute(select(MediaFile).where(MediaFile.object_key == payload.object_key))
     media_file = result.scalar_one_or_none()
+    if media_file is None and payload.slot_key:
+        result = await db.execute(
+            select(MediaFile).where(
+                MediaFile.entity_type == payload.entity_type,
+                MediaFile.entity_id == payload.entity_id,
+                MediaFile.slot_key == payload.slot_key,
+            )
+        )
+        media_file = result.scalar_one_or_none()
+
     if media_file is None:
         media_file = MediaFile(
             entity_type=payload.entity_type,
@@ -114,6 +124,8 @@ async def confirm_upload(
             content_type=payload.content_type,
             file_name=payload.file_name,
             file_size=payload.file_size,
+            sort_order=payload.sort_order,
+            slot_key=payload.slot_key,
             is_primary=payload.is_primary,
         )
         db.add(media_file)
@@ -125,6 +137,8 @@ async def confirm_upload(
         media_file.content_type = payload.content_type
         media_file.file_name = payload.file_name
         media_file.file_size = payload.file_size
+        media_file.sort_order = payload.sort_order
+        media_file.slot_key = payload.slot_key
         media_file.is_primary = payload.is_primary
 
     await db.commit()

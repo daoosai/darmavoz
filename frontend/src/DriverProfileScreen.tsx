@@ -197,6 +197,10 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
           file_name: safeFileName,
           content_type: safeContentType,
           file_size: file.size,
+          entity_type: "vehicle",
+          entity_id: profile.vehicle.id,
+          is_primary: false,
+          sort_order: 0,
           slot_key: slotId
         })
       });
@@ -226,6 +230,11 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
           entity_type: "vehicle",
           entity_id: profile.vehicle.id,
           object_key: presignData.object_key,
+          file_name: safeFileName,
+          content_type: safeContentType,
+          file_size: file.size,
+          is_primary: false,
+          sort_order: 0,
           slot_key: slotId
         })
       });

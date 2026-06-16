@@ -13,7 +13,7 @@ from app.schemas.media import (
     PresignUploadRequest,
     PresignUploadResponse,
 )
-from app.security.auth import get_current_admin_user
+from app.security.auth import get_current_user
 from app.services.storage import (
     StorageNotConfiguredError,
     StorageValidationError,
@@ -41,6 +41,23 @@ async def _ensure_entity_exists(entity_type: str, entity_id: UUID, db: AsyncSess
     return entity
 
 
+def _assert_media_access(*, current_user: User, entity_type: str, entity_id: UUID | None) -> None:
+    role_name = current_user.role.name if current_user.role else None
+    if role_name == "admin":
+        return
+
+    if role_name != "driver":
+        raise HTTPException(status_code=403, detail="The user doesn't have enough privileges")
+
+    if entity_type != "vehicle" or entity_id is None:
+        raise HTTPException(status_code=403, detail="Drivers can manage media only for their own vehicle")
+
+    driver = current_user.driver_profile
+    vehicle = driver.vehicle if driver is not None else None
+    if vehicle is None or vehicle.id != entity_id:
+        raise HTTPException(status_code=403, detail="Drivers can manage media only for their own vehicle")
+
+
 async def _sync_entity_image_url(entity_type: str, entity_id: UUID, db: AsyncSession) -> None:
     if entity_type not in {"material", "delivery_option"}:
         return
@@ -65,9 +82,8 @@ async def _sync_entity_image_url(entity_type: str, entity_id: UUID, db: AsyncSes
 async def presign_upload(
     payload: PresignUploadRequest,
     db: AsyncSession = Depends(get_db),
-    current_admin: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_user),
 ) -> PresignUploadResponse:
-    del current_admin
     try:
         storage = get_storage_service()
         storage.assert_supported_entity_type(payload.entity_type)
@@ -76,6 +92,12 @@ async def presign_upload(
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except StorageValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    _assert_media_access(
+        current_user=current_user,
+        entity_type=payload.entity_type,
+        entity_id=payload.entity_id,
+    )
 
     if payload.entity_id is not None:
         await _ensure_entity_exists(payload.entity_type, payload.entity_id, db)
@@ -95,9 +117,8 @@ async def presign_upload(
 async def confirm_upload(
     payload: ConfirmUploadRequest,
     db: AsyncSession = Depends(get_db),
-    current_admin: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_user),
 ) -> ConfirmUploadResponse:
-    del current_admin
     try:
         storage = get_storage_service()
         storage.assert_supported_entity_type(payload.entity_type)
@@ -106,6 +127,12 @@ async def confirm_upload(
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except StorageValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    _assert_media_access(
+        current_user=current_user,
+        entity_type=payload.entity_type,
+        entity_id=payload.entity_id,
+    )
 
     await _ensure_entity_exists(payload.entity_type, payload.entity_id, db)
 
@@ -175,13 +202,18 @@ async def confirm_upload(
 async def delete_media(
     media_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_admin: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_user),
 ) -> dict[str, bool]:
-    del current_admin
     result = await db.execute(select(MediaFile).where(MediaFile.id == media_id))
     media_file = result.scalar_one_or_none()
     if media_file is None:
         raise HTTPException(status_code=404, detail="Media file not found")
+
+    _assert_media_access(
+        current_user=current_user,
+        entity_type=media_file.entity_type,
+        entity_id=media_file.entity_id,
+    )
 
     try:
         storage = get_storage_service()

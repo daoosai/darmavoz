@@ -58,12 +58,21 @@ export default function DriverOrdersScreen({
       const res = await fetch(`${baseURL}/driver/profile/full`, {
         headers: { Authorization: `Bearer ${currentToken}` }
       });
+      if (res.status === 401) {
+        useAuthStore.getState().logout();
+        onLogout();
+        return;
+      }
       if (res.ok) {
         const data = await res.json();
         const profile = Array.isArray(data) ? data[0] : data;
         setModerationStatus(profile?.moderation_status || "pending_moderation");
+      } else {
+        setIsLoading(false);
       }
-    } catch (e) {}
+    } catch (e) {
+      setIsLoading(false);
+    }
   };
 
   const checkIncomingOffer = React.useCallback(async () => {
@@ -77,9 +86,12 @@ export default function DriverOrdersScreen({
         },
       });
       
-      if (res.status === 401 || res.status === 403) {
+      if (res.status === 401) {
         useAuthStore.getState().logout();
         onLogout();
+        return;
+      }
+      if (res.status === 403) {
         return;
       }
 
@@ -105,7 +117,6 @@ export default function DriverOrdersScreen({
   }, [onLogout]);
 
   useEffect(() => {
-    fetchOrders();
     fetchProfile();
   }, []);
 
@@ -113,6 +124,7 @@ export default function DriverOrdersScreen({
     let pollingInterval: NodeJS.Timeout;
 
     if (token && moderationStatus === "approved") {
+      fetchOrders();
       pollingInterval = setInterval(checkIncomingOffer, 5000);
       checkIncomingOffer(); // Initial check
     }
@@ -151,9 +163,13 @@ export default function DriverOrdersScreen({
         },
       });
 
-      if (res.status === 401 || res.status === 403) {
+      if (res.status === 401) {
         useAuthStore.getState().logout();
         onLogout();
+        return;
+      }
+      if (res.status === 403) {
+        toast.error("Нет доступа к действию");
         return;
       }
 
@@ -183,9 +199,13 @@ export default function DriverOrdersScreen({
         body: JSON.stringify({ reason: "manual" }),
       });
 
-      if (res.status === 401 || res.status === 403) {
+      if (res.status === 401) {
         useAuthStore.getState().logout();
         onLogout();
+        return;
+      }
+      if (res.status === 403) {
+        toast.error("Нет доступа к действию");
         return;
       }
 
@@ -214,9 +234,14 @@ export default function DriverOrdersScreen({
         },
       });
 
-      if (assignedRes.status === 401 || assignedRes.status === 403) {
+      if (assignedRes.status === 401) {
         useAuthStore.getState().logout();
         onLogout();
+        return;
+      }
+      
+      if (assignedRes.status === 403) {
+        setOrders([]);
         return;
       }
 
@@ -249,9 +274,14 @@ export default function DriverOrdersScreen({
         },
       });
 
-      if (res.status === 401 || res.status === 403) {
+      if (res.status === 401) {
         useAuthStore.getState().logout();
         onLogout();
+        return;
+      }
+
+      if (res.status === 403) {
+        setOrders([]);
         return;
       }
 
@@ -285,9 +315,13 @@ export default function DriverOrdersScreen({
         body: JSON.stringify({ status: newStatus }),
       });
 
-      if (res.status === 401 || res.status === 403) {
+      if (res.status === 401) {
         useAuthStore.getState().logout();
         onLogout();
+        return;
+      }
+      if (res.status === 403) {
+        toast.error("Недостаточно прав (403)");
         return;
       }
 

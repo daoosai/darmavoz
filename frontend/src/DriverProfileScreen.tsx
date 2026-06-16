@@ -68,9 +68,13 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
           Authorization: `Bearer ${currentToken}`
         }
       });
-      if (res.status === 403 || res.status === 401) {
+      if (res.status === 401) {
         logout();
         onLogout();
+        return;
+      }
+      if (res.status === 403) {
+        // Профиль может возвращать 403, если есть критические ошибки прав.
         return;
       }
       if (!res.ok) {
@@ -117,7 +121,7 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
       }
       
       // Update profile
-      await fetch(`${baseURL}/driver/profile`, {
+      const profRes = await fetch(`${baseURL}/driver/profile`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -125,10 +129,12 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
         },
         body: JSON.stringify({ name, phone: sendPhone })
       });
+      if (profRes.status === 401) { logout(); onLogout(); return; }
+      if (profRes.status === 403) { toast.error("Недостаточно прав (403)"); return; }
 
       // Update vehicle
       const rateVal = parseFloat(rateValue) || 0;
-      await fetch(`${baseURL}/driver/vehicle`, {
+      const vehRes = await fetch(`${baseURL}/driver/vehicle`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -146,6 +152,11 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
           rate_per_ton_km: rateType === "per_ton_km" ? rateVal : 0
         })
       });
+      
+      if (vehRes.status === 401) { logout(); onLogout(); return; }
+      if (vehRes.status === 403) { toast.error("Недостаточно прав (403)"); return; }
+      
+      if (!profRes.ok || !vehRes.ok) throw new Error("Save status error");
 
       toast.success("Данные успешно сохранены");
       await fetchProfile(); // refresh data
@@ -186,6 +197,8 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
         })
       });
 
+      if (presignRes.status === 401) { logout(); onLogout(); return; }
+      if (presignRes.status === 403) { toast.error("Нет доступа к загрузке фото"); return; }
       if (!presignRes.ok) throw new Error("Ошибка Presign");
       const presignData = await presignRes.json();
       if (!presignData.upload_url) throw new Error("Бэкенд не вернул upload_url!");

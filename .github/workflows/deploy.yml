@@ -3,7 +3,7 @@ name: Deploy React SPA to Darmavoz
 on:
   push:
     branches:
-      - feature/sprint-7-delivery
+      - feature/sprint-11-driver-profiles
   workflow_dispatch:
 
 jobs:
@@ -23,14 +23,19 @@ jobs:
 
       - name: Install dependencies
         working-directory: ./frontend
-        run: npm ci
+        run: |
+          set -euo pipefail
+          npm install
 
       - name: Build frontend
         working-directory: ./frontend
-        run: npm run build
+        run: |
+          set -euo pipefail
+          npm run build
 
       - name: Setup SSH key
         run: |
+          set -euo pipefail
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/github_actions_key
@@ -39,11 +44,19 @@ jobs:
 
       - name: Ensure target directory exists
         run: |
+          set -euo pipefail
           ssh -i ~/.ssh/github_actions_key "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
             "mkdir -p '${{ secrets.DEPLOY_PATH }}' && chmod 755 '${{ secrets.DEPLOY_PATH }}'"
 
       - name: Upload dist to server
         run: |
+          set -euo pipefail
           rsync -avz --delete \
             -e "ssh -i ~/.ssh/github_actions_key" \
             frontend/dist/ "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.DEPLOY_PATH }}/"
+
+      - name: Verify uploaded dist
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/github_actions_key "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+            "find '${{ secrets.DEPLOY_PATH }}' -maxdepth 2 -type f | head -20"

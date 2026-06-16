@@ -152,8 +152,8 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
           body_volume_m3: Number(selectedDeliveryOption?.capacity_m3 || 0),
           delivery_option_id: deliveryOptionId || null,
           rate_mode: rateType,
-          fixed_rate: rateType === "fixed" ? rateVal : 0,
-          rate_per_ton_km: rateType === "per_ton_km" ? rateVal : 0
+          fixed_rate: rateType === "fixed" ? rateVal : null,
+          rate_per_ton_km: rateType === "per_ton_km" ? rateVal : null
         })
       });
       

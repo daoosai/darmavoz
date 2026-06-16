@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.database import get_db
-from app.models.models import DeliveryOption, Driver, MediaFile, ModerationStatus, Order, User, Vehicle
+from app.models.models import DeliveryOption, Driver, DriverStatus, MediaFile, ModerationStatus, Order, OrderStatus, User, Vehicle
 from app.schemas.driver import (
     DriverResponse,
     DriverFullProfileResponse,
@@ -23,9 +23,11 @@ from app.schemas.order import DriverAssignedOrderOut, OrderOut
 from app.security.auth import get_current_approved_driver, get_current_driver
 from app.services.dispatch_service import (
     accept_offer,
+    add_event,
     decline_offer,
     get_current_assigned_order_for_driver,
     get_current_incoming_offer_for_driver,
+    get_order_by_id,
     list_orders_for_driver,
     mask_phone,
 )
@@ -243,6 +245,44 @@ async def get_driver_orders(
     current_driver: Driver = Depends(get_current_approved_driver),
 ) -> list[Order]:
     return await list_orders_for_driver(db, current_driver.id)
+
+
+@router.post("/orders/{order_id}/start", response_model=OrderOut)
+async def start_driver_order(
+    order_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_driver: Driver = Depends(get_current_approved_driver),
+) -> Order:
+    order = await get_order_by_id(db, order_id)
+    if order.driver_id != current_driver.id:
+        raise HTTPException(status_code=403, detail="Order does not belong to this driver")
+    if order.status != OrderStatus.driver_assigned.value:
+        raise HTTPException(status_code=409, detail="Order cannot be started in its current status")
+
+    order.status = OrderStatus.in_progress.value
+    await add_event(db, order.id, "driver_started_order", f"Driver {current_driver.id} started the order")
+    await db.commit()
+    return await get_order_by_id(db, order.id)
+
+
+@router.post("/orders/{order_id}/complete", response_model=OrderOut)
+async def complete_driver_order(
+    order_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_driver: Driver = Depends(get_current_approved_driver),
+) -> Order:
+    order = await get_order_by_id(db, order_id)
+    if order.driver_id != current_driver.id:
+        raise HTTPException(status_code=403, detail="Order does not belong to this driver")
+    if order.status not in {OrderStatus.driver_assigned.value, OrderStatus.in_progress.value}:
+        raise HTTPException(status_code=409, detail="Order cannot be completed in its current status")
+
+    order.status = OrderStatus.completed.value
+    order.current_offer_id = None
+    current_driver.status = DriverStatus.available.value
+    await add_event(db, order.id, "driver_completed_order", f"Driver {current_driver.id} completed the order")
+    await db.commit()
+    return await get_order_by_id(db, order.id)
 
 
 @router.get("/profile", response_model=DriverResponse)

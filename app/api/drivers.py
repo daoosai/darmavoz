@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.database import get_db
-from app.models.models import Driver, User, Vehicle
+from app.models.models import Driver, DriverStatus, OrderOffer, User, Vehicle
 from app.schemas.driver import DriverCreate, DriverResponse
 from app.security.auth import get_current_logist_user
 
@@ -100,3 +100,38 @@ async def list_drivers(
         delivery_option_id=delivery_option_id,
         status_filter=status_filter,
     )
+
+
+@router.delete("/{driver_id}", status_code=status.HTTP_200_OK)
+async def delete_driver(
+    driver_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_logist_user),
+) -> dict[str, str | bool]:
+    del current_user
+    result = await db.execute(
+        select(Driver)
+        .options(selectinload(Driver.user), selectinload(Driver.vehicle))
+        .where(Driver.id == driver_id)
+    )
+    driver = result.scalar_one_or_none()
+    if driver is None:
+        raise HTTPException(status_code=404, detail="Driver not found")
+
+    if driver.user is not None:
+        driver.user.is_active = False
+    driver.status = DriverStatus.offline.value
+    driver.vehicle_id = None
+    driver.is_auto_dispatch_enabled = False
+
+    pending_offers = await db.execute(
+        select(OrderOffer).where(
+            OrderOffer.driver_id == driver.id,
+            OrderOffer.status == "pending",
+        )
+    )
+    for offer in pending_offers.scalars().all():
+        offer.status = "cancelled"
+
+    await db.commit()
+    return {"ok": True, "action": "deactivated", "detail": "Driver deactivated and unbound from vehicle"}

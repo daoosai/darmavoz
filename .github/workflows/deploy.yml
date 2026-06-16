@@ -54,9 +54,3 @@ jobs:
           rsync -avz --delete \
             -e "ssh -i ~/.ssh/github_actions_key" \
             frontend/dist/ "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.DEPLOY_PATH }}/"
-
-      - name: Verify uploaded dist
-        run: |
-          set -euo pipefail
-          ssh -i ~/.ssh/github_actions_key "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
-            "find '${{ secrets.DEPLOY_PATH }}' -maxdepth 2 -type f | head -20"

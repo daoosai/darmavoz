@@ -19,6 +19,10 @@ export default function DriverRegistrationScreen({ onRegister, onBack }: DriverR
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!name.trim() || !phone.trim() || !password.trim()) {
+      toast.error("Пожалуйста, заполните все обязательные поля");
+      return;
+    }
     setIsLoading(true);
 
     try {
@@ -45,8 +49,7 @@ export default function DriverRegistrationScreen({ onRegister, onBack }: DriverR
       if (data.access_token) {
         useAuthStore.getState().login(data.access_token, data.role || 'driver');
         toast.success("Регистрация успешна!");
-        // Редирект на экран логина ЗДЕСЬ БЫТЬ НЕ ДОЛЖНО!
-        // Глобальный роутер сам перекинет водителя в профиль благодаря изменению стейта.
+        onRegister(data.role || 'driver');
       } else {
         throw new Error("Токен не получен от сервера");
       }

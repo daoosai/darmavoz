@@ -807,11 +807,11 @@ export default function LogistDashboardScreen({
               <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                 <div className="flex flex-col">
                   <h3 className="text-xl font-bold text-slate-800">
-                    История распределения
+                    Жизненный цикл заказа
                   </h3>
                   {currentHistoryOrder && (
                     <div className="flex items-center gap-1.5 mt-1">
-                      <span className="text-xs text-slate-400 font-medium">Статус заказа:</span>
+                      <span className="text-xs text-slate-400 font-medium">Статус:</span>
                       <span
                         className={`text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-wide border ${
                           orderStatusColors[currentHistoryOrder.status] || "bg-slate-100 text-slate-600 border border-slate-200"
@@ -829,71 +829,113 @@ export default function LogistDashboardScreen({
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <div className="p-6 overflow-y-auto w-full flex flex-col gap-4">
+              <div className="p-6 overflow-y-auto w-full flex flex-col">
                 {isLoadingHistory ? (
                   <div className="flex flex-col items-center justify-center py-10">
                     <Loader2 className="w-8 h-8 text-slate-300 animate-spin mb-2" />
                     <p className="text-slate-500 text-sm">Загружаем историю...</p>
                   </div>
-                ) : dispatchHistory.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-10">
-                    <p className="text-slate-500 text-sm">История пуста</p>
-                  </div>
                 ) : (
-                  <div className="flex flex-col gap-3">
-                    {dispatchHistory.map((entry, i) => (
-                      <div key={i} className="flex flex-col bg-slate-50 border border-slate-100 rounded-xl p-4 gap-2 text-left">
-                        <div className="flex justify-between items-start gap-2">
-                          <div className="flex flex-col">
-                            {entry.driver_name ? (
-                              <p className="font-bold text-slate-800 text-base">
-                                {entry.driver_name}
-                              </p>
-                            ) : (
-                              <p className="font-bold text-slate-800 text-base">
-                                Попытка #{entry.sequence_no}
-                              </p>
-                            )}
-                            
-                            {entry.driver_phone && (
-                              <p className="text-sm font-medium mt-0.5">
-                                <a href={`tel:${entry.driver_phone}`} className="text-blue-500 hover:underline">
-                                  {entry.driver_phone}
-                                </a>
-                              </p>
-                            )}
-
-                            {entry.vehicle_title && (
-                              <p className="text-xs font-semibold text-slate-500">
-                                {entry.vehicle_title}
-                              </p>
-                            )}
-                            
-                            {entry.driver_name && (
-                              <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mt-1">
-                                Попытка #{entry.sequence_no}
-                              </p>
-                            )}
-                          </div>
-                          <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded ${
-                            entry.status === 'accepted' ? 'bg-emerald-100 text-emerald-700' :
-                            entry.status === 'declined' ? 'bg-rose-100 text-rose-700' :
-                            entry.status === 'expired' || entry.status === 'timeout' ? 'bg-slate-200 text-slate-600' :
-                            'bg-indigo-100 text-indigo-700'
-                          }`}>
-                            {attemptStatusMap[entry.status] || entry.status.toUpperCase()}
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-400 font-medium">
-                          {entry.offered_at ? new Date(entry.offered_at).toLocaleString() : ""}
+                  <div className="relative border-l-2 border-slate-200 ml-3 pl-6 py-2 space-y-6">
+                    {/* Event: Order Created */}
+                    {currentHistoryOrder && (
+                      <div className="relative">
+                        <div className="absolute -left-[33px] mt-0.5 bg-slate-300 w-4 h-4 rounded-full border-[3px] border-white shadow-sm" />
+                        <p className="text-sm font-bold text-slate-800">Заявка создана</p>
+                        <p className="text-xs text-slate-500 font-medium mt-0.5">
+                          {new Date(currentHistoryOrder.created_at).toLocaleString([], { dateStyle: "short", timeStyle: "short" })}
                         </p>
-                        {entry.decision_reason && (
-                          <div className="text-xs text-rose-600 mt-1 font-semibold bg-rose-50/50 p-2.5 rounded-lg border border-rose-100/50">
-                            Причина: {declineReasonMap[entry.decision_reason] || entry.decision_reason}
-                          </div>
-                        )}
                       </div>
-                    ))}
+                    )}
+
+                    {/* Dispatch Attempts */}
+                    {dispatchHistory.map((entry, i) => {
+                      const isSuccess = entry.status === 'accepted';
+                      const isFail = entry.status === 'declined' || entry.status === 'timeout' || entry.status === 'expired';
+                      const badgeColor = isSuccess ? 'bg-emerald-100 text-emerald-700' : isFail ? 'bg-rose-100 text-rose-700' : 'bg-indigo-100 text-indigo-700';
+                      const dotColor = isSuccess ? 'bg-emerald-500' : isFail ? 'bg-rose-400' : 'bg-indigo-400';
+
+                      return (
+                        <div key={i} className="relative flex flex-col bg-slate-50 border border-slate-100 rounded-xl p-3.5 gap-2 text-left w-full shadow-sm">
+                          <div className={`absolute -left-[33px] top-4 ${dotColor} w-4 h-4 rounded-full border-[3px] border-white shadow-sm`} />
+                          <div className="flex justify-between items-start gap-2">
+                            <div className="flex flex-col">
+                              {entry.driver_name ? (
+                                <p className="font-bold text-slate-800 text-[15px] leading-tight">
+                                  {entry.driver_name}
+                                </p>
+                              ) : (
+                                <p className="font-bold text-slate-600 text-[15px] leading-tight">
+                                  Попытка #{entry.sequence_no}
+                                </p>
+                              )}
+                              
+                              {entry.driver_phone && (
+                                <p className="text-sm font-semibold mt-1">
+                                  <a href={`tel:${entry.driver_phone}`} className="text-[#2DB0E6] hover:underline">
+                                    {entry.driver_phone}
+                                  </a>
+                                </p>
+                              )}
+
+                              {entry.vehicle_title && (
+                                <p className="text-xs font-semibold text-slate-500 mt-0.5">
+                                  {entry.vehicle_title}
+                                </p>
+                              )}
+                              
+                              {entry.driver_name && (
+                                <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mt-1.5">
+                                  Попытка #{entry.sequence_no}
+                                </p>
+                              )}
+                            </div>
+                            <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-lg border border-white/50 ${badgeColor}`}>
+                              {attemptStatusMap[entry.status] || entry.status.toUpperCase()}
+                            </span>
+                          </div>
+                          
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <Clock className="w-3 h-3 text-slate-400" />
+                            <p className="text-xs text-slate-400 font-medium">
+                              {entry.offered_at ? new Date(entry.offered_at).toLocaleString([], { dateStyle: "short", timeStyle: "short" }) : ""}
+                            </p>
+                          </div>
+                          
+                          {entry.decision_reason && (
+                            <div className="text-[11px] text-rose-700 mt-1 font-semibold bg-rose-50/80 px-2.5 py-1.5 rounded-lg border border-rose-100/50">
+                              Причина: <span className="font-bold">{declineReasonMap[entry.decision_reason] || entry.decision_reason}</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {/* Event: In Progress */}
+                    {currentHistoryOrder && (currentHistoryOrder.status === "in_progress" || currentHistoryOrder.status === "completed") && (
+                      <div className="relative">
+                        <div className="absolute -left-[35px] top-0 bg-[#2DB0E6] w-5 h-5 rounded-full border-[3px] border-white shadow-sm flex items-center justify-center">
+                          <Truck className="w-2.5 h-2.5 text-white" />
+                        </div>
+                        <div className="flex flex-col items-start pt-0.5">
+                          <p className="text-sm font-bold text-slate-800">Водитель в пути</p>
+                          <span className="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-wide border bg-[#2DB0E6]/10 text-[#2DB0E6] border-[#2DB0E6]/20">В пути</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Event: Completed */}
+                    {currentHistoryOrder && currentHistoryOrder.status === "completed" && (
+                      <div className="relative">
+                        <div className="absolute -left-[35px] top-0 bg-emerald-500 w-5 h-5 rounded-full border-[3px] border-white shadow-sm flex items-center justify-center">
+                          <CheckCircle2 className="w-3 h-3 text-white" />
+                        </div>
+                        <div className="flex flex-col items-start pt-0.5">
+                          <p className="text-sm font-bold text-slate-800">Заказ успешно завершен</p>
+                          <span className="inline-block mt-1 text-[10px] font-bold px-2.5 py-0.5 rounded-lg uppercase tracking-wide border bg-emerald-100 text-emerald-700 border-emerald-200">Завершен</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

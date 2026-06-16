@@ -198,10 +198,6 @@ export default function OrdersScreen({ onOpenAuth }: { onOpenAuth?: () => void }
                         </div>
                         <span className="text-sm font-bold text-slate-800">{order.driver?.name}</span>
                       </div>
-                      <a href={`tel:${order.driver?.phone}`} className="flex items-center gap-1.5 bg-[#2DB0E6]/10 text-[#2DB0E6] px-3 py-1.5 rounded-lg active:bg-[#2DB0E6]/20 transition-colors">
-                        <Phone className="w-3.5 h-3.5" />
-                        <span className="text-sm font-bold">Позвонить</span>
-                      </a>
                     </div>
                   </div>
                 )}

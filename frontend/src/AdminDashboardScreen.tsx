@@ -505,14 +505,15 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
     setIsSavingDelivery(true);
     try {
       const isEdit = !!editingDelivery.id;
-      const url = isEdit ? `${baseURL}/admin/delivery-options/${editingDelivery.id}` : `${baseURL}/admin/delivery-options/`;
+      const url = isEdit ? `${baseURL}/admin/delivery-options/${editingDelivery.id}/` : `${baseURL}/admin/delivery-options/`;
       const method = isEdit ? "PATCH" : "POST";
       
       const payload: any = {
         title: editingDelivery.title,
         capacity_m3: Number(editingDelivery.capacity_m3),
         base_price: Number(editingDelivery.base_price || 0),
-        is_active: editingDelivery.is_active ?? true
+        is_active: editingDelivery.is_active ?? true,
+        sort_order: 10
       };
 
       const res = await fetch(url, {
@@ -524,15 +525,19 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
         body: JSON.stringify(payload)
       });
       
-      if (!res.ok) throw new Error("Ошибка сохранения");
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail ? JSON.stringify(errData.detail) : "Ошибка сервера");
+      }
+      
       const savedData = await res.json();
       const entityId = isEdit ? editingDelivery.id! : savedData.id;
       
       toast.success(isEdit ? "Опция доставки обновлена" : "Опция доставки добавлена");
       setIsDeliveryModalOpen(false);
       fetchDeliveryOptions(true);
-    } catch (err) {
-      toast.error("Ошибка сохранения опции доставки");
+    } catch (err: any) {
+      toast.error(err.message || "Ошибка сохранения опции доставки");
     } finally {
       setIsSavingDelivery(false);
     }

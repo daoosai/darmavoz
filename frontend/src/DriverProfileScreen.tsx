@@ -43,6 +43,8 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
   const [rateType, setRateType] = useState("per_ton_km");
   const [rateValue, setRateValue] = useState("");
   const [deliveryOptions, setDeliveryOptions] = useState<any[]>([]);
+  const [uploadingSlots, setUploadingSlots] = useState<Record<string, boolean>>({});
+
 
   useEffect(() => {
     fetchProfile();
@@ -110,6 +112,11 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
   };
 
   const handleSave = async () => {
+    if (!name.trim() || !phone.trim() || !brand.trim() || !plate.trim() || !deliveryOptionId || !vehicleType.trim()) {
+      toast.error("Пожалуйста, заполните все обязательные поля");
+      return;
+    }
+
     setIsSaving(true);
     try {
       const currentToken = useAuthStore.getState().token;

@@ -388,7 +388,9 @@ export default function LogistDashboardScreen({
 
     try {
       setIsManualAssignSaving(true);
-      const res = await fetch(`${baseURL}/orders/${manualAssignOrder.id}/assign`, {
+      // Backend route is POST /api/v1/orders/{order_id}/assign without a trailing slash.
+      const assignUrl = `${baseURL}/orders/${manualAssignOrder.id}/assign`;
+      const res = await fetch(assignUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

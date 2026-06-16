@@ -25,6 +25,7 @@ interface AdminOrder {
   id: string;
   address: string;
   items?: { material: { name: string } }[];
+  delivery_option_id?: string;
   delivery_option?: { capacity_m3: number };
   total_amount: number;
   created_at: string;
@@ -50,6 +51,11 @@ interface AdminDriver {
   vehicle?: {
     title: string;
     plate_number: string;
+    delivery_option_id?: string;
+    delivery_option?: {
+      id?: string;
+      capacity_m3?: number;
+    };
   };
 }
 
@@ -64,6 +70,26 @@ const driverStatusLabelMap: Record<string, string> = {
   available: "Свободен",
   busy: "Занят",
   offline: "Недоступен",
+};
+
+const isDriverCompatibleWithOrder = (driver: AdminDriver, order: AdminOrder | null) => {
+  if (!order) {
+    return true;
+  }
+
+  const orderDeliveryOptionId = order.delivery_option_id;
+  const driverDeliveryOptionId = driver.vehicle?.delivery_option_id || driver.vehicle?.delivery_option?.id;
+  if (orderDeliveryOptionId && driverDeliveryOptionId) {
+    return orderDeliveryOptionId === driverDeliveryOptionId;
+  }
+
+  const orderCapacity = order.delivery_option?.capacity_m3;
+  const driverCapacity = driver.vehicle?.delivery_option?.capacity_m3;
+  if (orderCapacity !== undefined && driverCapacity !== undefined) {
+    return orderCapacity === driverCapacity;
+  }
+
+  return false;
 };
 
 interface LogistDashboardScreenProps {
@@ -420,6 +446,10 @@ export default function LogistDashboardScreen({
     logout();
     onLogout();
   };
+
+  const compatibleDrivers = manualAssignOrder
+    ? drivers.filter((driver) => isDriverCompatibleWithOrder(driver, manualAssignOrder))
+    : drivers;
 
   return (
     <div className="flex flex-col h-screen bg-slate-50 relative overflow-hidden">
@@ -911,7 +941,7 @@ export default function LogistDashboardScreen({
                   <option value="" disabled>
                     Выберите водителя...
                   </option>
-                  {drivers.map((driver) => {
+                  {compatibleDrivers.map((driver) => {
                     const vehicleTitle = driver.vehicle?.title || "Без машины";
                     const statusLabel = driverStatusLabelMap[driver.status] || driver.status;
                     return (
@@ -923,9 +953,9 @@ export default function LogistDashboardScreen({
                 </select>
               </div>
 
-              {drivers.length === 0 && !isLoadingDrivers && (
+              {compatibleDrivers.length === 0 && !isLoadingDrivers && (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                  Список водителей пуст. Проверьте, что в системе есть активные водители.
+                  Нет подходящих водителей для выбранной кубатуры.
                 </div>
               )}
 

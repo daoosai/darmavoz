@@ -254,6 +254,117 @@ async def test_dispatch_skips_wrong_vehicle_and_moves_to_next_driver(client, ses
 
 
 @pytest.mark.asyncio
+async def test_logist_can_assign_driver_manually_and_driver_sees_assigned_order(client, session_factory):
+    async with session_factory() as session:
+        driver_role = await ensure_role(session, "driver")
+        logist_role = await ensure_role(session, "logist")
+
+        category = Category(name="Щебень", slug="stone-manual-assign", sort_order=0, is_active=True)
+        material = Material(
+            category=category,
+            name="Щебень 20-40",
+            description="",
+            price=1800.0,
+            unit="m3",
+            min_volume=5.0,
+            is_active=True,
+            sort_order=0,
+        )
+        delivery_option = DeliveryOption(
+            capacity_m3=10.0,
+            title="10 м3",
+            description="",
+            base_price=0.0,
+            is_active=True,
+            sort_order=0,
+        )
+        session.add_all([category, material, delivery_option])
+        await session.flush()
+
+        driver_user = await create_driver_user(session, username="manual_assign_driver", role=driver_role)
+        logist_user = await create_driver_user(session, username="manual_assign_logist", role=logist_role)
+
+        vehicle = Vehicle(title="Камаз ручной", delivery_option_id=delivery_option.id, is_active=True)
+        session.add(vehicle)
+        await session.flush()
+
+        driver = Driver(
+            user_id=driver_user.id,
+            vehicle_id=vehicle.id,
+            name="Ручной водитель",
+            phone="+79000000123",
+            status=DriverStatus.available.value,
+            dispatch_priority=100,
+            is_auto_dispatch_enabled=True,
+        )
+        session.add(driver)
+        await session.commit()
+        await session.refresh(material)
+        await session.refresh(delivery_option)
+        await session.refresh(driver)
+        del logist_user
+
+    create_response = await client.post(
+        "/api/v1/logist/orders",
+        json={
+            "client_name": "Петр Смирнов",
+            "client_phone": "+79990002233",
+            "material_id": str(material.id),
+            "delivery_option_id": str(delivery_option.id),
+            "address": "Томск, Фрунзе 15",
+            "notes": "Подъезд со двора",
+            "quantity": 1,
+            "auto_dispatch": False,
+        },
+        headers=auth_headers("manual_assign_logist"),
+    )
+    assert create_response.status_code == 201
+    order_id = create_response.json()["id"]
+    assert create_response.json()["status"] == OrderStatus.created.value
+
+    assign_response = await client.post(
+        f"/api/v1/orders/{order_id}/assign",
+        json={"driver_id": str(driver.id)},
+        headers=auth_headers("manual_assign_logist"),
+    )
+    assert assign_response.status_code == 200
+    assign_payload = assign_response.json()
+    assert assign_payload["status"] == OrderStatus.driver_assigned.value
+    assert assign_payload["driver"]["id"] == str(driver.id)
+
+    assigned_response = await client.get(
+        "/api/v1/driver/orders/assigned/current",
+        headers=auth_headers("manual_assign_driver"),
+    )
+    assert assigned_response.status_code == 200
+    assigned_payload = assigned_response.json()
+    assert assigned_payload["order_id"] == order_id
+    assert assigned_payload["status"] == OrderStatus.driver_assigned.value
+    assert assigned_payload["order"]["status"] == OrderStatus.driver_assigned.value
+    assert assigned_payload["order"]["address"] == "Томск, Фрунзе 15"
+
+    history_response = await client.get(
+        f"/api/v1/logist/orders/{order_id}/dispatch-history",
+        headers=auth_headers("manual_assign_logist"),
+    )
+    assert history_response.status_code == 200
+    history = history_response.json()
+    assert history["assigned_driver_id"] == str(driver.id)
+    assert [attempt["status"] for attempt in history["attempts"]] == [OrderOfferStatus.accepted.value]
+    assert history["attempts"][0]["decision_reason"] == "Manual assignment by logist"
+
+    async with session_factory() as session:
+        order = await session.scalar(select(Order).where(Order.id == order_id))
+        assert order is not None
+        assert order.status == OrderStatus.driver_assigned.value
+        assert order.driver_id == driver.id
+
+        refreshed_driver = await session.get(Driver, driver.id)
+        assert refreshed_driver is not None
+        assert refreshed_driver.status == DriverStatus.busy.value
+
+
+@pytest.mark.asyncio
 async def test_decline_immediately_offers_next_driver_even_if_next_driver_is_penalized(client, session_factory):
     fake_redis = FakeRedis()
     async with session_factory() as session:

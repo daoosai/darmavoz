@@ -584,18 +584,14 @@ async def restart_dispatch_for_order(session: AsyncSession, order_id: UUID) -> O
 
 async def assign_order_to_driver(session: AsyncSession, *, order_id: UUID, driver_id: UUID) -> Order:
     order = await get_order_by_id(session, order_id)
-    driver = await session.get(
-        Driver,
-        driver_id,
-        options=(selectinload(Driver.vehicle),),
-    )
+    driver = await session.get(Driver, driver_id, options=(selectinload(Driver.vehicle),))
 
     if driver is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Driver not found")
-    if driver.vehicle_id is None:
+    if driver.vehicle is None or driver.vehicle_id is None or not driver.vehicle.is_active:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Driver must have a vehicle before assignment",
+            detail="Driver must have an active vehicle before assignment",
         )
     if driver.status != DriverStatus.available.value:
         raise HTTPException(
@@ -604,13 +600,20 @@ async def assign_order_to_driver(session: AsyncSession, *, order_id: UUID, drive
         )
     if order.status not in {
         OrderStatus.created.value,
-        OrderStatus.searching_driver.value,
-        OrderStatus.offered_to_driver.value,
-        OrderStatus.no_driver_found.value,
-    }:
+            OrderStatus.searching_driver.value,
+            OrderStatus.offered_to_driver.value,
+            OrderStatus.no_driver_found.value,
+        }:
+        if order.status == OrderStatus.driver_assigned.value and order.driver_id == driver_id:
+            return order
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Order cannot be assigned manually in the current status",
+        )
+    if order.delivery_option_id is not None and driver.vehicle.delivery_option_id != order.delivery_option_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Driver vehicle does not match order delivery option",
         )
 
     now = utcnow()
@@ -623,18 +626,40 @@ async def assign_order_to_driver(session: AsyncSession, *, order_id: UUID, drive
     for offer in pending_offers:
         offer.status = OrderOfferStatus.cancelled.value
         offer.responded_at = now
-        offer.decision_reason = "Order assigned manually by logist"
+        offer.decision_reason = "Manual assignment by logist"
+
+    next_sequence_no = (
+        await session.scalar(
+            select(func.coalesce(func.max(OrderOffer.sequence_no), 0)).where(OrderOffer.order_id == order.id)
+        )
+    ) or 0
+    accepted_offer = OrderOffer(
+        order_id=order.id,
+        driver_id=driver.id,
+        price=order.total_amount,
+        sequence_no=next_sequence_no + 1,
+        status=OrderOfferStatus.accepted.value,
+        offered_at=now,
+        expires_at=now,
+        responded_at=now,
+        decision_reason="Manual assignment by logist",
+        priority_snapshot={"manual_assignment": True},
+    )
+    session.add(accepted_offer)
+    await session.flush()
 
     order.driver_id = driver.id
     order.status = OrderStatus.driver_assigned.value
     order.assigned_at = now
-    order.current_offer_id = None
+    order.current_offer_id = accepted_offer.id
+    if order.dispatch_started_at is None:
+        order.dispatch_started_at = now
     driver.status = DriverStatus.busy.value
 
     await add_event(
         session,
         order.id,
-        "driver_assigned",
+        "driver_assigned_manual",
         f"Driver {driver.id} assigned manually by logist",
     )
     await session.commit()

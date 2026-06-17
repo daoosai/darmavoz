@@ -325,9 +325,14 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
     if (!token) return;
     if (!silent) setIsLoading(true);
     try {
-      const res = await fetch(`${baseURL}/admin/drivers`, {
+      let res = await fetch(`${baseURL}/admin/drivers`, {
         headers: { "Authorization": `Bearer ${token}` }
       });
+      if (res.status === 404 || res.status === 405) {
+        res = await fetch(`${baseURL}/drivers/`, {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+      }
       if (!res.ok) throw new Error("Ошибка загрузки водителей");
       const data = await res.json();
       setDrivers(Array.isArray(data) ? data : data.results || []);

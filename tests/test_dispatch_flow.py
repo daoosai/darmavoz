@@ -5,6 +5,7 @@ from sqlalchemy import select
 
 from app.models.models import (
     Category,
+    Client,
     DeliveryOption,
     Driver,
     DriverStatus,
@@ -362,6 +363,95 @@ async def test_logist_can_assign_driver_manually_and_driver_sees_assigned_order(
         refreshed_driver = await session.get(Driver, driver.id)
         assert refreshed_driver is not None
         assert refreshed_driver.status == DriverStatus.busy.value
+
+
+@pytest.mark.asyncio
+async def test_driver_assigned_current_returns_manually_assigned_order_without_offer_record(client, session_factory):
+    async with session_factory() as session:
+        driver_role = await ensure_role(session, "driver")
+
+        category = Category(name="Песок без оффера", slug="sand-no-offer", sort_order=0, is_active=True)
+        material = Material(
+            category=category,
+            name="Песок карьерный",
+            description="",
+            price=1500.0,
+            unit="m3",
+            min_volume=5.0,
+            is_active=True,
+            sort_order=0,
+        )
+        delivery_option = DeliveryOption(
+            capacity_m3=12.0,
+            title="12 м3",
+            description="",
+            base_price=0.0,
+            is_active=True,
+            sort_order=0,
+        )
+        session.add_all([category, material, delivery_option])
+        await session.flush()
+
+        driver_user = await create_driver_user(session, username="assigned_no_offer_driver", role=driver_role)
+        vehicle = Vehicle(title="Самосвал без оффера", delivery_option_id=delivery_option.id, is_active=True)
+        session.add(vehicle)
+        await session.flush()
+
+        driver = Driver(
+            user_id=driver_user.id,
+            vehicle_id=vehicle.id,
+            name="Водитель без оффера",
+            phone="+79000000999",
+            status=DriverStatus.busy.value,
+            dispatch_priority=100,
+            is_auto_dispatch_enabled=True,
+        )
+        session.add(driver)
+        await session.flush()
+        client_record = Client(name="Клиент без оффера", phone="+79990009999")
+        session.add(client_record)
+        await session.flush()
+
+        order = Order(
+            client_id=client_record.id,
+            driver_id=driver.id,
+            delivery_option_id=delivery_option.id,
+            address="Томск, Иркутский тракт 1",
+            total_amount=18000.0,
+            status=OrderStatus.driver_assigned.value,
+            source="dispatcher",
+            created_by_source="dispatcher",
+            assigned_at=datetime.now(UTC),
+        )
+        session.add(order)
+        await session.flush()
+        session.add(
+            OrderItem(
+                order_id=order.id,
+                material_id=material.id,
+                quantity=1,
+                volume=12.0,
+                price=1500.0,
+                amount=18000.0,
+            )
+        )
+        await session.commit()
+        await session.refresh(order)
+
+    assigned_response = await client.get(
+        "/api/v1/driver/orders/assigned/current",
+        headers=auth_headers("assigned_no_offer_driver"),
+    )
+    assert assigned_response.status_code == 200
+    payload = assigned_response.json()
+    assert payload["order_id"] == str(order.id)
+    assert payload["status"] == OrderStatus.driver_assigned.value
+    assert payload["order"]["status"] == OrderStatus.driver_assigned.value
+    assert payload["order"]["address"] == "Томск, Иркутский тракт 1"
+
+    async with session_factory() as session:
+        offers = await session.scalars(select(OrderOffer).where(OrderOffer.order_id == order.id))
+        assert list(offers) == []
 
 
 @pytest.mark.asyncio

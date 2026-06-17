@@ -691,6 +691,9 @@ async def get_current_incoming_offer_for_driver(session: AsyncSession, driver_id
 
 
 async def get_current_assigned_order_for_driver(session: AsyncSession, driver_id: UUID) -> Order | None:
+    # Manual logist assignments must remain visible even when there is no live
+    # offer record tied to the order. Resolve the active driver order strictly
+    # from order ownership and status.
     result = await session.execute(
         select(Order)
         .options(*order_load_options())

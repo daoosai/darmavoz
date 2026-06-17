@@ -93,6 +93,7 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
   const [materials, setMaterials] = useState<AdminMaterial[]>([]);
   const [deliveryOptions, setDeliveryOptions] = useState<AdminDeliveryOption[]>([]);
   const [drivers, setDrivers] = useState<AdminDriver[]>([]);
+  const [driverActiveOverrides, setDriverActiveOverrides] = useState<Record<string, boolean>>({});
   const [categories, setCategories] = useState<AdminCategory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -109,6 +110,14 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
   const [editingDriver, setEditingDriver] = useState<Partial<AdminDriver> & { password?: string }>({});
   const [isSavingDriver, setIsSavingDriver] = useState(false);
   const [showDriverPassword, setShowDriverPassword] = useState(false);
+
+  const applyDriverActiveOverrides = (items: AdminDriver[]) =>
+    items.map((driver) => {
+      if (!driver.id || !(driver.id in driverActiveOverrides)) {
+        return driver;
+      }
+      return { ...driver, is_active: driverActiveOverrides[driver.id] };
+    });
 
   const getVehicleString = (driver: AdminDriver) => {
     const vehicleString = driver.vehicle
@@ -335,7 +344,8 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
       }
       if (!res.ok) throw new Error("Ошибка загрузки водителей");
       const data = await res.json();
-      setDrivers(Array.isArray(data) ? data : data.results || []);
+      const items = Array.isArray(data) ? data : data.results || [];
+      setDrivers(applyDriverActiveOverrides(items));
     } catch (err) {
       if (!silent) toast.error("Не удалось загрузить водителей");
     } finally {
@@ -659,7 +669,17 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
       const previousIsActive = isEdit
         ? drivers.find((driver) => driver.id === editingDriver.id)?.is_active
         : undefined;
-      const isStatusChanged = isEdit && previousIsActive !== (editingDriver.is_active ?? true);
+      const nextIsActive = editingDriver.is_active ?? true;
+      const isStatusChanged = isEdit && previousIsActive !== nextIsActive;
+
+      if (isEdit && editingDriver.id) {
+        setDriverActiveOverrides((prev) => ({ ...prev, [editingDriver.id!]: nextIsActive }));
+        setDrivers((prev) =>
+          prev.map((driver) =>
+            driver.id === editingDriver.id ? { ...driver, is_active: nextIsActive } : driver
+          )
+        );
+      }
 
       toast.success(
         !isEdit ? "Водитель добавлен" : isStatusChanged ? "Статус водителя изменен" : "Водитель успешно сохранен"

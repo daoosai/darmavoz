@@ -9,6 +9,7 @@ interface DriverProfile {
   id: string;
   name: string;
   phone: string;
+  is_active: boolean;
   dispatch_priority: number;
   moderation_status: "pending_moderation" | "approved" | "rejected" | "suspended" | null;
   vehicle: {
@@ -43,6 +44,7 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
   const [rateValue, setRateValue] = useState("");
   const [deliveryOptions, setDeliveryOptions] = useState<any[]>([]);
   const [uploadingSlots, setUploadingSlots] = useState<Record<string, boolean>>({});
+  const isDriverInactive = profile?.is_active === false;
 
 
   useEffect(() => {
@@ -109,6 +111,10 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
   };
 
   const handleSave = async () => {
+    if (isDriverInactive) {
+      toast.error("Ваш профиль не активен, обратитесь к администратору");
+      return;
+    }
     if (!name.trim() || !phone.trim() || !brand.trim() || !plate.trim() || !deliveryOptionId || !vehicleType.trim()) {
       toast.error("Пожалуйста, заполните все обязательные поля");
       return;
@@ -172,6 +178,10 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
   };
 
   const handleFileUpload = async (file: File, slotId: string) => {
+    if (isDriverInactive) {
+      toast.error("Ваш профиль не активен, обратитесь к администратору");
+      return;
+    }
     if (!profile?.vehicle?.id) {
       toast.error("Сначала сохраните данные автомобиля!");
       return;
@@ -299,6 +309,17 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
   };
 
   const getModerationBanner = () => {
+    if (isDriverInactive) {
+      return (
+        <div className="bg-amber-50 border border-amber-100 p-4 rounded-2xl flex items-start gap-3 shadow-sm">
+          <AlertCircle className="w-6 h-6 text-amber-500 mt-0.5 shrink-0" />
+          <div>
+            <h3 className="font-bold text-amber-900 leading-tight mb-1">Профиль не активен.</h3>
+            <p className="text-xs text-amber-700 font-medium leading-relaxed">Ваш профиль не активен, обратитесь к администратору.</p>
+          </div>
+        </div>
+      );
+    }
     switch (profile?.moderation_status) {
       case "approved":
         return null; // hide banner for approved driver
@@ -351,6 +372,7 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              disabled={isDriverInactive}
               className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-semibold text-slate-900 outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] transition-all"
             />
           </div>
@@ -360,6 +382,7 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
               type="tel"
               value={phone}
               onChange={(e) => setPhone(formatPhoneNumber(e.target.value))}
+              disabled={isDriverInactive}
               className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-semibold text-slate-900 outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] transition-all"
               placeholder="+7 (999) 000-00-00"
               maxLength={18}
@@ -377,6 +400,7 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
             <select
               value={brand}
               onChange={(e) => setBrand(e.target.value)}
+              disabled={isDriverInactive}
               className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-semibold text-slate-900 outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] transition-all appearance-none"
             >
               <option value="">Выберите марку</option>
@@ -391,6 +415,7 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
               type="text"
               value={plate}
               onChange={(e) => setPlate(e.target.value)}
+              disabled={isDriverInactive}
               className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-mono font-black text-slate-900 uppercase pr-8 outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] transition-all"
             />
           </div>
@@ -399,6 +424,7 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
             <select
               value={vehicleType}
               onChange={(e) => setVehicleType(e.target.value)}
+              disabled={isDriverInactive}
               className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-semibold text-slate-900 outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] transition-all appearance-none"
             >
               <option value="">Выберите тип машины</option>
@@ -412,6 +438,7 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
             <select
               value={deliveryOptionId}
               onChange={(e) => setDeliveryOptionId(e.target.value)}
+              disabled={isDriverInactive}
               className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-semibold text-slate-900 outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] transition-all appearance-none"
             >
               <option value="">Выберите кубатуру</option>
@@ -429,6 +456,7 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
               <select
                 value={rateType}
                 onChange={(e) => setRateType(e.target.value)}
+                disabled={isDriverInactive}
                 className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-semibold text-slate-900 outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] transition-all appearance-none"
               >
                 <option value="per_ton_km">За тонно-км</option>
@@ -441,6 +469,7 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
                 type="number"
                 value={rateValue}
                 onChange={(e) => setRateValue(e.target.value)}
+                disabled={isDriverInactive}
                 className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-semibold text-slate-900 outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] transition-all"
               />
             </div>
@@ -465,7 +494,7 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
 
       <button
         onClick={handleSave}
-        disabled={isSaving}
+        disabled={isSaving || isDriverInactive}
         className="w-full bg-[#2DB0E6] text-white py-4 font-bold rounded-2xl shadow-sm hover:bg-[#209BD6] active:bg-[#1b8bc2] transition-colors flex items-center justify-center gap-2"
       >
         {isSaving && <Loader2 className="w-5 h-5 animate-spin" />}

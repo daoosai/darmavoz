@@ -122,6 +122,18 @@ async def _load_driver_or_404(db: AsyncSession, driver_id: UUID) -> Driver:
     return driver
 
 
+async def _list_admin_drivers(db: AsyncSession) -> list[Driver]:
+    result = await db.execute(
+        select(Driver)
+        .options(
+            selectinload(Driver.user),
+            selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option),
+        )
+        .order_by(Driver.name.asc())
+    )
+    return list(result.scalars().all())
+
+
 async def _ensure_unique_driver_phone(
     db: AsyncSession,
     phone: str,
@@ -237,9 +249,37 @@ async def _ensure_driver_user(
     user.role_id = role.id
     if password:
         user.hashed_password = get_password_hash(password)
-    if not user.is_active:
-        user.is_active = True
     return user
+
+
+async def _cancel_pending_driver_offers(db: AsyncSession, driver_id: UUID) -> None:
+    pending_offers = await db.execute(
+        select(OrderOffer).where(
+            OrderOffer.driver_id == driver_id,
+            OrderOffer.status == "pending",
+        )
+    )
+    for offer in pending_offers.scalars().all():
+        offer.status = "cancelled"
+
+
+@router.get("/drivers", response_model=list[DriverResponse])
+async def list_admin_drivers(
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    del current_admin
+    return await _list_admin_drivers(db)
+
+
+@router.get("/drivers/{driver_id}", response_model=DriverResponse)
+async def get_admin_driver(
+    driver_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    del current_admin
+    return await _load_driver_or_404(db, driver_id)
 
 
 @router.post("/drivers", response_model=DriverResponse, status_code=status.HTTP_201_CREATED)
@@ -273,6 +313,7 @@ async def create_admin_driver(
         user_id=user.id,
         vehicle_id=vehicle.id,
         status=payload.status,
+        is_active=payload.is_active,
         is_auto_dispatch_enabled=payload.is_auto_dispatch_enabled,
         dispatch_priority=payload.dispatch_priority,
         moderation_status=ModerationStatus.approved.value,
@@ -331,6 +372,11 @@ async def update_admin_driver(
         driver.phone = next_phone
     if payload.status is not None:
         driver.status = payload.status
+    if payload.is_active is not None:
+        driver.is_active = payload.is_active
+        if not payload.is_active:
+            driver.status = DriverStatus.offline.value
+            await _cancel_pending_driver_offers(db, driver.id)
     if payload.is_auto_dispatch_enabled is not None:
         driver.is_auto_dispatch_enabled = payload.is_auto_dispatch_enabled
     if payload.dispatch_priority is not None:
@@ -467,20 +513,11 @@ async def delete_admin_driver(
     del current_admin
     driver = await _load_driver_or_404(db, driver_id)
 
-    if driver.user is not None:
-        driver.user.is_active = False
+    driver.is_active = False
     driver.status = DriverStatus.offline.value
     driver.vehicle_id = None
     driver.is_auto_dispatch_enabled = False
-
-    pending_offers = await db.execute(
-        select(OrderOffer).where(
-            OrderOffer.driver_id == driver.id,
-            OrderOffer.status == "pending",
-        )
-    )
-    for offer in pending_offers.scalars().all():
-        offer.status = "cancelled"
+    await _cancel_pending_driver_offers(db, driver.id)
 
     await db.commit()
     return DeleteResult(action="deactivated", detail="Driver deactivated and unbound from vehicle")

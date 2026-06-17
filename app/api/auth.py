@@ -55,6 +55,7 @@ async def driver_register(
         phone=normalized_phone,
         user_id=user.id,
         status="offline",
+        is_active=True,
         is_auto_dispatch_enabled=True,
         dispatch_priority=100,
         moderation_status=ModerationStatus.pending_moderation.value,

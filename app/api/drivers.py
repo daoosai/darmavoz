@@ -23,6 +23,7 @@ def build_driver_list_query(
         select(Driver)
         .join(Driver.user)
         .where(User.is_active.is_(True))
+        .where(Driver.is_active.is_(True))
         .options(selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option))
         .order_by(Driver.name.asc())
     )
@@ -73,6 +74,7 @@ async def create_driver(
         name=payload.name,
         phone=payload.phone,
         status=payload.status or "offline",
+        is_active=True,
         vehicle_id=payload.vehicle_id,
         is_auto_dispatch_enabled=payload.is_auto_dispatch_enabled,
         dispatch_priority=payload.dispatch_priority,
@@ -118,8 +120,7 @@ async def delete_driver(
     if driver is None:
         raise HTTPException(status_code=404, detail="Driver not found")
 
-    if driver.user is not None:
-        driver.user.is_active = False
+    driver.is_active = False
     driver.status = DriverStatus.offline.value
     driver.vehicle_id = None
     driver.is_auto_dispatch_enabled = False

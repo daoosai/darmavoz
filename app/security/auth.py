@@ -132,6 +132,11 @@ async def get_current_driver(current_user: User = Depends(get_current_driver_use
 
 async def get_current_approved_driver(current_driver: Driver = Depends(get_current_driver)) -> Driver:
     vehicle = current_driver.vehicle
+    if not current_driver.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Driver profile is inactive",
+        )
     if current_driver.moderation_status != ModerationStatus.approved.value:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

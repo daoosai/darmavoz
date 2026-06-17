@@ -265,6 +265,7 @@ def _matching_drivers_base_query(order: Order) -> Select[tuple[Driver]]:
         .join(Driver.vehicle)
         .options(selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option))
         .where(Driver.status == DriverStatus.available.value)
+        .where(Driver.is_active.is_(True))
         .where(Driver.is_auto_dispatch_enabled.is_(True))
         .where(Driver.vehicle_id.is_not(None))
         .where(Vehicle.is_active.is_(True))
@@ -588,6 +589,11 @@ async def assign_order_to_driver(session: AsyncSession, *, order_id: UUID, drive
 
     if driver is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Driver not found")
+    if not driver.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Driver is inactive",
+        )
     if driver.vehicle is None or driver.vehicle_id is None or not driver.vehicle.is_active:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

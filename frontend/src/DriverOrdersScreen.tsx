@@ -53,6 +53,7 @@ export default function DriverOrdersScreen({
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [moderationStatus, setModerationStatus] = useState<string | null>(null);
+  const [isDriverActive, setIsDriverActive] = useState(true);
 
   // Incoming offer state
   const [currentOffer, setCurrentOffer] = useState<any>(null);
@@ -74,8 +75,9 @@ export default function DriverOrdersScreen({
         const data = await res.json();
         const profile = Array.isArray(data) ? data[0] : data;
         setModerationStatus(profile?.moderation_status || "pending_moderation");
+        setIsDriverActive(profile?.is_active !== false);
         
-        if (!profile?.vehicle?.brand || !profile?.vehicle?.plate_number) {
+        if (profile?.is_active === false || !profile?.vehicle?.brand || !profile?.vehicle?.plate_number) {
           setActiveTab("profile");
         }
       } else {
@@ -134,7 +136,7 @@ export default function DriverOrdersScreen({
   useEffect(() => {
     let pollingInterval: NodeJS.Timeout;
 
-    if (token && moderationStatus === "approved") {
+    if (token && moderationStatus === "approved" && isDriverActive) {
       fetchOrders();
       pollingInterval = setInterval(checkIncomingOffer, 5000);
       checkIncomingOffer(); // Initial check
@@ -143,7 +145,7 @@ export default function DriverOrdersScreen({
     return () => {
       if (pollingInterval) clearInterval(pollingInterval);
     };
-  }, [token, checkIncomingOffer, moderationStatus]);
+  }, [token, checkIncomingOffer, moderationStatus, isDriverActive]);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -344,6 +346,10 @@ export default function DriverOrdersScreen({
 
   const handleStatusChange = async (newStatus: DriverStatus) => {
     if (newStatus === status) return;
+    if (!isDriverActive) {
+      toast.error("Ваш профиль не активен, обратитесь к администратору");
+      return;
+    }
 
     try {
       setIsUpdatingStatus(true);
@@ -420,7 +426,7 @@ export default function DriverOrdersScreen({
         </div>
 
         {/* Status Toggle */}
-        {moderationStatus === "approved" && (
+        {moderationStatus === "approved" && isDriverActive && (
           <div className="bg-slate-100/80 p-1 rounded-xl flex items-center relative gap-1 mb-3">
             {statuses.map((s) => {
               const isActive = status === s.id;
@@ -465,7 +471,19 @@ export default function DriverOrdersScreen({
             {ordersTab === "current" ? "Активные заказы" : "История поездок"}
           </h2>
 
-          {moderationStatus !== "approved" && moderationStatus !== null ? (
+          {!isDriverActive ? (
+            <div className="flex flex-col items-center justify-center p-10 text-slate-500 text-center mt-10 min-h-[50vh] bg-amber-50 rounded-3xl border border-amber-200 shadow-sm">
+              <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mb-4 shadow-sm">
+                <AlertCircle className="w-10 h-10 text-amber-500" />
+              </div>
+              <p className="text-xl font-bold text-amber-900 mb-2">
+                Профиль не активен
+              </p>
+              <p className="text-sm text-amber-700">
+                Ваш профиль не активен, обратитесь к администратору.
+              </p>
+            </div>
+          ) : moderationStatus !== "approved" && moderationStatus !== null ? (
             <div className="flex flex-col items-center justify-center p-10 text-slate-500 text-center mt-10 min-h-[50vh] bg-slate-100 rounded-3xl border border-slate-200 shadow-sm">
               <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mb-4 shadow-sm">
                 <AlertCircle className="w-10 h-10 text-slate-400" />

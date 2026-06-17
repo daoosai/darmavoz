@@ -41,6 +41,14 @@ def _build_vehicle_title(vehicle: Vehicle) -> str:
     return " / ".join(parts) if parts else "Черновик машины"
 
 
+def _ensure_driver_profile_active(driver: Driver) -> None:
+    if not driver.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Driver profile is inactive",
+        )
+
+
 async def _attach_vehicle_media(db: AsyncSession, vehicle: Vehicle | None) -> None:
     if vehicle is None:
         return
@@ -312,6 +320,7 @@ async def update_driver_profile(
     db: AsyncSession = Depends(get_db),
     current_driver: Driver = Depends(get_current_driver),
 ) -> Driver:
+    _ensure_driver_profile_active(current_driver)
     normalized_phone = normalize_phone(payload.phone) if payload.phone is not None else None
 
     if payload.phone is not None:
@@ -345,6 +354,7 @@ async def update_driver_vehicle(
     db: AsyncSession = Depends(get_db),
     current_driver: Driver = Depends(get_current_driver),
 ) -> Driver:
+    _ensure_driver_profile_active(current_driver)
     vehicle = current_driver.vehicle
     if vehicle is None:
         if payload.delivery_option_id is None:
@@ -413,6 +423,7 @@ async def update_driver_status(
     db: AsyncSession = Depends(get_db),
     current_driver: Driver = Depends(get_current_driver),
 ) -> dict[str, str | bool]:
+    _ensure_driver_profile_active(current_driver)
     current_driver.status = payload.status
     await db.commit()
     return {"ok": True, "status": current_driver.status}

@@ -325,7 +325,7 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
     if (!token) return;
     if (!silent) setIsLoading(true);
     try {
-      const res = await fetch(`${baseURL}/drivers/`, {
+      const res = await fetch(`${baseURL}/admin/drivers`, {
         headers: { "Authorization": `Bearer ${token}` }
       });
       if (!res.ok) throw new Error("Ошибка загрузки водителей");
@@ -651,7 +651,14 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
         throw new Error(errData?.detail || "Ошибка сохранения");
       }
       
-      toast.success("Водитель успешно сохранен");
+      const previousIsActive = isEdit
+        ? drivers.find((driver) => driver.id === editingDriver.id)?.is_active
+        : undefined;
+      const isStatusChanged = isEdit && previousIsActive !== (editingDriver.is_active ?? true);
+
+      toast.success(
+        !isEdit ? "Водитель добавлен" : isStatusChanged ? "Статус водителя изменен" : "Водитель успешно сохранен"
+      );
       setIsDriverModalOpen(false);
       fetchDrivers(true);
     } catch (err: any) {

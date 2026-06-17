@@ -289,7 +289,9 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
     if (!token) return;
     if (!silent) setIsLoading(true);
     try {
-      const res = await fetch(`${baseURL}/catalog/materials/`); // assuming public or logist accessible ? Wait, maybe we need auth token for everything. We'll pass it.
+      const res = await fetch(`${baseURL}/catalog/materials/`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       if (!res.ok) throw new Error("Ошибка загрузки материалов");
       const data = await res.json();
       setMaterials(Array.isArray(data) ? data : data.results || []);
@@ -304,7 +306,9 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
     if (!token) return;
     if (!silent) setIsLoading(true);
     try {
-      const res = await fetch(`${baseURL}/catalog/delivery-options/`);
+      const res = await fetch(`${baseURL}/catalog/delivery-options/`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       if (!res.ok) throw new Error("Ошибка загрузки автопарка");
       const data = await res.json();
       setDeliveryOptions(Array.isArray(data) ? data : data.results || []);
@@ -885,11 +889,11 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                               <td className="px-6 py-4 text-sm text-slate-500">{m.unit}</td>
                               <td className="px-6 py-4">
                                 {m.is_active === false ? (
-                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-100 text-slate-600 text-xs font-bold uppercase tracking-wider">
-                                    <XCircle className="w-3 h-3" /> Скрыт
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-100 text-amber-800 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
+                                    <XCircle className="w-3 h-3" /> Неактивен
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-green-50 text-green-700 text-xs font-bold uppercase tracking-wider">
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-50 text-emerald-700 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
                                     <CheckCircle2 className="w-3 h-3" /> Активен
                                   </span>
                                 )}
@@ -957,11 +961,11 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
 
                           <div className="mt-2 flex justify-start">
                             {m.is_active === false ? (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-100 text-slate-600 text-xs font-bold uppercase tracking-wider">
-                                <XCircle className="w-3 h-3" /> Скрыт
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-100 text-amber-800 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
+                                <XCircle className="w-3 h-3" /> Неактивен
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-green-50 text-green-700 text-xs font-bold uppercase tracking-wider">
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-50 text-emerald-700 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
                                 <CheckCircle2 className="w-3 h-3" /> Активен
                               </span>
                             )}
@@ -1038,11 +1042,11 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                               <td className="px-6 py-4 text-sm font-medium">{opt.base_price} ₽</td>
                               <td className="px-6 py-4">
                                 {opt.is_active === false ? (
-                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-100 text-slate-600 text-xs font-bold uppercase tracking-wider">
-                                    <XCircle className="w-3 h-3" /> Скрыт
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-100 text-amber-800 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
+                                    <XCircle className="w-3 h-3" /> Неактивен
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-green-50 text-green-700 text-xs font-bold uppercase tracking-wider">
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-50 text-emerald-700 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
                                     <CheckCircle2 className="w-3 h-3" /> Активен
                                   </span>
                                 )}
@@ -1110,11 +1114,11 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
 
                           <div className="mt-2 flex justify-start">
                             {opt.is_active === false ? (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-100 text-slate-600 text-xs font-bold uppercase tracking-wider">
-                                <XCircle className="w-3 h-3" /> Скрыт
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-100 text-amber-800 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
+                                <XCircle className="w-3 h-3" /> Неактивен
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-green-50 text-green-700 text-xs font-bold uppercase tracking-wider">
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-50 text-emerald-700 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
                                 <CheckCircle2 className="w-3 h-3" /> Активен
                               </span>
                             )}
@@ -1182,34 +1186,34 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                             </td>
                             <td className="px-6 py-4">
                               {d.is_active === false ? (
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-100 text-slate-600 text-xs font-bold uppercase tracking-wider">
-                                  <XCircle className="w-3 h-3" /> Скрыт
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-100 text-amber-800 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
+                                  <XCircle className="w-3 h-3" /> Неактивен
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-100 text-slate-600 text-xs font-bold uppercase tracking-wider">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-50 text-emerald-700 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
                                   <CheckCircle2 className="w-3 h-3" /> Активен
                                 </span>
                               )}
                             </td>
                             <td className="px-6 py-4">
                               {d.moderation_status === "approved" ? (
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-50 text-emerald-700 text-xs font-bold uppercase tracking-wider">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-50 text-emerald-700 text-xs font-bold uppercase tracking-wider whitespace-nowrap">
                                   <CheckCircle2 className="w-3 h-3" /> Одобрен
                                 </span>
                               ) : d.moderation_status === "pending_moderation" ? (
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-50 text-amber-700 text-xs font-bold uppercase tracking-wider">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-50 text-amber-700 text-xs font-bold uppercase tracking-wider whitespace-nowrap">
                                   На проверке
                                 </span>
                               ) : d.moderation_status === "rejected" ? (
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-rose-50 text-rose-700 text-xs font-bold uppercase tracking-wider">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-rose-50 text-rose-700 text-xs font-bold uppercase tracking-wider whitespace-nowrap">
                                   <XCircle className="w-3 h-3" /> Отклонен
                                 </span>
                               ) : d.moderation_status === "suspended" ? (
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-100 text-slate-500 text-xs font-bold uppercase tracking-wider">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-100 text-slate-500 text-xs font-bold uppercase tracking-wider whitespace-nowrap">
                                   <Lock className="w-3 h-3" /> Заблокирован
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-100 text-slate-500 text-xs font-bold uppercase tracking-wider">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-100 text-slate-500 text-xs font-bold uppercase tracking-wider whitespace-nowrap">
                                   Неизвестно
                                 </span>
                               )}
@@ -1305,11 +1309,11 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                         <div className="mt-2 flex justify-between items-center">
                           <div className="flex justify-start">
                             {d.is_active === false ? (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-100 text-slate-600 text-xs font-bold uppercase tracking-wider">
-                                <XCircle className="w-3 h-3" /> Скрыт
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-100 text-amber-800 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
+                                <XCircle className="w-3 h-3" /> Неактивен
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-100 text-slate-600 text-xs font-bold uppercase tracking-wider">
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-50 text-emerald-700 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
                                 <CheckCircle2 className="w-3 h-3" /> Активен
                               </span>
                             )}

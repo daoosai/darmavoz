@@ -258,11 +258,13 @@ export default function DriverOrdersScreen({
 
       if (assignedRes.ok) {
         const assignedData = await assignedRes.json().catch(() => null);
-        if (assignedData && assignedData.order_id) {
-          const detail = assignedData.order;
-          if (detail && detail.status !== "completed" && detail.status !== "cancelled") {
+        if (assignedData) {
+          const isOffer = !!assignedData.order_id;
+          const orderId = isOffer ? assignedData.order_id : assignedData.id;
+          const detail = isOffer ? assignedData.order : assignedData;
+          if (orderId && detail && detail.status !== "completed" && detail.status !== "cancelled") {
             const currentOrder: DriverOrder = {
-              id: assignedData.order_id,
+              id: orderId,
               address: detail.address || "Адрес не указан",
               items: detail.items || [],
               delivery_option: detail.delivery_option,

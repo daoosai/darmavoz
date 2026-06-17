@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useAuthStore } from "./store";
 import { baseURL, formatPhoneNumber } from "./utils";
-import { LogOut, Truck, User as UserIcon, Phone, Star, AlertCircle, Camera, Loader2, CheckCircle2 } from "lucide-react";
+import { LogOut, Truck, User as UserIcon, Phone, Star, AlertCircle, Camera, Loader2, CheckCircle2, BadgeCheck } from "lucide-react";
 import UpdateBanner from "./UpdateBanner";
 import toast from "react-hot-toast";
 
@@ -301,15 +301,7 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
   const getModerationBanner = () => {
     switch (profile?.moderation_status) {
       case "approved":
-        return (
-          <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl flex items-start gap-3 shadow-sm">
-            <CheckCircle2 className="w-6 h-6 text-emerald-500 mt-0.5 shrink-0" />
-            <div>
-              <h3 className="font-bold text-emerald-900 leading-tight mb-1">Профиль подтвержден</h3>
-              <p className="text-xs text-emerald-700 font-medium leading-relaxed">Вы можете принимать заказы.</p>
-            </div>
-          </div>
-        );
+        return null; // hide banner for approved driver
       case "pending_moderation":
         return (
           <div className="bg-amber-50 border border-amber-100 p-4 rounded-2xl flex items-start gap-3 shadow-sm">
@@ -347,7 +339,14 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
         
         <div className="flex flex-col gap-3">
           <div>
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">ФИО</label>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1 flex items-center justify-between">
+              <span>ФИО</span>
+              {profile?.moderation_status === "approved" && (
+                <div className="flex items-center gap-1 text-blue-500">
+                  <BadgeCheck className="w-4 h-4" />
+                </div>
+              )}
+            </label>
             <input
               type="text"
               value={name}

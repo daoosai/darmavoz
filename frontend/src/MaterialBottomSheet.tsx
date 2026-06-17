@@ -39,7 +39,8 @@ export default function MaterialBottomSheet({
         const res = await fetch(`${baseURL}/catalog/delivery-options/`);
         if (res.ok) {
           const data = await res.json();
-          setDeliveryOptions(Array.isArray(data) ? data : data.results || []);
+          const options = Array.isArray(data) ? data : data.results || [];
+          setDeliveryOptions(options.filter((o: any) => o.is_active !== false));
         }
       } catch (err) {
         console.error("Error fetching delivery options", err);

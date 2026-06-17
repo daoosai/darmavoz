@@ -76,11 +76,10 @@ export default function App() {
               ? categoriesData
               : categoriesData.results || [],
           );
-          setMaterials(
-            Array.isArray(materialsData)
-              ? materialsData
-              : materialsData.results || [],
-          );
+          const fetchedMaterials = Array.isArray(materialsData)
+            ? materialsData
+            : materialsData.results || [];
+          setMaterials(fetchedMaterials.filter((m: any) => m.is_active !== false));
         } else {
           console.error("Failed to fetch data");
         }

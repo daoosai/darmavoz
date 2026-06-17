@@ -268,7 +268,9 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
       // refetch after upload
       if (entityType === "material") {
         await fetchMaterials(true);
-        const refetchRes = await fetch(`${baseURL}/catalog/materials/${entityId}`);
+        const refetchRes = await fetch(`${baseURL}/admin/materials/${entityId}`, {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
         if(refetchRes.ok) setEditingMaterial(await refetchRes.json());
       }
       else if (entityType === "delivery_option") {
@@ -289,8 +291,8 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
     if (!token) return;
     if (!silent) setIsLoading(true);
     try {
-      const res = await fetch(`${baseURL}/catalog/materials/`, {
-        headers: { Authorization: `Bearer ${token}` }
+      const res = await fetch(`${baseURL}/admin/materials/`, {
+        headers: { "Authorization": `Bearer ${token}` }
       });
       if (!res.ok) throw new Error("Ошибка загрузки материалов");
       const data = await res.json();
@@ -418,7 +420,9 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
       if (entityType === "material") {
         await fetchMaterials(true);
         if (editingMaterial && editingMaterial.id) {
-          const refetchRes = await fetch(`${baseURL}/catalog/materials/${editingMaterial.id}`);
+          const refetchRes = await fetch(`${baseURL}/admin/materials/${editingMaterial.id}`, {
+            headers: { "Authorization": `Bearer ${token}` }
+          });
           if (refetchRes.ok) setEditingMaterial(await refetchRes.json());
         }
       } else if (entityType === "delivery_option") {
@@ -445,7 +449,9 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
       if (entityType === "material") {
         await fetchMaterials(true);
         if (editingMaterial && editingMaterial.id) {
-          const refetchRes = await fetch(`${baseURL}/catalog/materials/${editingMaterial.id}`);
+          const refetchRes = await fetch(`${baseURL}/admin/materials/${editingMaterial.id}`, {
+            headers: { "Authorization": `Bearer ${token}` }
+          });
           if (refetchRes.ok) setEditingMaterial(await refetchRes.json());
         }
       } else if (entityType === "delivery_option") {
@@ -660,7 +666,9 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
       setEditingMaterial({ ...material });
       setIsMaterialModalOpen(true);
       try {
-        const res = await fetch(`${baseURL}/catalog/materials/${material.id}`);
+        const res = await fetch(`${baseURL}/admin/materials/${material.id}`, {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
         if(res.ok) {
           const data = await res.json();
           setEditingMaterial({ ...data, media_files: data.media_files || material.media_files });
@@ -890,7 +898,7 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                               <td className="px-6 py-4">
                                 {m.is_active === false ? (
                                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-100 text-amber-800 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
-                                    <XCircle className="w-3 h-3" /> Неактивен
+                                    <XCircle className="w-3 h-3" /> Не активен
                                   </span>
                                 ) : (
                                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-50 text-emerald-700 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
@@ -962,7 +970,7 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                           <div className="mt-2 flex justify-start">
                             {m.is_active === false ? (
                               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-100 text-amber-800 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
-                                <XCircle className="w-3 h-3" /> Неактивен
+                                <XCircle className="w-3 h-3" /> Не активен
                               </span>
                             ) : (
                               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-50 text-emerald-700 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">

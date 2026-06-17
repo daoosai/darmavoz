@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.database import get_db
+from app.api.catalog import _attach_delivery_options, _attach_media, _get_active_delivery_options
 from app.integrations.avito.client import AvitoAPIClient
 from app.integrations.avito.management import AvitoManagementService
 from app.models.models import (
@@ -508,6 +509,21 @@ async def get_all_materials(
     del current_admin
     result = await db.execute(select(Material).order_by(Material.sort_order.asc(), Material.name.asc()))
     return list(result.scalars().all())
+
+
+@router.get("/materials/{material_id}", response_model=MaterialOut)
+async def get_material_for_admin(
+    material_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    del current_admin
+    material = await db.get(Material, material_id)
+    if material is None:
+        raise HTTPException(status_code=404, detail="Material not found")
+    delivery_options = await _get_active_delivery_options(db)
+    await _attach_media(db, [material], delivery_options)
+    return _attach_delivery_options([material], delivery_options)[0]
 
 
 @router.post("/materials/", response_model=MaterialOut, status_code=status.HTTP_201_CREATED)

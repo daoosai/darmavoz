@@ -172,9 +172,12 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
+        setPendingRequests((prev) => prev.filter((request) => request.driver_id !== id));
+        setDrivers((prev) => prev.map((driver) => (
+          driver.id === id ? { ...driver, moderation_status: "approved" } : driver
+        )));
         toast.success("Водитель одобрен");
         fetchDrivers(true);
-        fetchPendingRequests(true);
       } else {
         toast.error("Ошибка при одобрении");
       }
@@ -190,9 +193,12 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
+        setPendingRequests((prev) => prev.filter((request) => request.driver_id !== id));
+        setDrivers((prev) => prev.map((driver) => (
+          driver.id === id ? { ...driver, moderation_status: "rejected" } : driver
+        )));
         toast.success("Водитель отклонен");
         fetchDrivers(true);
-        fetchPendingRequests(true);
       } else {
         toast.error("Ошибка при отклонении");
       }

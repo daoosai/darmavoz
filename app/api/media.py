@@ -23,8 +23,6 @@ from app.services.storage import (
 from app.services.vehicle_moderation import (
     REQUIRED_VEHICLE_MEDIA_SLOTS,
     set_incomplete_moderation,
-    set_pending_moderation,
-    vehicle_is_ready_for_moderation,
 )
 
 router = APIRouter()
@@ -248,16 +246,11 @@ async def confirm_upload(
         media_file.is_primary = payload.is_primary
 
     if vehicle is not None and (current_user.role.name if current_user.role else None) == "driver":
-        media_files = await _load_vehicle_media(db, vehicle.id)
         linked_driver = await _get_driver_profile(db, current_user.id)
-        if vehicle_is_ready_for_moderation(vehicle, media_files):
-            set_pending_moderation(vehicle)
-            if linked_driver is not None:
-                set_pending_moderation(linked_driver)
-        else:
+        if vehicle.moderation_status != ModerationStatus.suspended.value:
             set_incomplete_moderation(vehicle)
-            if linked_driver is not None:
-                set_incomplete_moderation(linked_driver)
+        if linked_driver is not None and linked_driver.moderation_status != ModerationStatus.suspended.value:
+            set_incomplete_moderation(linked_driver)
 
     await db.commit()
     await db.refresh(media_file)

@@ -126,6 +126,8 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
       if (!res.ok) {
         throw new Error("Failed to submit");
       }
+      const updatedProfile = await res.json();
+      setProfile(updatedProfile);
       toast.success("Заявка отправлена на модерацию");
       await fetchProfile();
     } catch (e) {

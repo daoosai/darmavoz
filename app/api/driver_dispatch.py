@@ -70,17 +70,16 @@ async def _load_driver_with_vehicle(db: AsyncSession, driver_id: UUID) -> Driver
 
 
 def _sync_driver_vehicle_moderation(driver: Driver, vehicle: Vehicle | None, media_files: list[MediaFile] | None) -> None:
+    del media_files
     if vehicle is None:
+        if driver.moderation_status != ModerationStatus.suspended.value:
+            set_incomplete_moderation(driver)
+        return
+
+    if vehicle.moderation_status != ModerationStatus.suspended.value:
+        set_incomplete_moderation(vehicle)
+    if driver.moderation_status != ModerationStatus.suspended.value:
         set_incomplete_moderation(driver)
-        return
-
-    if vehicle_is_ready_for_moderation(vehicle, media_files or []):
-        set_pending_moderation(vehicle)
-        set_pending_moderation(driver)
-        return
-
-    set_incomplete_moderation(vehicle)
-    set_incomplete_moderation(driver)
 
 
 def _has_driver_critical_changes(driver: Driver, payload: DriverProfileUpdate) -> bool:
@@ -410,6 +409,31 @@ async def update_driver_vehicle(
     _sync_driver_vehicle_moderation(current_driver, vehicle, vehicle.media_files)
     await db.commit()
     return await _load_driver_with_vehicle(db, current_driver.id)
+
+
+@router.post("/vehicle/submit", response_model=DriverFullProfileResponse)
+async def submit_driver_vehicle_for_moderation(
+    db: AsyncSession = Depends(get_db),
+    current_driver: Driver = Depends(get_current_driver),
+) -> Driver:
+    driver = await _load_driver_with_vehicle(db, current_driver.id)
+    vehicle = driver.vehicle
+
+    if vehicle is None:
+        raise HTTPException(status_code=400, detail="Vehicle profile is not created yet")
+    if not driver.name or not driver.phone:
+        raise HTTPException(status_code=400, detail="Driver profile is incomplete")
+    if driver.moderation_status == ModerationStatus.suspended.value or vehicle.moderation_status == ModerationStatus.suspended.value:
+        raise HTTPException(status_code=403, detail="Suspended profiles cannot be submitted")
+
+    media_files = getattr(vehicle, "media_files", [])
+    if not vehicle_is_ready_for_moderation(vehicle, media_files):
+        raise HTTPException(status_code=400, detail="Vehicle profile is incomplete for moderation")
+
+    set_pending_moderation(vehicle)
+    set_pending_moderation(driver)
+    await db.commit()
+    return await _load_driver_with_vehicle(db, driver.id)
 
 
 @router.patch("/profile/status", response_model=dict[str, str | bool])

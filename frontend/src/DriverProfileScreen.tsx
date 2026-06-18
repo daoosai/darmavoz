@@ -11,7 +11,7 @@ interface DriverProfile {
   phone: string;
   is_active: boolean;
   dispatch_priority: number;
-  moderation_status: "pending_moderation" | "approved" | "rejected" | "suspended" | null;
+  moderation_status: "incomplete" | "pending_moderation" | "approved" | "rejected" | "suspended" | null;
   vehicle_moderation_status?: "pending_moderation" | "approved" | "rejected" | "suspended" | null;
   vehicle: {
     id: string;
@@ -333,7 +333,20 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
     );
   };
 
-  const moderationStatus = profile?.vehicle_moderation_status || profile?.moderation_status;
+  const hasAllPhotos = profile?.vehicle?.media_files && 
+                      profile.vehicle.media_files.some(m => m.slot_key === 'vehicle_main') &&
+                      profile.vehicle.media_files.some(m => m.slot_key === 'vehicle_left') &&
+                      profile.vehicle.media_files.some(m => m.slot_key === 'vehicle_plate');
+
+  const isProfileComplete = 
+    !!profile?.vehicle?.brand &&
+    !!profile?.vehicle?.plate_number &&
+    !!profile?.vehicle?.delivery_option_id &&
+    hasAllPhotos;
+
+  const moderationStatus = isProfileComplete
+    ? (profile?.vehicle_moderation_status || profile?.moderation_status)
+    : "incomplete";
 
   const getModerationBanner = () => {
     if (isDriverInactive) {
@@ -360,6 +373,16 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
             </div>
           </div>
         );
+      case "incomplete":
+        return (
+          <div className="bg-sky-50 border border-sky-100 p-4 rounded-2xl flex items-start gap-3 shadow-sm">
+            <UserIcon className="w-6 h-6 text-sky-500 mt-0.5 shrink-0" />
+            <div>
+              <h3 className="font-bold text-sky-900 leading-tight mb-1">Заполните профиль водителя</h3>
+              <p className="text-xs text-sky-700 font-medium leading-relaxed">Добавьте данные автомобиля и 3 фото, затем сохраните изменения.</p>
+            </div>
+          </div>
+        );
       case "suspended":
         return (
           <div className="bg-rose-50 border border-rose-100 p-4 rounded-2xl flex items-start gap-3 shadow-sm">
@@ -374,17 +397,6 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
         return null;
     }
   };
-
-  const hasAllPhotos = profile?.vehicle?.media_files && 
-                      profile.vehicle.media_files.some(m => m.slot_key === 'vehicle_main') &&
-                      profile.vehicle.media_files.some(m => m.slot_key === 'vehicle_left') &&
-                      profile.vehicle.media_files.some(m => m.slot_key === 'vehicle_plate');
-
-  const isProfileComplete = 
-    !!profile?.vehicle?.brand &&
-    !!profile?.vehicle?.plate_number &&
-    !!profile?.vehicle?.delivery_option_id &&
-    hasAllPhotos;
 
   const showModerationBadge = moderationStatus === "pending_moderation";
 

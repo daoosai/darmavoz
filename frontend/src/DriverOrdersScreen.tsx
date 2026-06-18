@@ -76,13 +76,24 @@ export default function DriverOrdersScreen({
       if (res.ok) {
         const data = await res.json();
         const profile = Array.isArray(data) ? data[0] : data;
-        setModerationStatus(profile?.moderation_status || null);
+        const hasAllPhotos =
+          Array.isArray(profile?.vehicle?.media_files) &&
+          profile.vehicle.media_files.some((m: any) => m.slot_key === "vehicle_main") &&
+          profile.vehicle.media_files.some((m: any) => m.slot_key === "vehicle_left") &&
+          profile.vehicle.media_files.some((m: any) => m.slot_key === "vehicle_plate");
+        const isProfileComplete =
+          !!profile?.vehicle?.brand &&
+          !!profile?.vehicle?.plate_number &&
+          !!profile?.vehicle?.delivery_option_id &&
+          hasAllPhotos;
+
+        setModerationStatus(isProfileComplete ? (profile?.moderation_status || null) : "incomplete");
         setIsDriverActive(profile?.is_active !== false);
         if (profile?.status) {
           setStatus(profile.status);
         }
         
-        if (profile?.is_active === false || !profile?.vehicle?.brand || !profile?.vehicle?.plate_number) {
+        if (profile?.is_active === false || !isProfileComplete) {
           setActiveTab("profile");
         }
       } else {

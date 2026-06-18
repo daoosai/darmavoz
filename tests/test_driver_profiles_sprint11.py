@@ -1,7 +1,7 @@
 import pytest
 from sqlalchemy import select
 
-from app.models.models import DeliveryOption, Driver, ModerationStatus, Role, User, Vehicle
+from app.models.models import DeliveryOption, Driver, MediaFile, ModerationStatus, Role, User, Vehicle
 from app.security.auth import get_password_hash
 from app.security.jwt import create_access_token
 
@@ -310,6 +310,82 @@ async def test_admin_can_approve_reject_and_suspend_driver_and_vehicle(client, s
     assert driver.moderation_status == ModerationStatus.suspended.value
     assert driver.moderated_by_user_id is not None
     assert vehicle.moderation_status == ModerationStatus.approved.value
+
+
+@pytest.mark.asyncio
+async def test_admin_vehicle_list_includes_pending_moderation_and_vehicle_media(client, session_factory):
+    async with session_factory() as session:
+        admin_role = await ensure_role(session, "admin")
+        admin_user = await create_user(session, username="sprint11_vehicle_admin", role=admin_role)
+        delivery_option = await create_delivery_option(session, capacity_m3=18.0, title="Самосвал 18 м3")
+        vehicle = Vehicle(
+            title="Truck with media",
+            brand="КамАЗ",
+            plate_number="А001АА70",
+            delivery_option_id=delivery_option.id,
+            is_active=True,
+            moderation_status=ModerationStatus.pending_moderation.value,
+        )
+        session.add(vehicle)
+        await session.flush()
+        session.add_all(
+            [
+                MediaFile(
+                    entity_type="vehicle",
+                    entity_id=vehicle.id,
+                    bucket="test-bucket",
+                    object_key="vehicles/main.jpg",
+                    public_url="https://example.com/main.jpg",
+                    content_type="image/jpeg",
+                    file_name="main.jpg",
+                    file_size=111,
+                    slot_key="vehicle_main",
+                    is_primary=True,
+                ),
+                MediaFile(
+                    entity_type="vehicle",
+                    entity_id=vehicle.id,
+                    bucket="test-bucket",
+                    object_key="vehicles/left.jpg",
+                    public_url="https://example.com/left.jpg",
+                    content_type="image/jpeg",
+                    file_name="left.jpg",
+                    file_size=222,
+                    slot_key="vehicle_left",
+                    is_primary=False,
+                ),
+                MediaFile(
+                    entity_type="vehicle",
+                    entity_id=vehicle.id,
+                    bucket="test-bucket",
+                    object_key="vehicles/plate.jpg",
+                    public_url="https://example.com/plate.jpg",
+                    content_type="image/jpeg",
+                    file_name="plate.jpg",
+                    file_size=333,
+                    slot_key="vehicle_plate",
+                    is_primary=False,
+                ),
+            ]
+        )
+        await session.commit()
+        admin_username = admin_user.username
+
+    response = await client.get(
+        "/api/v1/admin/vehicles",
+        headers=auth_headers(admin_username),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    vehicle_payload = next(item for item in payload if item["title"] == "Truck with media")
+    assert vehicle_payload["moderation_status"] == ModerationStatus.pending_moderation.value
+    assert {item["slot_key"] for item in vehicle_payload["media_files"]} >= {
+        "vehicle_main",
+        "vehicle_left",
+        "vehicle_plate",
+    }
+    assert vehicle_payload["media_files"][0]["public_url"].startswith("https://example.com/")
 
 
 @pytest.mark.asyncio

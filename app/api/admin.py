@@ -17,8 +17,10 @@ from app.models.models import (
     Driver,
     ModerationStatus,
     DriverStatus,
+    MediaFile,
     Material,
     Order,
+    OrderStatus,
     OrderItem,
     OrderOffer,
     Role,
@@ -33,7 +35,7 @@ from app.schemas.catalog import (
     MaterialOut,
     MaterialUpdate,
 )
-from app.schemas.driver import AdminDriverCreate, AdminDriverUpdate, DriverResponse
+from app.schemas.driver import AdminDriverCreate, AdminDriverUpdate, DriverResponse, VehicleOut
 from app.security.auth import (
     get_current_admin_user,
     get_current_logist_user,
@@ -106,6 +108,24 @@ async def _load_vehicle_or_404(db: AsyncSession, vehicle_id: UUID) -> Vehicle:
     return vehicle
 
 
+async def _attach_vehicle_media(db: AsyncSession, vehicles: list[Vehicle]) -> None:
+    vehicle_ids = [vehicle.id for vehicle in vehicles]
+    if not vehicle_ids:
+        return
+
+    result = await db.execute(
+        select(MediaFile)
+        .where(MediaFile.entity_type == "vehicle", MediaFile.entity_id.in_(vehicle_ids))
+        .order_by(MediaFile.is_primary.desc(), MediaFile.created_at.asc())
+    )
+    media_by_vehicle: dict[UUID, list[MediaFile]] = {vehicle_id: [] for vehicle_id in vehicle_ids}
+    for media_file in result.scalars().all():
+        media_by_vehicle.setdefault(media_file.entity_id, []).append(media_file)
+
+    for vehicle in vehicles:
+        vehicle.media_files = media_by_vehicle.get(vehicle.id, [])
+
+
 async def _load_driver_or_404(db: AsyncSession, driver_id: UUID) -> Driver:
     result = await db.execute(
         select(Driver)
@@ -132,6 +152,18 @@ async def _list_admin_drivers(db: AsyncSession) -> list[Driver]:
         .order_by(Driver.name.asc())
     )
     return list(result.scalars().all())
+
+
+async def _list_admin_vehicles(db: AsyncSession) -> list[Vehicle]:
+    result = await db.execute(
+        select(Vehicle)
+        .options(selectinload(Vehicle.delivery_option))
+        .where(Vehicle.is_active.is_(True))
+        .order_by(Vehicle.created_at.desc(), Vehicle.title.asc())
+    )
+    vehicles = list(result.scalars().all())
+    await _attach_vehicle_media(db, vehicles)
+    return vehicles
 
 
 async def _ensure_unique_driver_phone(
@@ -252,17 +284,6 @@ async def _ensure_driver_user(
     return user
 
 
-async def _cancel_pending_driver_offers(db: AsyncSession, driver_id: UUID) -> None:
-    pending_offers = await db.execute(
-        select(OrderOffer).where(
-            OrderOffer.driver_id == driver_id,
-            OrderOffer.status == "pending",
-        )
-    )
-    for offer in pending_offers.scalars().all():
-        offer.status = "cancelled"
-
-
 @router.get("/drivers", response_model=list[DriverResponse])
 async def list_admin_drivers(
     db: AsyncSession = Depends(get_db),
@@ -280,6 +301,15 @@ async def get_admin_driver(
 ):
     del current_admin
     return await _load_driver_or_404(db, driver_id)
+
+
+@router.get("/vehicles", response_model=list[VehicleOut])
+async def list_admin_vehicles(
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    del current_admin
+    return await _list_admin_vehicles(db)
 
 
 @router.post("/drivers", response_model=DriverResponse, status_code=status.HTTP_201_CREATED)
@@ -376,7 +406,6 @@ async def update_admin_driver(
         driver.is_active = payload.is_active
         if not payload.is_active:
             driver.status = DriverStatus.offline.value
-            await _cancel_pending_driver_offers(db, driver.id)
     if payload.is_auto_dispatch_enabled is not None:
         driver.is_auto_dispatch_enabled = payload.is_auto_dispatch_enabled
     if payload.dispatch_priority is not None:
@@ -512,15 +541,41 @@ async def delete_admin_driver(
 ):
     del current_admin
     driver = await _load_driver_or_404(db, driver_id)
+    user = driver.user
 
-    driver.is_active = False
-    driver.status = DriverStatus.offline.value
+    offer_ids = list(
+        (
+            await db.scalars(
+                select(OrderOffer.id).where(OrderOffer.driver_id == driver.id)
+            )
+        ).all()
+    )
+    if offer_ids:
+        current_offer_orders = await db.scalars(
+            select(Order).where(Order.current_offer_id.in_(offer_ids))
+        )
+        for order in current_offer_orders.all():
+            order.current_offer_id = None
+
+    assigned_orders = await db.scalars(select(Order).where(Order.driver_id == driver.id))
+    for order in assigned_orders.all():
+        order.driver_id = None
+        order.assigned_at = None
+        if order.status in {OrderStatus.driver_assigned.value, OrderStatus.in_progress.value}:
+            order.status = OrderStatus.created.value
+
     driver.vehicle_id = None
-    driver.is_auto_dispatch_enabled = False
-    await _cancel_pending_driver_offers(db, driver.id)
 
+    if offer_ids:
+        offers = await db.scalars(select(OrderOffer).where(OrderOffer.id.in_(offer_ids)))
+        for offer in offers.all():
+            await db.delete(offer)
+
+    await db.delete(driver)
+    if user is not None:
+        await db.delete(user)
     await db.commit()
-    return DeleteResult(action="deactivated", detail="Driver deactivated and unbound from vehicle")
+    return DeleteResult(action="deleted", detail="Driver deleted permanently")
 
 
 @router.post("/avito/webhook/register")

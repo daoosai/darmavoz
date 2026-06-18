@@ -3,7 +3,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import select
 
-from app.models.models import CartItem, Category, DeliveryOption, Driver, Material, Role, User, Vehicle
+from app.models.models import CartItem, Category, Client, DeliveryOption, Driver, Material, Order, OrderOffer, Role, User, Vehicle
 from app.security.auth import get_password_hash, verify_password
 from app.security.jwt import create_access_token
 
@@ -259,7 +259,7 @@ async def test_admin_can_update_driver_password_and_rebind_vehicle(client, sessi
 
 
 @pytest.mark.asyncio
-async def test_admin_delete_driver_deactivates_user_and_unbinds_vehicle(client, session_factory):
+async def test_admin_delete_driver_hard_deletes_driver_and_user(client, session_factory):
     async with session_factory() as session:
         admin_role = await ensure_role(session, "admin")
         driver_role = await ensure_role(session, "driver")
@@ -279,9 +279,35 @@ async def test_admin_delete_driver_deactivates_user_and_unbinds_vehicle(client, 
             dispatch_priority=100,
         )
         session.add(driver)
+        await session.flush()
+        client = Client(name="Delete Driver Client", phone="+79990000788")
+        session.add(client)
+        await session.flush()
+        order = Order(
+            client_id=client.id,
+            driver_id=driver.id,
+            delivery_option_id=delivery_option.id,
+            address="Test address",
+            total_amount=1000.0,
+            status="driver_assigned",
+        )
+        session.add(order)
+        await session.flush()
+        offer = OrderOffer(
+            order_id=order.id,
+            driver_id=driver.id,
+            price=1000.0,
+            sequence_no=1,
+            status="accepted",
+        )
+        session.add(offer)
+        await session.flush()
+        order.current_offer_id = offer.id
         await session.commit()
         driver_id = driver.id
         driver_user_id = driver_user.id
+        order_id = order.id
+        offer_id = offer.id
 
     response = await client.delete(
         f"/api/v1/admin/drivers/{driver_id}",
@@ -289,18 +315,22 @@ async def test_admin_delete_driver_deactivates_user_and_unbinds_vehicle(client, 
     )
 
     assert response.status_code == 200
-    assert response.json()["action"] == "deactivated"
+    assert response.json()["action"] == "deleted"
 
     async with session_factory() as session:
         driver = await session.get(Driver, driver_id)
         user = await session.get(User, driver_user_id)
+        order = await session.get(Order, order_id)
+        offer = await session.get(OrderOffer, offer_id)
 
-    assert driver is not None
-    assert driver.status == "offline"
-    assert driver.vehicle_id is None
-    assert driver.is_auto_dispatch_enabled is False
-    assert user is not None
-    assert user.is_active is False
+    assert driver is None
+    assert user is None
+    assert order is not None
+    assert order.driver_id is None
+    assert order.status == "created"
+    assert order.assigned_at is None
+    assert order.current_offer_id is None
+    assert offer is None
 
 
 @pytest.mark.asyncio

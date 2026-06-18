@@ -100,6 +100,29 @@ async def test_driver_can_self_register_with_incomplete_moderation(client, sessi
 
 
 @pytest.mark.asyncio
+async def test_driver_register_accepts_title_case_vehicle_type(client):
+    response = await client.post(
+        "/api/v1/auth/driver/register",
+        json={
+            "phone": "+79990010111",
+            "password": "driver123",
+            "name": "Водитель с title case",
+            "vehicle_brand": "КамАЗ",
+            "vehicle_plate_number": "А111АА72",
+            "cubature_min": 10.0,
+            "cubature_max": 14.0,
+            "tonnage_min": 8.0,
+            "tonnage_max": 12.0,
+            "vehicle_type": "Самосвал",
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["driver"]["vehicle"]["vehicle_type"] == "самосвал"
+
+
+@pytest.mark.asyncio
 async def test_driver_profile_update_resets_driver_moderation_and_updates_username(client, session_factory):
     async with session_factory() as session:
         driver_role = await ensure_role(session, "driver")

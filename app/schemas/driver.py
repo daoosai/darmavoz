@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from uuid import UUID
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.schemas.catalog import DeliveryOptionOut, MediaFileOut
 
@@ -107,6 +107,13 @@ class DriverRegisterRequest(BaseModel):
     tonnage_min: float
     tonnage_max: float
     vehicle_type: DriverRegisterVehicleType
+
+    @field_validator("vehicle_type", mode="before")
+    @classmethod
+    def normalize_vehicle_type(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip().lower()
+        return value
 
     @model_validator(mode="after")
     def validate_ranges(self) -> "DriverRegisterRequest":

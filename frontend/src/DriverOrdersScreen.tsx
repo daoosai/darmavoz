@@ -15,6 +15,7 @@ import {
   User as UserIcon,
   CheckCircle2,
   Phone,
+  Ban,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -45,6 +46,7 @@ export default function DriverOrdersScreen({
   const { logout, token } = useAuthStore();
   const [status, setStatus] = useState<DriverStatus>("offline");
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [isForbidden, setIsForbidden] = useState(false);
   const [activeTab, setActiveTab] = useState<"orders" | "profile">("orders");
   const [ordersTab, setOrdersTab] = useState<"current" | "history">("current");
 
@@ -74,8 +76,11 @@ export default function DriverOrdersScreen({
       if (res.ok) {
         const data = await res.json();
         const profile = Array.isArray(data) ? data[0] : data;
-        setModerationStatus(profile?.moderation_status || "pending_moderation");
+        setModerationStatus(profile?.moderation_status || null);
         setIsDriverActive(profile?.is_active !== false);
+        if (profile?.status) {
+          setStatus(profile.status);
+        }
         
         if (profile?.is_active === false || !profile?.vehicle?.brand || !profile?.vehicle?.plate_number) {
           setActiveTab("profile");
@@ -148,10 +153,13 @@ export default function DriverOrdersScreen({
       
       if (assignedRes.status === 403) {
         setOrders([]);
+        setIsForbidden(true);
+        if (!silent) setIsLoading(false);
         return;
       }
 
       if (assignedRes.ok) {
+        setIsForbidden(false);
         let assignedData = await assignedRes.json().catch(() => null);
         if (assignedData) {
           if (Array.isArray(assignedData)) {
@@ -197,6 +205,8 @@ export default function DriverOrdersScreen({
 
       if (res.status === 403) {
         setOrders([]);
+        setIsForbidden(true);
+        if (!silent) setIsLoading(false);
         return;
       }
 
@@ -205,6 +215,7 @@ export default function DriverOrdersScreen({
         console.error("Orders error text:", errText);
         throw new Error("Failed to fetch orders");
       }
+      setIsForbidden(false);
       const data = await res.json().catch(() => ({}));
       const loadedOrders = Array.isArray(data) ? data : data.orders || [];
       const activeOrders = loadedOrders.filter((o: any) => o.status !== "completed" && o.status !== "cancelled");
@@ -491,17 +502,47 @@ export default function DriverOrdersScreen({
                 Ваш профиль не активен, обратитесь к администратору.
               </p>
             </div>
-          ) : moderationStatus !== "approved" && moderationStatus !== null ? (
+          ) : moderationStatus === "rejected" || isForbidden ? (
+            <div className="flex flex-col items-center justify-center p-10 text-red-600 text-center mt-10 min-h-[50vh] bg-red-50 rounded-3xl border border-red-200 shadow-sm">
+              <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mb-4 shadow-sm">
+                <Ban className="w-10 h-10 text-red-500" />
+              </div>
+              <p className="text-xl font-bold text-red-700 mb-2 leading-tight">
+                Профиль заблокирован
+              </p>
+              <p className="text-sm text-red-600">
+                Ваш профиль был отклонен или заблокирован администратором.
+              </p>
+            </div>
+          ) : moderationStatus === "pending_moderation" ? (
+            <div className="flex flex-col items-center justify-center p-10 text-amber-600 text-center mt-10 min-h-[50vh] bg-amber-50 rounded-3xl border border-amber-200 shadow-sm">
+              <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mb-4 shadow-sm">
+                <Clock className="w-10 h-10 text-amber-400" />
+              </div>
+              <p className="text-xl font-bold text-amber-700 mb-2 leading-tight">
+                Профиль на проверке. Вы не можете принимать заказы.
+              </p>
+              <p className="text-sm text-amber-600">
+                Диспетчер проверяет ваши данные. Обычно это занимает не больше часа.
+              </p>
+            </div>
+          ) : moderationStatus !== "approved" ? (
             <div className="flex flex-col items-center justify-center p-10 text-slate-500 text-center mt-10 min-h-[50vh] bg-slate-100 rounded-3xl border border-slate-200 shadow-sm">
               <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mb-4 shadow-sm">
                 <AlertCircle className="w-10 h-10 text-slate-400" />
               </div>
               <p className="text-xl font-bold text-slate-700 mb-2">
-                Дождитесь одобрения администратором
+                Требуется действие
               </p>
-              <p className="text-sm text-slate-500">
-                Ваш профиль находится на модерации. Вы сможете принимать заказы после проверки.
+              <p className="text-sm text-slate-500 mb-6">
+                Завершите регистрацию. Заполните данные об автомобиле и загрузите 3 фотографии с разных сторон в разделе «Профиль», чтобы отправить заявку на модерацию.
               </p>
+              <button
+                onClick={() => setActiveTab("profile")}
+                className="bg-[#2DB0E6] text-white px-6 py-3 rounded-xl font-bold hover:bg-[#209BD6] transition-colors"
+              >
+                Перейти в Профиль
+              </button>
             </div>
           ) : ordersTab === "history" ? (
             isLoadingHistory ? (

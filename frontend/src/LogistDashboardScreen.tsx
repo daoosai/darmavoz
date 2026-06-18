@@ -365,6 +365,15 @@ export default function LogistDashboardScreen({
     }
   };
 
+  const getVehicleString = (driver: AdminDriver) => {
+    if (!driver.vehicle) return "Транспорт не указан";
+    const brand = (driver.vehicle as any).brand || (driver.vehicle as any).name || (driver.vehicle as any).model || "";
+    const capacity = driver.vehicle.delivery_option?.capacity_m3 || (driver.vehicle as any).capacity_m3;
+    const capacityStr = capacity ? `${capacity} м³` : "";
+    const parts = [brand, capacityStr].filter(Boolean);
+    return parts.length > 0 ? parts.join(" ") : "Транспорт не указан";
+  };
+
   const handleDeleteOrder = async (orderId: string) => {
     if (!window.confirm("Вы уверены, что хотите удалить этот заказ?")) {
       return;
@@ -752,7 +761,7 @@ export default function LogistDashboardScreen({
                         <div className="flex items-center gap-2.5">
                           <Truck className="w-4 h-4 text-slate-400" />
                           <span className="text-sm font-semibold text-slate-700">
-                            {driver.vehicle?.title || "Транспорт не указан"}
+                            {getVehicleString(driver)}
                           </span>
                         </div>
                         {driver.vehicle?.plate_number && (
@@ -942,7 +951,7 @@ export default function LogistDashboardScreen({
                     Выберите водителя...
                   </option>
                   {compatibleDrivers.map((driver) => {
-                    const vehicleTitle = driver.vehicle?.title || "Без машины";
+                    const vehicleTitle = getVehicleString(driver);
                     const statusLabel = driverStatusLabelMap[driver.status] || driver.status;
                     return (
                       <option key={driver.id} value={driver.id}>

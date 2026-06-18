@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useAuthStore } from "./store";
 import { baseURL, formatPhoneNumber } from "./utils";
-import { LogOut, Truck, User as UserIcon, Phone, Star, AlertCircle, Camera, Loader2, CheckCircle2, BadgeCheck } from "lucide-react";
+import { LogOut, Truck, User as UserIcon, Phone, Star, AlertCircle, Camera, Loader2, CheckCircle2, BadgeCheck, Ban } from "lucide-react";
 import UpdateBanner from "./UpdateBanner";
 import toast from "react-hot-toast";
 
@@ -12,6 +12,7 @@ interface DriverProfile {
   is_active: boolean;
   dispatch_priority: number;
   moderation_status: "pending_moderation" | "approved" | "rejected" | "suspended" | null;
+  vehicle_moderation_status?: "pending_moderation" | "approved" | "rejected" | "suspended" | null;
   vehicle: {
     id: string;
     brand: string;
@@ -107,6 +108,30 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
       console.error("Error fetching profile:", error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSubmitForModeration = async () => {
+    setIsSaving(true);
+    try {
+      const currentToken = useAuthStore.getState().token;
+      if (!currentToken) return;
+      const res = await fetch(`${baseURL}/driver/vehicle/submit`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${currentToken}`
+        }
+      });
+      if (!res.ok) {
+        throw new Error("Failed to submit");
+      }
+      toast.success("Заявка отправлена на модерацию");
+      await fetchProfile();
+    } catch (e) {
+      toast.error("Не удалось отправить заявку");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -308,6 +333,8 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
     );
   };
 
+  const moderationStatus = profile?.vehicle_moderation_status || profile?.moderation_status;
+
   const getModerationBanner = () => {
     if (isDriverInactive) {
       return (
@@ -320,7 +347,7 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
         </div>
       );
     }
-    switch (profile?.moderation_status) {
+    switch (moderationStatus) {
       case "approved":
         return null; // hide banner for approved driver
       case "pending_moderation":
@@ -333,14 +360,13 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
             </div>
           </div>
         );
-      case "rejected":
       case "suspended":
         return (
           <div className="bg-rose-50 border border-rose-100 p-4 rounded-2xl flex items-start gap-3 shadow-sm">
             <AlertCircle className="w-6 h-6 text-rose-500 mt-0.5 shrink-0" />
             <div>
               <h3 className="font-bold text-rose-900 leading-tight mb-1">Профиль заблокирован.</h3>
-              <p className="text-xs text-rose-700 font-medium leading-relaxed">Ваш профиль был отклонен или заблокирован администратором.</p>
+              <p className="text-xs text-rose-700 font-medium leading-relaxed">Ваш профиль был приостановлен администратором.</p>
             </div>
           </div>
         );
@@ -349,14 +375,49 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
     }
   };
 
+  const hasAllPhotos = profile?.vehicle?.media_files && 
+                      profile.vehicle.media_files.some(m => m.slot_key === 'vehicle_main') &&
+                      profile.vehicle.media_files.some(m => m.slot_key === 'vehicle_left') &&
+                      profile.vehicle.media_files.some(m => m.slot_key === 'vehicle_plate');
+
+  const isProfileComplete = 
+    !!profile?.vehicle?.brand &&
+    !!profile?.vehicle?.plate_number &&
+    !!profile?.vehicle?.delivery_option_id &&
+    hasAllPhotos;
+
+  const showModerationBadge = moderationStatus === "pending_moderation";
+
   return (
     <div className="flex-1 overflow-y-auto p-5 pb-32 bg-slate-50 flex flex-col gap-6">
       <UpdateBanner />
 
       {getModerationBanner()}
 
-      <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col gap-4">
-        <h2 className="text-xl font-bold text-slate-800">Личные данные</h2>
+      {showModerationBadge ? (
+        <div className="w-full bg-slate-100 text-slate-500 py-12 font-bold rounded-2xl shadow-sm border border-slate-200 text-center flex flex-col items-center justify-center gap-2 mt-4 mb-2">
+          <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mb-2 shadow-sm">
+            <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+          </div>
+          <span className="text-lg text-slate-600">Ваш профиль отправлен на модерацию</span>
+          <span className="text-sm font-medium text-slate-400">Ожидайте подтверждения администратором</span>
+        </div>
+      ) : moderationStatus === "rejected" ? (
+        <div className="flex flex-col items-center justify-center p-10 text-red-600 text-center mt-4 mb-2 bg-red-50 rounded-3xl border border-red-200 shadow-sm">
+          <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mb-4 shadow-sm">
+            <Ban className="w-10 h-10 text-red-500" />
+          </div>
+          <p className="text-xl font-bold text-red-700 mb-2 leading-tight">
+            Профиль заблокирован
+          </p>
+          <p className="text-sm text-red-600">
+            Ваш профиль был отклонен администратором.
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col gap-4">
+            <h2 className="text-xl font-bold text-slate-800">Личные данные</h2>
         
         <div className="flex flex-col gap-3">
           <div>
@@ -492,14 +553,31 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
         </div>
       </div>
 
-      <button
-        onClick={handleSave}
-        disabled={isSaving || isDriverInactive}
-        className="w-full bg-[#2DB0E6] text-white py-4 font-bold rounded-2xl shadow-sm hover:bg-[#209BD6] active:bg-[#1b8bc2] transition-colors flex items-center justify-center gap-2"
-      >
-        {isSaving && <Loader2 className="w-5 h-5 animate-spin" />}
-        {isSaving ? "Сохранение..." : "Сохранить изменения"}
-      </button>
+          <div className="flex flex-col gap-2 mt-2 mb-2">
+            {profile?.vehicle?.id && !hasAllPhotos && (
+               <div className="bg-orange-50 text-orange-700 p-3 rounded-xl border border-orange-200 text-sm font-medium text-center shadow-sm">
+                 Для отправки на проверку необходимо загрузить 3 фотографии автомобиля
+               </div>
+            )}
+            <button
+              onClick={handleSave}
+              disabled={isSaving || isDriverInactive}
+              className={`w-full ${isProfileComplete ? 'bg-white text-[#2DB0E6] border-2 border-[#2DB0E6] hover:bg-slate-50' : 'bg-[#2DB0E6] text-white hover:bg-[#209BD6]'} py-4 font-bold rounded-2xl shadow-sm active:bg-[#1b8bc2] transition-colors flex items-center justify-center gap-2`}
+            >
+              {isSaving && <Loader2 className="w-5 h-5 animate-spin" />}
+              {isSaving ? "Сохранение..." : "Сохранить изменения"}
+            </button>
+            <button
+              onClick={handleSubmitForModeration}
+              disabled={isSaving || isDriverInactive || !isProfileComplete}
+              className={`w-full py-4 font-bold rounded-2xl shadow-sm transition-colors flex items-center justify-center gap-2 mt-2 ${!isProfileComplete || isDriverInactive || isSaving ? 'bg-emerald-200 text-emerald-50 cursor-not-allowed' : 'bg-emerald-500 text-white hover:bg-emerald-600 active:bg-emerald-700'}`}
+            >
+              {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}
+              {isSaving ? "Отправка..." : "Отправить на модерацию"}
+            </button>
+          </div>
+        </>
+      )}
 
       {/* Выйти кнопка */}
       <div className="mt-2 mb-4">

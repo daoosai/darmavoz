@@ -17,7 +17,9 @@ import {
   Star,
   StarOff,
   Eye,
-  EyeOff
+  EyeOff,
+  ClipboardCheck,
+  RefreshCw
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -64,6 +66,10 @@ interface AdminDriver {
   delivery_option_id: string;
   is_active: boolean;
   moderation_status?: "pending_moderation" | "approved" | "rejected" | "suspended" | null;
+  rate_mode?: "fixed" | "per_ton_km";
+  fixed_rate?: number;
+  rate_per_ton_km?: number;
+  media_files?: { id: string; public_url: string; slot_key: string }[];
   delivery_option?: {
     title: string;
     capacity_m3: number;
@@ -72,8 +78,12 @@ interface AdminDriver {
     title: string;
     brand?: string;
     model?: string;
+    plate_number?: string;
     vehicle_type?: string;
     delivery_option_id?: string;
+    vehicle_main_url?: string;
+    vehicle_left_url?: string;
+    vehicle_plate_url?: string;
     delivery_option?: {
       id?: string;
       title?: string;
@@ -82,20 +92,36 @@ interface AdminDriver {
   };
 }
 
+interface PendingModerationRequest {
+  driver_id: string;
+  driver_name: string;
+  driver_phone: string;
+  vehicle_id: string;
+  vehicle_brand: string;
+  vehicle_model: string;
+  vehicle_plate_number: string;
+  vehicle_body_volume_m3: number;
+  vehicle_main_url?: string | null;
+  vehicle_left_url?: string | null;
+  vehicle_plate_url?: string | null;
+}
+
 interface AdminDashboardScreenProps {
   onLogout: () => void;
 }
 
 export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenProps) {
   const { logout, token } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<"materials" | "delivery" | "drivers">("materials");
+  const [activeTab, setActiveTab] = useState<"materials" | "delivery" | "drivers" | "moderation">("materials");
   
   const [materials, setMaterials] = useState<AdminMaterial[]>([]);
   const [deliveryOptions, setDeliveryOptions] = useState<AdminDeliveryOption[]>([]);
   const [drivers, setDrivers] = useState<AdminDriver[]>([]);
+  const [pendingRequests, setPendingRequests] = useState<PendingModerationRequest[]>([]);
   const [driverActiveOverrides, setDriverActiveOverrides] = useState<Record<string, boolean>>({});
   const [categories, setCategories] = useState<AdminCategory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingModeration, setIsLoadingModeration] = useState(false);
 
   // Modals state
   const [isMaterialModalOpen, setIsMaterialModalOpen] = useState(false);
@@ -120,10 +146,18 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
     });
 
   const getVehicleString = (driver: AdminDriver) => {
-    const vehicleString = driver.vehicle
-      ? `${driver.vehicle.brand || ""} ${driver.vehicle.vehicle_type || ""} (${driver.vehicle.delivery_option?.capacity_m3 || "?"} м³)`.trim()
+    const vehicleStr = driver.vehicle
+      ? `${driver.vehicle.brand || ""} ${driver.vehicle.plate_number ? `(${driver.vehicle.plate_number})` : ""} - ${driver.vehicle.delivery_option?.capacity_m3 || "?"} м³`.trim()
       : "Автомобиль не назначен";
-    return vehicleString || "Автомобиль не назначен";
+    
+    let rateStr = "";
+    if (driver.rate_mode === "fixed") {
+      rateStr = `Фикс: ${driver.fixed_rate}₽`;
+    } else if (driver.rate_mode === "per_ton_km") {
+      rateStr = `За тн-км: ${driver.rate_per_ton_km}₽`;
+    }
+    
+    return rateStr ? `${vehicleStr} | ${rateStr}` : vehicleStr;
   };
 
   const handleLogout = () => {
@@ -140,6 +174,7 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
       if (res.ok) {
         toast.success("Водитель одобрен");
         fetchDrivers(true);
+        fetchPendingRequests(true);
       } else {
         toast.error("Ошибка при одобрении");
       }
@@ -157,6 +192,7 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
       if (res.ok) {
         toast.success("Водитель отклонен");
         fetchDrivers(true);
+        fetchPendingRequests(true);
       } else {
         toast.error("Ошибка при отклонении");
       }
@@ -353,6 +389,24 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
     }
   };
 
+  const fetchPendingRequests = async (silent = false) => {
+    if (!token) return;
+    if (!silent) setIsLoadingModeration(true);
+    try {
+      const res = await fetch(`${baseURL}/admin/moderation/pending`, {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error("Failed to fetch pending requests");
+      const data = await res.json();
+      const items = Array.isArray(data) ? data : data.results || [];
+      setPendingRequests(items);
+    } catch (err) {
+      if (!silent) toast.error("Не удалось загрузить заявки");
+    } finally {
+      if (!silent) setIsLoadingModeration(false);
+    }
+  };
+
   useEffect(() => {
     fetchCategories();
     if (activeTab === "materials" && materials.length === 0) {
@@ -362,6 +416,8 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
     } else if (activeTab === "drivers" && drivers.length === 0) {
       fetchDrivers();
       if (deliveryOptions.length === 0) fetchDeliveryOptions(true);
+    } else if (activeTab === "moderation" && pendingRequests.length === 0) {
+      fetchPendingRequests();
     }
   }, [activeTab]);
 
@@ -854,6 +910,22 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
               <Truck className="w-4 h-4" />
               Водители
             </button>
+            <button
+              onClick={() => setActiveTab("moderation")}
+              className={`flex-1 sm:w-auto flex-shrink-0 whitespace-nowrap py-2 px-3 text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2 ${
+                activeTab === "moderation" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              <div className="relative flex items-center justify-center">
+                <ClipboardCheck className="w-4 h-4" />
+                {drivers.filter(d => d.moderation_status === "pending_moderation").length > 0 && (
+                  <div className="absolute -top-1.5 -right-2 bg-rose-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center shadow-sm">
+                    {drivers.filter(d => d.moderation_status === "pending_moderation").length}
+                  </div>
+                )}
+              </div>
+              Модерация
+            </button>
           </div>
         </div>
 
@@ -1222,7 +1294,18 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                             <td className="px-6 py-4 font-semibold text-slate-800">{d.name}</td>
                             <td className="px-6 py-4 text-sm whitespace-nowrap">{d.phone}</td>
                             <td className="px-6 py-4 text-sm text-slate-500">
-                              {getVehicleString(d)}
+                              <div className="flex flex-col gap-2">
+                                <span>{getVehicleString(d)}</span>
+                                {d.moderation_status === "pending_moderation" && d.media_files && d.media_files.length > 0 && (
+                                  <div className="flex gap-2 mt-1">
+                                    {d.media_files.map(mf => (
+                                      <a key={mf.id} href={mf.public_url} target="_blank" rel="noreferrer" className="block w-12 h-12 rounded-lg border border-slate-200 overflow-hidden hover:opacity-80">
+                                        <img src={mf.public_url} alt={mf.slot_key} className="w-full h-full object-cover" />
+                                      </a>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
                             </td>
                             <td className="px-6 py-4">
                               {d.is_active === false ? (
@@ -1330,7 +1413,18 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                           <h3 className="font-bold text-slate-800 text-base truncate pr-2">{d.name}</h3>
                           <div className="flex flex-col gap-0.5 mt-1">
                             <span className="text-sm font-medium text-slate-700">Телефон: {d.phone}</span>
-                            <span className="text-sm text-slate-500">Авто: {getVehicleString(d)}</span>
+                            <div className="flex flex-col gap-1">
+                              <span className="text-sm text-slate-500">Авто: {getVehicleString(d)}</span>
+                              {d.moderation_status === "pending_moderation" && d.media_files && d.media_files.length > 0 && (
+                                <div className="flex gap-2 mt-2">
+                                  {d.media_files.map(mf => (
+                                    <a key={mf.id} href={mf.public_url} target="_blank" rel="noreferrer" className="block w-14 h-14 rounded-lg border border-slate-200 overflow-hidden hover:opacity-80">
+                                      <img src={mf.public_url} alt={mf.slot_key} className="w-full h-full object-cover" />
+                                    </a>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
                             {d.moderation_status === "pending_moderation" && (
                               <span className="text-sm font-bold text-amber-600 mt-1">На проверке</span>
                             )}
@@ -1394,6 +1488,146 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
 
                   {drivers.length === 0 && (
                     <div className="p-8 text-center text-slate-500 font-medium">Нет водителей</div>
+                  )}
+                </div>
+              )}
+            </>
+          ) : activeTab === "moderation" ? (
+            <>
+              <div className="flex justify-between items-center bg-white p-5 rounded-2xl shadow-sm border border-slate-100 mb-2">
+                <h2 className="text-xl font-bold text-slate-800">Заявки на модерацию</h2>
+                <button
+                  onClick={() => fetchPendingRequests(false)}
+                  className="flex items-center gap-2 px-4 py-2 bg-slate-50 text-slate-600 rounded-lg hover:bg-slate-100 transition-colors font-medium text-sm border border-slate-200"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Обновить
+                </button>
+              </div>
+
+              {isLoadingModeration ? (
+                <div className="flex justify-center p-10 bg-white rounded-2xl border border-slate-100">
+                  <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+                </div>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  {pendingRequests.length === 0 ? (
+                    <div className="p-12 text-center bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col items-center gap-3">
+                      <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center">
+                        <ClipboardCheck className="w-8 h-8 text-slate-300" />
+                      </div>
+                      <p className="text-slate-500 font-medium text-lg">Нет новых заявок на модерацию</p>
+                    </div>
+                  ) : (
+                    pendingRequests.map(request => (
+                      <div key={request.driver_id} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col gap-5">
+                        
+                        <div className="flex flex-col md:flex-row gap-6 md:gap-10">
+                          {/* Driver Info */}
+                          <div className="flex-1 space-y-4">
+                            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center flex-shrink-0">
+                                <Truck className="w-5 h-5 text-indigo-500" />
+                              </div>
+                              {request.driver_name}
+                            </h3>
+                            <div className="flex flex-col gap-2 text-sm text-slate-600 pl-13">
+                              <div className="flex justify-between border-b border-slate-50 pb-2">
+                                <span className="font-medium text-slate-400">Телефон</span>
+                                <span className="font-semibold text-slate-700">{request.driver_phone}</span>
+                              </div>
+                              <div className="flex justify-between border-b border-slate-50 pb-2">
+                                <span className="font-medium text-slate-400">Марка/Модель</span>
+                                <span className="font-semibold text-slate-700">{request.vehicle_brand} {request.vehicle_model}</span>
+                              </div>
+                              <div className="flex justify-between border-b border-slate-50 pb-2">
+                                <span className="font-medium text-slate-400">Госномер</span>
+                                <span className="font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">{request.vehicle_plate_number}</span>
+                              </div>
+                              <div className="flex justify-between border-b border-slate-50 pb-2">
+                                <span className="font-medium text-slate-400">Кубатура</span>
+                                <span className="font-semibold text-slate-700">{request.vehicle_body_volume_m3} м³</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Photos Info */}
+                          <div className="flex-[1.5] flex flex-col gap-3">
+                            <span className="text-sm font-bold text-slate-700 uppercase tracking-wider">Фотографии автомобиля</span>
+                            <div className="grid grid-cols-3 gap-4">
+                              {/* Основное фото / Спереди */}
+                              <div className="flex flex-col gap-2">
+                                {request.vehicle_main_url ? (
+                                  <a href={request.vehicle_main_url} target="_blank" rel="noreferrer" className="block relative group rounded-lg overflow-hidden h-48 border border-slate-200">
+                                    <img src={request.vehicle_main_url} alt="Спереди" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                                    <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                      <Eye className="w-8 h-8 text-white" />
+                                    </div>
+                                  </a>
+                                ) : (
+                                  <div className="h-48 bg-slate-100 rounded-lg flex items-center justify-center border border-slate-200">
+                                    <span className="text-sm font-medium text-slate-400">Нет фото</span>
+                                  </div>
+                                )}
+                                <span className="text-xs font-bold text-center text-slate-600">Спереди</span>
+                              </div>
+
+                              {/* Сбоку / Слева */}
+                              <div className="flex flex-col gap-2">
+                                {request.vehicle_left_url ? (
+                                  <a href={request.vehicle_left_url} target="_blank" rel="noreferrer" className="block relative group rounded-lg overflow-hidden h-48 border border-slate-200">
+                                    <img src={request.vehicle_left_url} alt="Сбоку" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                                    <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                      <Eye className="w-8 h-8 text-white" />
+                                    </div>
+                                  </a>
+                                ) : (
+                                  <div className="h-48 bg-slate-100 rounded-lg flex items-center justify-center border border-slate-200">
+                                    <span className="text-sm font-medium text-slate-400">Нет фото</span>
+                                  </div>
+                                )}
+                                <span className="text-xs font-bold text-center text-slate-600">Сбоку</span>
+                              </div>
+
+                              {/* Номер / Plate */}
+                              <div className="flex flex-col gap-2">
+                                {request.vehicle_plate_url ? (
+                                  <a href={request.vehicle_plate_url} target="_blank" rel="noreferrer" className="block relative group rounded-lg overflow-hidden h-48 border border-slate-200">
+                                    <img src={request.vehicle_plate_url} alt="Госномер" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                                    <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                      <Eye className="w-8 h-8 text-white" />
+                                    </div>
+                                  </a>
+                                ) : (
+                                  <div className="h-48 bg-slate-100 rounded-lg flex items-center justify-center border border-slate-200">
+                                    <span className="text-sm font-medium text-slate-400">Нет фото</span>
+                                  </div>
+                                )}
+                                <span className="text-xs font-bold text-center text-slate-600">Фото госномера</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex gap-4 pt-5 border-t border-slate-100 mt-2">
+                          <button
+                            onClick={() => handleRejectDriver(request.driver_id)}
+                            className="flex-1 py-3 px-4 bg-white hover:bg-rose-50 text-rose-600 font-bold rounded-xl transition-colors border border-rose-200 hover:border-rose-300 shadow-sm flex items-center justify-center gap-2"
+                          >
+                            <XCircle className="w-5 h-5" />
+                            Отклонить
+                          </button>
+                          <button
+                            onClick={() => handleApproveDriver(request.driver_id)}
+                            className="flex-[2] py-3 px-4 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2"
+                          >
+                            <CheckCircle2 className="w-5 h-5" />
+                            Одобрить водителя
+                          </button>
+                        </div>
+                      </div>
+                    ))
                   )}
                 </div>
               )}

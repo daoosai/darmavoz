@@ -2,7 +2,7 @@ import { MaterialProps, DeliveryOption } from './MaterialDetailScreen';
 
 export const baseURL = 'https://darmavoz.ru/api/v1';
 
-export const APP_VERSION = import.meta.env.VITE_APP_VERSION || "1.7.0";
+export const APP_VERSION = import.meta.env.VITE_APP_VERSION || "1.8.0";
 
 export const orderStatusMap: Record<string, string> = {
   'created': 'СОЗДАН',
@@ -12,7 +12,7 @@ export const orderStatusMap: Record<string, string> = {
   'no_driver_found': 'НЕТ СВОБОДНЫХ МАШИН',
   'driver_assigned': 'НАЗНАЧЕН',
   'in_progress': 'В ПУТИ',
-  'completed': 'ЗАВЕРШЕН',
+  'completed': 'ПОЛУЧЕН',
   'cancelled': 'ОТМЕНЕН',
 };
 
@@ -78,7 +78,7 @@ export const clientOrderStatusMap: Record<string, string> = {
   'no_driver_found': 'Ищем водителя',
   'driver_assigned': 'Водитель назначен',
   'in_progress': 'В ПУТИ',
-  'completed': 'Завершен',
+  'completed': 'ПОЛУЧЕН',
   'cancelled': 'Отменен',
 };
 

@@ -80,7 +80,7 @@ async def health_check():
     return {
         "status": "online",
         "project": "Darmavoz Core API",
-        "version": "1.7.0",
+        "version": settings.WEB_VERSION,
         "message": "Server is running",
         "llm_configured": bool(settings.LLM_API_KEY),
     }
@@ -98,6 +98,6 @@ else:
         return {
             "status": "online",
             "project": "Darmavoz Core API",
-            "version": "1.7.0",
+            "version": settings.WEB_VERSION,
             "message": "Server is running",
         }

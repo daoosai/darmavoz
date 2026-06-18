@@ -186,6 +186,7 @@ async def ensure_driver(session, *, user_id, vehicle_id, name: str, phone: str) 
             name=name,
             phone=phone,
             status=DriverStatus.available.value,
+            is_active=True,
             is_auto_dispatch_enabled=True,
             dispatch_priority=100,
         )

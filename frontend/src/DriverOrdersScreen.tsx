@@ -129,6 +129,94 @@ export default function DriverOrdersScreen({
     }
   }, [onLogout]);
 
+  const fetchOrders = React.useCallback(async (silent = false) => {
+    try {
+      if (!silent) setIsLoading(true);
+      const currentToken = useAuthStore.getState().token;
+
+      const assignedRes = await fetch(`${baseURL}/driver/orders/assigned/current`, {
+        headers: {
+          Authorization: `Bearer ${currentToken}`,
+        },
+      });
+
+      if (assignedRes.status === 401) {
+        useAuthStore.getState().logout();
+        onLogout();
+        return;
+      }
+      
+      if (assignedRes.status === 403) {
+        setOrders([]);
+        return;
+      }
+
+      if (assignedRes.ok) {
+        let assignedData = await assignedRes.json().catch(() => null);
+        if (assignedData) {
+          if (Array.isArray(assignedData)) {
+            assignedData = assignedData.length > 0 ? assignedData[0] : null;
+          }
+          if (assignedData) {
+            const isOffer = !!assignedData.order_id;
+            const orderId = isOffer ? assignedData.order_id : assignedData.id;
+            const detail = isOffer ? assignedData.order : assignedData;
+            if (orderId && detail && detail.status !== "completed" && detail.status !== "cancelled") {
+              const currentOrder: DriverOrder = {
+                id: orderId,
+                address: detail.address || "Адрес не указан",
+                items: detail.items || [],
+                delivery_option: detail.delivery_option,
+                created_at: detail.created_at || new Date().toISOString(),
+                total_amount: detail.total_amount || 0,
+                notes: detail.notes,
+                status: detail.status || "driver_assigned",
+                material_name: detail.material_name,
+                capacity_m3: detail.capacity_m3,
+                client_phone: detail.client_phone,
+                client: detail.client,
+              };
+              setOrders([currentOrder]);
+              return;
+            }
+          }
+        }
+      }
+
+      const res = await fetch(`${baseURL}/driver/orders`, {
+        headers: {
+          Authorization: `Bearer ${currentToken}`,
+        },
+      });
+
+      if (res.status === 401) {
+        useAuthStore.getState().logout();
+        onLogout();
+        return;
+      }
+
+      if (res.status === 403) {
+        setOrders([]);
+        return;
+      }
+
+      if (!res.ok) {
+        const errText = await res.text();
+        console.error("Orders error text:", errText);
+        throw new Error("Failed to fetch orders");
+      }
+      const data = await res.json().catch(() => ({}));
+      const loadedOrders = Array.isArray(data) ? data : data.orders || [];
+      const activeOrders = loadedOrders.filter((o: any) => o.status !== "completed" && o.status !== "cancelled");
+      setOrders(activeOrders);
+    } catch (error) {
+      console.error("Error fetching orders:", error);
+      setOrders([]);
+    } finally {
+      if (!silent) setIsLoading(false);
+    }
+  }, [onLogout]);
+
   useEffect(() => {
     fetchProfile();
   }, []);
@@ -138,14 +226,17 @@ export default function DriverOrdersScreen({
 
     if (token && moderationStatus === "approved" && isDriverActive) {
       fetchOrders();
-      pollingInterval = setInterval(checkIncomingOffer, 5000);
+      pollingInterval = setInterval(() => {
+        checkIncomingOffer();
+        fetchOrders(true);
+      }, 5000);
       checkIncomingOffer(); // Initial check
     }
 
     return () => {
       if (pollingInterval) clearInterval(pollingInterval);
     };
-  }, [token, checkIncomingOffer, moderationStatus, isDriverActive]);
+  }, [token, checkIncomingOffer, fetchOrders, moderationStatus, isDriverActive]);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -233,89 +324,6 @@ export default function DriverOrdersScreen({
       }
     } catch (error: any) {
       toast.error(error.message);
-    }
-  };
-
-  const fetchOrders = async () => {
-    try {
-      setIsLoading(true);
-      const currentToken = useAuthStore.getState().token;
-
-      const assignedRes = await fetch(`${baseURL}/driver/orders/assigned/current`, {
-        headers: {
-          Authorization: `Bearer ${currentToken}`,
-        },
-      });
-
-      if (assignedRes.status === 401) {
-        useAuthStore.getState().logout();
-        onLogout();
-        return;
-      }
-      
-      if (assignedRes.status === 403) {
-        setOrders([]);
-        return;
-      }
-
-      if (assignedRes.ok) {
-        const assignedData = await assignedRes.json().catch(() => null);
-        if (assignedData) {
-          const isOffer = !!assignedData.order_id;
-          const orderId = isOffer ? assignedData.order_id : assignedData.id;
-          const detail = isOffer ? assignedData.order : assignedData;
-          if (orderId && detail && detail.status !== "completed" && detail.status !== "cancelled") {
-            const currentOrder: DriverOrder = {
-              id: orderId,
-              address: detail.address || "Адрес не указан",
-              items: detail.items || [],
-              delivery_option: detail.delivery_option,
-              created_at: detail.created_at || new Date().toISOString(),
-              total_amount: detail.total_amount || 0,
-              notes: detail.notes,
-              status: detail.status || "driver_assigned",
-              material_name: detail.material_name,
-              capacity_m3: detail.capacity_m3,
-              client_phone: detail.client_phone,
-              client: detail.client,
-            };
-            setOrders([currentOrder]);
-            return;
-          }
-        }
-      }
-
-      const res = await fetch(`${baseURL}/driver/orders`, {
-        headers: {
-          Authorization: `Bearer ${currentToken}`,
-        },
-      });
-
-      if (res.status === 401) {
-        useAuthStore.getState().logout();
-        onLogout();
-        return;
-      }
-
-      if (res.status === 403) {
-        setOrders([]);
-        return;
-      }
-
-      if (!res.ok) {
-        const errText = await res.text();
-        console.error("Orders error text:", errText);
-        throw new Error("Failed to fetch orders");
-      }
-      const data = await res.json().catch(() => ({}));
-      const loadedOrders = Array.isArray(data) ? data : data.orders || [];
-      const activeOrders = loadedOrders.filter((o: any) => o.status !== "completed" && o.status !== "cancelled");
-      setOrders(activeOrders);
-    } catch (error) {
-      console.error("Error fetching orders:", error);
-      setOrders([]);
-    } finally {
-      setIsLoading(false);
     }
   };
 

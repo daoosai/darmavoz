@@ -36,6 +36,7 @@ from app.schemas.catalog import (
     MaterialUpdate,
 )
 from app.schemas.driver import AdminDriverCreate, AdminDriverUpdate, DriverResponse, VehicleOut
+from app.schemas.driver import PendingModerationItemOut, VehicleModerationDecisionOut
 from app.security.auth import (
     get_current_admin_user,
     get_current_logist_user,
@@ -164,6 +165,81 @@ async def _list_admin_vehicles(db: AsyncSession) -> list[Vehicle]:
     vehicles = list(result.scalars().all())
     await _attach_vehicle_media(db, vehicles)
     return vehicles
+
+
+def _resolve_moderation_comment(payload: "ModerationDecisionPayload | None") -> str | None:
+    if payload is None:
+        return None
+    if payload.reject_reason:
+        return payload.reject_reason
+    return payload.comment
+
+
+def _collect_vehicle_slot_urls(vehicle: Vehicle | None) -> dict[str, str | None]:
+    slot_urls = {
+        "vehicle_main_url": None,
+        "vehicle_left_url": None,
+        "vehicle_plate_url": None,
+    }
+    if vehicle is None:
+        return slot_urls
+    for media_file in getattr(vehicle, "media_files", []):
+        if media_file.slot_key == "vehicle_main":
+            slot_urls["vehicle_main_url"] = media_file.public_url
+        elif media_file.slot_key == "vehicle_left":
+            slot_urls["vehicle_left_url"] = media_file.public_url
+        elif media_file.slot_key == "vehicle_plate":
+            slot_urls["vehicle_plate_url"] = media_file.public_url
+    return slot_urls
+
+
+async def _list_pending_moderation_items(db: AsyncSession) -> list[PendingModerationItemOut]:
+    result = await db.execute(
+        select(Driver)
+        .options(
+            selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option),
+            selectinload(Driver.user),
+        )
+        .where(Driver.vehicle_id.is_not(None))
+        .where(
+            (Driver.moderation_status == ModerationStatus.pending_moderation.value)
+            | (Vehicle.moderation_status == ModerationStatus.pending_moderation.value)
+        )
+        .join(Vehicle, Driver.vehicle_id == Vehicle.id)
+        .order_by(Driver.id.asc())
+    )
+    drivers = list(result.scalars().unique().all())
+    await _attach_vehicle_media(db, [driver.vehicle for driver in drivers if driver.vehicle is not None])
+
+    items: list[PendingModerationItemOut] = []
+    for driver in drivers:
+        vehicle = driver.vehicle
+        if vehicle is None:
+            continue
+        slot_urls = _collect_vehicle_slot_urls(vehicle)
+        if not all(slot_urls.values()):
+            continue
+        items.append(
+            PendingModerationItemOut(
+                driver_id=driver.id,
+                driver_name=driver.name,
+                driver_phone=driver.phone,
+                driver_moderation_status=driver.moderation_status,
+                driver_moderation_comment=driver.moderation_comment,
+                vehicle_id=vehicle.id,
+                vehicle_brand=vehicle.brand,
+                vehicle_model=vehicle.model,
+                vehicle_plate_number=vehicle.plate_number,
+                vehicle_body_volume_m3=vehicle.body_volume_m3,
+                vehicle_moderation_status=vehicle.moderation_status,
+                vehicle_moderation_comment=vehicle.moderation_comment,
+                vehicle_main_url=slot_urls["vehicle_main_url"],
+                vehicle_left_url=slot_urls["vehicle_left_url"],
+                vehicle_plate_url=slot_urls["vehicle_plate_url"],
+                media_files=list(getattr(vehicle, "media_files", [])),
+            )
+        )
+    return items
 
 
 async def _ensure_unique_driver_phone(
@@ -423,6 +499,7 @@ async def update_admin_driver(
 
 class ModerationDecisionPayload(BaseModel):
     comment: str | None = None
+    reject_reason: str | None = None
 
 
 @router.post("/drivers/{driver_id}/approve", response_model=DriverResponse)
@@ -479,7 +556,17 @@ async def suspend_driver(
     return await _load_driver_or_404(db, driver_id)
 
 
-@router.post("/vehicles/{vehicle_id}/approve", response_model=dict[str, str | bool])
+@router.get("/moderation/pending", response_model=list[PendingModerationItemOut])
+async def list_pending_moderation(
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    del current_admin
+    return await _list_pending_moderation_items(db)
+
+
+@router.patch("/vehicles/{vehicle_id}/approve", response_model=VehicleModerationDecisionOut)
+@router.post("/vehicles/{vehicle_id}/approve", response_model=VehicleModerationDecisionOut, include_in_schema=False)
 async def approve_vehicle(
     vehicle_id: UUID,
     payload: ModerationDecisionPayload | None = Body(default=None),
@@ -487,17 +574,33 @@ async def approve_vehicle(
     current_admin: User = Depends(get_current_admin_user),
 ):
     vehicle = await _load_vehicle_or_404(db, vehicle_id)
+    comment = _resolve_moderation_comment(payload)
     _set_vehicle_moderation(
         vehicle,
         ModerationStatus.approved.value,
-        comment=payload.comment if payload else None,
+        comment=comment,
         admin_user_id=current_admin.id,
     )
+    linked_driver = await db.scalar(select(Driver).where(Driver.vehicle_id == vehicle.id))
+    if linked_driver is not None and linked_driver.moderation_status != ModerationStatus.suspended.value:
+        _set_driver_moderation(
+            linked_driver,
+            ModerationStatus.approved.value,
+            comment=comment,
+            admin_user_id=current_admin.id,
+        )
     await db.commit()
-    return {"ok": True, "moderation_status": vehicle.moderation_status}
+    return VehicleModerationDecisionOut(
+        ok=True,
+        moderation_status=vehicle.moderation_status,
+        moderation_comment=vehicle.moderation_comment,
+        driver_moderation_status=linked_driver.moderation_status if linked_driver is not None else None,
+        driver_moderation_comment=linked_driver.moderation_comment if linked_driver is not None else None,
+    )
 
 
-@router.post("/vehicles/{vehicle_id}/reject", response_model=dict[str, str | bool])
+@router.patch("/vehicles/{vehicle_id}/reject", response_model=VehicleModerationDecisionOut)
+@router.post("/vehicles/{vehicle_id}/reject", response_model=VehicleModerationDecisionOut, include_in_schema=False)
 async def reject_vehicle(
     vehicle_id: UUID,
     payload: ModerationDecisionPayload | None = Body(default=None),
@@ -505,14 +608,29 @@ async def reject_vehicle(
     current_admin: User = Depends(get_current_admin_user),
 ):
     vehicle = await _load_vehicle_or_404(db, vehicle_id)
+    comment = _resolve_moderation_comment(payload)
     _set_vehicle_moderation(
         vehicle,
         ModerationStatus.rejected.value,
-        comment=payload.comment if payload else None,
+        comment=comment,
         admin_user_id=current_admin.id,
     )
+    linked_driver = await db.scalar(select(Driver).where(Driver.vehicle_id == vehicle.id))
+    if linked_driver is not None and linked_driver.moderation_status != ModerationStatus.suspended.value:
+        _set_driver_moderation(
+            linked_driver,
+            ModerationStatus.rejected.value,
+            comment=comment,
+            admin_user_id=current_admin.id,
+        )
     await db.commit()
-    return {"ok": True, "moderation_status": vehicle.moderation_status}
+    return VehicleModerationDecisionOut(
+        ok=True,
+        moderation_status=vehicle.moderation_status,
+        moderation_comment=vehicle.moderation_comment,
+        driver_moderation_status=linked_driver.moderation_status if linked_driver is not None else None,
+        driver_moderation_comment=linked_driver.moderation_comment if linked_driver is not None else None,
+    )
 
 
 @router.post("/vehicles/{vehicle_id}/suspend", response_model=dict[str, str | bool])

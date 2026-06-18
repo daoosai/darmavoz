@@ -9,7 +9,7 @@ class PresignUploadRequest(BaseModel):
     file_name: str
     content_type: str
     file_size: int = Field(gt=0)
-    entity_type: str
+    entity_type: str | None = None
     entity_id: UUID | None = None
     is_primary: bool = False
     sort_order: int = 0
@@ -25,12 +25,12 @@ class PresignUploadResponse(BaseModel):
 
 
 class ConfirmUploadRequest(BaseModel):
-    entity_type: str
+    entity_type: str | None = None
     entity_id: UUID
     object_key: str
-    file_name: str
-    content_type: str
-    file_size: int = Field(gt=0)
+    file_name: str | None = None
+    content_type: str | None = None
+    file_size: int | None = Field(default=None, gt=0)
     is_primary: bool = False
     sort_order: int = 0
     slot_key: str | None = None

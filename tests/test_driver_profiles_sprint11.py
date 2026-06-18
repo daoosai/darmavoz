@@ -414,3 +414,276 @@ async def test_admin_moderation_endpoints_allow_empty_body(client, session_facto
 
     assert response.status_code == 200
     assert response.json()["moderation_status"] == ModerationStatus.approved.value
+
+
+class FakeStorageService:
+    bucket = "test-bucket"
+
+    def assert_supported_entity_type(self, entity_type: str) -> None:
+        assert entity_type == "vehicle"
+
+    def assert_supported_image(self, file_name: str, content_type: str, file_size: int) -> None:
+        assert file_name
+        assert content_type.startswith("image/")
+        assert file_size > 0
+
+    def build_object_key(self, entity_type: str, file_name: str) -> str:
+        return f"uploads/{entity_type}/{file_name}"
+
+    def generate_presigned_put(self, object_key: str, content_type: str) -> str:
+        return f"https://upload.example.com/{object_key}?content_type={content_type}"
+
+    def build_public_url(self, object_key: str) -> str:
+        return f"https://cdn.example.com/{object_key}"
+
+    def head_object(self, object_key: str) -> dict:
+        return {
+            "ContentType": "image/jpeg",
+            "ContentLength": 2048,
+        }
+
+
+@pytest.mark.asyncio
+async def test_driver_media_upload_uses_driver_token_and_resets_vehicle_to_pending(client, session_factory, monkeypatch):
+    monkeypatch.setattr("app.api.media.get_storage_service", lambda: FakeStorageService())
+
+    async with session_factory() as session:
+        driver_role = await ensure_role(session, "driver")
+        driver_user = await create_user(session, username="+79990010808", role=driver_role)
+        delivery_option = await create_delivery_option(session, capacity_m3=12.0, title="Самосвал 12 м3")
+        vehicle = Vehicle(
+            title="Approved vehicle",
+            brand="Shacman",
+            plate_number="Е111ЕЕ72",
+            delivery_option_id=delivery_option.id,
+            is_active=True,
+            moderation_status=ModerationStatus.approved.value,
+        )
+        session.add(vehicle)
+        await session.flush()
+        driver = Driver(
+            name="Media Driver",
+            phone="+79990010808",
+            user_id=driver_user.id,
+            vehicle_id=vehicle.id,
+            status="offline",
+            moderation_status=ModerationStatus.approved.value,
+        )
+        session.add(driver)
+        await session.commit()
+        vehicle_id = vehicle.id
+
+    presign_response = await client.post(
+        "/api/v1/media/presign-upload",
+        headers=auth_headers("+79990010808"),
+        json={
+            "file_name": "vehicle-main.jpg",
+            "content_type": "image/jpeg",
+            "file_size": 2048,
+            "slot_key": "vehicle_main",
+        },
+    )
+
+    assert presign_response.status_code == 200
+    object_key = presign_response.json()["object_key"]
+
+    confirm_response = await client.post(
+        "/api/v1/media/confirm",
+        headers=auth_headers("+79990010808"),
+        json={
+            "entity_id": str(vehicle_id),
+            "entity_type": "vehicle",
+            "object_key": object_key,
+            "slot_key": "vehicle_main",
+        },
+    )
+
+    assert confirm_response.status_code == 201
+    assert confirm_response.json()["media_file"]["slot_key"] == "vehicle_main"
+
+    async with session_factory() as session:
+        vehicle = await session.get(Vehicle, vehicle_id)
+        media_rows = (
+            await session.execute(
+                select(MediaFile).where(MediaFile.entity_type == "vehicle", MediaFile.entity_id == vehicle_id)
+            )
+        ).scalars().all()
+
+    assert vehicle is not None
+    assert vehicle.moderation_status == ModerationStatus.pending_moderation.value
+    assert len(media_rows) == 1
+    assert media_rows[0].public_url == f"https://cdn.example.com/{object_key}"
+
+
+@pytest.mark.asyncio
+async def test_admin_pending_moderation_endpoint_returns_aggregated_queue(client, session_factory):
+    async with session_factory() as session:
+        admin_role = await ensure_role(session, "admin")
+        driver_role = await ensure_role(session, "driver")
+        admin_user = await create_user(session, username="pending_queue_admin", role=admin_role)
+        pending_driver_user = await create_user(session, username="+79990010909", role=driver_role)
+        approved_driver_user = await create_user(session, username="+79990011010", role=driver_role)
+        delivery_option = await create_delivery_option(session, capacity_m3=16.0, title="Самосвал 16 м3")
+
+        pending_vehicle = Vehicle(
+            title="Pending queue vehicle",
+            brand="КАМАЗ",
+            model="65115",
+            plate_number="К001КК72",
+            body_volume_m3=16.0,
+            delivery_option_id=delivery_option.id,
+            is_active=True,
+            moderation_status=ModerationStatus.pending_moderation.value,
+        )
+        approved_vehicle = Vehicle(
+            title="Approved queue vehicle",
+            brand="MAN",
+            plate_number="М002ММ72",
+            body_volume_m3=20.0,
+            delivery_option_id=delivery_option.id,
+            is_active=True,
+            moderation_status=ModerationStatus.approved.value,
+        )
+        session.add_all([pending_vehicle, approved_vehicle])
+        await session.flush()
+
+        pending_driver = Driver(
+            name="Pending Queue Driver",
+            phone="+79990010909",
+            user_id=pending_driver_user.id,
+            vehicle_id=pending_vehicle.id,
+            status="offline",
+            moderation_status=ModerationStatus.pending_moderation.value,
+        )
+        approved_driver = Driver(
+            name="Approved Queue Driver",
+            phone="+79990011010",
+            user_id=approved_driver_user.id,
+            vehicle_id=approved_vehicle.id,
+            status="offline",
+            moderation_status=ModerationStatus.approved.value,
+        )
+        session.add_all([pending_driver, approved_driver])
+        await session.flush()
+
+        session.add_all(
+            [
+                MediaFile(
+                    entity_type="vehicle",
+                    entity_id=pending_vehicle.id,
+                    bucket="demo",
+                    object_key="vehicles/pending-main.jpg",
+                    public_url="https://example.com/main.jpg",
+                    content_type="image/jpeg",
+                    file_name="main.jpg",
+                    file_size=100,
+                    slot_key="vehicle_main",
+                ),
+                MediaFile(
+                    entity_type="vehicle",
+                    entity_id=pending_vehicle.id,
+                    bucket="demo",
+                    object_key="vehicles/pending-left.jpg",
+                    public_url="https://example.com/left.jpg",
+                    content_type="image/jpeg",
+                    file_name="left.jpg",
+                    file_size=100,
+                    slot_key="vehicle_left",
+                ),
+                MediaFile(
+                    entity_type="vehicle",
+                    entity_id=pending_vehicle.id,
+                    bucket="demo",
+                    object_key="vehicles/pending-plate.jpg",
+                    public_url="https://example.com/plate.jpg",
+                    content_type="image/jpeg",
+                    file_name="plate.jpg",
+                    file_size=100,
+                    slot_key="vehicle_plate",
+                ),
+            ]
+        )
+        await session.commit()
+        admin_username = admin_user.username
+
+    response = await client.get(
+        "/api/v1/admin/moderation/pending",
+        headers=auth_headers(admin_username),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload) == 1
+    assert payload[0]["driver_name"] == "Pending Queue Driver"
+    assert payload[0]["driver_phone"] == "+79990010909"
+    assert payload[0]["vehicle_brand"] == "КАМАЗ"
+    assert payload[0]["vehicle_plate_number"] == "К001КК72"
+    assert payload[0]["vehicle_main_url"] == "https://example.com/main.jpg"
+    assert payload[0]["vehicle_left_url"] == "https://example.com/left.jpg"
+    assert payload[0]["vehicle_plate_url"] == "https://example.com/plate.jpg"
+
+
+@pytest.mark.asyncio
+async def test_admin_vehicle_patch_decisions_sync_driver_moderation(client, session_factory):
+    async with session_factory() as session:
+        admin_role = await ensure_role(session, "admin")
+        driver_role = await ensure_role(session, "driver")
+        admin_user = await create_user(session, username="vehicle_patch_admin", role=admin_role)
+        driver_user = await create_user(session, username="+79990011111", role=driver_role)
+        delivery_option = await create_delivery_option(session, capacity_m3=14.0, title="Самосвал 14 м3")
+        vehicle = Vehicle(
+            title="Patch moderation vehicle",
+            delivery_option_id=delivery_option.id,
+            is_active=True,
+            moderation_status=ModerationStatus.pending_moderation.value,
+        )
+        session.add(vehicle)
+        await session.flush()
+        driver = Driver(
+            name="Patch moderation driver",
+            phone="+79990011111",
+            user_id=driver_user.id,
+            vehicle_id=vehicle.id,
+            status="offline",
+            moderation_status=ModerationStatus.pending_moderation.value,
+        )
+        session.add(driver)
+        await session.commit()
+        vehicle_id = vehicle.id
+        driver_id = driver.id
+        admin_username = admin_user.username
+
+    reject_response = await client.patch(
+        f"/api/v1/admin/vehicles/{vehicle_id}/reject",
+        headers=auth_headers(admin_username),
+        json={"reject_reason": "Фото номера мутное"},
+    )
+    assert reject_response.status_code == 200
+    assert reject_response.json()["moderation_status"] == ModerationStatus.rejected.value
+    assert reject_response.json()["driver_moderation_status"] == ModerationStatus.rejected.value
+    assert reject_response.json()["moderation_comment"] == "Фото номера мутное"
+
+    approve_response = await client.patch(
+        f"/api/v1/admin/vehicles/{vehicle_id}/approve",
+        headers=auth_headers(admin_username),
+        json={"comment": "Все фото читаемые"},
+    )
+    assert approve_response.status_code == 200
+    assert approve_response.json()["moderation_status"] == ModerationStatus.approved.value
+    assert approve_response.json()["driver_moderation_status"] == ModerationStatus.approved.value
+
+    orders_response = await client.get(
+        "/api/v1/driver/orders",
+        headers=auth_headers("+79990011111"),
+    )
+    assert orders_response.status_code == 200
+    assert orders_response.json() == []
+
+    async with session_factory() as session:
+        vehicle = await session.get(Vehicle, vehicle_id)
+        driver = await session.get(Driver, driver_id)
+
+    assert vehicle is not None
+    assert driver is not None
+    assert vehicle.moderation_status == ModerationStatus.approved.value
+    assert driver.moderation_status == ModerationStatus.approved.value

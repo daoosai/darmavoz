@@ -5,7 +5,7 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
 from app.db.database import get_db
-from app.models.models import Driver, ModerationStatus, Role, User
+from app.models.models import Driver, ModerationStatus, Role, User, Vehicle
 from app.schemas.driver import DriverRegistrationResponse
 from app.schemas.driver import DriverRegisterRequest
 from app.security.auth import get_password_hash, verify_password
@@ -14,6 +14,11 @@ from app.schemas.token import Token
 from app.utils.phones import normalize_phone, normalize_phone_like_username
 
 router = APIRouter()
+
+
+def _build_registration_vehicle_title(*, brand: str, plate_number: str) -> str:
+    parts = [part.strip() for part in (brand, plate_number) if part.strip()]
+    return " / ".join(parts) if parts else "Черновик машины"
 
 
 async def _get_or_create_driver_role(db: AsyncSession) -> Role:
@@ -50,10 +55,29 @@ async def driver_register(
     db.add(user)
     await db.flush()
 
+    vehicle = Vehicle(
+        title=_build_registration_vehicle_title(
+            brand=payload.vehicle_brand,
+            plate_number=payload.vehicle_plate_number,
+        ),
+        brand=payload.vehicle_brand,
+        plate_number=payload.vehicle_plate_number,
+        vehicle_type=payload.vehicle_type.value,
+        cubature_min=payload.cubature_min,
+        cubature_max=payload.cubature_max,
+        tonnage_min=payload.tonnage_min,
+        tonnage_max=payload.tonnage_max,
+        moderation_status=ModerationStatus.incomplete.value,
+        is_active=True,
+    )
+    db.add(vehicle)
+    await db.flush()
+
     driver = Driver(
-        name=(payload.name or "Новый водитель").strip() or "Новый водитель",
+        name=payload.name,
         phone=normalized_phone,
         user_id=user.id,
+        vehicle_id=vehicle.id,
         status="offline",
         is_auto_dispatch_enabled=True,
         dispatch_priority=100,
@@ -61,7 +85,12 @@ async def driver_register(
     )
     db.add(driver)
     await db.commit()
-    await db.refresh(driver)
+    result = await db.execute(
+        select(Driver)
+        .options(selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option))
+        .where(Driver.id == driver.id)
+    )
+    driver = result.scalar_one()
 
     access_token = create_access_token(data={"sub": user.username, "role": role.name})
     return DriverRegistrationResponse(

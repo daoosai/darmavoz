@@ -3,7 +3,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import select
 
-from app.models.models import CartItem, Category, Client, DeliveryOption, Driver, Material, Order, OrderOffer, Role, User, Vehicle
+from app.models.models import CartItem, Category, Client, DeliveryOption, Driver, Material, MediaFile, Order, OrderOffer, Role, User, Vehicle
 from app.security.auth import get_password_hash, verify_password
 from app.security.jwt import create_access_token
 
@@ -164,6 +164,63 @@ async def test_delivery_option_delete_hides_when_linked_to_vehicle(client, sessi
 
     assert stored_option is not None
     assert stored_option.is_active is False
+
+
+@pytest.mark.asyncio
+async def test_public_delivery_option_detail_returns_primary_image_and_media(client, session_factory):
+    async with session_factory() as session:
+        delivery_option = DeliveryOption(
+            capacity_m3=15.0,
+            title="Самосвал 15 м3",
+            description="",
+            base_price=6500.0,
+            is_active=True,
+            sort_order=0,
+        )
+        session.add(delivery_option)
+        await session.flush()
+
+        session.add_all(
+            [
+                MediaFile(
+                    entity_type="delivery_option",
+                    entity_id=delivery_option.id,
+                    bucket="darmavoz-media",
+                    object_key=f"delivery-option/{uuid4()}.jpg",
+                    public_url="https://darmavoz.ru/s3/darmavoz-media/delivery-option/primary.jpg",
+                    content_type="image/jpeg",
+                    file_name="primary.jpg",
+                    file_size=1024,
+                    is_primary=True,
+                    slot_key="main",
+                ),
+                MediaFile(
+                    entity_type="delivery_option",
+                    entity_id=delivery_option.id,
+                    bucket="darmavoz-media",
+                    object_key=f"delivery-option/{uuid4()}.jpg",
+                    public_url="https://darmavoz.ru/s3/darmavoz-media/delivery-option/secondary.jpg",
+                    content_type="image/jpeg",
+                    file_name="secondary.jpg",
+                    file_size=2048,
+                    is_primary=False,
+                    slot_key="gallery",
+                ),
+            ]
+        )
+        await session.commit()
+        delivery_option_id = delivery_option.id
+
+    response = await client.get(f"/api/v1/catalog/delivery-options/{delivery_option_id}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == str(delivery_option_id)
+    assert body["primary_image_url"] == "https://darmavoz.ru/s3/darmavoz-media/delivery-option/primary.jpg"
+    assert [item["public_url"] for item in body["media_files"]] == [
+        "https://darmavoz.ru/s3/darmavoz-media/delivery-option/primary.jpg",
+        "https://darmavoz.ru/s3/darmavoz-media/delivery-option/secondary.jpg",
+    ]
 
 
 @pytest.mark.asyncio

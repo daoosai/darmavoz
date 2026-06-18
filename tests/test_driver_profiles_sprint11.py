@@ -55,6 +55,13 @@ async def test_driver_can_self_register_with_incomplete_moderation(client, sessi
             "phone": "+79990010101",
             "password": "driver123",
             "name": "Новый водитель",
+            "vehicle_brand": "КамАЗ",
+            "vehicle_plate_number": "А123АА72",
+            "cubature_min": 10.0,
+            "cubature_max": 14.0,
+            "tonnage_min": 8.0,
+            "tonnage_max": 12.0,
+            "vehicle_type": "самосвал",
         },
     )
 
@@ -63,15 +70,33 @@ async def test_driver_can_self_register_with_incomplete_moderation(client, sessi
     assert payload["role"] == "driver"
     assert payload["driver"]["phone"] == "+79990010101"
     assert payload["driver"]["moderation_status"] == ModerationStatus.incomplete.value
-    assert payload["driver"]["vehicle"] is None
+    assert payload["driver"]["vehicle"]["brand"] == "КамАЗ"
+    assert payload["driver"]["vehicle"]["plate_number"] == "А123АА72"
+    assert payload["driver"]["vehicle"]["cubature_min"] == 10.0
+    assert payload["driver"]["vehicle"]["cubature_max"] == 14.0
+    assert payload["driver"]["vehicle"]["tonnage_min"] == 8.0
+    assert payload["driver"]["vehicle"]["tonnage_max"] == 12.0
+    assert payload["driver"]["vehicle"]["vehicle_type"] == "самосвал"
+    assert payload["driver"]["vehicle"]["moderation_status"] == ModerationStatus.incomplete.value
+    assert payload["driver"]["vehicle"]["delivery_option_id"] is None
 
     async with session_factory() as session:
         driver = await session.scalar(select(Driver).where(Driver.phone == "+79990010101"))
         user = await session.scalar(select(User).where(User.username == "+79990010101"))
+        vehicle = await session.get(Vehicle, driver.vehicle_id)
 
     assert driver is not None
     assert user is not None
     assert driver.user_id == user.id
+    assert vehicle is not None
+    assert vehicle.brand == "КамАЗ"
+    assert vehicle.plate_number == "А123АА72"
+    assert vehicle.cubature_min == 10.0
+    assert vehicle.cubature_max == 14.0
+    assert vehicle.tonnage_min == 8.0
+    assert vehicle.tonnage_max == 12.0
+    assert vehicle.vehicle_type == "самосвал"
+    assert vehicle.delivery_option_id is None
 
 
 @pytest.mark.asyncio
@@ -220,9 +245,16 @@ async def test_driver_register_normalizes_phone_and_login_accepts_normalized_pho
     response = await client.post(
         "/api/v1/auth/driver/register",
         json={
-            "name": "Masked Driver",
+            "full_name": "Masked Driver",
             "phone": "+7 (999) 000-11-22",
             "password": "driver123",
+            "vehicle_brand": "MAN",
+            "vehicle_plate_number": "В456ВВ72",
+            "cubature_min": 12.0,
+            "cubature_max": 16.0,
+            "tonnage_min": 10.0,
+            "tonnage_max": 18.0,
+            "vehicle_type": "бортовой",
         },
     )
 
@@ -238,6 +270,27 @@ async def test_driver_register_normalizes_phone_and_login_accepts_normalized_pho
 
     assert login_response.status_code == 200
     assert login_response.json()["role"] == "driver"
+
+
+@pytest.mark.asyncio
+async def test_driver_register_rejects_invalid_min_max_ranges(client):
+    response = await client.post(
+        "/api/v1/auth/driver/register",
+        json={
+            "name": "Bad Range Driver",
+            "phone": "+79990001133",
+            "password": "driver123",
+            "vehicle_brand": "FAW",
+            "vehicle_plate_number": "С789СС72",
+            "cubature_min": 15.0,
+            "cubature_max": 10.0,
+            "tonnage_min": 9.0,
+            "tonnage_max": 8.0,
+            "vehicle_type": "будка",
+        },
+    )
+
+    assert response.status_code == 422
 
 
 @pytest.mark.asyncio

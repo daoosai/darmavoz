@@ -326,7 +326,9 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
       }
       else if (entityType === "delivery_option") {
         await fetchDeliveryOptions(true);
-        const refetchRes = await fetch(`${baseURL}/catalog/delivery-options/${entityId}`);
+        const refetchRes = await fetch(`${baseURL}/admin/delivery-options/${entityId}`, {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
         if(refetchRes.ok) setEditingDelivery(await refetchRes.json());
       }
       
@@ -359,7 +361,7 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
     if (!token) return;
     if (!silent) setIsLoading(true);
     try {
-      const res = await fetch(`${baseURL}/catalog/delivery-options/`, {
+      const res = await fetch(`${baseURL}/admin/delivery-options`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (!res.ok) throw new Error("Ошибка загрузки автопарка");
@@ -505,7 +507,9 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
       } else if (entityType === "delivery_option") {
         await fetchDeliveryOptions(true);
         if (editingDelivery && editingDelivery.id) {
-          const refetchRes = await fetch(`${baseURL}/catalog/delivery-options/${editingDelivery.id}`);
+          const refetchRes = await fetch(`${baseURL}/admin/delivery-options/${editingDelivery.id}`, {
+            headers: { "Authorization": `Bearer ${token}` }
+          });
           if (refetchRes.ok) setEditingDelivery(await refetchRes.json());
         }
       }
@@ -534,7 +538,9 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
       } else if (entityType === "delivery_option") {
         await fetchDeliveryOptions(true);
         if (editingDelivery && editingDelivery.id) {
-          const refetchRes = await fetch(`${baseURL}/catalog/delivery-options/${editingDelivery.id}`);
+          const refetchRes = await fetch(`${baseURL}/admin/delivery-options/${editingDelivery.id}`, {
+            headers: { "Authorization": `Bearer ${token}` }
+          });
           if (refetchRes.ok) setEditingDelivery(await refetchRes.json());
         }
       }
@@ -781,7 +787,9 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
       setEditingDelivery({ ...delivery });
       setIsDeliveryModalOpen(true);
       try {
-        const res = await fetch(`${baseURL}/catalog/delivery-options/${delivery.id}`);
+        const res = await fetch(`${baseURL}/admin/delivery-options/${delivery.id}`, {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
         if(res.ok) {
           const data = await res.json();
           setEditingDelivery({ ...data, media_files: data.media_files || delivery.media_files });

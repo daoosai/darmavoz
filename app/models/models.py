@@ -124,7 +124,11 @@ class Vehicle(Base):
     plate_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     vehicle_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     body_volume_m3: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    delivery_option_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("delivery_options.id"), nullable=False)
+    cubature_min: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    cubature_max: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    tonnage_min: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    tonnage_max: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    delivery_option_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("delivery_options.id"), nullable=True)
     rate_mode: Mapped[Optional[str]] = mapped_column(
         SQLEnum("per_ton_km", "fixed", name="vehicle_rate_mode"),
         nullable=True,
@@ -150,7 +154,7 @@ class Vehicle(Base):
     moderated_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    delivery_option: Mapped["DeliveryOption"] = relationship("DeliveryOption", back_populates="vehicles")
+    delivery_option: Mapped[Optional["DeliveryOption"]] = relationship("DeliveryOption", back_populates="vehicles")
     drivers: Mapped[List["Driver"]] = relationship("Driver", back_populates="vehicle")
 
 

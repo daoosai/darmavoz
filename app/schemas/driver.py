@@ -1,9 +1,16 @@
 from datetime import datetime
+from enum import Enum
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.catalog import DeliveryOptionOut, MediaFileOut
+
+
+class DriverRegisterVehicleType(str, Enum):
+    dump_truck = "самосвал"
+    flatbed = "бортовой"
+    box_van = "будка"
 
 
 class VehicleCreate(BaseModel):
@@ -13,7 +20,11 @@ class VehicleCreate(BaseModel):
     plate_number: str | None = None
     vehicle_type: str | None = None
     body_volume_m3: float | None = None
-    delivery_option_id: UUID
+    cubature_min: float | None = None
+    cubature_max: float | None = None
+    tonnage_min: float | None = None
+    tonnage_max: float | None = None
+    delivery_option_id: UUID | None = None
     rate_mode: str | None = None
     rate_per_ton_km: float | None = None
     fixed_rate: float | None = None
@@ -29,7 +40,11 @@ class VehicleOut(BaseModel):
     plate_number: str | None = None
     vehicle_type: str | None = None
     body_volume_m3: float | None = None
-    delivery_option_id: UUID
+    cubature_min: float | None = None
+    cubature_max: float | None = None
+    tonnage_min: float | None = None
+    tonnage_max: float | None = None
+    delivery_option_id: UUID | None = None
     rate_mode: str | None = None
     rate_per_ton_km: float | None = None
     fixed_rate: float | None = None
@@ -76,9 +91,30 @@ class AdminDriverUpdate(BaseModel):
 
 
 class DriverRegisterRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, str_strip_whitespace=True)
+
+    name: str = Field(
+        min_length=1,
+        max_length=255,
+        validation_alias=AliasChoices("name", "full_name"),
+    )
     phone: str
     password: str = Field(min_length=6, max_length=128)
-    name: str | None = None
+    vehicle_brand: str = Field(min_length=1, max_length=255)
+    vehicle_plate_number: str = Field(min_length=1, max_length=50)
+    cubature_min: float
+    cubature_max: float
+    tonnage_min: float
+    tonnage_max: float
+    vehicle_type: DriverRegisterVehicleType
+
+    @model_validator(mode="after")
+    def validate_ranges(self) -> "DriverRegisterRequest":
+        if self.cubature_max < self.cubature_min:
+            raise ValueError("cubature_max must be greater than or equal to cubature_min")
+        if self.tonnage_max < self.tonnage_min:
+            raise ValueError("tonnage_max must be greater than or equal to tonnage_min")
+        return self
 
 
 class DriverProfileUpdate(BaseModel):
@@ -92,6 +128,10 @@ class DriverVehicleUpdate(BaseModel):
     plate_number: str | None = None
     vehicle_type: str | None = None
     body_volume_m3: float | None = None
+    cubature_min: float | None = None
+    cubature_max: float | None = None
+    tonnage_min: float | None = None
+    tonnage_max: float | None = None
     delivery_option_id: UUID | None = None
     rate_mode: str | None = None
     rate_per_ton_km: float | None = None

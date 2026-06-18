@@ -172,6 +172,23 @@ async def _list_admin_vehicles(db: AsyncSession) -> list[Vehicle]:
     return vehicles
 
 
+async def _attach_delivery_option_media(
+    db: AsyncSession,
+    delivery_options: list[DeliveryOption],
+) -> list[DeliveryOption]:
+    await _attach_media(db, [], delivery_options)
+    return delivery_options
+
+
+async def _attach_material_media(
+    db: AsyncSession,
+    materials: list[Material],
+) -> list[Material]:
+    delivery_options = await _get_active_delivery_options(db)
+    await _attach_media(db, materials, delivery_options)
+    return _attach_delivery_options(materials, delivery_options)
+
+
 def _resolve_moderation_comment(payload: "ModerationDecisionPayload | None") -> str | None:
     if payload is None:
         return None
@@ -756,7 +773,8 @@ async def get_all_materials(
 ):
     del current_admin
     result = await db.execute(select(Material).order_by(Material.sort_order.asc(), Material.name.asc()))
-    return list(result.scalars().all())
+    materials = list(result.scalars().all())
+    return await _attach_material_media(db, materials)
 
 
 @router.get("/materials/{material_id}", response_model=MaterialOut)
@@ -769,9 +787,7 @@ async def get_material_for_admin(
     material = await db.get(Material, material_id)
     if material is None:
         raise HTTPException(status_code=404, detail="Material not found")
-    delivery_options = await _get_active_delivery_options(db)
-    await _attach_media(db, [material], delivery_options)
-    return _attach_delivery_options([material], delivery_options)[0]
+    return (await _attach_material_media(db, [material]))[0]
 
 
 @router.post("/materials/", response_model=MaterialOut, status_code=status.HTTP_201_CREATED)
@@ -785,7 +801,7 @@ async def create_material(
     db.add(material)
     await db.commit()
     await db.refresh(material)
-    return material
+    return (await _attach_material_media(db, [material]))[0]
 
 
 @router.patch("/materials/{material_id}", response_model=MaterialOut)
@@ -805,7 +821,7 @@ async def update_material(
 
     await db.commit()
     await db.refresh(material)
-    return material
+    return (await _attach_material_media(db, [material]))[0]
 
 
 @router.delete("/materials/{material_id}", response_model=DeleteResult)
@@ -848,7 +864,8 @@ async def list_delivery_options(
     result = await db.execute(
         select(DeliveryOption).order_by(DeliveryOption.sort_order.asc(), DeliveryOption.capacity_m3.asc())
     )
-    return list(result.scalars().all())
+    delivery_options = list(result.scalars().all())
+    return await _attach_delivery_option_media(db, delivery_options)
 
 
 @router.get("/delivery-options/{delivery_option_id}", response_model=DeliveryOptionOut)
@@ -861,7 +878,7 @@ async def get_delivery_option(
     delivery_option = await db.get(DeliveryOption, delivery_option_id)
     if delivery_option is None:
         raise HTTPException(status_code=404, detail="Delivery option not found")
-    return delivery_option
+    return (await _attach_delivery_option_media(db, [delivery_option]))[0]
 
 
 @router.post("/delivery-options", response_model=DeliveryOptionOut, status_code=status.HTTP_201_CREATED)
@@ -875,7 +892,7 @@ async def create_delivery_option(
     db.add(delivery_option)
     await db.commit()
     await db.refresh(delivery_option)
-    return delivery_option
+    return (await _attach_delivery_option_media(db, [delivery_option]))[0]
 
 
 @router.patch("/delivery-options/{delivery_option_id}", response_model=DeliveryOptionOut)
@@ -895,7 +912,7 @@ async def update_delivery_option(
 
     await db.commit()
     await db.refresh(delivery_option)
-    return delivery_option
+    return (await _attach_delivery_option_media(db, [delivery_option]))[0]
 
 
 @router.delete("/delivery-options/{delivery_option_id}", response_model=DeleteResult)

@@ -112,3 +112,12 @@ async def get_delivery_options(db: AsyncSession = Depends(get_db)) -> list[Deliv
     delivery_options = list(result.scalars().all())
     await _attach_media(db, [], delivery_options)
     return delivery_options
+
+
+@router.get("/delivery-options/{delivery_option_id}", response_model=DeliveryOptionOut)
+async def get_delivery_option(delivery_option_id: UUID, db: AsyncSession = Depends(get_db)) -> DeliveryOption:
+    delivery_option = await db.get(DeliveryOption, delivery_option_id)
+    if delivery_option is None or not delivery_option.is_active:
+        raise HTTPException(status_code=404, detail="Delivery option not found")
+    await _attach_media(db, [], [delivery_option])
+    return delivery_option

@@ -10,7 +10,9 @@ from app.models.models import (
     Driver,
     DriverStatus,
     Material,
+    ModerationStatus,
     Order,
+    OrderItem,
     OrderOffer,
     OrderOfferStatus,
     OrderStatus,
@@ -332,6 +334,7 @@ async def test_logist_can_assign_driver_manually_and_driver_sees_assigned_order(
     assign_payload = assign_response.json()
     assert assign_payload["status"] == OrderStatus.driver_assigned.value
     assert assign_payload["driver"]["id"] == str(driver.id)
+    assert assign_payload["driver"]["status"] == DriverStatus.busy.value
 
     assigned_response = await client.get(
         "/api/v1/driver/orders/assigned/current",
@@ -452,6 +455,90 @@ async def test_driver_assigned_current_returns_manually_assigned_order_without_o
     async with session_factory() as session:
         offers = await session.scalars(select(OrderOffer).where(OrderOffer.order_id == order.id))
         assert list(offers) == []
+
+
+@pytest.mark.asyncio
+async def test_logist_cannot_assign_driver_manually_with_unapproved_vehicle(client, session_factory):
+    async with session_factory() as session:
+        driver_role = await ensure_role(session, "driver")
+        logist_role = await ensure_role(session, "logist")
+
+        category = Category(name="Песок", slug="manual-assign-pending-vehicle", sort_order=0, is_active=True)
+        material = Material(
+            category=category,
+            name="Песок карьерный",
+            description="",
+            price=1500.0,
+            unit="m3",
+            min_volume=5.0,
+            is_active=True,
+            sort_order=0,
+        )
+        delivery_option = DeliveryOption(
+            capacity_m3=10.0,
+            title="10 м3",
+            description="",
+            base_price=0.0,
+            is_active=True,
+            sort_order=0,
+        )
+        session.add_all([category, material, delivery_option])
+        await session.flush()
+
+        driver_user = await create_driver_user(session, username="pending_vehicle_driver", role=driver_role)
+        await create_driver_user(session, username="pending_vehicle_logist", role=logist_role)
+
+        vehicle = Vehicle(
+            title="Камаз на модерации",
+            delivery_option_id=delivery_option.id,
+            is_active=True,
+            moderation_status=ModerationStatus.pending_moderation.value,
+        )
+        session.add(vehicle)
+        await session.flush()
+
+        driver = Driver(
+            user_id=driver_user.id,
+            vehicle_id=vehicle.id,
+            name="Водитель с машиной на модерации",
+            phone="+79000000124",
+            status=DriverStatus.available.value,
+            dispatch_priority=100,
+            is_auto_dispatch_enabled=True,
+        )
+        session.add(driver)
+        await session.commit()
+        await session.refresh(material)
+        await session.refresh(delivery_option)
+        await session.refresh(driver)
+
+    create_response = await client.post(
+        "/api/v1/logist/orders",
+        json={
+            "client_name": "Петр Смирнов",
+            "client_phone": "+79990002234",
+            "material_id": str(material.id),
+            "delivery_option_id": str(delivery_option.id),
+            "address": "Томск, Иркутский тракт 1",
+            "notes": "Проверка модерации",
+            "quantity": 1,
+            "auto_dispatch": False,
+        },
+        headers=auth_headers("pending_vehicle_logist"),
+    )
+    assert create_response.status_code == 201
+    order_id = create_response.json()["id"]
+
+    assign_response = await client.post(
+        f"/api/v1/orders/{order_id}/assign",
+        json={"driver_id": str(driver.id)},
+        headers=auth_headers("pending_vehicle_logist"),
+    )
+    assert assign_response.status_code == 400
+    assert (
+        assign_response.json()["detail"]
+        == "Невозможно назначить заказ: профиль водителя или автомобиль не прошли модерацию"
+    )
 
 
 @pytest.mark.asyncio

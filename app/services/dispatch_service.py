@@ -17,6 +17,7 @@ from app.models.models import (
     DriverStatus,
     EventLog,
     Material,
+    ModerationStatus,
     Order,
     OrderItem,
     OrderOffer,
@@ -28,6 +29,7 @@ from app.schemas.order import DispatchHistoryAttemptOut, DispatchHistoryOut, Log
 
 GUEST_CLIENT_PHONE = "00000000000"
 GUEST_CLIENT_NAME = "Гость (Демо)"
+MANUAL_ASSIGN_APPROVAL_ERROR = "Невозможно назначить заказ: профиль водителя или автомобиль не прошли модерацию"
 
 
 def utcnow() -> datetime:
@@ -594,11 +596,15 @@ async def assign_order_to_driver(session: AsyncSession, *, order_id: UUID, drive
             status_code=status.HTTP_409_CONFLICT,
             detail="Driver is inactive",
         )
+    if driver.moderation_status != ModerationStatus.approved.value:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=MANUAL_ASSIGN_APPROVAL_ERROR)
     if driver.vehicle is None or driver.vehicle_id is None or not driver.vehicle.is_active:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Driver must have an active vehicle before assignment",
         )
+    if driver.vehicle.moderation_status != ModerationStatus.approved.value:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=MANUAL_ASSIGN_APPROVAL_ERROR)
     if driver.status != DriverStatus.available.value:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -655,6 +661,7 @@ async def assign_order_to_driver(session: AsyncSession, *, order_id: UUID, drive
     await session.flush()
 
     order.driver_id = driver.id
+    order.driver = driver
     order.status = OrderStatus.driver_assigned.value
     order.assigned_at = now
     order.current_offer_id = accepted_offer.id

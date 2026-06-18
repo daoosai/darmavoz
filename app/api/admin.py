@@ -570,6 +570,7 @@ async def suspend_driver(
 
 
 @router.get("/moderation/pending", response_model=list[PendingModerationItemOut])
+@router.get("/moderation/pending/", response_model=list[PendingModerationItemOut], include_in_schema=False)
 async def list_pending_moderation(
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin_user),

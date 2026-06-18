@@ -1,6 +1,7 @@
 import pytest
 from sqlalchemy import select
 
+from main import app
 from app.models.models import DeliveryOption, Driver, MediaFile, ModerationStatus, Role, User, Vehicle
 from app.security.auth import get_password_hash
 from app.security.jwt import create_access_token
@@ -586,6 +587,13 @@ async def test_vehicle_enters_pending_only_after_third_required_photo(client, se
         assert profile_response.status_code == 200
         assert profile_response.json()["moderation_status"] == expected_status
         assert profile_response.json()["vehicle"]["moderation_status"] == expected_status
+
+
+@pytest.mark.asyncio
+async def test_admin_pending_moderation_route_registers_both_variants():
+    paths = {route.path for route in app.routes if getattr(route, "methods", None) and "GET" in route.methods}
+    assert "/api/v1/admin/moderation/pending" in paths
+    assert "/api/v1/admin/moderation/pending/" in paths
 
 
 @pytest.mark.asyncio

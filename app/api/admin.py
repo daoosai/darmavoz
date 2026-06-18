@@ -523,12 +523,20 @@ async def approve_driver(
     current_admin: User = Depends(get_current_admin_user),
 ):
     driver = await _load_driver_or_404(db, driver_id)
+    comment = _resolve_moderation_comment(payload)
     _set_driver_moderation(
         driver,
         ModerationStatus.approved.value,
-        comment=payload.comment if payload else None,
+        comment=comment,
         admin_user_id=current_admin.id,
     )
+    if driver.vehicle is not None and driver.vehicle.moderation_status != ModerationStatus.suspended.value:
+        _set_vehicle_moderation(
+            driver.vehicle,
+            ModerationStatus.approved.value,
+            comment=comment,
+            admin_user_id=current_admin.id,
+        )
     await db.commit()
     return await _load_driver_or_404(db, driver_id)
 
@@ -541,12 +549,20 @@ async def reject_driver(
     current_admin: User = Depends(get_current_admin_user),
 ):
     driver = await _load_driver_or_404(db, driver_id)
+    comment = _resolve_moderation_comment(payload)
     _set_driver_moderation(
         driver,
         ModerationStatus.rejected.value,
-        comment=payload.comment if payload else None,
+        comment=comment,
         admin_user_id=current_admin.id,
     )
+    if driver.vehicle is not None and driver.vehicle.moderation_status != ModerationStatus.suspended.value:
+        _set_vehicle_moderation(
+            driver.vehicle,
+            ModerationStatus.rejected.value,
+            comment=comment,
+            admin_user_id=current_admin.id,
+        )
     await db.commit()
     return await _load_driver_or_404(db, driver_id)
 
@@ -559,12 +575,20 @@ async def suspend_driver(
     current_admin: User = Depends(get_current_admin_user),
 ):
     driver = await _load_driver_or_404(db, driver_id)
+    comment = _resolve_moderation_comment(payload)
     _set_driver_moderation(
         driver,
         ModerationStatus.suspended.value,
-        comment=payload.comment if payload else None,
+        comment=comment,
         admin_user_id=current_admin.id,
     )
+    if driver.vehicle is not None:
+        _set_vehicle_moderation(
+            driver.vehicle,
+            ModerationStatus.suspended.value,
+            comment=comment,
+            admin_user_id=current_admin.id,
+        )
     await db.commit()
     return await _load_driver_or_404(db, driver_id)
 

@@ -20,9 +20,15 @@ from app.services.storage import (
     StorageValidationError,
     get_storage_service,
 )
+from app.services.vehicle_moderation import (
+    REQUIRED_VEHICLE_MEDIA_SLOTS,
+    set_incomplete_moderation,
+    set_pending_moderation,
+    vehicle_is_ready_for_moderation,
+)
 
 router = APIRouter()
-DRIVER_VEHICLE_MEDIA_SLOTS = {"vehicle_main", "vehicle_left", "vehicle_plate"}
+DRIVER_VEHICLE_MEDIA_SLOTS = REQUIRED_VEHICLE_MEDIA_SLOTS
 
 
 def _get_entity_model(entity_type: str):
@@ -106,11 +112,13 @@ async def _resolve_media_entity_context(
     return "vehicle", driver.vehicle_id, vehicle
 
 
-def _reset_vehicle_moderation(vehicle: Vehicle) -> None:
-    vehicle.moderation_status = ModerationStatus.pending_moderation.value
-    vehicle.moderation_comment = None
-    vehicle.moderated_at = None
-    vehicle.moderated_by_user_id = None
+async def _load_vehicle_media(db: AsyncSession, vehicle_id: UUID) -> list[MediaFile]:
+    result = await db.execute(
+        select(MediaFile)
+        .where(MediaFile.entity_type == "vehicle", MediaFile.entity_id == vehicle_id)
+        .order_by(MediaFile.created_at.asc())
+    )
+    return list(result.scalars().all())
 
 
 @router.post("/presign-upload", response_model=PresignUploadResponse)
@@ -240,7 +248,16 @@ async def confirm_upload(
         media_file.is_primary = payload.is_primary
 
     if vehicle is not None and (current_user.role.name if current_user.role else None) == "driver":
-        _reset_vehicle_moderation(vehicle)
+        media_files = await _load_vehicle_media(db, vehicle.id)
+        linked_driver = await _get_driver_profile(db, current_user.id)
+        if vehicle_is_ready_for_moderation(vehicle, media_files):
+            set_pending_moderation(vehicle)
+            if linked_driver is not None:
+                set_pending_moderation(linked_driver)
+        else:
+            set_incomplete_moderation(vehicle)
+            if linked_driver is not None:
+                set_incomplete_moderation(linked_driver)
 
     await db.commit()
     await db.refresh(media_file)

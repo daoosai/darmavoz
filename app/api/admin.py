@@ -44,6 +44,11 @@ from app.security.auth import (
     get_password_hash,
 )
 from app.utils.phones import normalize_phone
+from app.services.vehicle_moderation import (
+    REQUIRED_VEHICLE_MEDIA_SLOTS,
+    vehicle_has_required_photos,
+    vehicle_has_required_profile,
+)
 
 router = APIRouter()
 
@@ -202,8 +207,7 @@ async def _list_pending_moderation_items(db: AsyncSession) -> list[PendingModera
         )
         .where(Driver.vehicle_id.is_not(None))
         .where(
-            (Driver.moderation_status == ModerationStatus.pending_moderation.value)
-            | (Vehicle.moderation_status == ModerationStatus.pending_moderation.value)
+            Vehicle.moderation_status == ModerationStatus.pending_moderation.value
         )
         .join(Vehicle, Driver.vehicle_id == Vehicle.id)
         .order_by(Driver.id.asc())
@@ -216,8 +220,17 @@ async def _list_pending_moderation_items(db: AsyncSession) -> list[PendingModera
         vehicle = driver.vehicle
         if vehicle is None:
             continue
+        if not vehicle_has_required_profile(vehicle):
+            continue
         slot_urls = _collect_vehicle_slot_urls(vehicle)
-        if not all(slot_urls.values()):
+        matched_slots = {
+            media_file.slot_key
+            for media_file in getattr(vehicle, "media_files", [])
+            if media_file.slot_key in REQUIRED_VEHICLE_MEDIA_SLOTS
+        }
+        if matched_slots != REQUIRED_VEHICLE_MEDIA_SLOTS:
+            continue
+        if not vehicle_has_required_photos(getattr(vehicle, "media_files", [])):
             continue
         items.append(
             PendingModerationItemOut(

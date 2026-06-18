@@ -47,7 +47,7 @@ async def create_delivery_option(session, *, capacity_m3: float, title: str) -> 
 
 
 @pytest.mark.asyncio
-async def test_driver_can_self_register_with_pending_moderation(client, session_factory):
+async def test_driver_can_self_register_with_incomplete_moderation(client, session_factory):
     response = await client.post(
         "/api/v1/auth/driver/register",
         json={
@@ -61,7 +61,7 @@ async def test_driver_can_self_register_with_pending_moderation(client, session_
     payload = response.json()
     assert payload["role"] == "driver"
     assert payload["driver"]["phone"] == "+79990010101"
-    assert payload["driver"]["moderation_status"] == ModerationStatus.pending_moderation.value
+    assert payload["driver"]["moderation_status"] == ModerationStatus.incomplete.value
     assert payload["driver"]["vehicle"] is None
 
     async with session_factory() as session:
@@ -98,7 +98,7 @@ async def test_driver_profile_update_resets_driver_moderation_and_updates_userna
     payload = response.json()
     assert payload["name"] == "Новое имя"
     assert payload["phone"] == "+79990010203"
-    assert payload["moderation_status"] == ModerationStatus.pending_moderation.value
+    assert payload["moderation_status"] == ModerationStatus.incomplete.value
 
     async with session_factory() as session:
         driver = await session.scalar(select(Driver).where(Driver.phone == "+79990010203"))
@@ -110,7 +110,7 @@ async def test_driver_profile_update_resets_driver_moderation_and_updates_userna
 
 
 @pytest.mark.asyncio
-async def test_driver_vehicle_patch_creates_vehicle_and_resets_vehicle_moderation(client, session_factory):
+async def test_driver_vehicle_patch_creates_vehicle_and_keeps_incomplete_without_photos(client, session_factory):
     async with session_factory() as session:
         driver_role = await ensure_role(session, "driver")
         driver_user = await create_user(session, username="+79990010303", role=driver_role)
@@ -145,7 +145,7 @@ async def test_driver_vehicle_patch_creates_vehicle_and_resets_vehicle_moderatio
     payload = response.json()
     assert payload["vehicle"]["brand"] == "КамАЗ"
     assert payload["vehicle"]["model"] == "6520"
-    assert payload["vehicle"]["moderation_status"] == ModerationStatus.pending_moderation.value
+    assert payload["vehicle"]["moderation_status"] == ModerationStatus.incomplete.value
     assert payload["vehicle"]["fixed_rate"] == 18000.0
     assert payload["vehicle"]["rate_per_ton_km"] is None
 
@@ -510,9 +510,82 @@ async def test_driver_media_upload_uses_driver_token_and_resets_vehicle_to_pendi
         ).scalars().all()
 
     assert vehicle is not None
-    assert vehicle.moderation_status == ModerationStatus.pending_moderation.value
+    assert vehicle.moderation_status == ModerationStatus.incomplete.value
     assert len(media_rows) == 1
     assert media_rows[0].public_url == f"https://cdn.example.com/{object_key}"
+
+
+@pytest.mark.asyncio
+async def test_vehicle_enters_pending_only_after_third_required_photo(client, session_factory, monkeypatch):
+    monkeypatch.setattr("app.api.media.get_storage_service", lambda: FakeStorageService())
+
+    async with session_factory() as session:
+        driver_role = await ensure_role(session, "driver")
+        driver_user = await create_user(session, username="+79990011212", role=driver_role)
+        delivery_option = await create_delivery_option(session, capacity_m3=12.0, title="Самосвал 12 м3")
+        driver = Driver(
+            name="Pending After Third Photo",
+            phone="+79990011212",
+            user_id=driver_user.id,
+            status="offline",
+            moderation_status=ModerationStatus.incomplete.value,
+        )
+        session.add(driver)
+        await session.commit()
+        delivery_option_id = delivery_option.id
+
+    vehicle_response = await client.patch(
+        "/api/v1/driver/vehicle",
+        headers=auth_headers("+79990011212"),
+        json={
+            "brand": "КамАЗ",
+            "model": "65115",
+            "plate_number": "О777ОО72",
+            "vehicle_type": "Самосвал",
+            "body_volume_m3": 12.0,
+            "delivery_option_id": str(delivery_option_id),
+        },
+    )
+    assert vehicle_response.status_code == 200
+    vehicle_id = vehicle_response.json()["vehicle"]["id"]
+    assert vehicle_response.json()["vehicle"]["moderation_status"] == ModerationStatus.incomplete.value
+
+    for slot_key, expected_status in (
+        ("vehicle_main", ModerationStatus.incomplete.value),
+        ("vehicle_left", ModerationStatus.incomplete.value),
+        ("vehicle_plate", ModerationStatus.pending_moderation.value),
+    ):
+        presign_response = await client.post(
+            "/api/v1/media/presign-upload",
+            headers=auth_headers("+79990011212"),
+            json={
+                "file_name": f"{slot_key}.jpg",
+                "content_type": "image/jpeg",
+                "file_size": 2048,
+                "slot_key": slot_key,
+            },
+        )
+        assert presign_response.status_code == 200
+
+        confirm_response = await client.post(
+            "/api/v1/media/confirm",
+            headers=auth_headers("+79990011212"),
+            json={
+                "entity_id": vehicle_id,
+                "entity_type": "vehicle",
+                "object_key": presign_response.json()["object_key"],
+                "slot_key": slot_key,
+            },
+        )
+        assert confirm_response.status_code == 201
+
+        profile_response = await client.get(
+            "/api/v1/driver/profile/full",
+            headers=auth_headers("+79990011212"),
+        )
+        assert profile_response.status_code == 200
+        assert profile_response.json()["moderation_status"] == expected_status
+        assert profile_response.json()["vehicle"]["moderation_status"] == expected_status
 
 
 @pytest.mark.asyncio
@@ -535,6 +608,13 @@ async def test_admin_pending_moderation_endpoint_returns_aggregated_queue(client
             is_active=True,
             moderation_status=ModerationStatus.pending_moderation.value,
         )
+        incomplete_vehicle = Vehicle(
+            title="Incomplete queue vehicle",
+            brand="МАЗ",
+            delivery_option_id=delivery_option.id,
+            is_active=True,
+            moderation_status=ModerationStatus.pending_moderation.value,
+        )
         approved_vehicle = Vehicle(
             title="Approved queue vehicle",
             brand="MAN",
@@ -544,7 +624,7 @@ async def test_admin_pending_moderation_endpoint_returns_aggregated_queue(client
             is_active=True,
             moderation_status=ModerationStatus.approved.value,
         )
-        session.add_all([pending_vehicle, approved_vehicle])
+        session.add_all([pending_vehicle, incomplete_vehicle, approved_vehicle])
         await session.flush()
 
         pending_driver = Driver(
@@ -563,7 +643,16 @@ async def test_admin_pending_moderation_endpoint_returns_aggregated_queue(client
             status="offline",
             moderation_status=ModerationStatus.approved.value,
         )
-        session.add_all([pending_driver, approved_driver])
+        incomplete_driver_user = await create_user(session, username="+79990011313", role=driver_role)
+        incomplete_driver = Driver(
+            name="Incomplete Queue Driver",
+            phone="+79990011313",
+            user_id=incomplete_driver_user.id,
+            vehicle_id=incomplete_vehicle.id,
+            status="offline",
+            moderation_status=ModerationStatus.pending_moderation.value,
+        )
+        session.add_all([pending_driver, approved_driver, incomplete_driver])
         await session.flush()
 
         session.add_all(
@@ -613,14 +702,14 @@ async def test_admin_pending_moderation_endpoint_returns_aggregated_queue(client
 
     assert response.status_code == 200
     payload = response.json()
-    assert len(payload) == 1
-    assert payload[0]["driver_name"] == "Pending Queue Driver"
-    assert payload[0]["driver_phone"] == "+79990010909"
-    assert payload[0]["vehicle_brand"] == "КАМАЗ"
-    assert payload[0]["vehicle_plate_number"] == "К001КК72"
-    assert payload[0]["vehicle_main_url"] == "https://example.com/main.jpg"
-    assert payload[0]["vehicle_left_url"] == "https://example.com/left.jpg"
-    assert payload[0]["vehicle_plate_url"] == "https://example.com/plate.jpg"
+    pending_item = next(item for item in payload if item["driver_name"] == "Pending Queue Driver")
+    assert pending_item["driver_phone"] == "+79990010909"
+    assert pending_item["vehicle_brand"] == "КАМАЗ"
+    assert pending_item["vehicle_plate_number"] == "К001КК72"
+    assert pending_item["vehicle_main_url"] == "https://example.com/main.jpg"
+    assert pending_item["vehicle_left_url"] == "https://example.com/left.jpg"
+    assert pending_item["vehicle_plate_url"] == "https://example.com/plate.jpg"
+    assert all(item["driver_name"] != "Incomplete Queue Driver" for item in payload)
 
 
 @pytest.mark.asyncio

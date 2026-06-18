@@ -31,6 +31,12 @@ from app.services.dispatch_service import (
     list_orders_for_driver,
     mask_phone,
 )
+from app.services.vehicle_moderation import (
+    REQUIRED_VEHICLE_MEDIA_SLOTS,
+    set_incomplete_moderation,
+    set_pending_moderation,
+    vehicle_is_ready_for_moderation,
+)
 from app.utils.phones import normalize_phone
 
 router = APIRouter()
@@ -39,14 +45,6 @@ router = APIRouter()
 def _build_vehicle_title(vehicle: Vehicle) -> str:
     parts = [part.strip() for part in [vehicle.brand or "", vehicle.model or "", vehicle.plate_number or ""] if part]
     return " / ".join(parts) if parts else "Черновик машины"
-
-
-def _ensure_driver_profile_active(driver: Driver) -> None:
-    if not driver.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Driver profile is inactive",
-        )
 
 
 async def _attach_vehicle_media(db: AsyncSession, vehicle: Vehicle | None) -> None:
@@ -71,18 +69,18 @@ async def _load_driver_with_vehicle(db: AsyncSession, driver_id: UUID) -> Driver
     return driver
 
 
-def _reset_driver_moderation(driver: Driver) -> None:
-    driver.moderation_status = ModerationStatus.pending_moderation.value
-    driver.moderation_comment = None
-    driver.moderated_at = None
-    driver.moderated_by_user_id = None
+def _sync_driver_vehicle_moderation(driver: Driver, vehicle: Vehicle | None, media_files: list[MediaFile] | None) -> None:
+    if vehicle is None:
+        set_incomplete_moderation(driver)
+        return
 
+    if vehicle_is_ready_for_moderation(vehicle, media_files or []):
+        set_pending_moderation(vehicle)
+        set_pending_moderation(driver)
+        return
 
-def _reset_vehicle_moderation(vehicle: Vehicle) -> None:
-    vehicle.moderation_status = ModerationStatus.pending_moderation.value
-    vehicle.moderation_comment = None
-    vehicle.moderated_at = None
-    vehicle.moderated_by_user_id = None
+    set_incomplete_moderation(vehicle)
+    set_incomplete_moderation(driver)
 
 
 def _has_driver_critical_changes(driver: Driver, payload: DriverProfileUpdate) -> bool:
@@ -320,7 +318,6 @@ async def update_driver_profile(
     db: AsyncSession = Depends(get_db),
     current_driver: Driver = Depends(get_current_driver),
 ) -> Driver:
-    _ensure_driver_profile_active(current_driver)
     normalized_phone = normalize_phone(payload.phone) if payload.phone is not None else None
 
     if payload.phone is not None:
@@ -333,7 +330,7 @@ async def update_driver_profile(
 
     normalized_payload = payload.model_copy(update={"phone": normalized_phone})
     if _has_driver_critical_changes(current_driver, normalized_payload):
-        _reset_driver_moderation(current_driver)
+        _sync_driver_vehicle_moderation(current_driver, current_driver.vehicle, getattr(current_driver.vehicle, "media_files", []))
 
     if payload.name is not None:
         current_driver.name = payload.name
@@ -354,7 +351,6 @@ async def update_driver_vehicle(
     db: AsyncSession = Depends(get_db),
     current_driver: Driver = Depends(get_current_driver),
 ) -> Driver:
-    _ensure_driver_profile_active(current_driver)
     vehicle = current_driver.vehicle
     if vehicle is None:
         if payload.delivery_option_id is None:
@@ -366,7 +362,7 @@ async def update_driver_vehicle(
         vehicle = Vehicle(
             title="Черновик машины",
             delivery_option_id=payload.delivery_option_id,
-            moderation_status=ModerationStatus.pending_moderation.value,
+            moderation_status=ModerationStatus.incomplete.value,
             is_active=True,
         )
         db.add(vehicle)
@@ -386,9 +382,6 @@ async def update_driver_vehicle(
         rate_per_ton_km=next_rate_per_ton_km,
         fixed_rate=next_fixed_rate,
     )
-
-    if _has_vehicle_critical_changes(vehicle, payload):
-        _reset_vehicle_moderation(vehicle)
 
     for field in (
         "brand",
@@ -413,6 +406,8 @@ async def update_driver_vehicle(
         vehicle.rate_per_ton_km = None
 
     vehicle.title = _build_vehicle_title(vehicle)
+    await _attach_vehicle_media(db, vehicle)
+    _sync_driver_vehicle_moderation(current_driver, vehicle, vehicle.media_files)
     await db.commit()
     return await _load_driver_with_vehicle(db, current_driver.id)
 
@@ -423,7 +418,6 @@ async def update_driver_status(
     db: AsyncSession = Depends(get_db),
     current_driver: Driver = Depends(get_current_driver),
 ) -> dict[str, str | bool]:
-    _ensure_driver_profile_active(current_driver)
     current_driver.status = payload.status
     await db.commit()
     return {"ok": True, "status": current_driver.status}

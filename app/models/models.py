@@ -83,20 +83,20 @@ class Driver(Base):
         default="offline",
         nullable=False,
     )
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_auto_dispatch_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     dispatch_priority: Mapped[int] = mapped_column(Integer, default=100, nullable=False)
     temporary_penalty_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     last_offer_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     moderation_status: Mapped[str] = mapped_column(
         SQLEnum(
+            "incomplete",
             "pending_moderation",
             "approved",
             "rejected",
             "suspended",
             name="moderation_status",
         ),
-        default="approved",
+        default="incomplete",
         nullable=False,
     )
     moderation_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -134,13 +134,14 @@ class Vehicle(Base):
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     moderation_status: Mapped[str] = mapped_column(
         SQLEnum(
+            "incomplete",
             "pending_moderation",
             "approved",
             "rejected",
             "suspended",
             name="moderation_status",
         ),
-        default="approved",
+        default="incomplete",
         nullable=False,
     )
     moderation_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -265,6 +266,7 @@ class DriverStatus(str, Enum):
 
 
 class ModerationStatus(str, Enum):
+    incomplete = "incomplete"
     pending_moderation = "pending_moderation"
     approved = "approved"
     rejected = "rejected"

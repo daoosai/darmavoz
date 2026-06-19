@@ -75,6 +75,7 @@ class AdminDriverCreate(BaseModel):
     password: str = Field(min_length=6, max_length=128)
     delivery_option_id: UUID
     status: str = "offline"
+    is_active: bool = True
     is_auto_dispatch_enabled: bool = True
     dispatch_priority: int = 100
 
@@ -86,6 +87,7 @@ class AdminDriverUpdate(BaseModel):
     delivery_option_id: UUID | None = None
     vehicle_id: UUID | None = None
     status: str | None = None
+    is_active: bool | None = None
     is_auto_dispatch_enabled: bool | None = None
     dispatch_priority: int | None = None
 

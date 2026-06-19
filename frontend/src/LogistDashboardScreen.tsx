@@ -397,9 +397,6 @@ export default function LogistDashboardScreen({
   };
 
   const handleDeleteOrder = async (orderId: string) => {
-    if (!window.confirm("Вы уверены, что хотите удалить этот заказ?")) {
-      return;
-    }
     try {
       const res = await fetch(`${baseURL}/orders/${orderId}`, {
         method: "DELETE",

@@ -11,18 +11,15 @@ interface Props {
 }
 
 export default function ClientAuthBottomSheet({ isOpen, onClose }: Props) {
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [step, setStep] = useState<1 | 2>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorText, setErrorText] = useState("");
 
-  const [email, setEmail] = useState("");
-  const [agree1, setAgree1] = useState(false);
-  const [agree2, setAgree2] = useState(false);
-
-  const [name, setName] = useState("");
   const [phone, setPhone] = useState("+7");
   const [agree3, setAgree3] = useState(false);
   const [agree4, setAgree4] = useState(false);
+
+  const [timer, setTimer] = useState(40);
 
   const formatPhoneNumber = (value: string) => {
     let digits = value.replace(/\D/g, "");
@@ -47,6 +44,10 @@ export default function ClientAuthBottomSheet({ isOpen, onClose }: Props) {
     return formatted;
   };
 
+  const cleanPhoneNumber = (p: string) => {
+    return p.replace(/[\s()-]/g, '');
+  };
+
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setPhone(formatPhoneNumber(e.target.value));
   };
@@ -59,75 +60,52 @@ export default function ClientAuthBottomSheet({ isOpen, onClose }: Props) {
   useEffect(() => {
     if (isOpen) {
       setStep(1);
-      setEmail("");
-      setName("");
       setPhone("+7");
       setCode(["", "", "", ""]);
       setErrorText("");
+      setAgree3(false);
+      setAgree4(false);
+      setTimer(40);
     } else {
       document.body.style.overflow = "";
     }
   }, [isOpen]);
 
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (step === 2 && timer > 0) {
+      interval = setInterval(() => {
+        setTimer((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [step, timer]);
+
   const handleSendCode = async () => {
-    if (!email.includes("@")) {
-      setErrorText("Введите корректный email");
+    const digitsOnly = phone.replace(/\D/g, "");
+    if (digitsOnly.length < 11) {
+      setErrorText("Введите корректный номер телефона");
       return;
     }
-    if (!agree1 || !agree2) {
-      setErrorText("Необходимо согласие со всеми условиями");
+    if (!agree4) {
+      setErrorText("Необходимо согласие с политикой конфиденциальности");
       return;
     }
     
     setErrorText("");
     setIsSubmitting(true);
+    const cleanPhone = cleanPhoneNumber(phone);
     try {
       const res = await fetch(`${baseURL}/auth/client/send-code`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ phone: cleanPhone }),
       });
       if (res.ok) {
-        const data = await res.json();
-        if (data.is_new_user) {
-          setStep(2);
-        } else {
-          setStep(3);
-        }
+        setStep(2);
+        setTimer(40);
       } else {
-        setErrorText("Ошибка сервера");
-      }
-    } catch {
-      setErrorText("Сетевая ошибка");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleRegister = async () => {
-    const digitsOnly = phone.replace(/\D/g, "");
-    if (!name.trim() || digitsOnly.length < 11) {
-      setErrorText("Заполните все данные корректно");
-      return;
-    }
-    if (!agree3 || !agree4) {
-      setErrorText("Необходимо согласие со всеми условиями");
-      return;
-    }
-    setErrorText("");
-    setIsSubmitting(true);
-    const cleanPhone = "+" + digitsOnly;
-    try {
-      const res = await fetch(`${baseURL}/auth/client/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, name, phone: cleanPhone }),
-      });
-      if (res.ok) {
-        setStep(3);
-      } else {
-        const data = await res.json().catch(() => ({}));
-        setErrorText(data.detail || "Пользователь с таким телефонным номером уже зарегистрирован");
+        setErrorText("Ошибка отправки кода");
       }
     } catch {
       setErrorText("Сетевая ошибка");
@@ -139,17 +117,20 @@ export default function ClientAuthBottomSheet({ isOpen, onClose }: Props) {
   const handleVerify = async (fullCode: string) => {
     setErrorText("");
     setIsSubmitting(true);
+    const cleanPhone = cleanPhoneNumber(phone);
     try {
       const res = await fetch(`${baseURL}/auth/client/verify-code`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, code: fullCode }),
+        body: JSON.stringify({ phone: cleanPhone, code: fullCode }),
       });
       if (res.ok) {
         const data = await res.json();
         login(data.access_token, "client");
         toast.success("Вход выполнен");
         onClose();
+        // Since we emit CustomEvent inside login, or we can just fetch Profile here
+        // usually it's handled globally by useAuthStore -> fetch profile
       } else {
         setErrorText("Неверный код");
       }
@@ -204,7 +185,10 @@ export default function ClientAuthBottomSheet({ isOpen, onClose }: Props) {
         
         {step === 2 && (
           <button 
-            onClick={() => setStep(step - 1)}
+            onClick={() => {
+              setStep(1);
+              setCode(["", "", "", ""]);
+            }}
             className="absolute left-4 top-4 p-2 text-slate-800"
           >
             <ChevronLeft className="w-6 h-6" />
@@ -218,66 +202,8 @@ export default function ClientAuthBottomSheet({ isOpen, onClose }: Props) {
                 Вход / Регистрация
               </h2>
               <p className="text-[15px] text-slate-600 mb-8 font-medium">
-                Введите свой адрес электронной почты, чтобы войти в приложение
+                Введите свой номер телефона, чтобы войти в приложение
               </p>
-
-              <div className="relative mb-6">
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full border border-[#2DB0E6] rounded-2xl p-4 text-lg font-medium text-slate-800 focus:outline-none"
-                />
-                <label className="absolute -top-2 left-4 bg-white px-1 text-xs font-semibold text-[#2DB0E6]">E-mail</label>
-              </div>
-
-              <div className="flex flex-col gap-4 mb-8">
-                <div className="flex items-start gap-4 cursor-pointer" onClick={() => setAgree1(!agree1)}>
-                  <div className={`w-6 h-6 rounded flex items-center justify-center mt-1 shrink-0 ${agree1 ? "bg-[#2DB0E6]" : "border border-slate-300"}`}>
-                    {agree1 && <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
-                  </div>
-                  <span className="text-[15px] text-slate-500 font-medium leading-snug">
-                    Я согласен(-на) с политикой<br/><span className="border-b border-slate-400">конфиденциальности</span>
-                  </span>
-                </div>
-                <div className="flex items-start gap-4 cursor-pointer" onClick={() => setAgree2(!agree2)}>
-                  <div className={`w-6 h-6 rounded flex items-center justify-center mt-1 shrink-0 ${agree2 ? "bg-[#2DB0E6]" : "border border-slate-300"}`}>
-                    {agree2 && <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
-                  </div>
-                  <span className="text-[15px] text-slate-500 font-medium leading-snug">
-                    Я даю согласие(-ие) на обработку<br/><span className="border-b border-slate-400">персональных данных</span>
-                  </span>
-                </div>
-              </div>
-
-              {errorText && <div className="text-red-500 text-sm font-semibold mb-4">{errorText}</div>}
-
-              <button
-                disabled={isSubmitting || !agree1 || !agree2}
-                onClick={handleSendCode}
-                className="w-full bg-[#2DB0E6] text-white py-4 rounded-2xl font-bold text-lg active:scale-[0.98] transition-transform disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {isSubmitting && <Loader2 className="w-5 h-5 animate-spin" />}
-                Далее
-              </button>
-            </div>
-          )}
-
-          {step === 2 && (
-            <div className="flex flex-col animate-in fade-in slide-in-from-right-4 duration-300">
-              <h2 className="text-2xl font-bold text-slate-800 mb-8 mt-4 text-center leading-tight">
-                Давайте познакомимся
-              </h2>
-
-              <div className="relative mb-6">
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full border border-[#2DB0E6] rounded-2xl p-4 text-lg font-medium text-slate-800 focus:outline-none"
-                />
-                <label className="absolute -top-2 left-4 bg-white px-1 text-xs font-semibold text-[#2DB0E6]">Укажите ваше ФИО *</label>
-              </div>
 
               <div className="relative mb-6">
                 <input
@@ -308,34 +234,27 @@ export default function ClientAuthBottomSheet({ isOpen, onClose }: Props) {
                 </div>
               </div>
 
-              {errorText && (
-                <div className="text-red-500 text-sm font-semibold mb-4 leading-tight">
-                  {errorText}
-                  {errorText.includes("телефонным") && (
-                    <div className="mt-2 text-slate-800 font-medium">Хотите продолжить авторизацию с этим номером телефона?</div>
-                  )}
-                </div>
-              )}
+              {errorText && <div className="text-red-500 text-sm font-semibold mb-4">{errorText}</div>}
 
               <button
                 disabled={isSubmitting || !agree4}
-                onClick={handleRegister}
+                onClick={handleSendCode}
                 className="w-full bg-[#2DB0E6] text-white py-4 rounded-2xl font-bold text-lg active:scale-[0.98] transition-transform disabled:opacity-50 flex items-center justify-center gap-2 mt-auto"
               >
                 {isSubmitting && <Loader2 className="w-5 h-5 animate-spin" />}
-                {errorText.includes("телефонным") ? "Да, хочу" : "Далее"}
+                Далее
               </button>
             </div>
           )}
 
-          {step === 3 && (
+          {step === 2 && (
             <div className="flex flex-col animate-in fade-in slide-in-from-right-4 duration-300 h-full">
               <h2 className="text-2xl font-bold text-slate-800 mb-2 mt-4 text-center leading-tight">
-                Вход / Регистрация
+                Введите код
               </h2>
               <p className="text-[15px] text-slate-600 mb-8 font-medium text-center px-4">
-                Мы отправили код на почту<br/>
-                <span className="text-slate-900 font-bold">{email}</span>. Введите его, чтобы войти
+                Мы отправили код на номер<br/>
+                <span className="text-slate-900 font-bold">{phone}</span>
               </p>
 
               <div className="flex justify-center gap-3 mb-6">
@@ -357,8 +276,19 @@ export default function ClientAuthBottomSheet({ isOpen, onClose }: Props) {
                 ))}
               </div>
               
-              <div className="text-center text-slate-400 font-medium mb-8 text-sm">
-                Отправить повторно через 56 сек
+              <div className="text-center font-medium mb-8 text-sm">
+                {timer > 0 ? (
+                  <span className="text-slate-400">
+                    Получить новый код через {timer} сек.
+                  </span>
+                ) : (
+                  <button
+                    onClick={handleSendCode}
+                    className="text-[#2DB0E6] active:opacity-80 transition-opacity"
+                  >
+                    Получить новый код
+                  </button>
+                )}
               </div>
 
               {errorText && <div className="text-red-500 text-sm font-semibold mb-4 text-center">{errorText}</div>}
@@ -380,3 +310,4 @@ export default function ClientAuthBottomSheet({ isOpen, onClose }: Props) {
     </AnimatePresence>
   );
 }
+

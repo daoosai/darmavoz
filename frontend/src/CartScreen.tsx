@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   ShoppingCart,
   X,
@@ -8,7 +8,7 @@ import {
   Minus,
   Plus,
 } from "lucide-react";
-import { useAuthStore, useCartStore } from "./store";
+import { useAuthStore, useCartStore, useAddressStore } from "./store";
 import { getImageUrl, baseURL } from "./utils";
 import toast from "react-hot-toast";
 
@@ -16,10 +16,12 @@ export default function CartScreen({
   onGoToHome,
   onGoToOrders,
   onOpenAuth,
+  onOpenAddresses,
 }: {
   onGoToHome: () => void;
   onGoToOrders: () => void;
   onOpenAuth: () => void;
+  onOpenAddresses: () => void;
 }) {
   const {
     cartItems,
@@ -30,8 +32,18 @@ export default function CartScreen({
     decreaseQuantity,
   } = useCartStore();
   const { role, token } = useAuthStore();
+  const { selectedAddress, setSelectedAddress } = useAddressStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [globalAddress, setGlobalAddress] = useState("");
+  const [globalAddress, setGlobalAddress] = useState(selectedAddress);
+
+  useEffect(() => {
+    setGlobalAddress(selectedAddress);
+  }, [selectedAddress]);
+
+  const handleAddressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setGlobalAddress(e.target.value);
+    setSelectedAddress(e.target.value);
+  };
 
   const handleCheckout = async () => {
     if (cartItems.length === 0 || !globalAddress.trim()) return;
@@ -190,13 +202,25 @@ export default function CartScreen({
           <h3 className="font-semibold text-slate-800 mb-2 ml-1 text-[15px]">
             Адрес доставки
           </h3>
-          <input
-            type="text"
-            value={globalAddress}
-            onChange={(e) => setGlobalAddress(e.target.value)}
-            placeholder="Укажите точный адрес..."
-            className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6]/50 transition-all"
-          />
+          <button
+            onClick={() => {
+              if (role !== "client") {
+                onOpenAuth();
+              } else {
+                onOpenAddresses();
+              }
+            }}
+            className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3.5 text-left flex items-center justify-between active:bg-slate-100 transition-colors"
+          >
+            <div className="flex items-center gap-3 overflow-hidden">
+              <div className="w-8 h-8 rounded-full bg-[#2DB0E6]/10 flex items-center justify-center shrink-0">
+                <MapPin className="w-4 h-4 text-[#2DB0E6]" />
+              </div>
+              <span className={`text-[15px] font-medium truncate ${token && role === "client" && globalAddress ? 'text-slate-900' : 'text-slate-400'}`}>
+                {(token && role === "client" && globalAddress) ? globalAddress : "Укажите адрес доставки..."}
+              </span>
+            </div>
+          </button>
         </div>
       </div>
 

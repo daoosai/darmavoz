@@ -4,6 +4,14 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
+/* Вытаскиваем подсказки Яндекса поверх всех модалок */
+.ymaps-b-form-suggest,
+[class*="ymaps-"][class*="-suggest"],
+[class*="ymaps-2"][class*="islets_style_form-suggest"],
+body > ymaps {
+    z-index: 2147483647 !important; /* Максимально возможный z-index */
+}
+
 @layer utilities {
   .pb-safe {
     padding-bottom: env(safe-area-inset-bottom);

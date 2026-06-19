@@ -41,10 +41,31 @@ export const useAuthStore = create<AuthState>()(
       role: null,
       driverId: null,
       login: (token, role, driverId) => set({ token, role, driverId: driverId || null }),
-      logout: () => set({ token: null, role: null, driverId: null }),
+      logout: () => {
+        set({ token: null, role: null, driverId: null });
+        useAddressStore.getState().setSelectedAddress("");
+        localStorage.removeItem('address-storage');
+      },
     }),
     {
       name: "auth-storage", // unique name
+    }
+  )
+);
+
+interface AddressState {
+  selectedAddress: string;
+  setSelectedAddress: (address: string) => void;
+}
+
+export const useAddressStore = create<AddressState>()(
+  persist(
+    (set) => ({
+      selectedAddress: "",
+      setSelectedAddress: (address: string) => set({ selectedAddress: address }),
+    }),
+    {
+      name: "address-storage",
     }
   )
 );

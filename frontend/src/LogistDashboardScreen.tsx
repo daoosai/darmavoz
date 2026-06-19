@@ -90,19 +90,24 @@ const isDriverCompatibleWithOrder = (driver: AdminDriver, order: AdminOrder | nu
     return true;
   }
 
-  const orderDeliveryOptionId = order.delivery_option_id;
-  const driverDeliveryOptionId = driver.vehicle?.delivery_option_id || driver.vehicle?.delivery_option?.id;
-  if (orderDeliveryOptionId && driverDeliveryOptionId) {
-    return orderDeliveryOptionId === driverDeliveryOptionId;
+  // Убедимся, что машина есть и статус Свободен
+  if (!driver.vehicle || driver.status !== 'available') {
+    return false;
   }
-
-  const orderCapacity = order.delivery_option?.capacity_m3;
-  const driverCapacity = driver.vehicle?.delivery_option?.capacity_m3;
-  if (orderCapacity !== undefined && driverCapacity !== undefined) {
-    return orderCapacity === driverCapacity;
+  
+  // Извлекаем новые поля
+  const min = (driver as any).vehicle_cubature_min ?? driver.vehicle.cubature_min;
+  const max = (driver as any).vehicle_cubature_max ?? driver.vehicle.cubature_max;
+  
+  // Если у водителя нет этих полей (старая тестовая запись) - отбраковываем
+  if (min == null || max == null) {
+    return false;
   }
-
-  return false;
+  
+  // Проверяем вхождение объема заказа в диапазон кубатуры машины
+  const orderVolume = order.delivery_option?.capacity_m3 || 0;
+  
+  return orderVolume >= min && orderVolume <= max;
 };
 
 interface LogistDashboardScreenProps {
@@ -1000,8 +1005,8 @@ export default function LogistDashboardScreen({
 
       {manualAssignOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
-            <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl flex flex-col max-h-[90vh] overflow-visible">
+            <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-3xl">
               <div>
                 <h3 className="text-xl font-bold text-slate-800">Назначить водителя</h3>
                 <p className="text-sm text-slate-500 mt-1">Заказ #{manualAssignOrder.id.slice(0, 8)}</p>
@@ -1014,13 +1019,13 @@ export default function LogistDashboardScreen({
               </button>
             </div>
 
-            <div className="p-6 flex flex-col gap-4">
+            <div className="p-6 flex flex-col gap-4 overflow-visible">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <p className="text-xs font-bold uppercase tracking-wide text-slate-400 mb-2">Адрес</p>
                 <p className="text-sm font-semibold text-slate-800">{manualAssignOrder.address}</p>
               </div>
 
-              <div className="relative">
+              <div className="relative z-50">
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                   Водитель
                 </label>
@@ -1043,7 +1048,7 @@ export default function LogistDashboardScreen({
                 </div>
                 
                 {isDriverDropdownOpen && (
-                  <div className="absolute z-[100] w-full mt-2 bg-white rounded-xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.15)] border border-slate-100 max-h-64 overflow-y-auto left-0">
+                  <div className="absolute z-[9999] top-full left-0 w-full mt-1 bg-white rounded-xl shadow-2xl border border-gray-100 max-h-60 overflow-y-auto">
                     {compatibleDrivers.map((driver) => {
                       const vehicleTitle = getVehicleString(driver);
                       const isAvailable = driver.status === "available";

@@ -2,7 +2,7 @@ import { MaterialProps, DeliveryOption } from './MaterialDetailScreen';
 
 export const baseURL = 'https://darmavoz.ru/api/v1';
 
-export const APP_VERSION = import.meta.env.VITE_APP_VERSION || "2.0.0";
+export const APP_VERSION = import.meta.env.VITE_APP_VERSION || "2.1.0";
 
 export const orderStatusMap: Record<string, string> = {
   'created': 'СОЗДАН',

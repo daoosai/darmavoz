@@ -116,6 +116,16 @@ class S3StorageService:
             ExpiresIn=settings.S3_PRESIGN_TTL_SECONDS,
         )
 
+    def generate_presigned_get(self, object_key: str, expires_in: int | None = None) -> str:
+        return self._presign_client.generate_presigned_url(
+            "get_object",
+            Params={
+                "Bucket": self.bucket,
+                "Key": object_key,
+            },
+            ExpiresIn=expires_in or settings.S3_PRESIGN_TTL_SECONDS,
+        )
+
     def delete_object(self, object_key: str) -> None:
         self._client.delete_object(Bucket=self.bucket, Key=object_key)
 

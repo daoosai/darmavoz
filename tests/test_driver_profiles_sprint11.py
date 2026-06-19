@@ -317,6 +317,107 @@ async def test_driver_register_rejects_invalid_min_max_ranges(client):
 
 
 @pytest.mark.asyncio
+async def test_driver_vehicle_submit_requires_new_text_fields(client, session_factory):
+    async with session_factory() as session:
+        driver_role = await ensure_role(session, "driver")
+        driver_user = await create_user(session, username="+79990011414", role=driver_role)
+        vehicle = Vehicle(
+            title="Old schema vehicle",
+            brand="КамАЗ",
+            plate_number="А222АА72",
+            body_volume_m3=12.0,
+            is_active=True,
+            moderation_status=ModerationStatus.incomplete.value,
+        )
+        session.add(vehicle)
+        await session.flush()
+        driver = Driver(
+            name="Submit Text Driver",
+            phone="+79990011414",
+            user_id=driver_user.id,
+            vehicle_id=vehicle.id,
+            status="offline",
+            moderation_status=ModerationStatus.incomplete.value,
+        )
+        session.add(driver)
+        await session.commit()
+
+    response = await client.post(
+        "/api/v1/driver/vehicle/submit",
+        headers=auth_headers("+79990011414"),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Не заполнены обязательные текстовые данные автомобиля"
+
+
+@pytest.mark.asyncio
+async def test_driver_vehicle_submit_requires_all_three_required_photos(client, session_factory):
+    async with session_factory() as session:
+        driver_role = await ensure_role(session, "driver")
+        driver_user = await create_user(session, username="+79990011515", role=driver_role)
+        vehicle = Vehicle(
+            title="Ready except photos",
+            brand="КамАЗ",
+            plate_number="А333АА72",
+            vehicle_type="самосвал",
+            cubature_min=10.0,
+            cubature_max=12.0,
+            tonnage_min=8.0,
+            tonnage_max=10.0,
+            is_active=True,
+            moderation_status=ModerationStatus.incomplete.value,
+        )
+        session.add(vehicle)
+        await session.flush()
+        driver = Driver(
+            name="Submit Photo Driver",
+            phone="+79990011515",
+            user_id=driver_user.id,
+            vehicle_id=vehicle.id,
+            status="offline",
+            moderation_status=ModerationStatus.incomplete.value,
+        )
+        session.add(driver)
+        await session.flush()
+        session.add_all(
+            [
+                MediaFile(
+                    entity_type="vehicle",
+                    entity_id=vehicle.id,
+                    bucket="demo",
+                    object_key="vehicles/main-submit.jpg",
+                    public_url="https://example.com/main-submit.jpg",
+                    content_type="image/jpeg",
+                    file_name="main-submit.jpg",
+                    file_size=100,
+                    slot_key="vehicle_main",
+                ),
+                MediaFile(
+                    entity_type="vehicle",
+                    entity_id=vehicle.id,
+                    bucket="demo",
+                    object_key="vehicles/left-submit.jpg",
+                    public_url="https://example.com/left-submit.jpg",
+                    content_type="image/jpeg",
+                    file_name="left-submit.jpg",
+                    file_size=100,
+                    slot_key="vehicle_left",
+                ),
+            ]
+        )
+        await session.commit()
+
+    response = await client.post(
+        "/api/v1/driver/vehicle/submit",
+        headers=auth_headers("+79990011515"),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Необходимо загрузить все 3 фотографии автомобиля"
+
+
+@pytest.mark.asyncio
 async def test_admin_can_approve_reject_and_suspend_driver_and_vehicle(client, session_factory):
     async with session_factory() as session:
         admin_role = await ensure_role(session, "admin")
@@ -687,7 +788,11 @@ async def test_admin_pending_moderation_endpoint_returns_aggregated_queue(client
             brand="КАМАЗ",
             model="65115",
             plate_number="К001КК72",
-            body_volume_m3=16.0,
+            vehicle_type="самосвал",
+            cubature_min=14.0,
+            cubature_max=16.0,
+            tonnage_min=10.0,
+            tonnage_max=12.0,
             delivery_option_id=delivery_option.id,
             is_active=True,
             moderation_status=ModerationStatus.pending_moderation.value,
@@ -790,6 +895,11 @@ async def test_admin_pending_moderation_endpoint_returns_aggregated_queue(client
     assert pending_item["driver_phone"] == "+79990010909"
     assert pending_item["vehicle_brand"] == "КАМАЗ"
     assert pending_item["vehicle_plate_number"] == "К001КК72"
+    assert pending_item["vehicle_type"] == "самосвал"
+    assert pending_item["vehicle_cubature_min"] == 14.0
+    assert pending_item["vehicle_cubature_max"] == 16.0
+    assert pending_item["vehicle_tonnage_min"] == 10.0
+    assert pending_item["vehicle_tonnage_max"] == 12.0
     assert pending_item["vehicle_main_url"] == "https://example.com/main.jpg"
     assert pending_item["vehicle_left_url"] == "https://example.com/left.jpg"
     assert pending_item["vehicle_plate_url"] == "https://example.com/plate.jpg"

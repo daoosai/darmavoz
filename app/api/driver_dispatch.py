@@ -35,7 +35,6 @@ from app.services.vehicle_moderation import (
     REQUIRED_VEHICLE_MEDIA_SLOTS,
     set_incomplete_moderation,
     set_pending_moderation,
-    vehicle_is_ready_for_moderation,
 )
 from app.utils.phones import normalize_phone
 
@@ -435,8 +434,26 @@ async def submit_driver_vehicle_for_moderation(
         raise HTTPException(status_code=403, detail="Suspended profiles cannot be submitted")
 
     media_files = getattr(vehicle, "media_files", [])
-    if not vehicle_is_ready_for_moderation(vehicle, media_files):
-        raise HTTPException(status_code=400, detail="Vehicle profile is incomplete for moderation")
+    if not (
+        vehicle.brand
+        and vehicle.plate_number
+        and vehicle.vehicle_type
+        and (vehicle.cubature_max is not None or vehicle.cubature_min is not None)
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Не заполнены обязательные текстовые данные автомобиля",
+        )
+
+    if {
+        media_file.slot_key
+        for media_file in media_files
+        if media_file.slot_key in REQUIRED_VEHICLE_MEDIA_SLOTS
+    } != REQUIRED_VEHICLE_MEDIA_SLOTS:
+        raise HTTPException(
+            status_code=400,
+            detail="Необходимо загрузить все 3 фотографии автомобиля",
+        )
 
     set_pending_moderation(vehicle)
     set_pending_moderation(driver)

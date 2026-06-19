@@ -8,7 +8,8 @@ def vehicle_has_required_profile(vehicle) -> bool:
         vehicle is not None
         and vehicle.brand
         and vehicle.plate_number
-        and vehicle.body_volume_m3 is not None
+        and vehicle.vehicle_type
+        and (vehicle.cubature_max is not None or vehicle.cubature_min is not None)
     )
 
 

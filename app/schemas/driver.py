@@ -169,6 +169,16 @@ class DriverResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class DriverFleetResponse(DriverResponse):
+    vehicle_type: str | None = None
+    vehicle_cubature_min: float | None = None
+    vehicle_cubature_max: float | None = None
+    vehicle_tonnage_min: float | None = None
+    vehicle_tonnage_max: float | None = None
+    vehicle_main_url: str | None = None
+    vehicle_left_url: str | None = None
+
+
 class DriverRegistrationResponse(BaseModel):
     access_token: str
     token_type: str
@@ -235,7 +245,11 @@ class PendingModerationItemOut(BaseModel):
     vehicle_brand: str | None = None
     vehicle_model: str | None = None
     vehicle_plate_number: str | None = None
-    vehicle_body_volume_m3: float | None = None
+    vehicle_cubature_min: float | None = None
+    vehicle_cubature_max: float | None = None
+    vehicle_tonnage_min: float | None = None
+    vehicle_tonnage_max: float | None = None
+    vehicle_type: str | None = None
     vehicle_moderation_status: str
     vehicle_moderation_comment: str | None = None
     vehicle_main_url: str | None = None

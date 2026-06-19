@@ -7,11 +7,76 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.database import get_db
-from app.models.models import Driver, DriverStatus, OrderOffer, User, Vehicle
-from app.schemas.driver import DriverCreate, DriverResponse
+from app.models.models import Driver, DriverStatus, MediaFile, OrderOffer, User, Vehicle
+from app.schemas.driver import DriverCreate, DriverFleetResponse, DriverResponse
 from app.security.auth import get_current_logist_user
+from app.services.storage import StorageNotConfiguredError, get_storage_service
 
 router = APIRouter()
+
+
+async def _attach_vehicle_media(db: AsyncSession, vehicles: list[Vehicle]) -> None:
+    vehicle_ids = [vehicle.id for vehicle in vehicles]
+    if not vehicle_ids:
+        return
+
+    result = await db.execute(
+        select(MediaFile)
+        .where(MediaFile.entity_type == "vehicle", MediaFile.entity_id.in_(vehicle_ids))
+        .order_by(MediaFile.is_primary.desc(), MediaFile.created_at.asc())
+    )
+    media_by_vehicle: dict[UUID, list[MediaFile]] = {vehicle_id: [] for vehicle_id in vehicle_ids}
+    for media_file in result.scalars().all():
+        media_by_vehicle.setdefault(media_file.entity_id, []).append(media_file)
+
+    for vehicle in vehicles:
+        vehicle.media_files = media_by_vehicle.get(vehicle.id, [])
+
+
+def _collect_vehicle_slot_urls(
+    vehicle: Vehicle | None,
+    *,
+    storage=None,
+) -> dict[str, str | None]:
+    slot_urls = {
+        "vehicle_main_url": None,
+        "vehicle_left_url": None,
+    }
+    if vehicle is None:
+        return slot_urls
+
+    for media_file in getattr(vehicle, "media_files", []):
+        url = (
+            storage.generate_presigned_get(media_file.object_key)
+            if storage is not None
+            else media_file.public_url
+        )
+        if media_file.slot_key == "vehicle_main":
+            slot_urls["vehicle_main_url"] = url
+        elif media_file.slot_key == "vehicle_left":
+            slot_urls["vehicle_left_url"] = url
+
+    return slot_urls
+
+
+def _serialize_driver_fleet(
+    driver: Driver,
+    *,
+    storage=None,
+) -> DriverFleetResponse:
+    vehicle = driver.vehicle
+    slot_urls = _collect_vehicle_slot_urls(vehicle, storage=storage)
+    payload = DriverResponse.model_validate(driver).model_dump(mode="python")
+    return DriverFleetResponse(
+        **payload,
+        vehicle_type=vehicle.vehicle_type if vehicle is not None else None,
+        vehicle_cubature_min=vehicle.cubature_min if vehicle is not None else None,
+        vehicle_cubature_max=vehicle.cubature_max if vehicle is not None else None,
+        vehicle_tonnage_min=vehicle.tonnage_min if vehicle is not None else None,
+        vehicle_tonnage_max=vehicle.tonnage_max if vehicle is not None else None,
+        vehicle_main_url=slot_urls["vehicle_main_url"],
+        vehicle_left_url=slot_urls["vehicle_left_url"],
+    )
 
 
 def build_driver_list_query(
@@ -41,14 +106,22 @@ async def fetch_drivers(
     *,
     delivery_option_id: UUID | None = None,
     status_filter: str | None = None,
-) -> list[Driver]:
+) -> list[DriverFleetResponse]:
     result = await db.execute(
         build_driver_list_query(
             delivery_option_id=delivery_option_id,
             status_filter=status_filter,
         )
     )
-    return list(result.scalars().all())
+    drivers = list(result.scalars().unique().all())
+    await _attach_vehicle_media(db, [driver.vehicle for driver in drivers if driver.vehicle is not None])
+
+    try:
+        storage = get_storage_service()
+    except StorageNotConfiguredError:
+        storage = None
+
+    return [_serialize_driver_fleet(driver, storage=storage) for driver in drivers]
 
 
 @router.post("/", response_model=DriverResponse, status_code=status.HTTP_201_CREATED)
@@ -89,7 +162,7 @@ async def create_driver(
     return result.scalar_one()
 
 
-@router.get("/", response_model=List[DriverResponse])
+@router.get("/", response_model=List[DriverFleetResponse])
 async def list_drivers(
     delivery_option_id: UUID | None = Query(default=None),
     status_filter: str | None = Query(default=None, alias="status"),

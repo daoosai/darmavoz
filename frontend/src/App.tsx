@@ -234,7 +234,7 @@ function MainContent({ currentRoute, setCurrentRoute, activeTab, setActiveTab, c
   };
 
   return (
-    <div className="min-h-screen w-full bg-slate-100 flex sm:items-center justify-center font-sans text-slate-900">
+    <div className="min-h-screen w-full bg-slate-100 flex sm:items-center justify-center text-slate-900">
       {/* Mobile container aligned and constrained on large screens */}
       <div className="w-full max-w-md bg-white min-h-screen sm:min-h-0 sm:h-[85vh] relative shadow-2xl flex flex-col overflow-hidden sm:rounded-[32px] sm:border-8 border-slate-900">
         

@@ -17,6 +17,7 @@ import {
   Trash2,
   Users,
   SearchX,
+  ChevronDown,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import UpdateBanner from "./UpdateBanner";
@@ -48,9 +49,21 @@ interface AdminDriver {
   name: string;
   phone: string;
   status: string;
+  moderation_status?: string;
+  vehicle_main_url?: string | null;
+  vehicle_left_url?: string | null;
   vehicle?: {
     title: string;
     plate_number: string;
+    type?: string;
+    cubature_min?: number;
+    cubature_max?: number;
+    tonnage_min?: number;
+    tonnage_max?: number;
+    main_url?: string | null;
+    left_url?: string | null;
+    vehicle_main_url?: string | null;
+    vehicle_left_url?: string | null;
     delivery_option_id?: string;
     delivery_option?: {
       id?: string;
@@ -109,6 +122,7 @@ export default function LogistDashboardScreen({
   const [manualAssignOrder, setManualAssignOrder] = useState<AdminOrder | null>(null);
   const [selectedDriverId, setSelectedDriverId] = useState("");
   const [isManualAssignSaving, setIsManualAssignSaving] = useState(false);
+  const [isDriverDropdownOpen, setIsDriverDropdownOpen] = useState(false);
 
   // Create Order State
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -460,6 +474,14 @@ export default function LogistDashboardScreen({
     ? drivers.filter((driver) => isDriverCompatibleWithOrder(driver, manualAssignOrder))
     : drivers;
 
+  const getFirstName = (fullName?: string) => {
+    if (!fullName) return "Водитель";
+    const parts = fullName.trim().split(/\s+/);
+    if (parts.length >= 3) return parts[1];
+    if (parts.length === 2) return parts[0];
+    return fullName;
+  };
+
   return (
     <div className="flex flex-col h-screen bg-slate-50 relative overflow-hidden">
       {/* Header */}
@@ -734,43 +756,103 @@ export default function LogistDashboardScreen({
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                   {drivers.map((driver) => (
                     <div key={driver.id} className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex flex-col gap-4 text-left hover:shadow-md transition-shadow">
-                      <div className="flex justify-between items-start">
-                        <div className="flex items-center gap-3">
-                          <div className="bg-slate-100 p-3 rounded-full text-slate-500 shadow-sm border border-slate-200/50">
+                      <div className="flex justify-between items-start gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="bg-slate-100 p-3 rounded-full text-slate-500 shadow-sm border border-slate-200/50 shrink-0">
                             <User className="w-5 h-5" />
                           </div>
-                          <div>
-                            <p className="font-bold text-slate-800">{driver.name}</p>
-                            <p className="text-xs text-slate-500 font-mono mt-0.5">{driver.phone}</p>
+                          <div className="truncate">
+                            <p className="font-semibold text-gray-900 text-base truncate">{getFirstName(driver.name)}</p>
+                            <p className="text-xs text-slate-500 mt-0.5 truncate">{driver.phone}</p>
                           </div>
                         </div>
-                        <span className={`text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-lg border ${
-                          driver.status === 'available' ? 'bg-green-50 text-green-700 border-green-200' :
-                          driver.status === 'busy' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
-                          'bg-slate-50 text-slate-600 border-slate-200'
-                        }`}>
-                          {driver.status === 'available' ? 'Свободен' :
-                           driver.status === 'busy' ? 'Занят' :
-                           'Недоступен'}
-                        </span>
+                        {(() => {
+                          if (driver.moderation_status === 'pending_moderation') {
+                            return (
+                              <span className="text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-lg border bg-yellow-100 text-yellow-800 border-yellow-200 shrink-0">
+                                На модерации
+                              </span>
+                            );
+                          }
+                          if (driver.moderation_status === 'incomplete' || driver.moderation_status === 'draft') {
+                            return (
+                              <span className="text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-lg border bg-slate-100 text-slate-600 border-slate-300 shrink-0">
+                                Не заполнен
+                              </span>
+                            );
+                          }
+                          return (
+                            <span className={`text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-lg border shrink-0 ${
+                              driver.status === 'available' ? 'bg-green-50 text-green-700 border-green-200' :
+                              driver.status === 'busy' ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                              'bg-slate-50 text-slate-600 border-slate-200'
+                            }`}>
+                              {driver.status === 'available' ? 'Свободен' :
+                               driver.status === 'busy' ? 'Занят' :
+                               'Недоступен'}
+                            </span>
+                          );
+                        })()}
                       </div>
 
                       <div className="w-full h-px bg-slate-100 my-1" />
 
-                      <div className="flex flex-col gap-2">
-                        <div className="flex items-center gap-2.5">
-                          <Truck className="w-4 h-4 text-slate-400" />
-                          <span className="text-sm font-semibold text-slate-700">
-                            {getVehicleString(driver)}
-                          </span>
-                        </div>
-                        {driver.vehicle?.plate_number && (
-                          <div className="flex items-center gap-2.5 pl-[26px]">
-                            <span className="text-xs font-mono font-bold text-slate-800 bg-slate-100 px-2.5 py-1 rounded-md border border-slate-200 tracking-wider">
-                              {driver.vehicle.plate_number}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-center gap-2.5">
+                            <Truck className="w-4 h-4 text-slate-400 shrink-0" />
+                            <span className="text-sm font-semibold text-slate-700 leading-tight">
+                              {getVehicleString(driver)}
                             </span>
                           </div>
-                        )}
+                          
+                          {driver.vehicle && (
+                            <div className="flex flex-col pl-[26px] text-xs text-slate-500 space-y-0.5">
+                              {driver.vehicle.type && (
+                                <div><span className="text-slate-400">Тип:</span> {driver.vehicle.type}</div>
+                              )}
+                              {(driver.vehicle.cubature_min !== undefined || driver.vehicle.cubature_max !== undefined) && (
+                                <div><span className="text-slate-400">Кубатура:</span> {driver.vehicle.cubature_min || 0} - {driver.vehicle.cubature_max || 0} м³</div>
+                              )}
+                              {(driver.vehicle.tonnage_min !== undefined || driver.vehicle.tonnage_max !== undefined) && (
+                                <div><span className="text-slate-400">Тоннаж:</span> {driver.vehicle.tonnage_min || 0} - {driver.vehicle.tonnage_max || 0} т</div>
+                              )}
+                            </div>
+                          )}
+
+                          {driver.vehicle?.plate_number && (
+                            <div className="pl-[26px] mt-1">
+                              <div className="inline-flex items-stretch bg-white border border-gray-300 rounded-md shadow-sm h-7 overflow-hidden">
+                                <div className="flex items-center px-2 text-sm font-bold uppercase tracking-wider text-slate-900 leading-none pt-0.5">
+                                  {driver.vehicle.plate_number}
+                                </div>
+                                <div className="flex flex-col items-center justify-center border-l border-gray-300 bg-white h-full px-1.5 py-0.5">
+                                  <span className="text-[7px] font-bold leading-none text-slate-800 mb-0.5">RUS</span>
+                                  <img src="/russian.png" alt="RUS" className="w-4 h-3 object-cover rounded-[1px]" />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Thumbnail */}
+                        {(() => {
+                          const photoUrl = driver.vehicle_left_url || driver.vehicle_main_url || (driver.vehicle && (driver.vehicle.left_url || driver.vehicle.main_url || driver.vehicle.vehicle_left_url || driver.vehicle.vehicle_main_url));
+                          if (photoUrl) {
+                            return (
+                              <img 
+                                src={photoUrl} 
+                                alt="Vehicle" 
+                                className="w-20 h-16 object-cover rounded-lg border border-slate-200 shadow-sm shrink-0" 
+                              />
+                            );
+                          }
+                          return (
+                            <div className="w-20 h-16 bg-slate-50 flex flex-col items-center justify-center rounded-lg border border-slate-200 shadow-sm shrink-0">
+                              <Truck className="w-6 h-6 text-slate-300" />
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   ))}
@@ -938,28 +1020,60 @@ export default function LogistDashboardScreen({
                 <p className="text-sm font-semibold text-slate-800">{manualAssignOrder.address}</p>
               </div>
 
-              <div>
+              <div className="relative">
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                   Водитель
                 </label>
-                <select
-                  value={selectedDriverId}
-                  onChange={(e) => setSelectedDriverId(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] text-sm bg-white"
+                <div 
+                  onClick={() => setIsDriverDropdownOpen(!isDriverDropdownOpen)}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white flex justify-between items-center cursor-pointer hover:border-slate-300 transition-colors"
                 >
-                  <option value="" disabled>
-                    Выберите водителя...
-                  </option>
-                  {compatibleDrivers.map((driver) => {
-                    const vehicleTitle = getVehicleString(driver);
-                    const statusLabel = driverStatusLabelMap[driver.status] || driver.status;
-                    return (
-                      <option key={driver.id} value={driver.id}>
-                        {`${driver.name} • ${statusLabel} • ${vehicleTitle}`}
-                      </option>
-                    );
-                  })}
-                </select>
+                  {selectedDriverId ? (() => {
+                    const driver = compatibleDrivers.find(d => d.id === selectedDriverId);
+                    return driver ? (
+                       <div className="flex flex-col">
+                         <span className="text-sm font-bold text-slate-800">{driver.name}</span>
+                         <span className="text-xs font-medium text-slate-500">{getVehicleString(driver)}</span>
+                       </div>
+                    ) : <span className="text-sm text-slate-400">Выберите водителя...</span>;
+                  })() : (
+                    <span className="text-sm text-slate-400">Выберите водителя...</span>
+                  )}
+                  <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform ${isDriverDropdownOpen ? "rotate-180" : ""}`} />
+                </div>
+                
+                {isDriverDropdownOpen && (
+                  <div className="absolute z-[100] w-full mt-2 bg-white rounded-xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.15)] border border-slate-100 max-h-64 overflow-y-auto left-0">
+                    {compatibleDrivers.map((driver) => {
+                      const vehicleTitle = getVehicleString(driver);
+                      const isAvailable = driver.status === "available";
+                      return (
+                        <div 
+                          key={driver.id} 
+                          onClick={() => {
+                             setSelectedDriverId(driver.id);
+                             setIsDriverDropdownOpen(false);
+                          }}
+                          className={`p-3 cursor-pointer border-b border-gray-50 last:border-b-0 flex justify-between items-center transition-colors ${selectedDriverId === driver.id ? 'bg-[#2DB0E6]/5' : 'hover:bg-blue-50'}`}
+                        >
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-slate-800">{driver.name}</span>
+                            <span className="text-sm text-slate-500 mt-0.5">{vehicleTitle}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-md">
+                            <div className={`w-2 h-2 rounded-full ${isAvailable ? 'bg-emerald-500' : driver.status === 'busy' ? 'bg-amber-500' : 'bg-slate-400'}`}></div>
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                              {driverStatusLabelMap[driver.status] || driver.status}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {compatibleDrivers.length === 0 && (
+                       <div className="p-4 text-center text-sm font-medium text-slate-500">Нет водителей</div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {compatibleDrivers.length === 0 && !isLoadingDrivers && (
@@ -1001,7 +1115,7 @@ export default function LogistDashboardScreen({
               <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                 <div className="flex flex-col">
                   <h3 className="text-xl font-bold text-slate-800">
-                    Жизненный цикл заказа
+                    История заказа
                   </h3>
                   {currentHistoryOrder && (
                     <div className="flex items-center gap-1.5 mt-1">
@@ -1044,10 +1158,19 @@ export default function LogistDashboardScreen({
 
                     {/* Dispatch Attempts */}
                     {dispatchHistory.map((entry, i) => {
-                      const isSuccess = entry.status === 'accepted';
-                      const isFail = entry.status === 'declined' || entry.status === 'timeout' || entry.status === 'expired';
+                      const isManualAssign = entry.decision_reason && entry.decision_reason.includes("Manual assignment");
+                      const isAssigned = entry.status === 'assigned' || (entry.status === 'accepted' && isManualAssign);
+                      const isSuccess = entry.status === 'accepted' || isAssigned;
+                      const isFail = entry.status === 'declined' || entry.status === 'timeout' || entry.status === 'expired' || entry.status === 'cancelled' || entry.status === 'rejected';
                       const badgeColor = isSuccess ? 'bg-emerald-100 text-emerald-700' : isFail ? 'bg-rose-100 text-rose-700' : 'bg-indigo-100 text-indigo-700';
                       const dotColor = isSuccess ? 'bg-emerald-500' : isFail ? 'bg-rose-400' : 'bg-indigo-400';
+
+                      let badgeText = attemptStatusMap[entry.status] || entry.status.toUpperCase();
+                      if (isAssigned) {
+                        badgeText = "НАЗНАЧЕН";
+                      } else if (entry.status === "accepted") {
+                        badgeText = "ПРИНЯТО";
+                      }
 
                       return (
                         <div key={i} className="relative flex flex-col bg-slate-50 border border-slate-100 rounded-xl p-3.5 gap-2 text-left w-full shadow-sm">
@@ -1085,7 +1208,7 @@ export default function LogistDashboardScreen({
                               )}
                             </div>
                             <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-lg border border-white/50 ${badgeColor}`}>
-                              {attemptStatusMap[entry.status] || entry.status.toUpperCase()}
+                              {badgeText}
                             </span>
                           </div>
                           
@@ -1096,7 +1219,7 @@ export default function LogistDashboardScreen({
                             </p>
                           </div>
                           
-                          {entry.decision_reason && (
+                          {entry.decision_reason && isFail && (
                             <div className="text-[11px] text-rose-700 mt-1 font-semibold bg-rose-50/80 px-2.5 py-1.5 rounded-lg border border-rose-100/50">
                               Причина: <span className="font-bold">{declineReasonMap[entry.decision_reason] || entry.decision_reason}</span>
                             </div>

@@ -19,7 +19,7 @@ import {
   Eye,
   EyeOff,
   ClipboardCheck,
-  RefreshCw
+  RefreshCw,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -65,7 +65,12 @@ interface AdminDriver {
   phone: string;
   delivery_option_id: string;
   is_active: boolean;
-  moderation_status?: "pending_moderation" | "approved" | "rejected" | "suspended" | null;
+  moderation_status?:
+    | "pending_moderation"
+    | "approved"
+    | "rejected"
+    | "suspended"
+    | null;
   rate_mode?: "fixed" | "per_ton_km";
   fixed_rate?: number;
   rate_per_ton_km?: number;
@@ -88,7 +93,7 @@ interface AdminDriver {
       id?: string;
       title?: string;
       capacity_m3: number;
-    }
+    };
   };
 }
 
@@ -100,7 +105,11 @@ interface PendingModerationRequest {
   vehicle_brand: string;
   vehicle_model: string;
   vehicle_plate_number: string;
-  vehicle_body_volume_m3: number;
+  vehicle_body_volume_m3?: number;
+  vehicle_cubature_min?: number;
+  vehicle_cubature_max?: number;
+  vehicle_tonnage_min?: number;
+  vehicle_tonnage_max?: number;
   vehicle_main_url?: string | null;
   vehicle_left_url?: string | null;
   vehicle_plate_url?: string | null;
@@ -110,30 +119,44 @@ interface AdminDashboardScreenProps {
   onLogout: () => void;
 }
 
-export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenProps) {
+export default function AdminDashboardScreen({
+  onLogout,
+}: AdminDashboardScreenProps) {
   const { logout, token } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<"materials" | "delivery" | "drivers" | "moderation">("materials");
-  
+  const [activeTab, setActiveTab] = useState<
+    "materials" | "delivery" | "drivers" | "moderation"
+  >("materials");
+
   const [materials, setMaterials] = useState<AdminMaterial[]>([]);
-  const [deliveryOptions, setDeliveryOptions] = useState<AdminDeliveryOption[]>([]);
+  const [deliveryOptions, setDeliveryOptions] = useState<AdminDeliveryOption[]>(
+    [],
+  );
   const [drivers, setDrivers] = useState<AdminDriver[]>([]);
-  const [pendingRequests, setPendingRequests] = useState<PendingModerationRequest[]>([]);
-  const [driverActiveOverrides, setDriverActiveOverrides] = useState<Record<string, boolean>>({});
+  const [pendingRequests, setPendingRequests] = useState<
+    PendingModerationRequest[]
+  >([]);
+  const [driverActiveOverrides, setDriverActiveOverrides] = useState<
+    Record<string, boolean>
+  >({});
   const [categories, setCategories] = useState<AdminCategory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingModeration, setIsLoadingModeration] = useState(false);
 
   // Modals state
   const [isMaterialModalOpen, setIsMaterialModalOpen] = useState(false);
-  const [editingMaterial, setEditingMaterial] = useState<Partial<AdminMaterial> | null>(null);
+  const [editingMaterial, setEditingMaterial] =
+    useState<Partial<AdminMaterial> | null>(null);
   const [isSavingMaterial, setIsSavingMaterial] = useState(false);
 
   const [isDeliveryModalOpen, setIsDeliveryModalOpen] = useState(false);
-  const [editingDelivery, setEditingDelivery] = useState<Partial<AdminDeliveryOption> | null>(null);
+  const [editingDelivery, setEditingDelivery] =
+    useState<Partial<AdminDeliveryOption> | null>(null);
   const [isSavingDelivery, setIsSavingDelivery] = useState(false);
 
   const [isDriverModalOpen, setIsDriverModalOpen] = useState(false);
-  const [editingDriver, setEditingDriver] = useState<Partial<AdminDriver> & { password?: string }>({});
+  const [editingDriver, setEditingDriver] = useState<
+    Partial<AdminDriver> & { password?: string }
+  >({});
   const [isSavingDriver, setIsSavingDriver] = useState(false);
   const [showDriverPassword, setShowDriverPassword] = useState(false);
 
@@ -145,19 +168,26 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
       return { ...driver, is_active: driverActiveOverrides[driver.id] };
     });
 
-  const getVehicleString = (driver: AdminDriver) => {
-    const vehicleStr = driver.vehicle
-      ? `${driver.vehicle.brand || ""} ${driver.vehicle.plate_number ? `(${driver.vehicle.plate_number})` : ""} - ${driver.vehicle.delivery_option?.capacity_m3 || "?"} м³`.trim()
-      : "Автомобиль не назначен";
-    
-    let rateStr = "";
-    if (driver.rate_mode === "fixed") {
-      rateStr = `Фикс: ${driver.fixed_rate}₽`;
-    } else if (driver.rate_mode === "per_ton_km") {
-      rateStr = `За тн-км: ${driver.rate_per_ton_km}₽`;
+  const renderVehicleCell = (driver: AdminDriver) => {
+    if (!driver.vehicle) {
+      return <span className="text-slate-400">Автомобиль не назначен</span>;
     }
-    
-    return rateStr ? `${vehicleStr} | ${rateStr}` : vehicleStr;
+    return (
+      <div className="flex flex-col gap-1.5 items-start">
+        <span className="text-sm font-medium text-gray-900">{driver.vehicle.brand || "Неизвестно"}</span>
+        {driver.vehicle.plate_number ? (
+          <div className="flex items-center bg-white border border-gray-400 rounded-md shadow-sm overflow-hidden w-max">
+            <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 text-gray-900">
+              {driver.vehicle.plate_number}
+            </span>
+            <div className="border-l border-gray-400 flex flex-col items-center justify-center px-1.5 py-0.5 bg-white">
+              <span className="text-[8px] font-bold leading-none text-gray-800 mb-0.5">RUS</span>
+              <img src="/russian.png" alt="RUS" className="w-3 h-2 object-cover rounded-sm" />
+            </div>
+          </div>
+        ) : null}
+      </div>
+    );
   };
 
   const handleLogout = () => {
@@ -169,13 +199,19 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
     try {
       const res = await fetch(`${baseURL}/admin/drivers/${id}/approve`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
-        setPendingRequests((prev) => prev.filter((request) => request.driver_id !== id));
-        setDrivers((prev) => prev.map((driver) => (
-          driver.id === id ? { ...driver, moderation_status: "approved" } : driver
-        )));
+        setPendingRequests((prev) =>
+          prev.filter((request) => request.driver_id !== id),
+        );
+        setDrivers((prev) =>
+          prev.map((driver) =>
+            driver.id === id
+              ? { ...driver, moderation_status: "approved" }
+              : driver,
+          ),
+        );
         toast.success("Водитель одобрен");
         fetchDrivers(true);
       } else {
@@ -190,13 +226,19 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
     try {
       const res = await fetch(`${baseURL}/admin/drivers/${id}/reject`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
-        setPendingRequests((prev) => prev.filter((request) => request.driver_id !== id));
-        setDrivers((prev) => prev.map((driver) => (
-          driver.id === id ? { ...driver, moderation_status: "rejected" } : driver
-        )));
+        setPendingRequests((prev) =>
+          prev.filter((request) => request.driver_id !== id),
+        );
+        setDrivers((prev) =>
+          prev.map((driver) =>
+            driver.id === id
+              ? { ...driver, moderation_status: "rejected" }
+              : driver,
+          ),
+        );
         toast.success("Водитель отклонен");
         fetchDrivers(true);
       } else {
@@ -211,7 +253,7 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
     try {
       const res = await fetch(`${baseURL}/admin/drivers/${id}/suspend`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
         toast.success("Водитель заблокирован");
@@ -237,26 +279,44 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
     }
   };
 
-  const [uploadingSlots, setUploadingSlots] = useState<Record<string, boolean>>({});
+  const [uploadingSlots, setUploadingSlots] = useState<Record<string, boolean>>(
+    {},
+  );
 
-  const uploadPhoto = async (file: File, entityType: string, entityId: string, slotKey: string) => {
+  const uploadPhoto = async (
+    file: File,
+    entityType: string,
+    entityId: string,
+    slotKey: string,
+  ) => {
     const slotId = `${entityType}-${entityId}-${slotKey}`;
-    setUploadingSlots(prev => ({ ...prev, [slotId]: true }));
+    setUploadingSlots((prev) => ({ ...prev, [slotId]: true }));
     try {
       // Подготовим безопасное имя файла, чтобы избежать ошибки "Unsupported file extension"
-      let fileExt = file.name.includes('.') ? file.name.split('.').pop()?.toLowerCase() : '';
-      if (!fileExt || !['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(fileExt)) {
-        fileExt = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
+      let fileExt = file.name.includes(".")
+        ? file.name.split(".").pop()?.toLowerCase()
+        : "";
+      if (
+        !fileExt ||
+        !["jpg", "jpeg", "png", "webp", "gif"].includes(fileExt)
+      ) {
+        fileExt =
+          file.type === "image/png"
+            ? "png"
+            : file.type === "image/webp"
+              ? "webp"
+              : "jpg";
       }
       const safeFileName = `photo-${Date.now()}.${fileExt}`;
-      const safeContentType = file.type || `image/${fileExt === 'jpg' ? 'jpeg' : fileExt}`;
+      const safeContentType =
+        file.type || `image/${fileExt === "jpg" ? "jpeg" : fileExt}`;
 
       // ШАГ 1: Presign
       const presignRes = await fetch(`${baseURL}/media/presign-upload`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           file_name: safeFileName,
@@ -265,8 +325,8 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
           entity_type: entityType,
           entity_id: entityId,
           is_primary: false,
-          slot_key: slotKey
-        })
+          slot_key: slotKey,
+        }),
       });
 
       if (!presignRes.ok) {
@@ -275,15 +335,16 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
       }
 
       const presignData = await presignRes.json();
-      if (!presignData.upload_url) throw new Error("Бэкенд не вернул upload_url!");
+      if (!presignData.upload_url)
+        throw new Error("Бэкенд не вернул upload_url!");
 
       // ШАГ 2: Upload to S3
       const uploadRes = await fetch(presignData.upload_url, {
-        method: 'PUT',
+        method: "PUT",
         headers: {
-          'Content-Type': safeContentType
+          "Content-Type": safeContentType,
         },
-        body: file
+        body: file,
       });
 
       if (!uploadRes.ok) {
@@ -292,10 +353,10 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
 
       // ШАГ 3: Confirm
       const confirmRes = await fetch(`${baseURL}/media/confirm`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           entity_type: entityType,
@@ -305,8 +366,8 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
           content_type: safeContentType,
           file_size: file.size,
           is_primary: false,
-          slot_key: slotKey
-        })
+          slot_key: slotKey,
+        }),
       });
 
       if (!confirmRes.ok) {
@@ -315,28 +376,29 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
       }
 
       toast.success("Фото успешно загружено!");
-      
+
       // refetch after upload
       if (entityType === "material") {
         await fetchMaterials(true);
-        const refetchRes = await fetch(`${baseURL}/admin/materials/${entityId}`, {
-          headers: { "Authorization": `Bearer ${token}` }
-        });
-        if(refetchRes.ok) setEditingMaterial(await refetchRes.json());
-      }
-      else if (entityType === "delivery_option") {
+        const refetchRes = await fetch(
+          `${baseURL}/admin/materials/${entityId}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        );
+        if (refetchRes.ok) setEditingMaterial(await refetchRes.json());
+      } else if (entityType === "delivery_option") {
         await fetchDeliveryOptions(true);
-        const refetchRes = await fetch(`${baseURL}/admin/delivery-options/${entityId}`, {
-          headers: { "Authorization": `Bearer ${token}` }
-        });
-        if(refetchRes.ok) setEditingDelivery(await refetchRes.json());
+        const refetchRes = await fetch(
+          `${baseURL}/catalog/delivery-options/${entityId}`,
+        );
+        if (refetchRes.ok) setEditingDelivery(await refetchRes.json());
       }
-      
     } catch (err: any) {
       console.error("Full Upload Error:", err);
       toast.error(err.message || "Сбой загрузки фото");
     } finally {
-      setUploadingSlots(prev => ({ ...prev, [slotId]: false }));
+      setUploadingSlots((prev) => ({ ...prev, [slotId]: false }));
     }
   };
 
@@ -345,7 +407,7 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
     if (!silent) setIsLoading(true);
     try {
       const res = await fetch(`${baseURL}/admin/materials/`, {
-        headers: { "Authorization": `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Ошибка загрузки материалов");
       const data = await res.json();
@@ -361,8 +423,8 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
     if (!token) return;
     if (!silent) setIsLoading(true);
     try {
-      const res = await fetch(`${baseURL}/admin/delivery-options`, {
-        headers: { Authorization: `Bearer ${token}` }
+      const res = await fetch(`${baseURL}/catalog/delivery-options/`, {
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Ошибка загрузки автопарка");
       const data = await res.json();
@@ -379,11 +441,11 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
     if (!silent) setIsLoading(true);
     try {
       let res = await fetch(`${baseURL}/admin/drivers`, {
-        headers: { "Authorization": `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (res.status === 404 || res.status === 405) {
         res = await fetch(`${baseURL}/drivers/`, {
-          headers: { "Authorization": `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${token}` },
         });
       }
       if (!res.ok) throw new Error("Ошибка загрузки водителей");
@@ -402,7 +464,7 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
     if (!silent) setIsLoadingModeration(true);
     try {
       const res = await fetch(`${baseURL}/admin/moderation/pending`, {
-        headers: { "Authorization": `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Failed to fetch pending requests");
       const data = await res.json();
@@ -429,7 +491,10 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
     }
   }, [activeTab]);
 
-  const [itemToDelete, setItemToDelete] = useState<{ id: string; type: "material" | "delivery" | "driver" } | null>(null);
+  const [itemToDelete, setItemToDelete] = useState<{
+    id: string;
+    type: "material" | "delivery" | "driver";
+  } | null>(null);
 
   const confirmDeleteAction = async () => {
     if (!itemToDelete) return;
@@ -442,7 +507,7 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
       try {
         const res = await fetch(`${baseURL}/admin/materials/${id}`, {
           method: "DELETE",
-          headers: { "Authorization": `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) throw new Error("Delete failed");
         const data = await res.json();
@@ -459,7 +524,7 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
       try {
         const res = await fetch(`${baseURL}/admin/delivery-options/${id}`, {
           method: "DELETE",
-          headers: { "Authorization": `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) throw new Error("Delete failed");
         const data = await res.json();
@@ -476,7 +541,7 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
       try {
         const res = await fetch(`${baseURL}/admin/drivers/${id}`, {
           method: "DELETE",
-          headers: { "Authorization": `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) throw new Error("Delete failed");
         toast.success("Водитель успешно удален");
@@ -491,25 +556,28 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
     try {
       const res = await fetch(`${baseURL}/media/${mediaId}`, {
         method: "DELETE",
-        headers: { "Authorization": `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Delete media failed");
       toast.success("Фотография успешно удалена!");
-      
+
       if (entityType === "material") {
         await fetchMaterials(true);
         if (editingMaterial && editingMaterial.id) {
-          const refetchRes = await fetch(`${baseURL}/admin/materials/${editingMaterial.id}`, {
-            headers: { "Authorization": `Bearer ${token}` }
-          });
+          const refetchRes = await fetch(
+            `${baseURL}/admin/materials/${editingMaterial.id}`,
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            },
+          );
           if (refetchRes.ok) setEditingMaterial(await refetchRes.json());
         }
       } else if (entityType === "delivery_option") {
         await fetchDeliveryOptions(true);
         if (editingDelivery && editingDelivery.id) {
-          const refetchRes = await fetch(`${baseURL}/admin/delivery-options/${editingDelivery.id}`, {
-            headers: { "Authorization": `Bearer ${token}` }
-          });
+          const refetchRes = await fetch(
+            `${baseURL}/catalog/delivery-options/${editingDelivery.id}`,
+          );
           if (refetchRes.ok) setEditingDelivery(await refetchRes.json());
         }
       }
@@ -522,25 +590,28 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
     try {
       const res = await fetch(`${baseURL}/media/${mediaId}/make-primary`, {
         method: "POST",
-        headers: { "Authorization": `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Make primary failed");
       toast.success("Главное фото успешно назначено!");
-      
+
       if (entityType === "material") {
         await fetchMaterials(true);
         if (editingMaterial && editingMaterial.id) {
-          const refetchRes = await fetch(`${baseURL}/admin/materials/${editingMaterial.id}`, {
-            headers: { "Authorization": `Bearer ${token}` }
-          });
+          const refetchRes = await fetch(
+            `${baseURL}/admin/materials/${editingMaterial.id}`,
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            },
+          );
           if (refetchRes.ok) setEditingMaterial(await refetchRes.json());
         }
       } else if (entityType === "delivery_option") {
         await fetchDeliveryOptions(true);
         if (editingDelivery && editingDelivery.id) {
-          const refetchRes = await fetch(`${baseURL}/admin/delivery-options/${editingDelivery.id}`, {
-            headers: { "Authorization": `Bearer ${token}` }
-          });
+          const refetchRes = await fetch(
+            `${baseURL}/catalog/delivery-options/${editingDelivery.id}`,
+          );
           if (refetchRes.ok) setEditingDelivery(await refetchRes.json());
         }
       }
@@ -555,20 +626,22 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
       toast.error("Заполните обязательные поля (Название, Цена)");
       return;
     }
-    
+
     setIsSavingMaterial(true);
     try {
       const isEdit = !!editingMaterial.id;
-      const url = isEdit ? `${baseURL}/admin/materials/${editingMaterial.id}` : `${baseURL}/admin/materials/`;
+      const url = isEdit
+        ? `${baseURL}/admin/materials/${editingMaterial.id}`
+        : `${baseURL}/admin/materials/`;
       const method = isEdit ? "PATCH" : "POST";
-      
+
       const payload: any = {
         name: editingMaterial.name,
         description: editingMaterial.description || "",
         price: Number(editingMaterial.price),
         unit: editingMaterial.unit || "м3",
         min_volume: Number(editingMaterial.min_volume || 1),
-        is_active: editingMaterial.is_active ?? true
+        is_active: editingMaterial.is_active ?? true,
       };
 
       if (!isEdit) {
@@ -579,15 +652,15 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
         method,
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
-      
+
       if (!res.ok) throw new Error("Ошибка сохранения");
       const savedData = await res.json();
       const entityId = isEdit ? editingMaterial.id! : savedData.id;
-      
+
       toast.success(isEdit ? "Материал обновлен" : "Материал добавлен");
       setIsMaterialModalOpen(false);
       fetchMaterials(true);
@@ -604,39 +677,45 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
       toast.error("Заполните обязательные поля (Название, Объем)");
       return;
     }
-    
+
     setIsSavingDelivery(true);
     try {
       const isEdit = !!editingDelivery.id;
-      const url = isEdit ? `${baseURL}/admin/delivery-options/${editingDelivery.id}` : `${baseURL}/admin/delivery-options`;
+      const url = isEdit
+        ? `${baseURL}/admin/delivery-options/${editingDelivery.id}`
+        : `${baseURL}/admin/delivery-options`;
       const method = isEdit ? "PATCH" : "POST";
-      
+
       const payload: any = {
         title: editingDelivery.title,
         capacity_m3: Number(editingDelivery.capacity_m3),
         base_price: Number(editingDelivery.base_price || 0),
         is_active: editingDelivery.is_active ?? true,
-        sort_order: 10
+        sort_order: 10,
       };
 
       const res = await fetch(url, {
         method,
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
-      
+
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.detail ? JSON.stringify(errData.detail) : "Ошибка сервера");
+        throw new Error(
+          errData.detail ? JSON.stringify(errData.detail) : "Ошибка сервера",
+        );
       }
-      
+
       const savedData = await res.json();
       const entityId = isEdit ? editingDelivery.id! : savedData.id;
-      
-      toast.success(isEdit ? "Опция доставки обновлена" : "Опция доставки добавлена");
+
+      toast.success(
+        isEdit ? "Опция доставки обновлена" : "Опция доставки добавлена",
+      );
       setIsDeliveryModalOpen(false);
       fetchDeliveryOptions(true);
     } catch (err: any) {
@@ -652,7 +731,7 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
       digits = digits.substring(1);
     }
     digits = digits.substring(0, 10);
-    
+
     let formatted = "+7";
     if (digits.length > 0) {
       formatted += " (" + digits.substring(0, 3);
@@ -671,23 +750,34 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
 
   const openDriverModal = (driver?: AdminDriver) => {
     if (driver) {
-      const deliveryOptionId = driver.delivery_option_id || driver.vehicle?.delivery_option_id || driver.vehicle?.delivery_option?.id;
-      setEditingDriver({ ...driver, delivery_option_id: deliveryOptionId, phone: formatPhoneNumber(driver.phone) });
+      const deliveryOptionId =
+        driver.delivery_option_id ||
+        driver.vehicle?.delivery_option_id ||
+        driver.vehicle?.delivery_option?.id;
+      setEditingDriver({
+        ...driver,
+        delivery_option_id: deliveryOptionId,
+        phone: formatPhoneNumber(driver.phone),
+      });
     } else {
       setEditingDriver({ is_active: true, phone: "+7" });
     }
     setIsDriverModalOpen(true);
   };
 
-  const cleanPhone = (phone: string) => phone.replace(/[^\d+]/g, '');
+  const cleanPhone = (phone: string) => phone.replace(/[^\d+]/g, "");
 
   const handleSaveDriver = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingDriver?.name || !editingDriver?.phone || !editingDriver?.delivery_option_id) {
+    if (
+      !editingDriver?.name ||
+      !editingDriver?.phone ||
+      !editingDriver?.delivery_option_id
+    ) {
       toast.error("Заполните обязательные поля (Имя, Телефон, Автомобиль)");
       return;
     }
-    
+
     setIsSavingDriver(true);
     try {
       const isEdit = !!editingDriver.id;
@@ -696,12 +786,12 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
         setIsSavingDriver(false);
         return;
       }
-      
+
       const url = isEdit
         ? `${baseURL}/admin/drivers/${editingDriver.id}`
         : `${baseURL}/admin/drivers`;
       const method = isEdit ? "PATCH" : "POST";
-      
+
       let fullPhone = cleanPhone(editingDriver.phone);
       if (fullPhone.startsWith("8")) {
         fullPhone = "+7" + fullPhone.substring(1);
@@ -713,9 +803,9 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
         name: editingDriver.name,
         phone: fullPhone,
         delivery_option_id: editingDriver.delivery_option_id,
-        is_active: editingDriver.is_active ?? true
+        is_active: editingDriver.is_active ?? true,
       };
-      
+
       if (editingDriver.password) {
         payload.password = editingDriver.password;
       }
@@ -724,16 +814,16 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
         method,
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
-      
+
       if (!res.ok) {
         const errData = await res.json().catch(() => null);
         throw new Error(errData?.detail || "Ошибка сохранения");
       }
-      
+
       const previousIsActive = isEdit
         ? drivers.find((driver) => driver.id === editingDriver.id)?.is_active
         : undefined;
@@ -741,16 +831,25 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
       const isStatusChanged = isEdit && previousIsActive !== nextIsActive;
 
       if (isEdit && editingDriver.id) {
-        setDriverActiveOverrides((prev) => ({ ...prev, [editingDriver.id!]: nextIsActive }));
+        setDriverActiveOverrides((prev) => ({
+          ...prev,
+          [editingDriver.id!]: nextIsActive,
+        }));
         setDrivers((prev) =>
           prev.map((driver) =>
-            driver.id === editingDriver.id ? { ...driver, is_active: nextIsActive } : driver
-          )
+            driver.id === editingDriver.id
+              ? { ...driver, is_active: nextIsActive }
+              : driver,
+          ),
         );
       }
 
       toast.success(
-        !isEdit ? "Водитель добавлен" : isStatusChanged ? "Статус водителя изменен" : "Водитель успешно сохранен"
+        !isEdit
+          ? "Водитель добавлен"
+          : isStatusChanged
+            ? "Статус водителя изменен"
+            : "Водитель успешно сохранен",
       );
       setIsDriverModalOpen(false);
       fetchDrivers(true);
@@ -767,17 +866,25 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
       setIsMaterialModalOpen(true);
       try {
         const res = await fetch(`${baseURL}/admin/materials/${material.id}`, {
-          headers: { "Authorization": `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${token}` },
         });
-        if(res.ok) {
+        if (res.ok) {
           const data = await res.json();
-          setEditingMaterial({ ...data, media_files: data.media_files || material.media_files });
+          setEditingMaterial({
+            ...data,
+            media_files: data.media_files || material.media_files,
+          });
         }
       } catch (err) {
         console.error("Failed to fetch material details", err);
       }
     } else {
-      setEditingMaterial({ is_active: true, unit: "м3", min_volume: 1, price: 0 });
+      setEditingMaterial({
+        is_active: true,
+        unit: "м3",
+        min_volume: 1,
+        price: 0,
+      });
       setIsMaterialModalOpen(true);
     }
   };
@@ -787,12 +894,15 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
       setEditingDelivery({ ...delivery });
       setIsDeliveryModalOpen(true);
       try {
-        const res = await fetch(`${baseURL}/admin/delivery-options/${delivery.id}`, {
-          headers: { "Authorization": `Bearer ${token}` }
-        });
-        if(res.ok) {
+        const res = await fetch(
+          `${baseURL}/catalog/delivery-options/${delivery.id}`,
+        );
+        if (res.ok) {
           const data = await res.json();
-          setEditingDelivery({ ...data, media_files: data.media_files || delivery.media_files });
+          setEditingDelivery({
+            ...data,
+            media_files: data.media_files || delivery.media_files,
+          });
         }
       } catch (err) {
         console.error("Failed to fetch delivery details", err);
@@ -803,34 +913,52 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
     }
   };
 
-  const renderPhotoSlot = (entityType: string, entityId: string | undefined, slotKey: string, title: string, mediaFiles: AdminMediaFile[] = []) => {
+  const renderPhotoSlot = (
+    entityType: string,
+    entityId: string | undefined,
+    slotKey: string,
+    title: string,
+    mediaFiles: AdminMediaFile[] = [],
+  ) => {
     if (!entityId) {
       return (
         <div className="flex flex-col gap-1.5 opacity-50">
-          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">{title}</label>
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+            {title}
+          </label>
           <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center">
-            <span className="text-xs font-medium text-slate-500">Сначала сохраните элемент</span>
+            <span className="text-xs font-medium text-slate-500">
+              Сначала сохраните элемент
+            </span>
           </div>
         </div>
       );
     }
 
-    const file = mediaFiles.find(m => m.slot_key === slotKey);
+    const file = mediaFiles.find((m) => m.slot_key === slotKey);
     const slotId = `${entityType}-${entityId}-${slotKey}`;
     const isUploading = uploadingSlots[slotId];
 
     return (
       <div className="flex flex-col gap-1.5" key={slotKey}>
-        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">{title}</label>
+        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+          {title}
+        </label>
         {isUploading ? (
           <div className="border-2 border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center bg-slate-50 h-32">
             <Loader2 className="w-6 h-6 animate-spin text-indigo-600 mb-2" />
-            <span className="text-xs font-medium text-slate-500">Загрузка...</span>
+            <span className="text-xs font-medium text-slate-500">
+              Загрузка...
+            </span>
           </div>
         ) : file ? (
           <div className="border border-slate-200 rounded-xl p-2 relative group overflow-hidden bg-white">
             <div className="aspect-video bg-slate-100 rounded-lg overflow-hidden relative">
-              <img src={file.public_url} alt={title} className="w-full h-full object-cover" />
+              <img
+                src={file.public_url}
+                alt={title}
+                className="w-full h-full object-cover"
+              />
               {file.is_primary && (
                 <div className="absolute top-2 left-2 bg-indigo-600 text-white text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded shadow-sm flex items-center gap-1">
                   <Star className="w-3 h-3 fill-current" /> Главное
@@ -838,15 +966,19 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
               )}
             </div>
             <div className="flex gap-2 mt-2">
-              <button 
+              <button
                 type="button"
                 onClick={() => handleMakePrimary(file.id, entityType)}
                 className={`flex-1 flex justify-center items-center gap-1.5 text-xs font-bold py-1.5 rounded-lg transition-colors border ${file.is_primary ? "bg-indigo-50 text-indigo-700 border-indigo-200" : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"}`}
               >
-                {file.is_primary ? <Star className="w-3.5 h-3.5 fill-current" /> : <StarOff className="w-3.5 h-3.5" />}
+                {file.is_primary ? (
+                  <Star className="w-3.5 h-3.5 fill-current" />
+                ) : (
+                  <StarOff className="w-3.5 h-3.5" />
+                )}
                 {file.is_primary ? "Главное" : "Сделать главным"}
               </button>
-              <button 
+              <button
                 type="button"
                 onClick={() => handleDeleteMedia(file.id, entityType)}
                 className="px-3 flex justify-center items-center text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors"
@@ -858,17 +990,19 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
         ) : (
           <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center gap-2 hover:bg-slate-50 hover:border-indigo-300 transition-all cursor-pointer relative h-32">
             <UploadCloud className="w-6 h-6 text-slate-400" />
-            <span className="text-xs font-medium text-slate-500">Загрузить фото</span>
-            <input 
-              type="file" 
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" 
-              accept="image/*" 
+            <span className="text-xs font-medium text-slate-500">
+              Загрузить фото
+            </span>
+            <input
+              type="file"
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              accept="image/*"
               onChange={(e) => {
                 if (e.target.files && e.target.files[0]) {
                   uploadPhoto(e.target.files[0], entityType, entityId, slotKey);
-                  e.target.value = '';
+                  e.target.value = "";
                 }
-              }} 
+              }}
             />
           </div>
         )}
@@ -877,7 +1011,7 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
   };
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50 relative overflow-hidden font-sans text-slate-800">
+    <div className="flex flex-col h-screen bg-slate-50 relative overflow-hidden text-slate-800">
       {/* Header */}
       <div className="bg-white px-6 py-4 shadow-sm z-10 sticky top-0 border-b border-slate-100 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div className="flex items-center justify-between sm:justify-start gap-6">
@@ -885,7 +1019,9 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
             <h1 className="text-2xl font-black text-indigo-600 tracking-tight">
               Дармавоз
             </h1>
-            <p className="text-sm font-medium text-slate-500">Панель администратора</p>
+            <p className="text-sm font-medium text-slate-500">
+              Панель администратора
+            </p>
           </div>
           <button
             onClick={handleLogout}
@@ -894,13 +1030,15 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
             <LogOut className="w-4 h-4" />
           </button>
         </div>
-        
+
         <div className="flex flex-1 sm:justify-center">
           <div className="bg-slate-100 p-1 rounded-xl flex w-full sm:w-auto">
             <button
               onClick={() => setActiveTab("materials")}
               className={`flex-1 sm:w-auto flex-shrink-0 whitespace-nowrap py-2 px-3 text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2 ${
-                activeTab === "materials" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                activeTab === "materials"
+                  ? "bg-white text-indigo-700 shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
               }`}
             >
               <Layers className="w-4 h-4" />
@@ -909,7 +1047,9 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
             <button
               onClick={() => setActiveTab("delivery")}
               className={`flex-1 sm:w-auto flex-shrink-0 whitespace-nowrap py-2 px-3 text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2 ${
-                activeTab === "delivery" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                activeTab === "delivery"
+                  ? "bg-white text-indigo-700 shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
               }`}
             >
               <Truck className="w-4 h-4" />
@@ -918,7 +1058,9 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
             <button
               onClick={() => setActiveTab("drivers")}
               className={`flex-1 sm:w-auto flex-shrink-0 whitespace-nowrap py-2 px-3 text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2 ${
-                activeTab === "drivers" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                activeTab === "drivers"
+                  ? "bg-white text-indigo-700 shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
               }`}
             >
               <Truck className="w-4 h-4" />
@@ -927,14 +1069,22 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
             <button
               onClick={() => setActiveTab("moderation")}
               className={`flex-1 sm:w-auto flex-shrink-0 whitespace-nowrap py-2 px-3 text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2 ${
-                activeTab === "moderation" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                activeTab === "moderation"
+                  ? "bg-white text-indigo-700 shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
               }`}
             >
               <div className="relative flex items-center justify-center">
                 <ClipboardCheck className="w-4 h-4" />
-                {drivers.filter(d => d.moderation_status === "pending_moderation").length > 0 && (
+                {drivers.filter(
+                  (d) => d.moderation_status === "pending_moderation",
+                ).length > 0 && (
                   <div className="absolute -top-1.5 -right-2 bg-rose-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center shadow-sm">
-                    {drivers.filter(d => d.moderation_status === "pending_moderation").length}
+                    {
+                      drivers.filter(
+                        (d) => d.moderation_status === "pending_moderation",
+                      ).length
+                    }
                   </div>
                 )}
               </div>
@@ -997,22 +1147,40 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                       </thead>
                       <tbody className="divide-y divide-slate-100/80">
                         {materials.map((m) => {
-                          const imgUrl = m.primary_image_url || m.image_url || m.media_files?.[0]?.public_url;
+                          const imgUrl =
+                            m.primary_image_url ||
+                            m.image_url ||
+                            m.media_files?.[0]?.public_url;
                           return (
-                            <tr key={m.id} className="hover:bg-slate-50/50 transition-colors">
-                              <td className="px-6 py-4 text-xs font-mono text-slate-400">{m.id.substring(0,8)}</td>
+                            <tr
+                              key={m.id}
+                              className="hover:bg-slate-50/50 transition-colors"
+                            >
+                              <td className="px-6 py-4 text-xs font-mono text-slate-400">
+                                {m.id.substring(0, 8)}
+                              </td>
                               <td className="px-6 py-4">
                                 {imgUrl ? (
-                                  <img src={imgUrl} alt={m.name} className="w-24 h-16 object-contain rounded-md border border-slate-200 bg-slate-50 p-1" />
+                                  <img
+                                    src={imgUrl}
+                                    alt={m.name}
+                                    className="w-24 h-16 object-contain rounded-md border border-slate-200 bg-slate-50 p-1"
+                                  />
                                 ) : (
                                   <div className="w-24 h-16 rounded-md border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-300">
                                     <ImageIcon className="w-5 h-5" />
                                   </div>
                                 )}
                               </td>
-                              <td className="px-6 py-4 font-semibold text-slate-800">{m.name}</td>
-                              <td className="px-6 py-4 text-sm font-medium">{m.price} ₽</td>
-                              <td className="px-6 py-4 text-sm text-slate-500">{m.unit}</td>
+                              <td className="px-6 py-4 font-semibold text-slate-800">
+                                {m.name}
+                              </td>
+                              <td className="px-6 py-4 text-sm font-medium">
+                                {m.price} ₽
+                              </td>
+                              <td className="px-6 py-4 text-sm text-slate-500">
+                                {m.unit}
+                              </td>
                               <td className="px-6 py-4">
                                 {m.is_active === false ? (
                                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-100 text-amber-800 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
@@ -1024,22 +1192,27 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                                   </span>
                                 )}
                               </td>
-                            <td className="px-6 py-4 text-right flex justify-end gap-2">
-                              <button 
-                                onClick={() => openMaterialModal(m)}
-                                className="p-2 text-slate-400 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent"
-                              >
-                                <Edit2 className="w-4 h-4" />
-                              </button>
-                              <button 
-                                onClick={() => setItemToDelete({ id: m.id, type: "material" })}
-                                className="p-2 text-slate-400 hover:text-red-600 bg-slate-50 hover:bg-red-50 rounded-lg transition-colors border border-transparent"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </td>
-                          </tr>
-                        );
+                              <td className="px-6 py-4 text-right flex justify-end gap-2">
+                                <button
+                                  onClick={() => openMaterialModal(m)}
+                                  className="p-2 text-slate-400 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    setItemToDelete({
+                                      id: m.id,
+                                      type: "material",
+                                    })
+                                  }
+                                  className="p-2 text-slate-400 hover:text-red-600 bg-slate-50 hover:bg-red-50 rounded-lg transition-colors border border-transparent"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
                         })}
                       </tbody>
                     </table>
@@ -1047,40 +1220,63 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
 
                   <div className="grid grid-cols-1 gap-4 md:hidden">
                     {materials.map((m) => {
-                      const imgUrl = m.primary_image_url || m.image_url || m.media_files?.[0]?.public_url;
+                      const imgUrl =
+                        m.primary_image_url ||
+                        m.image_url ||
+                        m.media_files?.[0]?.public_url;
                       return (
-                        <div key={m.id} className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-col gap-3 relative">
+                        <div
+                          key={m.id}
+                          className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-col gap-3 relative"
+                        >
                           <div className="flex justify-between items-center mb-1">
-                            <span className="text-xs font-mono text-slate-400">ID: {m.id.substring(0,8)}</span>
+                            <span className="text-xs font-mono text-slate-400">
+                              ID: {m.id.substring(0, 8)}
+                            </span>
                             <div className="flex gap-2 -mt-2 -mr-2">
-                              <button 
+                              <button
                                 onClick={() => openMaterialModal(m)}
                                 className="p-2 text-slate-400 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent"
                               >
                                 <Edit2 className="w-4 h-4" />
                               </button>
-                              <button 
-                                onClick={() => setItemToDelete({ id: m.id, type: "material" })}
+                              <button
+                                onClick={() =>
+                                  setItemToDelete({
+                                    id: m.id,
+                                    type: "material",
+                                  })
+                                }
                                 className="p-2 text-slate-400 hover:text-red-600 bg-slate-50 hover:bg-red-50 rounded-lg transition-colors border border-transparent"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
                             </div>
                           </div>
-                          
+
                           <div className="flex gap-4 items-start">
                             {imgUrl ? (
-                              <img src={imgUrl} alt={m.name} className="shrink-0 w-24 h-16 object-contain rounded-md border border-slate-200 bg-slate-50 p-1" />
+                              <img
+                                src={imgUrl}
+                                alt={m.name}
+                                className="shrink-0 w-24 h-16 object-contain rounded-md border border-slate-200 bg-slate-50 p-1"
+                              />
                             ) : (
                               <div className="shrink-0 w-24 h-16 rounded-md border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-300">
                                 <ImageIcon className="w-5 h-5" />
                               </div>
                             )}
                             <div className="flex flex-col gap-1 min-w-0">
-                              <h3 className="font-bold text-slate-800 text-base truncate pr-2">{m.name}</h3>
+                              <h3 className="font-bold text-slate-800 text-base truncate pr-2">
+                                {m.name}
+                              </h3>
                               <div className="flex flex-col gap-0.5 mt-1">
-                                <span className="text-sm font-medium text-slate-700">Цена: {m.price} ₽</span>
-                                <span className="text-sm text-slate-500">Ед. изм.: {m.unit}</span>
+                                <span className="text-sm font-medium text-slate-700">
+                                  Цена: {m.price} ₽
+                                </span>
+                                <span className="text-sm text-slate-500">
+                                  Ед. изм.: {m.unit}
+                                </span>
                               </div>
                             </div>
                           </div>
@@ -1102,7 +1298,9 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                   </div>
 
                   {materials.length === 0 && (
-                    <div className="p-8 text-center text-slate-500 font-medium">Нет загруженных материалов</div>
+                    <div className="p-8 text-center text-slate-500 font-medium">
+                      Нет загруженных материалов
+                    </div>
                   )}
                 </div>
               )}
@@ -1111,7 +1309,9 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
             <>
               {/* Delivery Options Tab */}
               <div className="flex justify-between items-center bg-white p-5 rounded-2xl shadow-sm border border-slate-100 mb-2">
-                <h2 className="text-xl font-bold text-slate-800">Типы автомобилей</h2>
+                <h2 className="text-xl font-bold text-slate-800">
+                  Типы автомобилей
+                </h2>
                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => fetchDeliveryOptions()}
@@ -1150,22 +1350,40 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                       </thead>
                       <tbody className="divide-y divide-slate-100/80">
                         {deliveryOptions.map((opt) => {
-                          const imgUrl = opt.primary_image_url || opt.image_url || opt.media_files?.[0]?.public_url;
+                          const imgUrl =
+                            opt.primary_image_url ||
+                            opt.image_url ||
+                            opt.media_files?.[0]?.public_url;
                           return (
-                            <tr key={opt.id} className="hover:bg-slate-50/50 transition-colors">
-                              <td className="px-6 py-4 text-xs font-mono text-slate-400">{opt.id.substring(0,8)}</td>
+                            <tr
+                              key={opt.id}
+                              className="hover:bg-slate-50/50 transition-colors"
+                            >
+                              <td className="px-6 py-4 text-xs font-mono text-slate-400">
+                                {opt.id.substring(0, 8)}
+                              </td>
                               <td className="px-6 py-4">
                                 {imgUrl ? (
-                                  <img src={imgUrl} alt={opt.title} className="w-24 h-16 object-contain rounded-md border border-slate-200 bg-slate-50 p-1" />
+                                  <img
+                                    src={imgUrl}
+                                    alt={opt.title}
+                                    className="w-24 h-16 object-contain rounded-md border border-slate-200 bg-slate-50 p-1"
+                                  />
                                 ) : (
                                   <div className="w-24 h-16 rounded-md border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-300">
                                     <ImageIcon className="w-5 h-5" />
                                   </div>
                                 )}
                               </td>
-                              <td className="px-6 py-4 font-semibold text-slate-800">{opt.title}</td>
-                              <td className="px-6 py-4 text-sm font-medium">{opt.capacity_m3} м³</td>
-                              <td className="px-6 py-4 text-sm font-medium">{opt.base_price} ₽</td>
+                              <td className="px-6 py-4 font-semibold text-slate-800">
+                                {opt.title}
+                              </td>
+                              <td className="px-6 py-4 text-sm font-medium">
+                                {opt.capacity_m3} м³
+                              </td>
+                              <td className="px-6 py-4 text-sm font-medium">
+                                {opt.base_price} ₽
+                              </td>
                               <td className="px-6 py-4">
                                 {opt.is_active === false ? (
                                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-100 text-amber-800 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
@@ -1177,22 +1395,27 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                                   </span>
                                 )}
                               </td>
-                            <td className="px-6 py-4 text-right flex justify-end gap-2">
-                              <button 
-                                onClick={() => openDeliveryModal(opt)}
-                                className="p-2 text-slate-400 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent"
-                              >
-                                <Edit2 className="w-4 h-4" />
-                              </button>
-                              <button 
-                                onClick={() => setItemToDelete({ id: opt.id, type: "delivery" })}
-                                className="p-2 text-slate-400 hover:text-red-600 bg-slate-50 hover:bg-red-50 rounded-lg transition-colors border border-transparent"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </td>
-                          </tr>
-                        );
+                              <td className="px-6 py-4 text-right flex justify-end gap-2">
+                                <button
+                                  onClick={() => openDeliveryModal(opt)}
+                                  className="p-2 text-slate-400 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    setItemToDelete({
+                                      id: opt.id,
+                                      type: "delivery",
+                                    })
+                                  }
+                                  className="p-2 text-slate-400 hover:text-red-600 bg-slate-50 hover:bg-red-50 rounded-lg transition-colors border border-transparent"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
                         })}
                       </tbody>
                     </table>
@@ -1200,40 +1423,63 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
 
                   <div className="grid grid-cols-1 gap-4 md:hidden">
                     {deliveryOptions.map((opt) => {
-                      const imgUrl = opt.primary_image_url || opt.image_url || opt.media_files?.[0]?.public_url;
+                      const imgUrl =
+                        opt.primary_image_url ||
+                        opt.image_url ||
+                        opt.media_files?.[0]?.public_url;
                       return (
-                        <div key={opt.id} className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-col gap-3 relative">
+                        <div
+                          key={opt.id}
+                          className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-col gap-3 relative"
+                        >
                           <div className="flex justify-between items-center mb-1">
-                            <span className="text-xs font-mono text-slate-400">ID: {opt.id.substring(0,8)}</span>
+                            <span className="text-xs font-mono text-slate-400">
+                              ID: {opt.id.substring(0, 8)}
+                            </span>
                             <div className="flex gap-2 -mt-2 -mr-2">
-                              <button 
+                              <button
                                 onClick={() => openDeliveryModal(opt)}
                                 className="p-2 text-slate-400 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent"
                               >
                                 <Edit2 className="w-4 h-4" />
                               </button>
-                              <button 
-                                onClick={() => setItemToDelete({ id: opt.id, type: "delivery" })}
+                              <button
+                                onClick={() =>
+                                  setItemToDelete({
+                                    id: opt.id,
+                                    type: "delivery",
+                                  })
+                                }
                                 className="p-2 text-slate-400 hover:text-red-600 bg-slate-50 hover:bg-red-50 rounded-lg transition-colors border border-transparent"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
                             </div>
                           </div>
-                          
+
                           <div className="flex gap-4 items-start">
                             {imgUrl ? (
-                              <img src={imgUrl} alt={opt.title} className="shrink-0 w-24 h-16 object-contain rounded-md border border-slate-200 bg-slate-50 p-1" />
+                              <img
+                                src={imgUrl}
+                                alt={opt.title}
+                                className="shrink-0 w-24 h-16 object-contain rounded-md border border-slate-200 bg-slate-50 p-1"
+                              />
                             ) : (
                               <div className="shrink-0 w-24 h-16 rounded-md border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-300">
                                 <ImageIcon className="w-5 h-5" />
                               </div>
                             )}
                             <div className="flex flex-col gap-1 min-w-0">
-                              <h3 className="font-bold text-slate-800 text-base truncate pr-2">{opt.title}</h3>
+                              <h3 className="font-bold text-slate-800 text-base truncate pr-2">
+                                {opt.title}
+                              </h3>
                               <div className="flex flex-col gap-0.5 mt-1">
-                                <span className="text-sm font-medium text-slate-700">Кубатура: {opt.capacity_m3} м³</span>
-                                <span className="text-sm text-slate-500">Базовая цена: {opt.base_price} ₽</span>
+                                <span className="text-sm font-medium text-slate-700">
+                                  Кубатура: {opt.capacity_m3} м³
+                                </span>
+                                <span className="text-sm text-slate-500">
+                                  Базовая цена: {opt.base_price} ₽
+                                </span>
                               </div>
                             </div>
                           </div>
@@ -1255,7 +1501,9 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                   </div>
 
                   {deliveryOptions.length === 0 && (
-                    <div className="p-8 text-center text-slate-500 font-medium">Нет типов авто</div>
+                    <div className="p-8 text-center text-slate-500 font-medium">
+                      Нет типов авто
+                    </div>
                   )}
                 </div>
               )}
@@ -1303,22 +1551,43 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                       </thead>
                       <tbody className="divide-y divide-slate-100/80">
                         {drivers.map((d) => (
-                          <tr key={d.id} className="hover:bg-slate-50/50 transition-colors">
-                            <td className="px-6 py-4 text-xs font-mono text-slate-400">{d.id.substring(0,8)}</td>
-                            <td className="px-6 py-4 font-semibold text-slate-800">{d.name}</td>
-                            <td className="px-6 py-4 text-sm whitespace-nowrap">{d.phone}</td>
+                          <tr
+                            key={d.id}
+                            className="hover:bg-slate-50/50 transition-colors"
+                          >
+                            <td className="px-6 py-4 text-xs font-mono text-slate-400">
+                              {d.id.substring(0, 8)}
+                            </td>
+                            <td className="px-6 py-4 font-semibold text-slate-800">
+                              {d.name}
+                            </td>
+                            <td className="px-6 py-4 text-sm whitespace-nowrap">
+                              {d.phone}
+                            </td>
                             <td className="px-6 py-4 text-sm text-slate-500">
                               <div className="flex flex-col gap-2">
-                                <span>{getVehicleString(d)}</span>
-                                {d.moderation_status === "pending_moderation" && d.media_files && d.media_files.length > 0 && (
-                                  <div className="flex gap-2 mt-1">
-                                    {d.media_files.map(mf => (
-                                      <a key={mf.id} href={mf.public_url} target="_blank" rel="noreferrer" className="block w-12 h-12 rounded-lg border border-slate-200 overflow-hidden hover:opacity-80">
-                                        <img src={mf.public_url} alt={mf.slot_key} className="w-full h-full object-cover" />
-                                      </a>
-                                    ))}
-                                  </div>
-                                )}
+                                {renderVehicleCell(d)}
+                                {d.moderation_status === "pending_moderation" &&
+                                  d.media_files &&
+                                  d.media_files.length > 0 && (
+                                    <div className="flex gap-2 mt-1">
+                                      {d.media_files.map((mf) => (
+                                        <a
+                                          key={mf.id}
+                                          href={mf.public_url}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="block w-12 h-12 rounded-lg border border-slate-200 overflow-hidden hover:opacity-80"
+                                        >
+                                          <img
+                                            src={mf.public_url}
+                                            alt={mf.slot_key}
+                                            className="w-full h-full object-cover"
+                                          />
+                                        </a>
+                                      ))}
+                                    </div>
+                                  )}
                               </div>
                             </td>
                             <td className="px-6 py-4">
@@ -1337,7 +1606,8 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-50 text-emerald-700 text-xs font-bold uppercase tracking-wider whitespace-nowrap">
                                   <CheckCircle2 className="w-3 h-3" /> Одобрен
                                 </span>
-                              ) : d.moderation_status === "pending_moderation" ? (
+                              ) : d.moderation_status ===
+                                "pending_moderation" ? (
                                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-50 text-amber-700 text-xs font-bold uppercase tracking-wider whitespace-nowrap">
                                   На проверке
                                 </span>
@@ -1357,7 +1627,7 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                             </td>
                             <td className="px-6 py-4 text-right flex justify-end gap-2">
                               {d.moderation_status !== "approved" && (
-                                <button 
+                                <button
                                   onClick={() => handleApproveDriver(d.id)}
                                   title="Одобрить профиль"
                                   className="p-2 text-slate-400 hover:text-emerald-600 bg-slate-50 hover:bg-emerald-50 rounded-lg transition-colors border border-transparent"
@@ -1366,7 +1636,7 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                                 </button>
                               )}
                               {d.moderation_status !== "rejected" && (
-                                <button 
+                                <button
                                   onClick={() => handleRejectDriver(d.id)}
                                   title="Отклонить"
                                   className="p-2 text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 rounded-lg transition-colors border border-transparent"
@@ -1375,7 +1645,7 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                                 </button>
                               )}
                               {d.moderation_status !== "suspended" && (
-                                <button 
+                                <button
                                   onClick={() => handleSuspendDriver(d.id)}
                                   title="Заблокировать"
                                   className="p-2 text-slate-400 hover:text-amber-600 bg-slate-50 hover:bg-amber-50 rounded-lg transition-colors border border-transparent"
@@ -1383,14 +1653,16 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                                   <Lock className="w-4 h-4" />
                                 </button>
                               )}
-                              <button 
+                              <button
                                 onClick={() => openDriverModal(d)}
                                 className="p-2 text-slate-400 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent"
                               >
                                 <Edit2 className="w-4 h-4" />
                               </button>
-                              <button 
-                                onClick={() => setItemToDelete({ id: d.id, type: "driver" })}
+                              <button
+                                onClick={() =>
+                                  setItemToDelete({ id: d.id, type: "driver" })
+                                }
                                 className="p-2 text-slate-400 hover:text-red-600 bg-slate-50 hover:bg-red-50 rounded-lg transition-colors border border-transparent"
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -1404,52 +1676,83 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
 
                   <div className="grid grid-cols-1 gap-4 md:hidden">
                     {drivers.map((d) => (
-                      <div key={d.id} className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-col gap-3 relative">
+                      <div
+                        key={d.id}
+                        className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-col gap-3 relative"
+                      >
                         <div className="flex justify-between items-center mb-1">
-                          <span className="text-xs font-mono text-slate-400">ID: {d.id.substring(0,8)}</span>
+                          <span className="text-xs font-mono text-slate-400">
+                            ID: {d.id.substring(0, 8)}
+                          </span>
                           <div className="flex gap-2 -mt-2 -mr-2">
-                            <button 
+                            <button
                               onClick={() => openDriverModal(d)}
                               className="p-2 text-slate-400 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent"
                             >
                               <Edit2 className="w-4 h-4" />
                             </button>
-                            <button 
-                              onClick={() => setItemToDelete({ id: d.id, type: "driver" })}
+                            <button
+                              onClick={() =>
+                                setItemToDelete({ id: d.id, type: "driver" })
+                              }
                               className="p-2 text-slate-400 hover:text-red-600 bg-slate-50 hover:bg-red-50 rounded-lg transition-colors border border-transparent"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
                         </div>
-                        
+
                         <div className="flex flex-col gap-1 min-w-0">
-                          <h3 className="font-bold text-slate-800 text-base truncate pr-2">{d.name}</h3>
+                          <h3 className="font-bold text-slate-800 text-base truncate pr-2">
+                            {d.name}
+                          </h3>
                           <div className="flex flex-col gap-0.5 mt-1">
-                            <span className="text-sm font-medium text-slate-700">Телефон: {d.phone}</span>
-                            <div className="flex flex-col gap-1">
-                              <span className="text-sm text-slate-500">Авто: {getVehicleString(d)}</span>
-                              {d.moderation_status === "pending_moderation" && d.media_files && d.media_files.length > 0 && (
-                                <div className="flex gap-2 mt-2">
-                                  {d.media_files.map(mf => (
-                                    <a key={mf.id} href={mf.public_url} target="_blank" rel="noreferrer" className="block w-14 h-14 rounded-lg border border-slate-200 overflow-hidden hover:opacity-80">
-                                      <img src={mf.public_url} alt={mf.slot_key} className="w-full h-full object-cover" />
-                                    </a>
-                                  ))}
-                                </div>
-                              )}
+                            <span className="text-sm font-medium text-slate-700">
+                              Телефон: {d.phone}
+                            </span>
+                            <div className="flex flex-col gap-2 mt-1">
+                              {renderVehicleCell(d)}
+                              {d.moderation_status === "pending_moderation" &&
+                                d.media_files &&
+                                d.media_files.length > 0 && (
+                                  <div className="flex gap-2 mt-2">
+                                    {d.media_files.map((mf) => (
+                                      <a
+                                        key={mf.id}
+                                        href={mf.public_url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="block w-14 h-14 rounded-lg border border-slate-200 overflow-hidden hover:opacity-80"
+                                      >
+                                        <img
+                                          src={mf.public_url}
+                                          alt={mf.slot_key}
+                                          className="w-full h-full object-cover"
+                                        />
+                                      </a>
+                                    ))}
+                                  </div>
+                                )}
                             </div>
                             {d.moderation_status === "pending_moderation" && (
-                              <span className="text-sm font-bold text-amber-600 mt-1">На проверке</span>
+                              <span className="text-sm font-bold text-amber-600 mt-1">
+                                На проверке
+                              </span>
                             )}
                             {d.moderation_status === "rejected" && (
-                              <span className="text-sm font-bold text-rose-600 mt-1">Отклонен</span>
+                              <span className="text-sm font-bold text-rose-600 mt-1">
+                                Отклонен
+                              </span>
                             )}
                             {d.moderation_status === "suspended" && (
-                              <span className="text-sm font-bold text-slate-500 mt-1">Заблокирован</span>
+                              <span className="text-sm font-bold text-slate-500 mt-1">
+                                Заблокирован
+                              </span>
                             )}
                             {d.moderation_status === "approved" && (
-                              <span className="text-sm font-bold text-emerald-600 mt-1">Одобрен</span>
+                              <span className="text-sm font-bold text-emerald-600 mt-1">
+                                Одобрен
+                              </span>
                             )}
                           </div>
                         </div>
@@ -1468,7 +1771,7 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                           </div>
                           <div className="flex gap-2">
                             {d.moderation_status !== "approved" && (
-                              <button 
+                              <button
                                 onClick={() => handleApproveDriver(d.id)}
                                 title="Одобрить профиль"
                                 className="p-2 text-emerald-600 bg-emerald-50 rounded-lg transition-colors border border-transparent"
@@ -1477,7 +1780,7 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                               </button>
                             )}
                             {d.moderation_status !== "rejected" && (
-                              <button 
+                              <button
                                 onClick={() => handleRejectDriver(d.id)}
                                 title="Отклонить"
                                 className="p-2 text-rose-600 bg-rose-50 rounded-lg transition-colors border border-transparent"
@@ -1486,7 +1789,7 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                               </button>
                             )}
                             {d.moderation_status !== "suspended" && (
-                              <button 
+                              <button
                                 onClick={() => handleSuspendDriver(d.id)}
                                 title="Заблокировать"
                                 className="p-2 text-amber-600 bg-amber-50 rounded-lg transition-colors border border-transparent"
@@ -1501,7 +1804,9 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                   </div>
 
                   {drivers.length === 0 && (
-                    <div className="p-8 text-center text-slate-500 font-medium">Нет водителей</div>
+                    <div className="p-8 text-center text-slate-500 font-medium">
+                      Нет водителей
+                    </div>
                   )}
                 </div>
               )}
@@ -1509,7 +1814,9 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
           ) : activeTab === "moderation" ? (
             <>
               <div className="flex justify-between items-center bg-white p-5 rounded-2xl shadow-sm border border-slate-100 mb-2">
-                <h2 className="text-xl font-bold text-slate-800">Заявки на модерацию</h2>
+                <h2 className="text-xl font-bold text-slate-800">
+                  Заявки на модерацию
+                </h2>
                 <button
                   onClick={() => fetchPendingRequests(false)}
                   className="flex items-center gap-2 px-4 py-2 bg-slate-50 text-slate-600 rounded-lg hover:bg-slate-100 transition-colors font-medium text-sm border border-slate-200"
@@ -1530,12 +1837,16 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                       <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center">
                         <ClipboardCheck className="w-8 h-8 text-slate-300" />
                       </div>
-                      <p className="text-slate-500 font-medium text-lg">Нет новых заявок на модерацию</p>
+                      <p className="text-slate-500 font-medium text-lg">
+                        Нет новых заявок на модерацию
+                      </p>
                     </div>
                   ) : (
-                    pendingRequests.map(request => (
-                      <div key={request.driver_id} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col gap-5">
-                        
+                    pendingRequests.map((request) => (
+                      <div
+                        key={request.driver_id}
+                        className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col gap-5"
+                      >
                         <div className="flex flex-col md:flex-row gap-6 md:gap-10">
                           {/* Driver Info */}
                           <div className="flex-1 space-y-4">
@@ -1547,94 +1858,190 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                             </h3>
                             <div className="flex flex-col gap-2 text-sm text-slate-600 pl-13">
                               <div className="flex justify-between border-b border-slate-50 pb-2">
-                                <span className="font-medium text-slate-400">Телефон</span>
-                                <span className="font-semibold text-slate-700">{request.driver_phone}</span>
+                                <span className="font-medium text-slate-400">
+                                  Телефон
+                                </span>
+                                <span className="font-semibold text-slate-700">
+                                  {request.driver_phone}
+                                </span>
                               </div>
                               <div className="flex justify-between border-b border-slate-50 pb-2">
-                                <span className="font-medium text-slate-400">Марка/Модель</span>
-                                <span className="font-semibold text-slate-700">{request.vehicle_brand} {request.vehicle_model}</span>
+                                <span className="font-medium text-slate-400">
+                                  Марка/Модель
+                                </span>
+                                <span className="font-semibold text-slate-700">
+                                  {request.vehicle_brand}{" "}
+                                  {request.vehicle_model}
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center border-b border-slate-50 pb-2">
+                                <span className="font-medium text-slate-400">
+                                  Госномер
+                                </span>
+                                {request.vehicle_plate_number ? (
+                                  <div className="flex items-stretch bg-white border border-gray-400 rounded-md shadow-sm h-7 overflow-hidden">
+                                    <div className="flex items-center px-2 text-sm font-bold uppercase tracking-wider text-slate-900 leading-none pt-0.5">
+                                      {request.vehicle_plate_number}
+                                    </div>
+                                    <div className="flex flex-col items-center justify-center border-l border-gray-400 bg-white h-full px-1.5 py-0.5">
+                                      <span className="text-[7px] font-bold leading-none text-slate-800 mb-0.5">
+                                        RUS
+                                      </span>
+                                      <img
+                                        src="/russian.png"
+                                        alt="RUS"
+                                        className="w-4 h-3 object-cover rounded-[1px]"
+                                      />
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <span className="font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                                    Нет
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex justify-between border-b border-slate-50 pb-2 pt-2">
+                                <span className="font-medium text-slate-400">
+                                  Кубатура (м³)
+                                </span>
+                                <span className="font-semibold text-slate-700">
+                                  {request.vehicle_cubature_min !== undefined ||
+                                  request.vehicle_cubature_max !== undefined
+                                    ? `${request.vehicle_cubature_min || 0} - ${request.vehicle_cubature_max || 0}`
+                                    : request.vehicle_body_volume_m3
+                                      ? request.vehicle_body_volume_m3
+                                      : "—"}
+                                </span>
                               </div>
                               <div className="flex justify-between border-b border-slate-50 pb-2">
-                                <span className="font-medium text-slate-400">Госномер</span>
-                                <span className="font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">{request.vehicle_plate_number}</span>
-                              </div>
-                              <div className="flex justify-between border-b border-slate-50 pb-2">
-                                <span className="font-medium text-slate-400">Кубатура</span>
-                                <span className="font-semibold text-slate-700">{request.vehicle_body_volume_m3} м³</span>
+                                <span className="font-medium text-slate-400">
+                                  Тоннаж (т)
+                                </span>
+                                <span className="font-semibold text-slate-700">
+                                  {request.vehicle_tonnage_min !== undefined ||
+                                  request.vehicle_tonnage_max !== undefined
+                                    ? `${request.vehicle_tonnage_min || 0} - ${request.vehicle_tonnage_max || 0}`
+                                    : "—"}
+                                </span>
                               </div>
                             </div>
                           </div>
 
                           {/* Photos Info */}
                           <div className="flex-[1.5] flex flex-col gap-3">
-                            <span className="text-sm font-bold text-slate-700 uppercase tracking-wider">Фотографии автомобиля</span>
-                            <div className="grid grid-cols-3 gap-4">
-                              {/* Основное фото / Спереди */}
-                              <div className="flex flex-col gap-2">
-                                {request.vehicle_main_url ? (
-                                  <a href={request.vehicle_main_url} target="_blank" rel="noreferrer" className="block relative group rounded-lg overflow-hidden h-48 border border-slate-200">
-                                    <img src={request.vehicle_main_url} alt="Спереди" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                                    <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                      <Eye className="w-8 h-8 text-white" />
+                            <span className="text-sm font-bold text-slate-700 uppercase tracking-wider">
+                              Фотографии автомобиля
+                            </span>
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-2">
+                                {/* Основное фото / Спереди */}
+                                <div className="flex flex-col gap-2">
+                                  {request.vehicle_main_url ? (
+                                    <a
+                                      href={request.vehicle_main_url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="block relative group rounded-xl overflow-hidden h-48 sm:h-56 border border-slate-200"
+                                    >
+                                      <img
+                                        src={request.vehicle_main_url}
+                                        alt="Спереди"
+                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                      />
+                                      <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                        <Eye className="w-8 h-8 text-white" />
+                                      </div>
+                                    </a>
+                                  ) : (
+                                    <div className="h-48 sm:h-56 bg-slate-100 rounded-xl flex items-center justify-center border border-slate-200">
+                                      <span className="text-sm font-medium text-slate-400">
+                                        Фото не загружено
+                                      </span>
                                     </div>
-                                  </a>
-                                ) : (
-                                  <div className="h-48 bg-slate-100 rounded-lg flex items-center justify-center border border-slate-200">
-                                    <span className="text-sm font-medium text-slate-400">Нет фото</span>
-                                  </div>
-                                )}
-                                <span className="text-xs font-bold text-center text-slate-600">Спереди</span>
-                              </div>
+                                  )}
+                                  <span className="text-xs font-bold text-center text-slate-600">
+                                    Спереди
+                                  </span>
+                                </div>
 
-                              {/* Сбоку / Слева */}
-                              <div className="flex flex-col gap-2">
-                                {request.vehicle_left_url ? (
-                                  <a href={request.vehicle_left_url} target="_blank" rel="noreferrer" className="block relative group rounded-lg overflow-hidden h-48 border border-slate-200">
-                                    <img src={request.vehicle_left_url} alt="Сбоку" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                                    <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                      <Eye className="w-8 h-8 text-white" />
+                                {/* Сбоку / Слева */}
+                                <div className="flex flex-col gap-2">
+                                  {request.vehicle_left_url ? (
+                                    <a
+                                      href={request.vehicle_left_url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="block relative group rounded-xl overflow-hidden h-48 sm:h-56 border border-slate-200"
+                                    >
+                                      <img
+                                        src={request.vehicle_left_url}
+                                        alt="Сбоку"
+                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                      />
+                                      <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                        <Eye className="w-8 h-8 text-white" />
+                                      </div>
+                                    </a>
+                                  ) : (
+                                    <div className="h-48 sm:h-56 bg-slate-100 rounded-xl flex items-center justify-center border border-slate-200">
+                                      <span className="text-sm font-medium text-slate-400">
+                                        Фото не загружено
+                                      </span>
                                     </div>
-                                  </a>
-                                ) : (
-                                  <div className="h-48 bg-slate-100 rounded-lg flex items-center justify-center border border-slate-200">
-                                    <span className="text-sm font-medium text-slate-400">Нет фото</span>
-                                  </div>
-                                )}
-                                <span className="text-xs font-bold text-center text-slate-600">Сбоку</span>
-                              </div>
+                                  )}
+                                  <span className="text-xs font-bold text-center text-slate-600">
+                                    Сбоку
+                                  </span>
+                                </div>
 
-                              {/* Номер / Plate */}
-                              <div className="flex flex-col gap-2">
-                                {request.vehicle_plate_url ? (
-                                  <a href={request.vehicle_plate_url} target="_blank" rel="noreferrer" className="block relative group rounded-lg overflow-hidden h-48 border border-slate-200">
-                                    <img src={request.vehicle_plate_url} alt="Госномер" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                                    <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                      <Eye className="w-8 h-8 text-white" />
+                                {/* Номер / Plate */}
+                                <div className="flex flex-col gap-2">
+                                  {request.vehicle_plate_url ? (
+                                    <a
+                                      href={request.vehicle_plate_url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="block relative group rounded-xl overflow-hidden h-48 sm:h-56 border border-slate-200"
+                                    >
+                                      <img
+                                        src={request.vehicle_plate_url}
+                                        alt="Госномер"
+                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                      />
+                                      <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                        <Eye className="w-8 h-8 text-white" />
+                                      </div>
+                                    </a>
+                                  ) : (
+                                    <div className="h-48 sm:h-56 bg-slate-100 rounded-xl flex items-center justify-center border border-slate-200">
+                                      <span className="text-sm font-medium text-slate-400">
+                                        Фото не загружено
+                                      </span>
                                     </div>
-                                  </a>
-                                ) : (
-                                  <div className="h-48 bg-slate-100 rounded-lg flex items-center justify-center border border-slate-200">
-                                    <span className="text-sm font-medium text-slate-400">Нет фото</span>
-                                  </div>
-                                )}
-                                <span className="text-xs font-bold text-center text-slate-600">Фото госномера</span>
+                                  )}
+                                  <span className="text-xs font-bold text-center text-slate-600">
+                                    Фото госномера
+                                  </span>
+                                </div>
                               </div>
-                            </div>
                           </div>
                         </div>
 
                         {/* Actions */}
-                        <div className="flex gap-4 pt-5 border-t border-slate-100 mt-2">
+                        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 w-full mt-4 pt-5 border-t border-slate-100">
                           <button
-                            onClick={() => handleRejectDriver(request.driver_id)}
-                            className="flex-1 py-3 px-4 bg-white hover:bg-rose-50 text-rose-600 font-bold rounded-xl transition-colors border border-rose-200 hover:border-rose-300 shadow-sm flex items-center justify-center gap-2"
+                            onClick={() =>
+                              handleRejectDriver(request.driver_id)
+                            }
+                            className="w-full sm:flex-1 py-3 px-4 bg-white hover:bg-rose-50 text-rose-600 font-bold rounded-xl transition-colors border border-rose-200 hover:border-rose-300 shadow-sm flex items-center justify-center gap-2"
                           >
                             <XCircle className="w-5 h-5" />
                             Отклонить
                           </button>
                           <button
-                            onClick={() => handleApproveDriver(request.driver_id)}
-                            className="flex-[2] py-3 px-4 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2"
+                            onClick={() =>
+                              handleApproveDriver(request.driver_id)
+                            }
+                            className="w-full sm:flex-1 py-3 px-4 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2"
                           >
                             <CheckCircle2 className="w-5 h-5" />
                             Одобрить водителя
@@ -1656,7 +2063,9 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
           <div className="bg-white rounded-3xl w-full max-w-xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
             <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
               <h3 className="text-xl font-bold text-slate-800">
-                {editingMaterial.id ? "Редактировать материал" : "Добавить материал"}
+                {editingMaterial.id
+                  ? "Редактировать материал"
+                  : "Добавить материал"}
               </h3>
               <button
                 onClick={() => setIsMaterialModalOpen(false)}
@@ -1665,72 +2074,130 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                 <XCircle className="w-5 h-5" />
               </button>
             </div>
-            
-            <form onSubmit={handleSaveMaterial} className="p-6 overflow-y-auto flex flex-col gap-5">
+
+            <form
+              onSubmit={handleSaveMaterial}
+              className="p-6 overflow-y-auto flex flex-col gap-5"
+            >
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Название</label>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Название
+                </label>
                 <input
                   type="text"
                   required
                   value={editingMaterial.name || ""}
-                  onChange={(e) => setEditingMaterial({ ...editingMaterial, name: e.target.value })}
+                  onChange={(e) =>
+                    setEditingMaterial({
+                      ...editingMaterial,
+                      name: e.target.value,
+                    })
+                  }
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
                 />
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Описание</label>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Описание
+                </label>
                 <textarea
                   rows={2}
                   value={editingMaterial.description || ""}
-                  onChange={(e) => setEditingMaterial({ ...editingMaterial, description: e.target.value })}
+                  onChange={(e) =>
+                    setEditingMaterial({
+                      ...editingMaterial,
+                      description: e.target.value,
+                    })
+                  }
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium resize-none"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Цена (₽)</label>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    Цена (₽)
+                  </label>
                   <input
                     type="number"
                     required
                     step="0.01"
                     min="0"
                     value={editingMaterial.price || ""}
-                    onChange={(e) => setEditingMaterial({ ...editingMaterial, price: parseFloat(e.target.value) })}
+                    onChange={(e) =>
+                      setEditingMaterial({
+                        ...editingMaterial,
+                        price: parseFloat(e.target.value),
+                      })
+                    }
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Мин. объем</label>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    Мин. объем
+                  </label>
                   <input
                     type="number"
                     step="0.1"
                     min="0"
                     value={editingMaterial.min_volume || ""}
-                    onChange={(e) => setEditingMaterial({ ...editingMaterial, min_volume: parseFloat(e.target.value) })}
+                    onChange={(e) =>
+                      setEditingMaterial({
+                        ...editingMaterial,
+                        min_volume: parseFloat(e.target.value),
+                      })
+                    }
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
                   />
                 </div>
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Ед. измерения</label>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Ед. измерения
+                </label>
                 <input
                   type="text"
                   value={editingMaterial.unit || ""}
-                  onChange={(e) => setEditingMaterial({ ...editingMaterial, unit: e.target.value })}
+                  onChange={(e) =>
+                    setEditingMaterial({
+                      ...editingMaterial,
+                      unit: e.target.value,
+                    })
+                  }
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
                 />
               </div>
 
               <div className="flex flex-col gap-2 pt-2">
-                <span className="text-sm font-bold text-slate-800">Фотографии</span>
+                <span className="text-sm font-bold text-slate-800">
+                  Фотографии
+                </span>
                 {editingMaterial.id ? (
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    {renderPhotoSlot("material", editingMaterial.id, "career", "Карьер", editingMaterial.media_files)}
-                    {renderPhotoSlot("material", editingMaterial.id, "unload", "Выгрузка", editingMaterial.media_files)}
-                    {renderPhotoSlot("material", editingMaterial.id, "texture", "Текстура", editingMaterial.media_files)}
+                    {renderPhotoSlot(
+                      "material",
+                      editingMaterial.id,
+                      "career",
+                      "Карьер",
+                      editingMaterial.media_files,
+                    )}
+                    {renderPhotoSlot(
+                      "material",
+                      editingMaterial.id,
+                      "unload",
+                      "Выгрузка",
+                      editingMaterial.media_files,
+                    )}
+                    {renderPhotoSlot(
+                      "material",
+                      editingMaterial.id,
+                      "texture",
+                      "Текстура",
+                      editingMaterial.media_files,
+                    )}
                   </div>
                 ) : (
                   <div className="bg-amber-50 border border-amber-200 text-amber-700 p-3 rounded-xl text-sm font-medium">
@@ -1743,12 +2210,21 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                 <input
                   type="checkbox"
                   checked={editingMaterial.is_active !== false}
-                  onChange={(e) => setEditingMaterial({ ...editingMaterial, is_active: e.target.checked })}
+                  onChange={(e) =>
+                    setEditingMaterial({
+                      ...editingMaterial,
+                      is_active: e.target.checked,
+                    })
+                  }
                   className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
                 />
                 <div className="flex flex-col">
-                  <span className="font-bold text-slate-800 text-sm">Материал активен</span>
-                  <span className="text-xs text-slate-500 font-medium">Отображать этот материал в каталоге</span>
+                  <span className="font-bold text-slate-800 text-sm">
+                    Материал активен
+                  </span>
+                  <span className="text-xs text-slate-500 font-medium">
+                    Отображать этот материал в каталоге
+                  </span>
                 </div>
               </label>
 
@@ -1765,7 +2241,11 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                   disabled={isSavingMaterial}
                   className="flex-1 py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-colors flex justify-center items-center gap-2 shadow-sm"
                 >
-                  {isSavingMaterial ? <Loader2 className="w-5 h-5 animate-spin" /> : "Сохранить"}
+                  {isSavingMaterial ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    "Сохранить"
+                  )}
                 </button>
               </div>
             </form>
@@ -1779,7 +2259,9 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
           <div className="bg-white rounded-3xl w-full max-w-xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
             <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
               <h3 className="text-xl font-bold text-slate-800">
-                {editingDelivery.id ? "Редактировать тип машины" : "Добавить тип машины"}
+                {editingDelivery.id
+                  ? "Редактировать тип машины"
+                  : "Добавить тип машины"}
               </h3>
               <button
                 onClick={() => setIsDeliveryModalOpen(false)}
@@ -1788,50 +2270,82 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                 <XCircle className="w-5 h-5" />
               </button>
             </div>
-            
-            <form onSubmit={handleSaveDelivery} className="p-6 overflow-y-auto flex flex-col gap-5">
+
+            <form
+              onSubmit={handleSaveDelivery}
+              className="p-6 overflow-y-auto flex flex-col gap-5"
+            >
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Марка машины (например: Volvo, КамАЗ)</label>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Марка машины (например: Volvo, КамАЗ)
+                </label>
                 <input
                   type="text"
                   required
                   value={editingDelivery.title || ""}
-                  onChange={(e) => setEditingDelivery({ ...editingDelivery, title: e.target.value })}
+                  onChange={(e) =>
+                    setEditingDelivery({
+                      ...editingDelivery,
+                      title: e.target.value,
+                    })
+                  }
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Объем (м³)</label>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    Объем (м³)
+                  </label>
                   <input
                     type="number"
                     required
                     step="0.1"
                     min="0"
                     value={editingDelivery.capacity_m3 || ""}
-                    onChange={(e) => setEditingDelivery({ ...editingDelivery, capacity_m3: parseFloat(e.target.value) })}
+                    onChange={(e) =>
+                      setEditingDelivery({
+                        ...editingDelivery,
+                        capacity_m3: parseFloat(e.target.value),
+                      })
+                    }
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Базовая цена (₽)</label>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    Базовая цена (₽)
+                  </label>
                   <input
                     type="number"
                     step="0.01"
                     min="0"
                     value={editingDelivery.base_price ?? ""}
-                    onChange={(e) => setEditingDelivery({ ...editingDelivery, base_price: parseFloat(e.target.value) })}
+                    onChange={(e) =>
+                      setEditingDelivery({
+                        ...editingDelivery,
+                        base_price: parseFloat(e.target.value),
+                      })
+                    }
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
                   />
                 </div>
               </div>
 
               <div className="flex flex-col gap-2 pt-2">
-                <span className="text-sm font-bold text-slate-800">Фотографии</span>
+                <span className="text-sm font-bold text-slate-800">
+                  Фотографии
+                </span>
                 {editingDelivery.id ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {renderPhotoSlot("delivery_option", editingDelivery.id, "main", "Фото машины", editingDelivery.media_files)}
+                    {renderPhotoSlot(
+                      "delivery_option",
+                      editingDelivery.id,
+                      "main",
+                      "Фото машины",
+                      editingDelivery.media_files,
+                    )}
                   </div>
                 ) : (
                   <div className="bg-amber-50 border border-amber-200 text-amber-700 p-3 rounded-xl text-sm font-medium">
@@ -1844,12 +2358,21 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                 <input
                   type="checkbox"
                   checked={editingDelivery.is_active !== false}
-                  onChange={(e) => setEditingDelivery({ ...editingDelivery, is_active: e.target.checked })}
+                  onChange={(e) =>
+                    setEditingDelivery({
+                      ...editingDelivery,
+                      is_active: e.target.checked,
+                    })
+                  }
                   className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
                 />
                 <div className="flex flex-col">
-                  <span className="font-bold text-slate-800 text-sm">Тип машины активен</span>
-                  <span className="text-xs text-slate-500 font-medium">Отображать этот тип для логистов и клиентов</span>
+                  <span className="font-bold text-slate-800 text-sm">
+                    Тип машины активен
+                  </span>
+                  <span className="text-xs text-slate-500 font-medium">
+                    Отображать этот тип для логистов и клиентов
+                  </span>
                 </div>
               </label>
 
@@ -1866,7 +2389,11 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                   disabled={isSavingDelivery}
                   className="flex-1 py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-colors flex justify-center items-center gap-2 shadow-sm"
                 >
-                  {isSavingDelivery ? <Loader2 className="w-5 h-5 animate-spin" /> : "Сохранить"}
+                  {isSavingDelivery ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    "Сохранить"
+                  )}
                 </button>
               </div>
             </form>
@@ -1880,7 +2407,9 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
           <div className="bg-white rounded-3xl w-full max-w-xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
             <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
               <h3 className="text-xl font-bold text-slate-800">
-                {editingDriver.id ? "Редактировать водителя" : "Добавить водителя"}
+                {editingDriver.id
+                  ? "Редактировать водителя"
+                  : "Добавить водителя"}
               </h3>
               <button
                 onClick={() => setIsDriverModalOpen(false)}
@@ -1889,21 +2418,30 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                 <XCircle className="w-5 h-5" />
               </button>
             </div>
-            
-            <form onSubmit={handleSaveDriver} className="p-6 overflow-y-auto flex flex-col gap-5">
+
+            <form
+              onSubmit={handleSaveDriver}
+              className="p-6 overflow-y-auto flex flex-col gap-5"
+            >
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">ФИО</label>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  ФИО
+                </label>
                 <input
                   type="text"
                   required
                   value={editingDriver.name || ""}
-                  onChange={(e) => setEditingDriver({ ...editingDriver, name: e.target.value })}
+                  onChange={(e) =>
+                    setEditingDriver({ ...editingDriver, name: e.target.value })
+                  }
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
                 />
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Телефон</label>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Телефон
+                </label>
                 <input
                   type="text"
                   required
@@ -1919,29 +2457,51 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Тип машины (Кубатура)</label>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Тип машины (Кубатура)
+                </label>
                 <select
                   required
                   value={editingDriver.delivery_option_id || ""}
-                  onChange={(e) => setEditingDriver({ ...editingDriver, delivery_option_id: e.target.value })}
+                  onChange={(e) =>
+                    setEditingDriver({
+                      ...editingDriver,
+                      delivery_option_id: e.target.value,
+                    })
+                  }
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
                 >
-                  <option value="" disabled>Выберите машину...</option>
-                  {deliveryOptions.map(opt => (
-                    <option key={opt.id} value={opt.id}>{opt.title} ({opt.capacity_m3} м³)</option>
+                  <option value="" disabled>
+                    Выберите машину...
+                  </option>
+                  {deliveryOptions.map((opt) => (
+                    <option key={opt.id} value={opt.id}>
+                      {opt.title} ({opt.capacity_m3} м³)
+                    </option>
                   ))}
                 </select>
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Пароль</label>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Пароль
+                </label>
                 <div className="relative w-full">
                   <input
                     type={showDriverPassword ? "text" : "password"}
                     required={!editingDriver.id}
-                    placeholder={editingDriver.id ? "Оставьте пустым, чтобы не изменять" : "Минимум 6 символов"}
+                    placeholder={
+                      editingDriver.id
+                        ? "Оставьте пустым, чтобы не изменять"
+                        : "Минимум 6 символов"
+                    }
                     value={editingDriver.password || ""}
-                    onChange={(e) => setEditingDriver({ ...editingDriver, password: e.target.value })}
+                    onChange={(e) =>
+                      setEditingDriver({
+                        ...editingDriver,
+                        password: e.target.value,
+                      })
+                    }
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 pr-12 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
                   />
                   <button
@@ -1949,7 +2509,11 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                     onClick={() => setShowDriverPassword(!showDriverPassword)}
                     className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
                   >
-                    {showDriverPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    {showDriverPassword ? (
+                      <EyeOff className="w-5 h-5" />
+                    ) : (
+                      <Eye className="w-5 h-5" />
+                    )}
                   </button>
                 </div>
               </div>
@@ -1958,12 +2522,21 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                 <input
                   type="checkbox"
                   checked={editingDriver.is_active !== false}
-                  onChange={(e) => setEditingDriver({ ...editingDriver, is_active: e.target.checked })}
+                  onChange={(e) =>
+                    setEditingDriver({
+                      ...editingDriver,
+                      is_active: e.target.checked,
+                    })
+                  }
                   className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
                 />
                 <div className="flex flex-col">
-                  <span className="font-bold text-slate-800 text-sm">Водитель активен</span>
-                  <span className="text-xs text-slate-500 font-medium">Водитель сможет принимать заказы</span>
+                  <span className="font-bold text-slate-800 text-sm">
+                    Водитель активен
+                  </span>
+                  <span className="text-xs text-slate-500 font-medium">
+                    Водитель сможет принимать заказы
+                  </span>
                 </div>
               </label>
 
@@ -1980,7 +2553,11 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
                   disabled={isSavingDriver}
                   className="flex-1 py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-colors flex justify-center items-center gap-2 shadow-sm"
                 >
-                  {isSavingDriver ? <Loader2 className="w-5 h-5 animate-spin" /> : "Сохранить"}
+                  {isSavingDriver ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    "Сохранить"
+                  )}
                 </button>
               </div>
             </form>
@@ -1992,9 +2569,12 @@ export default function AdminDashboardScreen({ onLogout }: AdminDashboardScreenP
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
           <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="p-6">
-              <h3 className="text-xl font-bold text-slate-800 mb-2">Удаление</h3>
+              <h3 className="text-xl font-bold text-slate-800 mb-2">
+                Удаление
+              </h3>
               <p className="text-slate-500 font-medium text-sm">
-                Вы уверены, что хотите удалить эту запись? Действие нельзя будет отменить.
+                Вы уверены, что хотите удалить эту запись? Действие нельзя будет
+                отменить.
               </p>
             </div>
             <div className="flex gap-3 p-4 bg-slate-50 border-t border-slate-100">

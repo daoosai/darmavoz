@@ -1,7 +1,19 @@
 import React, { useState, useEffect } from "react";
 import { useAuthStore } from "./store";
 import { baseURL, formatPhoneNumber } from "./utils";
-import { LogOut, Truck, User as UserIcon, Phone, Star, AlertCircle, Camera, Loader2, CheckCircle2, BadgeCheck, Ban } from "lucide-react";
+import {
+  LogOut,
+  Truck,
+  User as UserIcon,
+  Phone,
+  Star,
+  AlertCircle,
+  Camera,
+  Loader2,
+  CheckCircle2,
+  BadgeCheck,
+  Ban,
+} from "lucide-react";
 import UpdateBanner from "./UpdateBanner";
 import toast from "react-hot-toast";
 
@@ -11,56 +23,59 @@ interface DriverProfile {
   phone: string;
   is_active: boolean;
   dispatch_priority: number;
-  moderation_status: "incomplete" | "pending_moderation" | "approved" | "rejected" | "suspended" | null;
-  vehicle_moderation_status?: "pending_moderation" | "approved" | "rejected" | "suspended" | null;
+  moderation_status:
+    | "incomplete"
+    | "pending_moderation"
+    | "approved"
+    | "rejected"
+    | "suspended"
+    | null;
+  vehicle_moderation_status?:
+    | "pending_moderation"
+    | "approved"
+    | "rejected"
+    | "suspended"
+    | null;
   vehicle: {
     id: string;
     brand: string;
     plate_number: string;
     vehicle_type: string;
-    body_volume_m3: number;
-    delivery_option_id: string;
-    rate_mode: "fixed" | "per_ton_km";
-    fixed_rate: number;
-    rate_per_ton_km: number;
+    body_volume_m3?: number;
+    cubature_min?: number;
+    cubature_max?: number;
+    tonnage_min?: number;
+    tonnage_max?: number;
+    delivery_option_id?: string;
+    rate_mode?: "fixed" | "per_ton_km";
+    fixed_rate?: number;
+    rate_per_ton_km?: number;
     media_files?: any[];
   } | null;
 }
 
-export default function DriverProfileScreen({ onLogout }: { onLogout: () => void }) {
-  const brandOptions = ["КамАЗ", "Shacman", "FAW", "HOWO", "ЗИЛ", "МАЗ", "Volvo", "Scania", "MAN", "DAF", "Другое"];
-  const vehicleTypeOptions = ["Самосвал", "Тонар", "Полуприцеп"];
+export default function DriverProfileScreen({
+  onLogout,
+  onProfileUpdate,
+}: {
+  onLogout: () => void;
+  onProfileUpdate?: () => void;
+}) {
   const { token, logout } = useAuthStore();
   const [profile, setProfile] = useState<DriverProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [brand, setBrand] = useState("");
-  const [plate, setPlate] = useState("");
-  const [vehicleType, setVehicleType] = useState("Самосвал");
-  const [deliveryOptionId, setDeliveryOptionId] = useState("");
-  const [rateType, setRateType] = useState("per_ton_km");
-  const [rateValue, setRateValue] = useState("");
-  const [deliveryOptions, setDeliveryOptions] = useState<any[]>([]);
-  const [uploadingSlots, setUploadingSlots] = useState<Record<string, boolean>>({});
+  const [uploadingSlots, setUploadingSlots] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [localPreviews, setLocalPreviews] = useState<Record<string, string>>(
+    {},
+  );
   const isDriverInactive = profile?.is_active === false;
-
 
   useEffect(() => {
     fetchProfile();
-    fetchDeliveryOptions();
   }, [token]);
-
-  const fetchDeliveryOptions = async () => {
-    try {
-      const res = await fetch(`${baseURL}/catalog/delivery-options/`);
-      if (res.ok) {
-        setDeliveryOptions(await res.json());
-      }
-    } catch (e) {}
-  };
 
   const fetchProfile = async () => {
     try {
@@ -69,136 +84,60 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
       const res = await fetch(`${baseURL}/driver/profile/full`, {
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${currentToken}`
-        }
+          Authorization: `Bearer ${currentToken}`,
+        },
       });
-      if (res.status === 401) {
+      if (res.status === 401 || res.status === 403) {
         logout();
         onLogout();
         return;
       }
-      if (res.status === 403) {
-        // Профиль может возвращать 403, если есть критические ошибки прав.
-        return;
+      if (res.ok) {
+        const data = await res.json();
+        setProfile(data);
       }
-      if (!res.ok) {
-        throw new Error("Failed to fetch profile");
-      }
-      const data = await res.json().catch(() => ({}));
-      const p = Array.isArray(data) ? data[0] : data;
-      setProfile(p);
-      
-      if (p) {
-        setName(p.name || "");
-        setPhone(formatPhoneNumber(p.phone) || "");
-        if (p.vehicle) {
-          setBrand(p.vehicle.brand || "");
-          setPlate(p.vehicle.plate_number || "");
-          setVehicleType(p.vehicle.vehicle_type || "");
-          setDeliveryOptionId(p.vehicle.delivery_option_id || "");
-          setRateType(p.vehicle.rate_mode || "per_ton_km");
-          if (p.vehicle.rate_mode === "fixed") {
-            setRateValue(p.vehicle.fixed_rate?.toString() || "");
-          } else {
-            setRateValue(p.vehicle.rate_per_ton_km?.toString() || "");
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Error fetching profile:", error);
+    } catch (e) {
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleSubmitForModeration = async () => {
-    setIsSaving(true);
     try {
+      setIsSaving(true);
       const currentToken = useAuthStore.getState().token;
-      if (!currentToken) return;
       const res = await fetch(`${baseURL}/driver/vehicle/submit`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${currentToken}`
-        }
+          Authorization: `Bearer ${currentToken}`,
+        },
       });
+
       if (!res.ok) {
-        throw new Error("Failed to submit");
+        const errData = await res.json().catch(() => ({}));
+        if (errData.detail && Array.isArray(errData.detail)) {
+          const errMsg = errData.detail
+            .map(
+              (e: any) => `${e.loc ? e.loc[e.loc.length - 1] : ""}: ${e.msg}`,
+            )
+            .join(", ");
+          throw new Error(errMsg);
+        }
+        throw new Error(
+          errData.detail ||
+            errData.message ||
+            "Ошибка при отправке на модерацию",
+        );
       }
+
       const updatedProfile = await res.json();
       setProfile(updatedProfile);
       toast.success("Заявка отправлена на модерацию");
       await fetchProfile();
-    } catch (e) {
-      toast.error("Не удалось отправить заявку");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleSave = async () => {
-    if (isDriverInactive) {
-      toast.error("Ваш профиль не активен, обратитесь к администратору");
-      return;
-    }
-    if (!name.trim() || !phone.trim() || !brand.trim() || !plate.trim() || !deliveryOptionId || !vehicleType.trim()) {
-      toast.error("Пожалуйста, заполните все обязательные поля");
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      const currentToken = useAuthStore.getState().token;
-      
-      let sendPhone = phone;
-      const digitsOnly = phone.replace(/\D/g, "");
-      if (digitsOnly.length === 11) {
-        sendPhone = "+" + digitsOnly;
-      }
-      
-      // Update profile
-      const profRes = await fetch(`${baseURL}/driver/profile`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${currentToken}`
-        },
-        body: JSON.stringify({ name, phone: sendPhone })
-      });
-      if (profRes.status === 401) { logout(); onLogout(); return; }
-      if (profRes.status === 403) { toast.error("Недостаточно прав (403)"); return; }
-
-      // Update vehicle
-      const rateVal = parseFloat(rateValue) || 0;
-      const selectedDeliveryOption = deliveryOptions.find((option) => option.id === deliveryOptionId);
-      const vehRes = await fetch(`${baseURL}/driver/vehicle`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer " + useAuthStore.getState().token
-        },
-        body: JSON.stringify({
-          brand: brand,
-          plate_number: plate,
-          vehicle_type: vehicleType,
-          body_volume_m3: Number(selectedDeliveryOption?.capacity_m3 || 0),
-          delivery_option_id: deliveryOptionId || null,
-          rate_mode: rateType,
-          fixed_rate: rateType === "fixed" ? rateVal : null,
-          rate_per_ton_km: rateType === "per_ton_km" ? rateVal : null
-        })
-      });
-      
-      if (vehRes.status === 401) { logout(); onLogout(); return; }
-      if (vehRes.status === 403) { toast.error("Недостаточно прав (403)"); return; }
-      
-      if (!profRes.ok || !vehRes.ok) throw new Error("Save status error");
-
-      toast.success("Данные успешно сохранены");
-      await fetchProfile(); // refresh data
+      onProfileUpdate?.();
     } catch (e: any) {
-      toast.error("Ошибка сохранения данных");
+      toast.error(e.message || "Ошибка при отправке на модерацию");
     } finally {
       setIsSaving(false);
     }
@@ -210,25 +149,40 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
       return;
     }
     if (!profile?.vehicle?.id) {
-      toast.error("Сначала сохраните данные автомобиля!");
+      toast.error("Сначала заполните данные автомобиля!");
       return;
     }
-    setUploadingSlots(prev => ({ ...prev, [slotId]: true }));
+
+    const localUrl = URL.createObjectURL(file);
+    setLocalPreviews((prev) => ({ ...prev, [slotId]: localUrl }));
+    setUploadingSlots((prev) => ({ ...prev, [slotId]: true }));
+
     try {
       const currentToken = useAuthStore.getState().token;
-      let fileExt = file.name.includes('.') ? file.name.split('.').pop()?.toLowerCase() : '';
-      if (!fileExt || !['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(fileExt)) {
-        fileExt = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
+      let fileExt = file.name.includes(".")
+        ? file.name.split(".").pop()?.toLowerCase()
+        : "";
+      if (
+        !fileExt ||
+        !["jpg", "jpeg", "png", "webp", "gif"].includes(fileExt)
+      ) {
+        fileExt =
+          file.type === "image/png"
+            ? "png"
+            : file.type === "image/webp"
+              ? "webp"
+              : "jpg";
       }
       const safeFileName = `photo-${Date.now()}.${fileExt}`;
-      const safeContentType = file.type || `image/${fileExt === 'jpg' ? 'jpeg' : fileExt}`;
+      const safeContentType =
+        file.type || `image/${fileExt === "jpg" ? "jpeg" : fileExt}`;
 
       // 1: Presign
       const presignRes = await fetch(`${baseURL}/media/presign-upload`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${currentToken}`
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${currentToken}`,
         },
         body: JSON.stringify({
           file_name: safeFileName,
@@ -238,30 +192,33 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
           entity_id: profile.vehicle.id,
           is_primary: false,
           sort_order: 0,
-          slot_key: slotId
-        })
+          slot_key: slotId,
+        }),
       });
 
-      if (presignRes.status === 401) { logout(); onLogout(); return; }
-      if (presignRes.status === 403) { toast.error("Нет доступа к загрузке фото"); return; }
+      if (presignRes.status === 401 || presignRes.status === 403) {
+        toast.error("Ошибка доступа");
+        return;
+      }
       if (!presignRes.ok) throw new Error("Ошибка Presign");
       const presignData = await presignRes.json();
-      if (!presignData.upload_url) throw new Error("Бэкенд не вернул upload_url!");
+      if (!presignData.upload_url)
+        throw new Error("Бэкенд не вернул upload_url!");
 
       // 2: Upload
       const uploadRes = await fetch(presignData.upload_url, {
-        method: 'PUT',
-        headers: { 'Content-Type': safeContentType },
-        body: file
+        method: "PUT",
+        headers: { "Content-Type": safeContentType },
+        body: file,
       });
       if (!uploadRes.ok) throw new Error("Ошибка загрузки в S3");
 
       // 3: Confirm
       const confirmRes = await fetch(`${baseURL}/media/confirm`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${currentToken}`
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${currentToken}`,
         },
         body: JSON.stringify({
           entity_type: "vehicle",
@@ -272,8 +229,8 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
           file_size: file.size,
           is_primary: false,
           sort_order: 0,
-          slot_key: slotId
-        })
+          slot_key: slotId,
+        }),
       });
       if (!confirmRes.ok) throw new Error("Ошибка подтверждения");
 
@@ -281,8 +238,13 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
       fetchProfile();
     } catch (e: any) {
       toast.error(e.message || "Ошибка загрузки файла");
+      setLocalPreviews((prev) => {
+        const copy = { ...prev };
+        delete copy[slotId];
+        return copy;
+      });
     } finally {
-      setUploadingSlots(prev => ({ ...prev, [slotId]: false }));
+      setUploadingSlots((prev) => ({ ...prev, [slotId]: false }));
     }
   };
 
@@ -294,61 +256,75 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
     );
   }
 
+  const moderationStatus =
+    profile?.vehicle_moderation_status ||
+    profile?.moderation_status ||
+    "incomplete";
+  const isReadOnly = moderationStatus === "approved" || moderationStatus === "pending_moderation";
+
   const renderPhotoSlot = (slotKey: string, label: string) => {
-    const media = profile?.vehicle?.media_files?.find((m: any) => m.slot_key === slotKey);
+    const media = profile?.vehicle?.media_files?.find(
+      (m: any) => m.slot_key === slotKey,
+    );
+    const localUrl = localPreviews[slotKey];
     const isUploading = uploadingSlots[slotKey];
+    const imageUrl = localUrl || media?.public_url;
 
     return (
       <div className="flex flex-col gap-2">
         <span className="text-xs font-bold text-slate-500">{label}</span>
-        <label className="relative flex flex-col items-center justify-center h-28 border-2 border-slate-200 border-dashed rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer overflow-hidden group">
+        <label className={`relative flex flex-col items-center justify-center h-28 border-2 ${isReadOnly ? 'border-transparent cursor-default' : 'border-slate-200 border-dashed hover:bg-slate-100 cursor-pointer'} rounded-xl bg-slate-50 transition-colors overflow-hidden group`}>
           {isUploading ? (
             <Loader2 className="w-6 h-6 text-[#2DB0E6] animate-spin" />
-          ) : media ? (
+          ) : imageUrl ? (
             <>
-              <img src={media.public_url} alt={label} className="absolute inset-0 w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
-              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white">
-                <Camera className="w-6 h-6 mb-1" />
-                <span className="text-xs font-bold">Изменить</span>
-              </div>
+              <img
+                src={imageUrl}
+                alt={label}
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+              {!isReadOnly && (
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white">
+                  <Camera className="w-6 h-6 mb-1" />
+                  <span className="text-xs font-bold">Изменить</span>
+                </div>
+              )}
             </>
           ) : (
             <>
               <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm mb-2 text-slate-400 group-hover:text-[#2DB0E6] transition-colors">
                 <Camera className="w-5 h-5" />
               </div>
-              <span className="text-[11px] font-medium text-slate-500 group-hover:text-slate-700">Загрузить фото</span>
+              <span className="text-[11px] font-medium text-slate-500 group-hover:text-slate-700">
+                Загрузить фото
+              </span>
             </>
           )}
-          <input
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => {
-              if (e.target.files && e.target.files[0]) {
-                handleFileUpload(e.target.files[0], slotKey);
-              }
-            }}
-          />
+          {!isReadOnly && (
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              disabled={isReadOnly}
+              onChange={(e) => {
+                if (e.target.files && e.target.files[0]) {
+                  handleFileUpload(e.target.files[0], slotKey);
+                }
+              }}
+            />
+          )}
         </label>
       </div>
     );
   };
 
-  const hasAllPhotos = profile?.vehicle?.media_files && 
-                      profile.vehicle.media_files.some(m => m.slot_key === 'vehicle_main') &&
-                      profile.vehicle.media_files.some(m => m.slot_key === 'vehicle_left') &&
-                      profile.vehicle.media_files.some(m => m.slot_key === 'vehicle_plate');
+  const hasAllPhotos =
+    profile?.vehicle?.media_files &&
+    profile.vehicle.media_files.some((m) => m.slot_key === "vehicle_main") &&
+    profile.vehicle.media_files.some((m) => m.slot_key === "vehicle_left") &&
+    profile.vehicle.media_files.some((m) => m.slot_key === "vehicle_plate");
 
-  const isProfileComplete = 
-    !!profile?.vehicle?.brand &&
-    !!profile?.vehicle?.plate_number &&
-    !!profile?.vehicle?.delivery_option_id &&
-    hasAllPhotos;
-
-  const moderationStatus = isProfileComplete
-    ? (profile?.vehicle_moderation_status || profile?.moderation_status)
-    : "incomplete";
+  const isProfileComplete = hasAllPhotos;
 
   const getModerationBanner = () => {
     if (isDriverInactive) {
@@ -356,32 +332,45 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
         <div className="bg-amber-50 border border-amber-100 p-4 rounded-2xl flex items-start gap-3 shadow-sm">
           <AlertCircle className="w-6 h-6 text-amber-500 mt-0.5 shrink-0" />
           <div>
-            <h3 className="font-bold text-amber-900 leading-tight mb-1">Профиль не активен.</h3>
-            <p className="text-xs text-amber-700 font-medium leading-relaxed">Ваш профиль не активен, обратитесь к администратору.</p>
+            <h3 className="font-bold text-amber-900 leading-tight mb-1">
+              Профиль не активен.
+            </h3>
+            <p className="text-xs text-amber-700 font-medium leading-relaxed">
+              Ваш профиль не активен, обратитесь к администратору.
+            </p>
           </div>
         </div>
       );
     }
     switch (moderationStatus) {
       case "approved":
-        return null; // hide banner for approved driver
+        return null;
       case "pending_moderation":
         return (
           <div className="bg-amber-50 border border-amber-100 p-4 rounded-2xl flex items-start gap-3 shadow-sm">
             <AlertCircle className="w-6 h-6 text-amber-500 mt-0.5 shrink-0" />
             <div>
-              <h3 className="font-bold text-amber-900 leading-tight mb-1">Профиль на проверке. Вы не можете принимать заказы.</h3>
-              <p className="text-xs text-amber-700 font-medium leading-relaxed">Диспетчер проверяет ваши данные. Обычно это занимает не больше часа.</p>
+              <h3 className="font-bold text-amber-900 leading-tight mb-1">
+                Профиль на проверке.
+              </h3>
+              <p className="text-xs text-amber-700 font-medium leading-relaxed">
+                Вы временно не можете принимать заказы.
+              </p>
             </div>
           </div>
         );
       case "incomplete":
+        if (hasAllPhotos) return null; // already completed
         return (
           <div className="bg-sky-50 border border-sky-100 p-4 rounded-2xl flex items-start gap-3 shadow-sm">
             <UserIcon className="w-6 h-6 text-sky-500 mt-0.5 shrink-0" />
             <div>
-              <h3 className="font-bold text-sky-900 leading-tight mb-1">Заполните профиль водителя</h3>
-              <p className="text-xs text-sky-700 font-medium leading-relaxed">Добавьте данные автомобиля и 3 фото, затем сохраните изменения.</p>
+              <h3 className="font-bold text-sky-900 leading-tight mb-1">
+                Завершите оформление
+              </h3>
+              <p className="text-xs text-sky-700 font-medium leading-relaxed">
+                Добавьте 3 фото автомобиля для отправки на модерацию.
+              </p>
             </div>
           </div>
         );
@@ -390,8 +379,12 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
           <div className="bg-rose-50 border border-rose-100 p-4 rounded-2xl flex items-start gap-3 shadow-sm">
             <AlertCircle className="w-6 h-6 text-rose-500 mt-0.5 shrink-0" />
             <div>
-              <h3 className="font-bold text-rose-900 leading-tight mb-1">Профиль заблокирован.</h3>
-              <p className="text-xs text-rose-700 font-medium leading-relaxed">Ваш профиль был приостановлен администратором.</p>
+              <h3 className="font-bold text-rose-900 leading-tight mb-1">
+                Профиль заблокирован.
+              </h3>
+              <p className="text-xs text-rose-700 font-medium leading-relaxed">
+                Ваш профиль был приостановлен администратором.
+              </p>
             </div>
           </div>
         );
@@ -403,198 +396,170 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
   const showModerationBadge = moderationStatus === "pending_moderation";
 
   return (
-    <div className="flex-1 overflow-y-auto p-5 pb-32 bg-slate-50 flex flex-col gap-6">
-      <UpdateBanner />
+    <div className="flex flex-col min-h-[calc(100vh-80px)] overflow-y-auto bg-slate-50 w-full relative">
+      <div className="flex-1 flex flex-col gap-4 p-5 pb-6">
+        <UpdateBanner />
 
       {getModerationBanner()}
 
       {showModerationBadge ? (
-        <div className="w-full bg-slate-100 text-slate-500 py-12 font-bold rounded-2xl shadow-sm border border-slate-200 text-center flex flex-col items-center justify-center gap-2 mt-4 mb-2">
+        <div className="w-full bg-slate-100 text-slate-500 py-12 font-bold rounded-3xl shadow-sm border border-slate-200 text-center flex flex-col items-center justify-center gap-2 mt-4 mb-2">
           <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mb-2 shadow-sm">
-            <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+            <CheckCircle2 className="w-8 h-8 text-[#2DB0E6]" />
           </div>
-          <span className="text-lg text-slate-600">Ваш профиль отправлен на модерацию</span>
-          <span className="text-sm font-medium text-slate-400">Ожидайте подтверждения администратором</span>
+          <span className="text-lg text-slate-600">Анкета на проверке</span>
+          <span className="text-sm font-medium text-slate-400">
+            Ожидайте подтверждения диспетчером
+          </span>
         </div>
       ) : moderationStatus === "rejected" ? (
-        <div className="flex flex-col items-center justify-center p-10 text-red-600 text-center mt-4 mb-2 bg-red-50 rounded-3xl border border-red-200 shadow-sm">
+        <div className="flex flex-col items-center justify-center p-10 text-rose-600 text-center mt-4 mb-2 bg-rose-50 rounded-3xl border border-rose-200 shadow-sm">
           <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mb-4 shadow-sm">
-            <Ban className="w-10 h-10 text-red-500" />
+            <Ban className="w-10 h-10 text-rose-500" />
           </div>
-          <p className="text-xl font-bold text-red-700 mb-2 leading-tight">
-            Профиль заблокирован
+          <p className="text-xl font-bold text-rose-700 mb-2 leading-tight">
+            Профиль отклонен
           </p>
-          <p className="text-sm text-red-600">
-            Ваш профиль был отклонен администратором.
+          <p className="text-sm text-rose-600">
+            Ваши данные не прошли проверку.
           </p>
         </div>
       ) : (
         <>
-          <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col gap-4">
-            <h2 className="text-xl font-bold text-slate-800">Личные данные</h2>
-        
-        <div className="flex flex-col gap-3">
-          <div>
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1 flex items-center justify-between">
-              <span>ФИО</span>
-              {profile?.moderation_status === "approved" && (
-                <div className="flex items-center gap-1 text-blue-500">
-                  <BadgeCheck className="w-4 h-4" />
+          <div className="flex flex-col gap-2 p-4 bg-white rounded-2xl shadow-sm h-auto w-full relative">
+            {profile?.moderation_status === "approved" && (
+              <div className="absolute top-0 right-0 p-4">
+                <BadgeCheck className="w-8 h-8 text-[#2DB0E6] opacity-30" />
+              </div>
+            )}
+            <div className="flex items-center gap-4 mb-2 pb-2 border-b border-slate-50">
+              <div className="w-12 h-12 rounded-full overflow-hidden bg-slate-100 flex items-center justify-center flex-shrink-0">
+                <UserIcon className="w-6 h-6 text-slate-400" />
+              </div>
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-bold text-slate-800 leading-tight">
+                    {profile?.name || "Водитель"}
+                  </h2>
                 </div>
-              )}
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              disabled={isDriverInactive}
-              className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-semibold text-slate-900 outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] transition-all"
-            />
-          </div>
-          <div>
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Телефон</label>
-            <input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(formatPhoneNumber(e.target.value))}
-              disabled={isDriverInactive}
-              className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-semibold text-slate-900 outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] transition-all"
-              placeholder="+7 (999) 000-00-00"
-              maxLength={18}
-            />
-          </div>
-        </div>
-      </div>
+                <span className="text-sm font-medium text-slate-500">
+                  {formatPhoneNumber(profile?.phone || "")}
+                </span>
+              </div>
+            </div>
 
-      <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col gap-4">
-        <h2 className="text-xl font-bold text-slate-800">Мой автомобиль</h2>
-        
-        <div className="flex flex-col gap-3">
-          <div>
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Марка</label>
-            <select
-              value={brand}
-              onChange={(e) => setBrand(e.target.value)}
-              disabled={isDriverInactive}
-              className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-semibold text-slate-900 outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] transition-all appearance-none"
-            >
-              <option value="">Выберите марку</option>
-              {brandOptions.map((option) => (
-                <option key={option} value={option}>{option}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Гос. номер</label>
-            <input
-              type="text"
-              value={plate}
-              onChange={(e) => setPlate(e.target.value)}
-              disabled={isDriverInactive}
-              className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-mono font-black text-slate-900 uppercase pr-8 outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] transition-all"
-            />
-          </div>
-          <div>
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Тип машины</label>
-            <select
-              value={vehicleType}
-              onChange={(e) => setVehicleType(e.target.value)}
-              disabled={isDriverInactive}
-              className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-semibold text-slate-900 outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] transition-all appearance-none"
-            >
-              <option value="">Выберите тип машины</option>
-              {vehicleTypeOptions.map((option) => (
-                <option key={option} value={option}>{option}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Кубатура</label>
-            <select
-              value={deliveryOptionId}
-              onChange={(e) => setDeliveryOptionId(e.target.value)}
-              disabled={isDriverInactive}
-              className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-semibold text-slate-900 outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] transition-all appearance-none"
-            >
-              <option value="">Выберите кубатуру</option>
-              {deliveryOptions.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.title} ({option.capacity_m3} м3)
-                </option>
-              ))}
-            </select>
-          </div>
-          
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Тип ставки</label>
-              <select
-                value={rateType}
-                onChange={(e) => setRateType(e.target.value)}
-                disabled={isDriverInactive}
-                className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-semibold text-slate-900 outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] transition-all appearance-none"
-              >
-                <option value="per_ton_km">За тонно-км</option>
-                <option value="fixed">Фиксированная</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Значение ставки</label>
-              <input
-                type="number"
-                value={rateValue}
-                onChange={(e) => setRateValue(e.target.value)}
-                disabled={isDriverInactive}
-                className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-semibold text-slate-900 outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] transition-all"
-              />
+            <div className="flex flex-col gap-2 text-sm pt-2">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Марка:</span>
+                <span className="font-bold text-slate-800">
+                  {profile?.vehicle?.brand ||
+                    profile?.vehicle?.brand ||
+                    "Не указана"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Госномер:</span>
+                {profile?.vehicle?.plate_number ? (
+                  <div className="flex items-stretch bg-white border border-gray-400 rounded-md shadow-sm h-7 overflow-hidden">
+                    <div className="flex items-center px-2 text-sm font-bold uppercase tracking-wider text-slate-900 leading-none pt-0.5">
+                      {profile.vehicle.plate_number}
+                    </div>
+                    <div className="flex flex-col items-center justify-center border-l border-gray-400 bg-white h-full px-1.5 py-0.5">
+                      <span className="text-[7px] font-bold leading-none text-slate-800 mb-0.5">
+                        RUS
+                      </span>
+                      <img
+                        src="/russian.png"
+                        alt="RUS"
+                        className="w-4 h-3 object-cover rounded-[1px]"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <span className="font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                    Нет
+                  </span>
+                )}
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Тип машины:</span>
+                <span className="font-bold text-slate-800">
+                  {profile?.vehicle?.vehicle_type ||
+                    profile?.vehicle?.vehicle_type ||
+                    "Не указан"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Кубатура (м³):</span>
+                <span className="font-bold text-slate-800">
+                  {profile?.vehicle?.cubature_min !== undefined ||
+                  profile?.vehicle?.cubature_max !== undefined
+                    ? `${profile.vehicle.cubature_min || 0} - ${profile.vehicle.cubature_max || 0}`
+                    : profile?.vehicle?.body_volume_m3
+                      ? `${profile?.vehicle?.body_volume_m3}`
+                      : "—"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Тоннаж (т):</span>
+                <span className="font-bold text-slate-800">
+                  {profile?.vehicle?.tonnage_min !== undefined ||
+                  profile?.vehicle?.tonnage_max !== undefined
+                    ? `${profile.vehicle.tonnage_min || 0} - ${profile.vehicle.tonnage_max || 0}`
+                    : "—"}
+                </span>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="mt-4 pt-4 border-t border-slate-100">
-          <h3 className="font-bold text-slate-800 mb-1">Фотографии (для модерации)</h3>
-          {!profile?.vehicle?.id ? (
-            <div className="text-sm bg-orange-50 text-orange-700 p-3 rounded-xl border border-orange-100 font-medium my-2">
-              Сначала заполните и сохраните данные автомобиля, чтобы загрузить фотографии.
+          <div className="flex flex-col gap-2 p-4 bg-white rounded-2xl shadow-sm h-auto w-full relative">
+            <div className="flex items-center justify-between mb-3 px-1">
+              <h3 className="font-bold text-slate-800">
+                Фотографии автомобиля
+              </h3>
+              {moderationStatus === 'approved' ? (
+                <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md">
+                  <CheckCircle2 className="w-4 h-4" /> Одобрен
+                </span>
+              ) : hasAllPhotos ? (
+                 <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+              ) : null}
             </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-3 mt-3">
+            {/* Убрали ложное условие на profile.vehicle.id */}
+            <div className="grid grid-cols-2 gap-3">
               {renderPhotoSlot("vehicle_main", "Спереди + номер")}
               {renderPhotoSlot("vehicle_left", "Сбоку")}
               {renderPhotoSlot("vehicle_plate", "Только госномер")}
             </div>
-          )}
-        </div>
-      </div>
-
-          <div className="flex flex-col gap-2 mt-2 mb-2">
-            {profile?.vehicle?.id && !hasAllPhotos && (
-               <div className="bg-orange-50 text-orange-700 p-3 rounded-xl border border-orange-200 text-sm font-medium text-center shadow-sm">
-                 Для отправки на проверку необходимо загрузить 3 фотографии автомобиля
-               </div>
-            )}
-            <button
-              onClick={handleSave}
-              disabled={isSaving || isDriverInactive}
-              className={`w-full ${isProfileComplete ? 'bg-white text-[#2DB0E6] border-2 border-[#2DB0E6] hover:bg-slate-50' : 'bg-[#2DB0E6] text-white hover:bg-[#209BD6]'} py-4 font-bold rounded-2xl shadow-sm active:bg-[#1b8bc2] transition-colors flex items-center justify-center gap-2`}
-            >
-              {isSaving && <Loader2 className="w-5 h-5 animate-spin" />}
-              {isSaving ? "Сохранение..." : "Сохранить изменения"}
-            </button>
-            <button
-              onClick={handleSubmitForModeration}
-              disabled={isSaving || isDriverInactive || !isProfileComplete}
-              className={`w-full py-4 font-bold rounded-2xl shadow-sm transition-colors flex items-center justify-center gap-2 mt-2 ${!isProfileComplete || isDriverInactive || isSaving ? 'bg-emerald-200 text-emerald-50 cursor-not-allowed' : 'bg-emerald-500 text-white hover:bg-emerald-600 active:bg-emerald-700'}`}
-            >
-              {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}
-              {isSaving ? "Отправка..." : "Отправить на модерацию"}
-            </button>
           </div>
+
+          {!isReadOnly && (
+            <div className="flex flex-col gap-2 mt-4 mb-2">
+              {!hasAllPhotos && (
+                <div className="bg-orange-50 text-orange-700 p-4 rounded-2xl border border-orange-200 text-sm font-medium text-center shadow-sm">
+                  Загрузите все 3 фото для отправки на модерацию
+                </div>
+              )}
+              <button
+                onClick={handleSubmitForModeration}
+                disabled={isSaving || isDriverInactive || !isProfileComplete}
+                className={`w-full py-4 font-bold rounded-full shadow-sm transition-all flex items-center justify-center gap-2 ${!isProfileComplete || isDriverInactive || isSaving ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-[#2DB0E6] text-white hover:bg-[#209BD6] active:bg-[#1b8bc2]"}`}
+              >
+                {isSaving ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="w-5 h-5" />
+                )}
+                {isSaving ? "Отправка..." : "Отправить на проверку"}
+              </button>
+            </div>
+          )}
         </>
       )}
+      </div>
 
-      {/* Выйти кнопка */}
-      <div className="mt-2 mb-4">
+      {/* Выход */}
+      <div className="mt-auto px-5">
         <button
           onClick={async () => {
             try {
@@ -603,19 +568,21 @@ export default function DriverProfileScreen({ onLogout }: { onLogout: () => void
                 method: "PATCH",
                 headers: {
                   "Content-Type": "application/json",
-                  Authorization: `Bearer ${currentToken}`
+                  Authorization: `Bearer ${currentToken}`,
                 },
-                body: JSON.stringify({ status: "offline" })
+                body: JSON.stringify({ status: "offline" }),
               });
-            } catch (err) {}
+            } catch (e) {}
             logout();
             onLogout();
           }}
-          className="w-full bg-rose-50 text-rose-600 hover:bg-rose-100 hover:text-rose-700 py-4 font-bold rounded-2xl transition-colors flex items-center justify-center gap-2 border border-rose-100"
+          className="w-full bg-white text-slate-500 hover:text-rose-600 hover:bg-rose-50 py-4 font-bold rounded-full transition-colors flex items-center justify-center gap-2 border border-slate-200 shadow-sm"
         >
           <LogOut className="w-5 h-5" />
           Выйти из аккаунта
         </button>
+        {/* Распорка для TabBar */}
+        <div className="h-32 w-full flex-shrink-0"></div>
       </div>
     </div>
   );

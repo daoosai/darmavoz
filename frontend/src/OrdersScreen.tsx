@@ -54,7 +54,7 @@ const formatDate = (dateString: string) => {
   }
 };
 
-const ActiveOrderCard = ({ order }: { order: ClientOrder }) => {
+const ActiveOrderCard: React.FC<{ order: ClientOrder }> = ({ order }) => {
   const stepIndex = getStepIndex(order.status);
   
   const renderCentralAnimation = () => {

@@ -10,8 +10,8 @@ jobs:
   build-android:
     runs-on: ubuntu-latest
     env:
-      RELEASE_VERSION: "1.8.0"
-      RELEASE_VERSION_CODE: "18"
+      RELEASE_VERSION: "1.9.0"
+      RELEASE_VERSION_CODE: "19"
       APK_REMOTE_PATH: /opt/darmavoz/static/darmavoz.apk
 
     steps:

@@ -57,7 +57,7 @@ class Client(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255))
     email: Mapped[Optional[str]] = mapped_column(String(255), unique=True, index=True, nullable=True)
-    phone: Mapped[Optional[str]] = mapped_column(String(20), unique=True, index=True, nullable=True)
+    phone: Mapped[str] = mapped_column(String(20), unique=True, index=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     external_source: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     external_user_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
@@ -68,6 +68,26 @@ class Client(Base):
 
     orders: Mapped[List["Order"]] = relationship("Order", back_populates="client")
     dialogues: Mapped[List["Dialogue"]] = relationship("Dialogue", back_populates="client")
+    addresses: Mapped[List["ClientAddress"]] = relationship(
+        "ClientAddress",
+        back_populates="client",
+        cascade="all, delete-orphan",
+    )
+
+
+class ClientAddress(Base):
+    __tablename__ = "client_addresses"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    client_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clients.id"), nullable=False, index=True)
+    full_address: Mapped[str] = mapped_column(String(500), nullable=False)
+    comment: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    lat: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    lon: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    client: Mapped["Client"] = relationship("Client", back_populates="addresses")
 
 
 class Driver(Base):
@@ -302,6 +322,9 @@ class Order(Base):
     )
     current_offer_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("order_offers.id"), nullable=True)
     address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    delivery_address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    delivery_lat: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    delivery_lon: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     total_amount: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     status: Mapped[str] = mapped_column(String(50), default=OrderStatus.draft.value)
     source: Mapped[Optional[str]] = mapped_column(String(50), default="avito", nullable=True)

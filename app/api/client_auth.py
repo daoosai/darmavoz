@@ -1,5 +1,4 @@
 import logging
-import random
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, or_, select
@@ -16,23 +15,36 @@ from app.schemas.client import (
 )
 from app.security.jwt import create_access_token
 from app.services.redis_client import get_redis
+from app.utils.phones import normalize_phone
 
 router = APIRouter(prefix="/client")
 logger = logging.getLogger("uvicorn.error")
 
 CLIENT_CODE_TTL_SECONDS = 300
+MOCK_CLIENT_CODE = "0000"
 
 
-def _normalize_email(email: str) -> str:
-    return email.strip().lower()
+def _normalize_email(email: str | None) -> str | None:
+    if email is None:
+        return None
+    value = email.strip().lower()
+    return value or None
 
 
-def _normalize_phone(phone: str) -> str:
-    return phone.strip()
+def _normalize_phone_number(phone_number: str) -> str:
+    normalized_phone = normalize_phone(phone_number)
+    digits = "".join(ch for ch in normalized_phone if ch.isdigit())
+    if not digits:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="phone_number is required")
+    return f"+{digits}"
 
 
-def _code_key(email: str) -> str:
-    return f"client_auth_code:{email}"
+def _code_key(phone_number: str) -> str:
+    return f"client_auth_code:{phone_number}"
+
+
+def _default_client_name(phone_number: str) -> str:
+    return f"Клиент {phone_number[-4:]}"
 
 
 @router.post("/send-code", response_model=ClientSendCodeResponse)
@@ -40,19 +52,26 @@ async def send_code(
     payload: ClientSendCodeRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    normalized_email = _normalize_email(payload.email)
-    code = f"{random.randint(0, 9999):04d}"
-    await get_redis().setex(_code_key(normalized_email), CLIENT_CODE_TTL_SECONDS, code)
+    normalized_phone = _normalize_phone_number(payload.phone_number)
+
+    client = await db.scalar(select(Client).where(Client.phone == normalized_phone))
+    is_new_user = client is None
+    if client is None:
+        client = Client(name=_default_client_name(normalized_phone), phone=normalized_phone, email=None)
+        db.add(client)
+        await db.commit()
+        await db.refresh(client)
+
+    await get_redis().setex(_code_key(normalized_phone), CLIENT_CODE_TTL_SECONDS, MOCK_CLIENT_CODE)
 
     logger.info(
-        "client_auth_code_generated email=%s code=%s ttl_seconds=%s",
-        normalized_email,
-        code,
+        "client_auth_code_generated phone=%s code=%s ttl_seconds=%s",
+        normalized_phone,
+        MOCK_CLIENT_CODE,
         CLIENT_CODE_TTL_SECONDS,
     )
 
-    existing_client = await db.scalar(select(Client.id).where(func.lower(Client.email) == normalized_email))
-    return ClientSendCodeResponse(is_new_user=existing_client is None)
+    return ClientSendCodeResponse(is_new_user=is_new_user)
 
 
 @router.post("/register", response_model=ClientSendCodeResponse, status_code=status.HTTP_201_CREATED)
@@ -60,16 +79,15 @@ async def register_client(
     payload: ClientRegister,
     db: AsyncSession = Depends(get_db),
 ):
+    normalized_phone = _normalize_phone_number(payload.phone_number)
     normalized_email = _normalize_email(payload.email)
-    normalized_phone = _normalize_phone(payload.phone)
+
+    conditions = [Client.phone == normalized_phone]
+    if normalized_email is not None:
+        conditions.append(func.lower(Client.email) == normalized_email)
 
     existing_client = await db.scalar(
-        select(Client.id).where(
-            or_(
-                func.lower(Client.email) == normalized_email,
-                Client.phone == normalized_phone,
-            )
-        )
+        select(Client.id).where(or_(*conditions))
     )
     if existing_client is not None:
         existing_record = await db.get(Client, existing_client)
@@ -80,7 +98,7 @@ async def register_client(
     client = Client(
         email=normalized_email,
         phone=normalized_phone,
-        name=payload.name.strip(),
+        name=payload.name.strip() or _default_client_name(normalized_phone),
     )
     db.add(client)
     await db.commit()
@@ -93,25 +111,27 @@ async def verify_code(
     payload: ClientVerifyCodeRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    normalized_email = _normalize_email(payload.email)
+    normalized_phone = _normalize_phone_number(payload.phone_number)
     code = payload.code.strip()
-    saved_code = await get_redis().get(_code_key(normalized_email))
+    saved_code = await get_redis().get(_code_key(normalized_phone))
 
-    if code != "0000" and saved_code != code:
+    if saved_code is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Verification code expired or not requested")
+    if code != MOCK_CLIENT_CODE or saved_code != MOCK_CLIENT_CODE:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid verification code")
 
-    client = await db.scalar(select(Client).where(func.lower(Client.email) == normalized_email))
+    client = await db.scalar(select(Client).where(Client.phone == normalized_phone))
     if client is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
 
     access_token = create_access_token(
         data={
-            "sub": normalized_email,
+            "sub": normalized_phone,
             "role": "client",
             "client_id": str(client.id),
         }
     )
-    await get_redis().delete(_code_key(normalized_email))
+    await get_redis().delete(_code_key(normalized_phone))
 
     return ClientAuthResponse(
         access_token=access_token,

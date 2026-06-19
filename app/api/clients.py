@@ -6,12 +6,33 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
 from app.models.models import Client, Order, User
-from app.schemas.client import ClientCreate, ClientResponse
+from app.schemas.client import ClientCreate, ClientProfileResponse, ClientProfileUpdate, ClientResponse
 from app.schemas.order import OrderOut
 from app.security.auth import get_current_client, get_current_logist_user
 from app.services.dispatch_service import list_orders_for_client
 
 router = APIRouter()
+
+
+def split_client_name(name: str | None) -> tuple[str, str | None]:
+    parts = [part for part in (name or "").strip().split() if part]
+    if not parts:
+        return "", None
+    if len(parts) == 1:
+        return parts[0], None
+    return parts[0], " ".join(parts[1:])
+
+
+def build_client_profile_response(client: Client) -> ClientProfileResponse:
+    first_name, last_name = split_client_name(client.name)
+    return ClientProfileResponse(
+        id=client.id,
+        first_name=first_name,
+        last_name=last_name,
+        name=client.name,
+        phone=client.phone,
+        created_at=client.created_at,
+    )
 
 
 @router.post("/", response_model=ClientResponse, status_code=status.HTTP_201_CREATED)
@@ -43,9 +64,28 @@ async def list_clients(
     return result.scalars().all()
 
 
-@router.get("/me", response_model=ClientResponse)
+@router.get("/me", response_model=ClientProfileResponse)
 async def get_my_profile(current_client: Client = Depends(get_current_client)):
-    return current_client
+    return build_client_profile_response(current_client)
+
+
+@router.patch("/me", response_model=ClientProfileResponse)
+async def update_my_profile(
+    payload: ClientProfileUpdate,
+    current_client: Client = Depends(get_current_client),
+    db: AsyncSession = Depends(get_db),
+):
+    current_first_name, current_last_name = split_client_name(current_client.name)
+    first_name = payload.first_name if payload.first_name is not None else current_first_name
+    last_name = payload.last_name if payload.last_name is not None else current_last_name
+
+    if not first_name:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="first_name is required")
+
+    current_client.name = " ".join(part for part in [first_name, last_name] if part)
+    await db.commit()
+    await db.refresh(current_client)
+    return build_client_profile_response(current_client)
 
 
 @router.get("/me/orders", response_model=list[OrderOut])

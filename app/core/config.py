@@ -47,9 +47,9 @@ class Settings(BaseSettings):
     DISPATCH_LOCK_TTL_SECONDS: int = 30
     DRIVER_TEST_USERNAME: str = "driver1"
     DRIVER_TEST_PASSWORD: str = "driver123"
-    ANDROID_VERSION: str = "1.9.0"
-    IOS_VERSION: str = "1.9.0"
-    WEB_VERSION: str = "1.9.0"
+    ANDROID_VERSION: str = "2.0.0"
+    IOS_VERSION: str = "2.0.0"
+    WEB_VERSION: str = "2.0.0"
     APK_DOWNLOAD_URL: str = "https://darmavoz.ru/static/darmavoz.apk"
     APK_FORCE_UPDATE: bool = False
 

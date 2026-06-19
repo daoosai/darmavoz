@@ -374,4 +374,4 @@ async def test_migrations_smoke(session_factory):
         ).scalar_one()
 
     assert required_tables.issubset(set(table_rows))
-    assert phone_nullable == "YES"
+    assert phone_nullable == "NO"

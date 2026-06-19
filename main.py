@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import admin, auth, catalog, client_auth, clients, driver_dispatch, drivers, logist_orders, media, orders, system, webhooks
+from app.api import admin, auth, catalog, client_addresses, client_auth, clients, driver_dispatch, drivers, logist_orders, media, orders, system, webhooks
 from app.core.config import settings
 from app.db.seed import seed_data
 from app.services.dispatch_worker import start_dispatch_worker, stop_dispatch_worker
@@ -50,6 +50,7 @@ app.add_middleware(
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(client_auth.router, prefix="/api/v1/auth", tags=["client-auth"])
+app.include_router(client_addresses.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1/admin", tags=["admin"])
 app.include_router(catalog.router, prefix="/api/v1/catalog", tags=["catalog"])
 app.include_router(clients.router, prefix="/api/v1/clients", tags=["clients"])

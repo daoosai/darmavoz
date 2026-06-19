@@ -55,9 +55,9 @@ async def test_system_version_endpoint_returns_public_apk_info(client):
 
     assert response.status_code == 200
     assert response.json() == {
-        "android_version": "1.9.0",
-        "ios_version": "1.9.0",
-        "web_version": "1.9.0",
+        "android_version": "2.0.0",
+        "ios_version": "2.0.0",
+        "web_version": "2.0.0",
         "download_url": "https://darmavoz.ru/static/darmavoz.apk",
         "force_update": False,
     }

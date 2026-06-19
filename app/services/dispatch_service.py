@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 from app.core.config import settings
 from app.models.models import (
     Client,
+    ClientAddress,
     DeliveryOption,
     Dialogue,
     Driver,
@@ -98,6 +99,8 @@ async def build_order(
     material: Material,
     delivery_option: DeliveryOption,
     address: str,
+    delivery_lat: float | None,
+    delivery_lon: float | None,
     notes: str | None,
     source: str | None,
     created_by_source: str,
@@ -112,6 +115,9 @@ async def build_order(
         client_id=client.id,
         delivery_option_id=delivery_option.id,
         address=address,
+        delivery_address=address,
+        delivery_lat=delivery_lat,
+        delivery_lon=delivery_lon,
         notes=notes,
         source=source,
         created_by_source=created_by_source,
@@ -146,7 +152,10 @@ async def create_checkout_order(
     client_id: UUID | None,
     material_id: UUID,
     delivery_option_id: UUID,
-    address: str,
+    address: str | None,
+    address_id: UUID | None,
+    delivery_lat: float | None,
+    delivery_lon: float | None,
     notes: str | None,
     source: str | None,
     quantity: int,
@@ -158,6 +167,22 @@ async def create_checkout_order(
         if client is None:
             raise HTTPException(status_code=404, detail="Client not found")
 
+    resolved_address = address.strip() if address else None
+    resolved_delivery_lat = delivery_lat
+    resolved_delivery_lon = delivery_lon
+    if address_id is not None:
+        address_record = await session.get(ClientAddress, address_id)
+        if address_record is None:
+            raise HTTPException(status_code=404, detail="Client address not found")
+        if address_record.client_id != client.id:
+            raise HTTPException(status_code=403, detail="Address does not belong to current client")
+        resolved_address = address_record.full_address
+        resolved_delivery_lat = address_record.lat
+        resolved_delivery_lon = address_record.lon
+
+    if not resolved_address:
+        raise HTTPException(status_code=422, detail="Delivery address is required")
+
     material, delivery_option = await validate_material_and_delivery_option(
         session, material_id=material_id, delivery_option_id=delivery_option_id
     )
@@ -166,7 +191,9 @@ async def create_checkout_order(
         client=client,
         material=material,
         delivery_option=delivery_option,
-        address=address,
+        address=resolved_address,
+        delivery_lat=resolved_delivery_lat,
+        delivery_lon=resolved_delivery_lon,
         notes=notes,
         source=source or "mobile",
         created_by_source="client_app",
@@ -192,6 +219,8 @@ async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate)
         material=material,
         delivery_option=delivery_option,
         address=payload.address,
+        delivery_lat=None,
+        delivery_lon=None,
         notes=payload.notes,
         source=payload.source or "dispatcher",
         created_by_source="dispatcher",

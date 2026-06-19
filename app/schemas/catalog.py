@@ -2,7 +2,7 @@ from uuid import UUID
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class MediaFileOut(BaseModel):
@@ -118,6 +118,16 @@ class DeliveryOptionCreate(BaseModel):
     is_active: bool = True
     sort_order: int = 0
 
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def accept_name_alias(cls, data):
+        if isinstance(data, dict) and "title" not in data and "name" in data:
+            data = dict(data)
+            data["title"] = data["name"]
+        return data
+
 
 class DeliveryOptionUpdate(BaseModel):
     capacity_m3: float | None = None
@@ -126,3 +136,13 @@ class DeliveryOptionUpdate(BaseModel):
     base_price: float | None = None
     is_active: bool | None = None
     sort_order: int | None = None
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def accept_name_alias(cls, data):
+        if isinstance(data, dict) and "title" not in data and "name" in data:
+            data = dict(data)
+            data["title"] = data["name"]
+        return data

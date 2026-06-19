@@ -161,8 +161,11 @@ async def _seed_catalog(session: AsyncSession) -> None:
             session.add(DeliveryOption(**option_data, is_active=True, base_price=None))
             continue
 
-        for field in ("title", "description", "sort_order"):
+        # Preserve admin-managed titles; only keep seed metadata in sync.
+        for field in ("description", "sort_order"):
             setattr(delivery_option, field, option_data[field])
+        if not delivery_option.title:
+            delivery_option.title = option_data["title"]
         delivery_option.is_active = True
 
     await session.commit()

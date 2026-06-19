@@ -1,6 +1,6 @@
 # Архитектура Darmavoz
 
-Документ фиксирует текущее состояние проекта в ветке `feature/sprint-7-delivery`.
+Документ фиксирует текущее рабочее состояние backend и web-клиента на ноде `дармавоз` в каталоге `/opt/darmavoz`.
 
 ## 1. Состав системы
 
@@ -10,6 +10,12 @@
 - PostgreSQL / Redis
 - React SPA
 - MinIO + Caddy-инфраструктура
+
+В текущем контуре дополнительно активно используются:
+
+- логистский контур заказов и автопарка
+- driver onboarding и модерация профилей/машин
+- dispatch worker для автоматического подбора водителя
 
 ## 2. Структура репозитория
 
@@ -95,8 +101,11 @@
 - `/api/v1/catalog`
 - `/api/v1/clients`
 - `/api/v1/drivers`
+- `/api/v1/logist`
+- `/api/v1/driver`
 - `/api/v1/media`
 - `/api/v1/orders`
+- `/api/v1/system`
 - `/api/v1/webhooks`
 
 Сервисные endpoints:
@@ -105,15 +114,19 @@
 - `GET /ping`
 - `GET /health`
 
-## 6. Каталог и Sprint 7
+## 6. Каталог, логистика и водительский контур
 
-Sprint 7 опирается на следующие сущности:
+Каталог и логистический контур опираются на следующие сущности:
 
 - `categories`
 - `materials`
 - `delivery_options`
 - `orders`
 - `order_items`
+- `drivers`
+- `vehicles`
+- `order_offers`
+- `media_files`
 
 Backend отдает:
 
@@ -132,6 +145,28 @@ Backend отдает:
 - комментарий
 - гостевой сценарий без обязательной авторизации клиента
 
+`app/api/logist_orders.py` и `app/services/dispatch_service.py` покрывают:
+
+- создание заказа логистом
+- просмотр заказов логистом
+- ручное назначение водителя
+- перезапуск диспетчеризации
+- историю попыток назначения
+
+`app/api/drivers.py` отдает список автопарка для логиста через `GET /api/v1/drivers/`.
+
+Для списка водителей используется схема `DriverFleetResponse`, в которой дополнительно отдаются:
+
+- `vehicle_main_url`
+- `vehicle_left_url`
+- `vehicle_type`
+- `vehicle_cubature_min`
+- `vehicle_cubature_max`
+- `vehicle_tonnage_min`
+- `vehicle_tonnage_max`
+
+`vehicle_main_url` и `vehicle_left_url` формируются как presigned GET URL через `app/services/storage.py` по данным `media_files` для `slot_key=vehicle_main|vehicle_left`.
+
 ## 7. Медиа и S3
 
 Файлы изображений обслуживаются через MinIO.
@@ -149,6 +184,7 @@ Backend отдает:
 - `material`
 - `delivery_option`
 - `order`
+- `vehicle`
 
 ## 8. Frontend
 
@@ -156,11 +192,11 @@ Frontend реализован как React SPA.
 
 Ключевые части:
 
-- `frontend/src/App.tsx` - загрузка каталога и основная навигация
-- `frontend/src/MaterialBottomSheet.tsx` - выбор кубатуры
-- `frontend/src/CartScreen.tsx` - оформление заказа
-- `frontend/src/OrdersScreen.tsx` - гостевая история заказов
-- `frontend/src/store.ts` - Zustand store корзины
+- `frontend/src/LogistDashboardScreen.tsx` - вкладки логиста, заказы и автопарк
+- `frontend/src/AdminDashboardScreen.tsx` - админка и модерация
+- `frontend/src/DriverProfileScreen.tsx` - профиль и машина водителя
+- `frontend/src/DriverOrdersScreen.tsx` - экран водителя
+- `frontend/src/store.ts` - Zustand store авторизации и клиентской корзины
 - `frontend/src/utils.ts` - `baseURL` и helper-функции
 
 Текущий пользовательский путь:
@@ -172,6 +208,14 @@ Frontend реализован как React SPA.
 5. Ввод адреса
 6. Checkout
 7. Сохранение истории в `localStorage`
+
+Отдельно для логиста:
+
+1. Просмотр списка заказов
+2. Просмотр вкладки "Автопарк"
+3. Получение списка водителей из `GET /api/v1/drivers/`
+4. Использование `vehicle_main_url` для превью машины
+5. Ручное назначение водителя на заказ
 
 ## 9. CI/CD
 
@@ -186,7 +230,7 @@ GitHub Actions workflow: `.github/workflows/deploy.yml`
 
 ## 10. Ограничения текущего состояния
 
-- driver-контур в frontend еще не реализован
-- клиентская авторизация еще не включена
-- история заказов на frontend пока гостевая, через `localStorage`
-- часть legacy backend-функций старших спринтов еще сохранена и живет рядом с новым web-контуром
+- часть документации по ранним спринтам и legacy demo-маршрутам еще остается в репозитории
+- `GET /api/v1/drivers/` смонтирован вне `/api/v1/logist`, что важно учитывать фронтенду и документации
+- список автопарка использует presigned URL, поэтому превью зависят от корректной S3-конфигурации
+- история заказов на клиентском контуре частично остается гостевой, через `localStorage`

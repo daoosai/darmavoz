@@ -427,25 +427,25 @@ export default function DriverProfileScreen({
       ) : (
         <>
           <div className="flex flex-col gap-2 p-4 bg-white rounded-2xl shadow-sm h-auto w-full relative">
-            {profile?.moderation_status === "approved" && (
-              <div className="absolute top-0 right-0 p-4">
-                <BadgeCheck className="w-8 h-8 text-[#2DB0E6] opacity-30" />
-              </div>
-            )}
-            <div className="flex items-center gap-4 mb-2 pb-2 border-b border-slate-50">
-              <div className="w-12 h-12 rounded-full overflow-hidden bg-slate-100 flex items-center justify-center flex-shrink-0">
-                <UserIcon className="w-6 h-6 text-slate-400" />
-              </div>
-              <div className="flex flex-col">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-bold text-slate-800 leading-tight">
+            <div className="flex justify-between items-start gap-4 mb-2 pb-2 border-b border-slate-50 w-full">
+              <div className="flex items-center gap-4 flex-1 min-w-0">
+                <div className="w-12 h-12 rounded-full overflow-hidden bg-slate-100 flex items-center justify-center flex-shrink-0">
+                  <UserIcon className="w-6 h-6 text-slate-400" />
+                </div>
+                <div className="flex flex-col flex-1 min-w-0 w-full">
+                  <h2 className="text-lg font-bold text-slate-800 leading-tight truncate break-words w-full">
                     {profile?.name || "Водитель"}
                   </h2>
+                  <span className="text-sm font-medium text-slate-500 truncate w-full">
+                    {formatPhoneNumber(profile?.phone || "")}
+                  </span>
                 </div>
-                <span className="text-sm font-medium text-slate-500">
-                  {formatPhoneNumber(profile?.phone || "")}
-                </span>
               </div>
+              {profile?.moderation_status === "approved" && (
+                <div className="flex-shrink-0 pt-1">
+                  <BadgeCheck className="w-8 h-8 text-[#2DB0E6] opacity-30" />
+                </div>
+              )}
             </div>
 
             <div className="flex flex-col gap-2 text-sm pt-2">

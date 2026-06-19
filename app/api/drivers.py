@@ -7,9 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.database import get_db
-from app.models.models import Driver, DriverStatus, MediaFile, OrderOffer, User, Vehicle
+from app.models.models import Driver, DriverStatus, MediaFile, ModerationStatus, Order, OrderOffer, OrderStatus, User, Vehicle
 from app.schemas.driver import DriverCreate, DriverFleetResponse, DriverResponse
 from app.security.auth import get_current_logist_user
+from app.services.dispatch_service import build_vehicle_volume_match_clause, get_order_requested_volume
 from app.services.storage import StorageNotConfiguredError, get_storage_service
 
 router = APIRouter()
@@ -83,6 +84,7 @@ def build_driver_list_query(
     *,
     delivery_option_id: UUID | None = None,
     status_filter: str | None = None,
+    order: Order | None = None,
 ) -> Select[tuple[Driver]]:
     stmt = (
         select(Driver)
@@ -97,6 +99,14 @@ def build_driver_list_query(
         stmt = stmt.where(Driver.status == status_filter)
     if delivery_option_id:
         stmt = stmt.join(Driver.vehicle).where(Vehicle.delivery_option_id == delivery_option_id)
+    if order is not None:
+        stmt = (
+            stmt.join(Driver.vehicle)
+            .where(Driver.status == DriverStatus.available.value)
+            .where(Driver.moderation_status == ModerationStatus.approved.value)
+            .where(Vehicle.moderation_status == ModerationStatus.approved.value)
+            .where(build_vehicle_volume_match_clause(get_order_requested_volume(order)))
+        )
 
     return stmt
 
@@ -106,11 +116,26 @@ async def fetch_drivers(
     *,
     delivery_option_id: UUID | None = None,
     status_filter: str | None = None,
+    order_id: UUID | None = None,
 ) -> list[DriverFleetResponse]:
+    order: Order | None = None
+    if order_id is not None:
+        order_result = await db.execute(
+            select(Order)
+            .options(selectinload(Order.items), selectinload(Order.delivery_option))
+            .where(Order.id == order_id)
+        )
+        order = order_result.scalar_one_or_none()
+        if order is None:
+            raise HTTPException(status_code=404, detail="Order not found")
+        if order.status in {OrderStatus.completed.value, OrderStatus.cancelled.value}:
+            raise HTTPException(status_code=409, detail="Order is not available for driver selection")
+
     result = await db.execute(
         build_driver_list_query(
             delivery_option_id=delivery_option_id,
             status_filter=status_filter,
+            order=order,
         )
     )
     drivers = list(result.scalars().unique().all())
@@ -166,6 +191,7 @@ async def create_driver(
 async def list_drivers(
     delivery_option_id: UUID | None = Query(default=None),
     status_filter: str | None = Query(default=None, alias="status"),
+    order_id: UUID | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_logist_user),
 ):
@@ -174,6 +200,7 @@ async def list_drivers(
         db,
         delivery_option_id=delivery_option_id,
         status_filter=status_filter,
+        order_id=order_id,
     )
 
 

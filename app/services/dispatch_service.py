@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import Select, delete, func, or_, select, update
+from sqlalchemy import Select, and_, delete, func, or_, select, true, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -221,6 +221,35 @@ async def get_order_by_id(session: AsyncSession, order_id: UUID) -> Order:
     return order
 
 
+def get_order_requested_volume(order: Order) -> float | None:
+    loaded_items = order.__dict__.get("items")
+    if loaded_items:
+        return max((item.volume for item in loaded_items), default=None)
+    loaded_delivery_option = order.__dict__.get("delivery_option")
+    if loaded_delivery_option is not None:
+        return loaded_delivery_option.capacity_m3
+    return None
+
+
+def build_vehicle_volume_match_clause(requested_volume: float | None):
+    if requested_volume is None:
+        return true()
+    return and_(
+        or_(Vehicle.cubature_min.is_(None), Vehicle.cubature_min <= requested_volume),
+        or_(Vehicle.cubature_max.is_(None), Vehicle.cubature_max >= requested_volume),
+    )
+
+
+def vehicle_matches_requested_volume(vehicle: Vehicle | None, requested_volume: float | None) -> bool:
+    if vehicle is None or requested_volume is None:
+        return False
+    if vehicle.cubature_min is not None and vehicle.cubature_min > requested_volume:
+        return False
+    if vehicle.cubature_max is not None and vehicle.cubature_max < requested_volume:
+        return False
+    return True
+
+
 async def list_recent_orders(session: AsyncSession, limit: int = 20) -> list[Order]:
     result = await session.execute(
         select(Order).options(*order_load_options()).order_by(Order.created_at.desc()).limit(limit)
@@ -262,6 +291,7 @@ async def delete_order_by_id(session: AsyncSession, order_id: UUID) -> None:
 
 
 def _matching_drivers_base_query(order: Order) -> Select[tuple[Driver]]:
+    requested_volume = get_order_requested_volume(order)
     return (
         select(Driver)
         .join(Driver.vehicle)
@@ -269,9 +299,11 @@ def _matching_drivers_base_query(order: Order) -> Select[tuple[Driver]]:
         .where(Driver.status == DriverStatus.available.value)
         .where(Driver.is_active.is_(True))
         .where(Driver.is_auto_dispatch_enabled.is_(True))
+        .where(Driver.moderation_status == ModerationStatus.approved.value)
         .where(Driver.vehicle_id.is_not(None))
         .where(Vehicle.is_active.is_(True))
-        .where(Vehicle.delivery_option_id == order.delivery_option_id)
+        .where(Vehicle.moderation_status == ModerationStatus.approved.value)
+        .where(build_vehicle_volume_match_clause(requested_volume))
     )
 
 
@@ -588,6 +620,7 @@ async def restart_dispatch_for_order(session: AsyncSession, order_id: UUID) -> O
 async def assign_order_to_driver(session: AsyncSession, *, order_id: UUID, driver_id: UUID) -> Order:
     order = await get_order_by_id(session, order_id)
     driver = await session.get(Driver, driver_id, options=(selectinload(Driver.vehicle),))
+    requested_volume = get_order_requested_volume(order)
 
     if driver is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Driver not found")
@@ -622,10 +655,10 @@ async def assign_order_to_driver(session: AsyncSession, *, order_id: UUID, drive
             status_code=status.HTTP_409_CONFLICT,
             detail="Order cannot be assigned manually in the current status",
         )
-    if order.delivery_option_id is not None and driver.vehicle.delivery_option_id != order.delivery_option_id:
+    if not vehicle_matches_requested_volume(driver.vehicle, requested_volume):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Driver vehicle does not match order delivery option",
+            detail="Driver vehicle does not match order volume",
         )
 
     now = utcnow()

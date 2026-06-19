@@ -250,6 +250,12 @@ export default function DriverOrdersScreen({
   }, []);
 
   useEffect(() => {
+    if (activeTab === "orders") {
+      fetchProfile();
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
     let pollingInterval: NodeJS.Timeout;
 
     if (token && moderationStatus === "approved" && isDriverActive) {

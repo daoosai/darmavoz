@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useAuthStore } from "./store";
-import { baseURL } from "./utils";
+import { baseURL, formatErrorToRussian } from "./utils";
 import {
   LogOut,
   Lock,
@@ -20,7 +20,10 @@ import {
   EyeOff,
   ClipboardCheck,
   RefreshCw,
+  Users,
+  User,
 } from "lucide-react";
+import AdminProfileScreen from "./AdminProfileScreen";
 import toast from "react-hot-toast";
 
 interface AdminCategory {
@@ -124,7 +127,7 @@ export default function AdminDashboardScreen({
 }: AdminDashboardScreenProps) {
   const { logout, token } = useAuthStore();
   const [activeTab, setActiveTab] = useState<
-    "materials" | "delivery" | "drivers" | "moderation"
+    "materials" | "delivery" | "drivers" | "moderation" | "profile"
   >("materials");
 
   const [materials, setMaterials] = useState<AdminMaterial[]>([]);
@@ -159,6 +162,10 @@ export default function AdminDashboardScreen({
   >({});
   const [isSavingDriver, setIsSavingDriver] = useState(false);
   const [showDriverPassword, setShowDriverPassword] = useState(false);
+
+  const sortedDeliveryOptions = useMemo(() => {
+    return [...deliveryOptions].sort((a, b) => (a.capacity_m3 || 0) - (b.capacity_m3 || 0));
+  }, [deliveryOptions]);
 
   const applyDriverActiveOverrides = (items: AdminDriver[]) =>
     items.map((driver) => {
@@ -396,7 +403,7 @@ export default function AdminDashboardScreen({
       }
     } catch (err: any) {
       console.error("Full Upload Error:", err);
-      toast.error(err.message || "Сбой загрузки фото");
+      toast.error(formatErrorToRussian(err, "Сбой загрузки фото"));
     } finally {
       setUploadingSlots((prev) => ({ ...prev, [slotId]: false }));
     }
@@ -719,7 +726,7 @@ export default function AdminDashboardScreen({
       setIsDeliveryModalOpen(false);
       fetchDeliveryOptions(true);
     } catch (err: any) {
-      toast.error(err.message || "Ошибка сохранения опции доставки");
+      toast.error(formatErrorToRussian(err, "Ошибка сохранения опции доставки"));
     } finally {
       setIsSavingDelivery(false);
     }
@@ -854,7 +861,7 @@ export default function AdminDashboardScreen({
       setIsDriverModalOpen(false);
       fetchDrivers(true);
     } catch (err: any) {
-      toast.error(err.message || "Ошибка сохранения водителя");
+      toast.error(formatErrorToRussian(err, "Ошибка сохранения водителя"));
     } finally {
       setIsSavingDriver(false);
     }
@@ -946,7 +953,7 @@ export default function AdminDashboardScreen({
         </label>
         {isUploading ? (
           <div className="border-2 border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center bg-slate-50 h-32">
-            <Loader2 className="w-6 h-6 animate-spin text-indigo-600 mb-2" />
+            <Loader2 className="w-6 h-6 animate-spin text-[#2DB0E6] mb-2" />
             <span className="text-xs font-medium text-slate-500">
               Загрузка...
             </span>
@@ -960,7 +967,7 @@ export default function AdminDashboardScreen({
                 className="w-full h-full object-cover"
               />
               {file.is_primary && (
-                <div className="absolute top-2 left-2 bg-indigo-600 text-white text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded shadow-sm flex items-center gap-1">
+                <div className="absolute top-2 left-2 bg-[#2DB0E6] text-white text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded shadow-sm flex items-center gap-1">
                   <Star className="w-3 h-3 fill-current" /> Главное
                 </div>
               )}
@@ -969,7 +976,7 @@ export default function AdminDashboardScreen({
               <button
                 type="button"
                 onClick={() => handleMakePrimary(file.id, entityType)}
-                className={`flex-1 flex justify-center items-center gap-1.5 text-xs font-bold py-1.5 rounded-lg transition-colors border ${file.is_primary ? "bg-indigo-50 text-indigo-700 border-indigo-200" : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"}`}
+                className={`flex-1 flex justify-center items-center gap-1.5 text-xs font-bold py-1.5 rounded-lg transition-colors border ${file.is_primary ? "bg-[#2DB0E6]/10 text-[#209ccf] border-[#209ccf]/20" : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"}`}
               >
                 {file.is_primary ? (
                   <Star className="w-3.5 h-3.5 fill-current" />
@@ -988,7 +995,7 @@ export default function AdminDashboardScreen({
             </div>
           </div>
         ) : (
-          <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center gap-2 hover:bg-slate-50 hover:border-indigo-300 transition-all cursor-pointer relative h-32">
+          <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center gap-2 hover:bg-slate-50 hover:border-[#2DB0E6]/30 transition-all cursor-pointer relative h-32">
             <UploadCloud className="w-6 h-6 text-slate-400" />
             <span className="text-xs font-medium text-slate-500">
               Загрузить фото
@@ -1016,7 +1023,7 @@ export default function AdminDashboardScreen({
       <div className="bg-white px-6 py-4 shadow-sm z-10 sticky top-0 border-b border-slate-100 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div className="flex items-center justify-between sm:justify-start gap-6">
           <div>
-            <h1 className="text-2xl font-black text-indigo-600 tracking-tight">
+            <h1 className="text-2xl font-black text-[#2DB0E6] tracking-tight">
               Дармавоз
             </h1>
             <p className="text-sm font-medium text-slate-500">
@@ -1031,13 +1038,13 @@ export default function AdminDashboardScreen({
           </button>
         </div>
 
-        <div className="flex flex-1 sm:justify-center">
+        <div className="hidden sm:flex flex-1 sm:justify-center">
           <div className="bg-slate-100 p-1 rounded-xl flex w-full sm:w-auto">
             <button
               onClick={() => setActiveTab("materials")}
               className={`flex-1 sm:w-auto flex-shrink-0 whitespace-nowrap py-2 px-3 text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2 ${
                 activeTab === "materials"
-                  ? "bg-white text-indigo-700 shadow-sm"
+                  ? "bg-white text-[#209ccf] shadow-sm"
                   : "text-slate-500 hover:text-slate-700"
               }`}
             >
@@ -1048,7 +1055,7 @@ export default function AdminDashboardScreen({
               onClick={() => setActiveTab("delivery")}
               className={`flex-1 sm:w-auto flex-shrink-0 whitespace-nowrap py-2 px-3 text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2 ${
                 activeTab === "delivery"
-                  ? "bg-white text-indigo-700 shadow-sm"
+                  ? "bg-white text-[#209ccf] shadow-sm"
                   : "text-slate-500 hover:text-slate-700"
               }`}
             >
@@ -1059,18 +1066,18 @@ export default function AdminDashboardScreen({
               onClick={() => setActiveTab("drivers")}
               className={`flex-1 sm:w-auto flex-shrink-0 whitespace-nowrap py-2 px-3 text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2 ${
                 activeTab === "drivers"
-                  ? "bg-white text-indigo-700 shadow-sm"
+                  ? "bg-white text-[#209ccf] shadow-sm"
                   : "text-slate-500 hover:text-slate-700"
               }`}
             >
-              <Truck className="w-4 h-4" />
+              <Users className="w-4 h-4" />
               Водители
             </button>
             <button
               onClick={() => setActiveTab("moderation")}
               className={`flex-1 sm:w-auto flex-shrink-0 whitespace-nowrap py-2 px-3 text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2 ${
                 activeTab === "moderation"
-                  ? "bg-white text-indigo-700 shadow-sm"
+                  ? "bg-white text-[#209ccf] shadow-sm"
                   : "text-slate-500 hover:text-slate-700"
               }`}
             >
@@ -1090,6 +1097,17 @@ export default function AdminDashboardScreen({
               </div>
               Модерация
             </button>
+            <button
+              onClick={() => setActiveTab("profile")}
+              className={`flex-1 sm:w-auto flex-shrink-0 whitespace-nowrap py-2 px-3 text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2 ${
+                activeTab === "profile"
+                  ? "bg-white text-[#209ccf] shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              <User className="w-4 h-4" />
+              Профиль
+            </button>
           </div>
         </div>
 
@@ -1103,7 +1121,7 @@ export default function AdminDashboardScreen({
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-y-auto p-6 lg:p-8">
+      <div className="flex-1 overflow-y-auto p-6 lg:p-8 sm:pb-8 pb-24 relative">
         <div className="max-w-6xl mx-auto flex flex-col gap-6">
           {activeTab === "materials" ? (
             <>
@@ -1118,7 +1136,7 @@ export default function AdminDashboardScreen({
                   </button>
                   <button
                     onClick={() => openMaterialModal()}
-                    className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl font-semibold hover:bg-indigo-700 transition-colors shadow-sm"
+                    className="flex items-center gap-2 bg-[#2DB0E6] text-white px-4 py-2 rounded-xl font-semibold hover:bg-[#209ccf] transition-colors shadow-sm"
                   >
                     <Plus className="w-4 h-4" />
                     <span className="hidden sm:inline">Добавить</span>
@@ -1128,7 +1146,7 @@ export default function AdminDashboardScreen({
 
               {isLoading ? (
                 <div className="flex justify-center p-20">
-                  <Loader2 className="w-10 h-10 animate-spin text-indigo-600" />
+                  <Loader2 className="w-10 h-10 animate-spin text-[#2DB0E6]" />
                 </div>
               ) : (
                 <div className="bg-transparent md:bg-white md:rounded-2xl md:shadow-sm md:border border-transparent md:border-slate-100 overflow-hidden">
@@ -1195,7 +1213,7 @@ export default function AdminDashboardScreen({
                               <td className="px-6 py-4 text-right flex justify-end gap-2">
                                 <button
                                   onClick={() => openMaterialModal(m)}
-                                  className="p-2 text-slate-400 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent"
+                                  className="p-2 text-slate-400 hover:text-[#2DB0E6] bg-slate-50 hover:bg-[#2DB0E6]/10 rounded-lg transition-colors border border-transparent"
                                 >
                                   <Edit2 className="w-4 h-4" />
                                 </button>
@@ -1236,7 +1254,7 @@ export default function AdminDashboardScreen({
                             <div className="flex gap-2 -mt-2 -mr-2">
                               <button
                                 onClick={() => openMaterialModal(m)}
-                                className="p-2 text-slate-400 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent"
+                                className="p-2 text-slate-400 hover:text-[#2DB0E6] bg-slate-50 hover:bg-[#2DB0E6]/10 rounded-lg transition-colors border border-transparent"
                               >
                                 <Edit2 className="w-4 h-4" />
                               </button>
@@ -1321,7 +1339,7 @@ export default function AdminDashboardScreen({
                   </button>
                   <button
                     onClick={() => openDeliveryModal()}
-                    className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl font-semibold hover:bg-indigo-700 transition-colors shadow-sm"
+                    className="flex items-center gap-2 bg-[#2DB0E6] text-white px-4 py-2 rounded-xl font-semibold hover:bg-[#209ccf] transition-colors shadow-sm"
                   >
                     <Plus className="w-4 h-4" />
                     <span className="hidden sm:inline">Добавить</span>
@@ -1331,7 +1349,7 @@ export default function AdminDashboardScreen({
 
               {isLoading ? (
                 <div className="flex justify-center p-20">
-                  <Loader2 className="w-10 h-10 animate-spin text-indigo-600" />
+                  <Loader2 className="w-10 h-10 animate-spin text-[#2DB0E6]" />
                 </div>
               ) : (
                 <div className="bg-transparent md:bg-white md:rounded-2xl md:shadow-sm md:border border-transparent md:border-slate-100 overflow-hidden">
@@ -1349,7 +1367,7 @@ export default function AdminDashboardScreen({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100/80">
-                        {deliveryOptions.map((opt) => {
+                        {sortedDeliveryOptions.map((opt) => {
                           const imgUrl =
                             opt.primary_image_url ||
                             opt.image_url ||
@@ -1398,7 +1416,7 @@ export default function AdminDashboardScreen({
                               <td className="px-6 py-4 text-right flex justify-end gap-2">
                                 <button
                                   onClick={() => openDeliveryModal(opt)}
-                                  className="p-2 text-slate-400 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent"
+                                  className="p-2 text-slate-400 hover:text-[#2DB0E6] bg-slate-50 hover:bg-[#2DB0E6]/10 rounded-lg transition-colors border border-transparent"
                                 >
                                   <Edit2 className="w-4 h-4" />
                                 </button>
@@ -1422,7 +1440,7 @@ export default function AdminDashboardScreen({
                   </div>
 
                   <div className="grid grid-cols-1 gap-4 md:hidden">
-                    {deliveryOptions.map((opt) => {
+                    {sortedDeliveryOptions.map((opt) => {
                       const imgUrl =
                         opt.primary_image_url ||
                         opt.image_url ||
@@ -1439,7 +1457,7 @@ export default function AdminDashboardScreen({
                             <div className="flex gap-2 -mt-2 -mr-2">
                               <button
                                 onClick={() => openDeliveryModal(opt)}
-                                className="p-2 text-slate-400 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent"
+                                className="p-2 text-slate-400 hover:text-[#2DB0E6] bg-slate-50 hover:bg-[#2DB0E6]/10 rounded-lg transition-colors border border-transparent"
                               >
                                 <Edit2 className="w-4 h-4" />
                               </button>
@@ -1522,7 +1540,7 @@ export default function AdminDashboardScreen({
                   </button>
                   <button
                     onClick={() => openDriverModal()}
-                    className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl font-semibold hover:bg-indigo-700 transition-colors shadow-sm"
+                    className="flex items-center gap-2 bg-[#2DB0E6] text-white px-4 py-2 rounded-xl font-semibold hover:bg-[#209ccf] transition-colors shadow-sm"
                   >
                     <Plus className="w-4 h-4" />
                     <span className="hidden sm:inline">Добавить</span>
@@ -1532,7 +1550,7 @@ export default function AdminDashboardScreen({
 
               {isLoading ? (
                 <div className="flex justify-center p-20">
-                  <Loader2 className="w-10 h-10 animate-spin text-indigo-600" />
+                  <Loader2 className="w-10 h-10 animate-spin text-[#2DB0E6]" />
                 </div>
               ) : (
                 <div className="bg-transparent md:bg-white md:rounded-2xl md:shadow-sm md:border border-transparent md:border-slate-100 overflow-hidden">
@@ -1655,7 +1673,7 @@ export default function AdminDashboardScreen({
                               )}
                               <button
                                 onClick={() => openDriverModal(d)}
-                                className="p-2 text-slate-400 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent"
+                                className="p-2 text-slate-400 hover:text-[#2DB0E6] bg-slate-50 hover:bg-[#2DB0E6]/10 rounded-lg transition-colors border border-transparent"
                               >
                                 <Edit2 className="w-4 h-4" />
                               </button>
@@ -1687,7 +1705,7 @@ export default function AdminDashboardScreen({
                           <div className="flex gap-2 -mt-2 -mr-2">
                             <button
                               onClick={() => openDriverModal(d)}
-                              className="p-2 text-slate-400 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent"
+                              className="p-2 text-slate-400 hover:text-[#2DB0E6] bg-slate-50 hover:bg-[#2DB0E6]/10 rounded-lg transition-colors border border-transparent"
                             >
                               <Edit2 className="w-4 h-4" />
                             </button>
@@ -1828,7 +1846,7 @@ export default function AdminDashboardScreen({
 
               {isLoadingModeration ? (
                 <div className="flex justify-center p-10 bg-white rounded-2xl border border-slate-100">
-                  <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+                  <Loader2 className="w-8 h-8 animate-spin text-[#2DB0E6]" />
                 </div>
               ) : (
                 <div className="flex flex-col gap-4">
@@ -1851,8 +1869,8 @@ export default function AdminDashboardScreen({
                           {/* Driver Info */}
                           <div className="flex-1 space-y-4">
                             <h3 className="text-lg font-bold text-slate-800 flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center flex-shrink-0">
-                                <Truck className="w-5 h-5 text-indigo-500" />
+                              <div className="w-10 h-10 rounded-full bg-[#2DB0E6]/10 flex items-center justify-center flex-shrink-0">
+                                <Truck className="w-5 h-5 text-[#2DB0E6]" />
                               </div>
                               {request.driver_name}
                             </h3>
@@ -2053,8 +2071,84 @@ export default function AdminDashboardScreen({
                 </div>
               )}
             </>
+          ) : activeTab === "profile" ? (
+            <AdminProfileScreen onLogout={handleLogout} />
           ) : null}
         </div>
+      </div>
+
+      {/* Mobile Bottom Navigation Menu */}
+      <div className="sm:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex z-50 h-[68px] justify-around items-center px-2 pb-safe">
+        <button
+          onClick={() => setActiveTab("materials")}
+          className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${
+            activeTab === "materials"
+              ? "text-[#2DB0E6]"
+              : "text-slate-400 hover:text-slate-600"
+          }`}
+        >
+          <div className={`p-1.5 rounded-xl transition-colors ${activeTab === "materials" ? "bg-[#2DB0E6]/10" : ""}`}>
+            <Layers className="w-6 h-6" />
+          </div>
+          <span className="text-[10px] font-bold">Каталог</span>
+        </button>
+        <button
+          onClick={() => setActiveTab("delivery")}
+          className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${
+            activeTab === "delivery"
+              ? "text-[#2DB0E6]"
+              : "text-slate-400 hover:text-slate-600"
+          }`}
+        >
+          <div className={`p-1.5 rounded-xl transition-colors ${activeTab === "delivery" ? "bg-[#2DB0E6]/10" : ""}`}>
+            <Truck className="w-6 h-6" />
+          </div>
+          <span className="text-[10px] font-bold">Автопарк</span>
+        </button>
+        <button
+          onClick={() => setActiveTab("drivers")}
+          className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${
+            activeTab === "drivers"
+              ? "text-[#2DB0E6]"
+              : "text-slate-400 hover:text-slate-600"
+          }`}
+        >
+          <div className={`p-1.5 rounded-xl transition-colors ${activeTab === "drivers" ? "bg-[#2DB0E6]/10" : ""}`}>
+            <Users className="w-6 h-6" />
+          </div>
+          <span className="text-[10px] font-bold">Водители</span>
+        </button>
+        <button
+          onClick={() => setActiveTab("moderation")}
+          className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all relative ${
+            activeTab === "moderation"
+              ? "text-[#2DB0E6]"
+              : "text-slate-400 hover:text-slate-600"
+          }`}
+        >
+          <div className={`relative p-1.5 rounded-xl transition-colors ${activeTab === "moderation" ? "bg-[#2DB0E6]/10" : ""}`}>
+            <ClipboardCheck className="w-6 h-6" />
+            {drivers.filter((d) => d.moderation_status === "pending_moderation").length > 0 && (
+              <div className="absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] font-bold w-3.5 h-3.5 rounded-full flex items-center justify-center shadow-sm">
+                {drivers.filter((d) => d.moderation_status === "pending_moderation").length}
+              </div>
+            )}
+          </div>
+          <span className="text-[10px] font-bold">Модерация</span>
+        </button>
+        <button
+          onClick={() => setActiveTab("profile")}
+          className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${
+            activeTab === "profile"
+              ? "text-[#2DB0E6]"
+              : "text-slate-400 hover:text-slate-600"
+          }`}
+        >
+          <div className={`p-1.5 rounded-xl transition-colors ${activeTab === "profile" ? "bg-[#2DB0E6]/10" : ""}`}>
+            <User className="w-6 h-6" />
+          </div>
+          <span className="text-[10px] font-bold">Профиль</span>
+        </button>
       </div>
 
       {/* Material Modal */}
@@ -2093,7 +2187,7 @@ export default function AdminDashboardScreen({
                       name: e.target.value,
                     })
                   }
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
                 />
               </div>
 
@@ -2110,7 +2204,7 @@ export default function AdminDashboardScreen({
                       description: e.target.value,
                     })
                   }
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium resize-none"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium resize-none"
                 />
               </div>
 
@@ -2131,7 +2225,7 @@ export default function AdminDashboardScreen({
                         price: parseFloat(e.target.value),
                       })
                     }
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
@@ -2149,7 +2243,7 @@ export default function AdminDashboardScreen({
                         min_volume: parseFloat(e.target.value),
                       })
                     }
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
                   />
                 </div>
               </div>
@@ -2167,7 +2261,7 @@ export default function AdminDashboardScreen({
                       unit: e.target.value,
                     })
                   }
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
                 />
               </div>
 
@@ -2216,7 +2310,7 @@ export default function AdminDashboardScreen({
                       is_active: e.target.checked,
                     })
                   }
-                  className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
+                  className="w-5 h-5 rounded text-[#2DB0E6] focus:ring-[#2DB0E6] border-slate-300 cursor-pointer"
                 />
                 <div className="flex flex-col">
                   <span className="font-bold text-slate-800 text-sm">
@@ -2239,7 +2333,7 @@ export default function AdminDashboardScreen({
                 <button
                   type="submit"
                   disabled={isSavingMaterial}
-                  className="flex-1 py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-colors flex justify-center items-center gap-2 shadow-sm"
+                  className="flex-1 py-3 px-4 bg-[#2DB0E6] hover:bg-[#209ccf] text-white font-bold rounded-xl transition-colors flex justify-center items-center gap-2 shadow-sm"
                 >
                   {isSavingMaterial ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
@@ -2289,7 +2383,7 @@ export default function AdminDashboardScreen({
                       title: e.target.value,
                     })
                   }
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
                 />
               </div>
 
@@ -2310,7 +2404,7 @@ export default function AdminDashboardScreen({
                         capacity_m3: parseFloat(e.target.value),
                       })
                     }
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
@@ -2328,7 +2422,7 @@ export default function AdminDashboardScreen({
                         base_price: parseFloat(e.target.value),
                       })
                     }
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
                   />
                 </div>
               </div>
@@ -2364,7 +2458,7 @@ export default function AdminDashboardScreen({
                       is_active: e.target.checked,
                     })
                   }
-                  className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
+                  className="w-5 h-5 rounded text-[#2DB0E6] focus:ring-[#2DB0E6] border-slate-300 cursor-pointer"
                 />
                 <div className="flex flex-col">
                   <span className="font-bold text-slate-800 text-sm">
@@ -2387,7 +2481,7 @@ export default function AdminDashboardScreen({
                 <button
                   type="submit"
                   disabled={isSavingDelivery}
-                  className="flex-1 py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-colors flex justify-center items-center gap-2 shadow-sm"
+                  className="flex-1 py-3 px-4 bg-[#2DB0E6] hover:bg-[#209ccf] text-white font-bold rounded-xl transition-colors flex justify-center items-center gap-2 shadow-sm"
                 >
                   {isSavingDelivery ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
@@ -2434,7 +2528,7 @@ export default function AdminDashboardScreen({
                   onChange={(e) =>
                     setEditingDriver({ ...editingDriver, name: e.target.value })
                   }
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
                 />
               </div>
 
@@ -2452,7 +2546,7 @@ export default function AdminDashboardScreen({
                     setEditingDriver({ ...editingDriver, phone: formatted });
                   }}
                   placeholder="+7 (999) 000-00-00"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
                 />
               </div>
 
@@ -2469,12 +2563,12 @@ export default function AdminDashboardScreen({
                       delivery_option_id: e.target.value,
                     })
                   }
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
                 >
                   <option value="" disabled>
                     Выберите машину...
                   </option>
-                  {deliveryOptions.map((opt) => (
+                  {sortedDeliveryOptions.map((opt) => (
                     <option key={opt.id} value={opt.id}>
                       {opt.title} ({opt.capacity_m3} м³)
                     </option>
@@ -2502,7 +2596,7 @@ export default function AdminDashboardScreen({
                         password: e.target.value,
                       })
                     }
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 pr-12 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 pr-12 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
                   />
                   <button
                     type="button"
@@ -2528,7 +2622,7 @@ export default function AdminDashboardScreen({
                       is_active: e.target.checked,
                     })
                   }
-                  className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
+                  className="w-5 h-5 rounded text-[#2DB0E6] focus:ring-[#2DB0E6] border-slate-300 cursor-pointer"
                 />
                 <div className="flex flex-col">
                   <span className="font-bold text-slate-800 text-sm">
@@ -2551,7 +2645,7 @@ export default function AdminDashboardScreen({
                 <button
                   type="submit"
                   disabled={isSavingDriver}
-                  className="flex-1 py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-colors flex justify-center items-center gap-2 shadow-sm"
+                  className="flex-1 py-3 px-4 bg-[#2DB0E6] hover:bg-[#209ccf] text-white font-bold rounded-xl transition-colors flex justify-center items-center gap-2 shadow-sm"
                 >
                   {isSavingDriver ? (
                     <Loader2 className="w-5 h-5 animate-spin" />

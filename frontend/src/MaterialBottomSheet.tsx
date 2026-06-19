@@ -157,7 +157,7 @@ export default function MaterialBottomSheet({
                   </div>
                 ) : (
                   <div className="flex gap-3 overflow-x-auto pb-2 hide-scrollbar -mx-4 px-4">
-                    {deliveryOptions.map((option) => {
+                    {[...deliveryOptions].sort((a, b) => (a.capacity_m3 || 0) - (b.capacity_m3 || 0)).map((option) => {
                       const isSelected = selectedOption?.id === option.id;
                       const imgSrc =
                         option.media_files?.[0]?.public_url ||

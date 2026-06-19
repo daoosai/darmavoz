@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import PullToRefresh from "react-simple-pull-to-refresh";
 import { useAuthStore } from "./store";
-import { baseURL, orderStatusMap, orderStatusColors } from "./utils";
+import { baseURL, orderStatusMap, orderStatusColors, formatErrorToRussian } from "./utils";
 import DriverProfileScreen from "./DriverProfileScreen";
 import {
   LogOut,
@@ -330,7 +330,7 @@ export default function DriverOrdersScreen({
         throw new Error(err.detail || "Не удалось принять заказ");
       }
     } catch (error: any) {
-      toast.error(error.message);
+      toast.error(formatErrorToRussian(error, "Не удалось принять заказ"));
     }
   };
 
@@ -369,7 +369,7 @@ export default function DriverOrdersScreen({
         throw new Error(err.detail || "Не удалось отказаться от заказа");
       }
     } catch (error: any) {
-      toast.error(error.message);
+      toast.error(formatErrorToRussian(error, "Не удалось отказаться от заказа"));
     }
   };
 
@@ -739,7 +739,7 @@ export default function DriverOrdersScreen({
           <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl p-6 flex flex-col gap-6 animate-in zoom-in-95 duration-200">
             <div className="flex flex-col items-center text-center gap-2">
               <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-2">
-                <PackageOpen className="w-8 h-8 text-blue-500 animate-bounce" />
+                <PackageOpen className="w-8 h-8 text-[#2DB0E6] animate-bounce" />
               </div>
               <h3 className="text-2xl font-black text-slate-800 tracking-tight">
                 Новый заказ!
@@ -905,7 +905,7 @@ const DriverOrderCard: React.FC<{
       toast.success("Отличной дороги!");
       onRefresh();
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error(formatErrorToRussian(e, "Не удалось начать поездку"));
     } finally {
       setIsStarting(false);
     }
@@ -935,7 +935,7 @@ const DriverOrderCard: React.FC<{
       toast.success("Заказ успешно завершен! Вы снова свободны.");
       onRefresh();
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error(formatErrorToRussian(e, "Не удалось завершить заказ"));
     } finally {
       setIsCompleting(false);
     }

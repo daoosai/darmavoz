@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import PullToRefresh from "react-simple-pull-to-refresh";
 import { useAuthStore } from "./store";
-import { baseURL, orderStatusMap, orderStatusColors, declineReasonMap, attemptStatusMap } from "./utils";
+import { baseURL, orderStatusMap, orderStatusColors, declineReasonMap, attemptStatusMap, formatErrorToRussian } from "./utils";
 import {
   LogOut,
   MapPin,
@@ -18,9 +18,12 @@ import {
   Users,
   SearchX,
   ChevronDown,
+  ClipboardList,
+  Layers,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import UpdateBanner from "./UpdateBanner";
+import AdminProfileScreen from "./AdminProfileScreen";
 
 interface AdminOrder {
   id: string;
@@ -118,7 +121,7 @@ export default function LogistDashboardScreen({
   onLogout,
 }: LogistDashboardScreenProps) {
   const { logout, token } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<"orders" | "drivers">("orders");
+  const [activeTab, setActiveTab] = useState<"orders" | "drivers" | "profile">("orders");
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [drivers, setDrivers] = useState<AdminDriver[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -292,7 +295,7 @@ export default function LogistDashboardScreen({
       }
     } catch (error: any) {
       console.error("Error creating order:", error);
-      toast.error(error.message || "Ошибка при создании заказа");
+      toast.error(formatErrorToRussian(error, "Ошибка при создании заказа"));
     } finally {
       setIsCreating(false);
     }
@@ -378,7 +381,7 @@ export default function LogistDashboardScreen({
       fetchOrders();
     } catch (error: any) {
       console.error("Error redispatching driver:", error);
-      toast.error(error.message || "Ошибка при перезапуске поиска");
+      toast.error(formatErrorToRussian(error, "Ошибка при перезапуске поиска"));
     } finally {
       setAssigningOrderId(null);
     }
@@ -414,7 +417,7 @@ export default function LogistDashboardScreen({
       fetchOrders();
     } catch (error: any) {
       console.error("Error deleting order:", error);
-      toast.error(error.message || "Ошибка при удалении заказа");
+      toast.error(formatErrorToRussian(error, "Ошибка при удалении заказа"));
     }
   };
 
@@ -464,7 +467,7 @@ export default function LogistDashboardScreen({
       fetchDrivers(true);
     } catch (error: any) {
       console.error("Error assigning driver manually:", error);
-      toast.error(error.message || "Ошибка при назначении водителя");
+      toast.error(formatErrorToRussian(error, "Ошибка при назначении водителя"));
     } finally {
       setIsManualAssignSaving(false);
     }
@@ -506,11 +509,11 @@ export default function LogistDashboardScreen({
           </button>
         </div>
         
-        <div className="flex flex-1 sm:justify-center">
+        <div className="hidden sm:flex flex-1 sm:justify-center">
           <div className="bg-slate-100 p-1 rounded-xl flex w-full sm:w-auto">
             <button
               onClick={() => setActiveTab("orders")}
-              className={`flex-1 sm:w-32 py-2 text-sm font-bold rounded-lg transition-colors ${
+              className={`flex-1 sm:w-32 py-2 text-sm font-bold rounded-lg transition-colors flex justify-center items-center gap-2 ${
                 activeTab === "orders" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"
               }`}
             >
@@ -518,11 +521,19 @@ export default function LogistDashboardScreen({
             </button>
             <button
               onClick={() => setActiveTab("drivers")}
-              className={`flex-1 sm:w-32 py-2 text-sm font-bold rounded-lg transition-colors ${
+              className={`flex-1 sm:w-32 py-2 text-sm font-bold rounded-lg transition-colors flex justify-center items-center gap-2 ${
                 activeTab === "drivers" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"
               }`}
             >
               Водители
+            </button>
+            <button
+              onClick={() => setActiveTab("profile")}
+              className={`flex-1 sm:w-32 py-2 text-sm font-bold rounded-lg transition-colors flex justify-center items-center gap-2 ${
+                activeTab === "profile" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              Профиль
             </button>
           </div>
         </div>
@@ -537,7 +548,7 @@ export default function LogistDashboardScreen({
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-y-auto p-6 lg:p-8">
+      <div className="flex-1 overflow-y-auto p-6 lg:p-8 sm:pb-8 pb-24 relative">
         <UpdateBanner />
         <div className="max-w-7xl mx-auto flex flex-col gap-6">
           {activeTab === "orders" ? (
@@ -590,7 +601,7 @@ export default function LogistDashboardScreen({
                           </div>
                           <div className="flex items-center gap-2">
                             {order.status === "offered_to_driver" ? (
-                              <span className="text-[11px] font-bold px-3 py-1 rounded-lg uppercase tracking-wide border bg-purple-100 text-purple-700 border-purple-200 max-w-[200px] truncate" title={`ПРЕДЛОЖЕН: ${order.current_offer?.driver?.name || order.driver?.name || "ВОДИТЕЛЮ"}`}>
+                              <span className="text-[11px] font-bold px-3 py-1 rounded-lg uppercase tracking-wide border bg-[#2DB0E6]/10 text-[#2DB0E6] border-[#2DB0E6]/20 max-w-[200px] truncate" title={`ПРЕДЛОЖЕН: ${order.current_offer?.driver?.name || order.driver?.name || "ВОДИТЕЛЮ"}`}>
                                 ПРЕДЛОЖЕН: {order.current_offer?.driver?.name || order.driver?.name || "ВОДИТЕЛЮ"}
                               </span>
                             ) : (
@@ -657,14 +668,14 @@ export default function LogistDashboardScreen({
                         <div className="mt-auto pt-2 flex flex-col gap-2">
                           {order.driver && order.driver.name && (
                             <div className="flex items-center gap-2.5 bg-blue-50/50 p-3 rounded-xl border border-blue-50">
-                              <div className="bg-white p-1.5 rounded-full text-blue-500 shadow-sm">
+                              <div className="bg-white p-1.5 rounded-full text-[#2DB0E6] shadow-sm">
                                 <User className="w-4 h-4" />
                               </div>
                               <div>
                                 <p className="text-[10px] text-blue-400 uppercase tracking-wide font-bold mb-0.5">
                                   Водитель
                                 </p>
-                                <p className="text-sm font-bold text-blue-700">
+                                <p className="text-sm font-bold text-[#2DB0E6]">
                                   {order.driver.name}
                                 </p>
                               </div>
@@ -696,7 +707,7 @@ export default function LogistDashboardScreen({
                           )}
 
                           {(order.status === "searching_driver" || order.status === "offered_to_driver") && (
-                            <div className="w-full py-3.5 bg-indigo-50 text-indigo-500 rounded-xl font-bold flex flex-row items-center justify-center gap-2 border border-indigo-100 shadow-sm">
+                            <div className="w-full py-3.5 bg-[#2DB0E6]/10 text-[#2DB0E6] rounded-xl font-bold flex flex-row items-center justify-center gap-2 border border-[#2DB0E6]/20 shadow-sm">
                               <Loader2 className="w-4 h-4 animate-spin" />
                               Автопоиск водителя...
                             </div>
@@ -739,7 +750,7 @@ export default function LogistDashboardScreen({
                 </PullToRefresh>
               )}
             </>
-          ) : (
+          ) : activeTab === "drivers" ? (
             <>
               {/* Drivers Tab */}
               <div className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-2">
@@ -871,8 +882,47 @@ export default function LogistDashboardScreen({
                 </div>
               )}
             </>
-          )}
+          ) : activeTab === "profile" ? (
+            <AdminProfileScreen onLogout={handleLogout} />
+          ) : null}
         </div>
+      </div>
+
+      {/* Mobile Bottom Navigation Menu */}
+      <div className="sm:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex z-50 h-[68px] justify-around items-center px-2 pb-safe">
+        <button
+          onClick={() => setActiveTab("orders")}
+          className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${
+            activeTab === "orders" ? "text-[#2DB0E6]" : "text-gray-400 hover:text-gray-600"
+          }`}
+        >
+          <div className={`p-1.5 rounded-xl transition-colors ${activeTab === "orders" ? "bg-[#2DB0E6]/10" : ""}`}>
+            <ClipboardList className="w-6 h-6" />
+          </div>
+          <span className="text-[10px] font-bold">Заказы</span>
+        </button>
+        <button
+          onClick={() => setActiveTab("drivers")}
+          className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${
+            activeTab === "drivers" ? "text-[#2DB0E6]" : "text-gray-400 hover:text-gray-600"
+          }`}
+        >
+          <div className={`p-1.5 rounded-xl transition-colors ${activeTab === "drivers" ? "bg-[#2DB0E6]/10" : ""}`}>
+            <Truck className="w-6 h-6" />
+          </div>
+          <span className="text-[10px] font-bold">Водители</span>
+        </button>
+        <button
+          onClick={() => setActiveTab("profile")}
+          className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${
+            activeTab === "profile" ? "text-[#2DB0E6]" : "text-gray-400 hover:text-gray-600"
+          }`}
+        >
+          <div className={`p-1.5 rounded-xl transition-colors ${activeTab === "profile" ? "bg-[#2DB0E6]/10" : ""}`}>
+            <User className="w-6 h-6" />
+          </div>
+          <span className="text-[10px] font-bold">Профиль</span>
+        </button>
       </div>
 
       {/* Create Order Modal */}
@@ -948,7 +998,7 @@ export default function LogistDashboardScreen({
                     onChange={(e) => setNewOrder({ ...newOrder, delivery_option_id: e.target.value })}
                   >
                     <option value="" disabled>Выберите...</option>
-                    {deliveryOptions.map((o) => (
+                    {[...deliveryOptions].sort((a, b) => (a.capacity_m3 || 0) - (b.capacity_m3 || 0)).map((o) => (
                       <option key={o.id} value={o.id}>{o.capacity_m3} м³</option>
                     ))}
                   </select>
@@ -1167,8 +1217,8 @@ export default function LogistDashboardScreen({
                       const isAssigned = entry.status === 'assigned' || (entry.status === 'accepted' && isManualAssign);
                       const isSuccess = entry.status === 'accepted' || isAssigned;
                       const isFail = entry.status === 'declined' || entry.status === 'timeout' || entry.status === 'expired' || entry.status === 'cancelled' || entry.status === 'rejected';
-                      const badgeColor = isSuccess ? 'bg-emerald-100 text-emerald-700' : isFail ? 'bg-rose-100 text-rose-700' : 'bg-indigo-100 text-indigo-700';
-                      const dotColor = isSuccess ? 'bg-emerald-500' : isFail ? 'bg-rose-400' : 'bg-indigo-400';
+                      const badgeColor = isSuccess ? 'bg-emerald-100 text-emerald-700' : isFail ? 'bg-rose-100 text-rose-700' : 'bg-[#2DB0E6]/20 text-[#209ccf]';
+                      const dotColor = isSuccess ? 'bg-emerald-500' : isFail ? 'bg-rose-400' : 'bg-[#2DB0E6]';
 
                       let badgeText = attemptStatusMap[entry.status] || entry.status.toUpperCase();
                       if (isAssigned) {

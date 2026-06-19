@@ -45,7 +45,7 @@ export default function InstallPWA() {
         <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl flex flex-col gap-3">
           <p className="text-sm font-medium text-slate-600 flex items-center gap-2">
             <span className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-200 text-slate-700 text-xs font-bold">1</span>
-            Нажмите кнопку <Share className="w-4 h-4 text-blue-500" /> в меню Safari
+            Нажмите кнопку <Share className="w-4 h-4 text-[#2DB0E6]" /> в меню Safari
           </p>
           <div className="w-full h-px bg-slate-200/50" />
           <p className="text-sm font-medium text-slate-600 flex items-center gap-2">

@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useAuthStore, UserRole } from "./store";
 import { ArrowLeft, Loader2, Eye, EyeOff } from "lucide-react";
 import toast from "react-hot-toast";
-import { baseURL } from "./utils";
+import { baseURL, formatPhoneNumber } from "./utils";
 
 interface LoginScreenProps {
   onLogin: (role: UserRole) => void;
@@ -16,6 +16,19 @@ export default function LoginScreen({ onLogin, onBack }: LoginScreenProps) {
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuthStore();
 
+  const handleLoginChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let val = e.target.value;
+    if (/^[\d+()\-\s]*$/.test(val) && val !== '') {
+      if (val === '+') {
+        setUsername('+');
+        return;
+      }
+      setUsername(formatPhoneNumber(val));
+    } else {
+      setUsername(val);
+    }
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username || !password) {
@@ -25,9 +38,9 @@ export default function LoginScreen({ onLogin, onBack }: LoginScreenProps) {
 
     setIsLoading(true);
     try {
-      const cleanPhone = username.replace(/[\s()-]/g, '');
+      const cleanLogin = username.replace(/[\s()-]/g, '');
       const formData = new URLSearchParams();
-      formData.append("username", cleanPhone);
+      formData.append("username", cleanLogin);
       formData.append("password", password);
 
       const response = await fetch(`${baseURL}/auth/login`, {
@@ -85,7 +98,7 @@ export default function LoginScreen({ onLogin, onBack }: LoginScreenProps) {
               type="text"
               name="username"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={handleLoginChange}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/50 transition-all"
               placeholder="Введите логин"
             />

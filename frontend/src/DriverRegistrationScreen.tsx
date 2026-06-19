@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { ArrowLeft, Loader2, Eye, EyeOff } from "lucide-react";
 import toast from "react-hot-toast";
-import { baseURL, formatPhoneNumber } from "./utils";
+import { baseURL, formatPhoneNumber, formatErrorToRussian } from "./utils";
 import { useAuthStore, UserRole } from "./store";
 
 interface DriverRegistrationScreenProps {
@@ -113,7 +113,7 @@ export default function DriverRegistrationScreen({ onRegister, onBack }: DriverR
 
     } catch (err: any) {
       console.error(err);
-      toast.error(err.message || "Сбой при регистрации");
+      toast.error(formatErrorToRussian(err, "Сбой при регистрации"));
     } finally {
       setIsLoading(false);
     }

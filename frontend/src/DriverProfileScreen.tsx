@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useAuthStore } from "./store";
-import { baseURL, formatPhoneNumber } from "./utils";
+import { baseURL, formatPhoneNumber, formatErrorToRussian } from "./utils";
 import {
   LogOut,
   Truck,
@@ -137,7 +137,7 @@ export default function DriverProfileScreen({
       await fetchProfile();
       onProfileUpdate?.();
     } catch (e: any) {
-      toast.error(e.message || "Ошибка при отправке на модерацию");
+      toast.error(formatErrorToRussian(e, "Ошибка при отправке на модерацию"));
     } finally {
       setIsSaving(false);
     }
@@ -237,7 +237,11 @@ export default function DriverProfileScreen({
       toast.success("Фото загружено!");
       fetchProfile();
     } catch (e: any) {
-      toast.error(e.message || "Ошибка загрузки файла");
+      if (e instanceof TypeError && e.message.includes('Failed to fetch')) {
+        toast.error("Ошибка сети при загрузке. Отключите VPN или проверьте интернет-соединение.");
+      } else {
+        toast.error("Не удалось загрузить фотографию. Попробуйте еще раз.");
+      }
       setLocalPreviews((prev) => {
         const copy = { ...prev };
         delete copy[slotId];

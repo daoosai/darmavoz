@@ -84,9 +84,9 @@ const ActiveOrderCard: React.FC<{ order: ClientOrder }> = ({ order }) => {
             animate={isAssigned ? { scale: 1 } : { x: [-20, 20, -20], y: [0, -3, 0] }}
             transition={isAssigned ? { type: "spring", bounce: 0.5 } : { repeat: Infinity, duration: 4, ease: "easeInOut" }}
           >
-            {isAssigned ? <UserCheck className="w-10 h-10 text-indigo-500" /> : <Truck className="w-12 h-12 text-[#2DB0E6]" />}
+            {isAssigned ? <UserCheck className="w-10 h-10 text-[#2DB0E6]" /> : <Truck className="w-12 h-12 text-[#2DB0E6]" />}
           </motion.div>
-          <span className={`text-[10px] sm:text-xs font-bold uppercase tracking-widest text-center ${isAssigned ? "text-indigo-500" : "text-[#2DB0E6]"}`}>
+          <span className={`text-[10px] sm:text-xs font-bold uppercase tracking-widest text-center ${isAssigned ? "text-[#2DB0E6]" : "text-[#2DB0E6]"}`}>
             {isAssigned ? "Водитель назначен" : "Машина в пути"}
           </span>
           {order.driver && (

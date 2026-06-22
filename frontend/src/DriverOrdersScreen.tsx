@@ -471,7 +471,7 @@ export default function DriverOrdersScreen({
     "?";
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50 sm:max-w-md sm:mx-auto shadow-2xl relative overflow-hidden">
+    <div className="flex flex-col h-screen bg-slate-50 sm:max-w-md sm:mx-auto shadow-2xl relative overflow-y-auto overflow-x-hidden pb-24">
       {/* Header */}
       <div className="bg-white px-5 pt-6 pb-4 shadow-sm z-10 sticky top-0 border-b border-slate-100">
         <div className="flex justify-between items-center mb-6">
@@ -542,7 +542,7 @@ export default function DriverOrdersScreen({
 
       {/* Navigation Tabs Content */}
       {activeTab === "orders" ? (
-        <div className="flex-1 overflow-y-auto p-5 pb-24">
+        <div className="flex-1 overflow-visible p-5 h-auto">
           <h2 className="text-lg font-bold text-slate-800 mb-4">
             {ordersTab === "current" ? "Активные заказы" : "История поездок"}
           </h2>
@@ -697,7 +697,7 @@ export default function DriverOrdersScreen({
       )}
 
       {/* Bottom Navigation */}
-      <div className="absolute bottom-0 left-0 right-0 bg-white border-t border-slate-100 shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.1)] z-40 pb-safe">
+      <div className="fixed sm:absolute bottom-0 left-0 right-0 sm:max-w-md sm:mx-auto bg-white border-t border-slate-100 shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.1)] z-40 pb-safe">
         <div className="flex justify-around items-center p-2">
           <button
             onClick={() => setActiveTab("orders")}
@@ -839,7 +839,7 @@ const DriverOrderCard: React.FC<{
 
   if (isHistory) {
     return (
-      <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex flex-col gap-3 text-left">
+      <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex flex-col gap-3 text-left h-auto overflow-visible">
         <div className="flex justify-between items-start gap-2">
           <span
             className={`text-[11px] font-bold px-2.5 py-1 rounded-lg uppercase tracking-wide ${
@@ -942,7 +942,7 @@ const DriverOrderCard: React.FC<{
   };
 
   return (
-    <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex flex-col gap-4 text-left">
+    <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex flex-col gap-4 text-left h-auto overflow-visible">
       {/* Header: Status and Date */}
       <div className="flex justify-between items-start gap-2">
         <span
@@ -978,7 +978,7 @@ const DriverOrderCard: React.FC<{
       </div>
 
       {/* Details Grid */}
-      <div className="grid grid-cols-2 gap-px bg-slate-100 overflow-hidden rounded-xl border border-slate-100">
+      <div className="grid grid-cols-2 gap-px bg-slate-100 overflow-visible rounded-xl border border-slate-100">
         <div className="flex flex-col gap-1 bg-slate-50 p-3">
           <p className="text-[11px] text-slate-500 uppercase tracking-wide font-bold">
             Материал

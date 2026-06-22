@@ -19,7 +19,7 @@ import CartScreen from "./CartScreen";
 import ProfileScreen from "./ProfileScreen";
 import PromosScreen from "./PromosScreen";
 import MaterialBottomSheet from "./MaterialBottomSheet";
-import { useCartStore } from "./store";
+
 import { Toaster } from "react-hot-toast";
 
 interface Category {
@@ -34,14 +34,15 @@ import DriverOrdersScreen from "./DriverOrdersScreen";
 import LogistDashboardScreen from "./LogistDashboardScreen";
 import AdminDashboardScreen from "./AdminDashboardScreen";
 import DriverRegistrationScreen from "./DriverRegistrationScreen";
-import { useAuthStore } from "./store";
+import { useAuthStore, useCartStore, useAddressStore } from "./store";
 import ClientAuthBottomSheet from "./ClientAuthBottomSheet";
+import ClientAddressBottomSheet from "./ClientAddressBottomSheet";
 import ClientProfileScreen from "./ClientProfileScreen";
 import InstallPWA from "./InstallPWA";
 
 // Reuse Material type as MaterialProps by exporting it from MaterialDetailScreen or type matching
 export default function App() {
-  const { role } = useAuthStore();
+  const { role, token } = useAuthStore();
   const [currentRoute, setCurrentRoute] = useState<
     "welcome" | "main" | "login" | "driver" | "logist" | "admin" | "driver_register"
   >(role === "driver" ? "driver" : role === "logist" ? "logist" : role === "admin" ? "admin" : "welcome");
@@ -212,6 +213,8 @@ export default function App() {
 }
 
 function MainContent({ currentRoute, setCurrentRoute, activeTab, setActiveTab, categories, materials, selectedMaterial, setSelectedMaterial, searchQuery, setSearchQuery, cartItemsCount, selectedCategoryId, setSelectedCategoryId, isLoading, showAuthSheet, setShowAuthSheet, role }: any) {
+  const { selectedAddress } = useAddressStore();
+  const { token } = useAuthStore();
   const tabs = [
     { id: "home", label: "Главная", icon: Home },
     { id: "orders", label: "Заказы", icon: List },
@@ -224,6 +227,8 @@ function MainContent({ currentRoute, setCurrentRoute, activeTab, setActiveTab, c
     { id: "promotions", label: "Акции", icon: Tag },
     { id: "profile", label: "Профиль", icon: User },
   ];
+
+  const [showAddressSheet, setShowAddressSheet] = useState(false);
 
   const handleCartClick = () => {
     setActiveTab("cart");
@@ -244,10 +249,19 @@ function MainContent({ currentRoute, setCurrentRoute, activeTab, setActiveTab, c
             <>
               {/* Top Address Button */}
               <div className="px-4 mb-4">
-                <button className="w-full bg-[#2DB0E6] text-white rounded-2xl p-3 flex items-center justify-start gap-2 flex-row font-medium active:opacity-80 transition-opacity">
+                <button 
+                  onClick={() => {
+                    if (role !== "client") {
+                      setShowAuthSheet(true);
+                      return;
+                    }
+                    setShowAddressSheet(true);
+                  }}
+                  className="w-full bg-[#2DB0E6] text-white rounded-2xl p-3 flex items-center justify-start gap-2 flex-row font-medium active:opacity-80 transition-opacity"
+                >
                   <MapPin className="w-[18px] h-[18px] flex-shrink-0" />
                   <span className="truncate text-sm">
-                    Укажите адрес доставки
+                    {token && role === "client" && selectedAddress ? selectedAddress : "Укажите адрес доставки"}
                   </span>
                 </button>
               </div>
@@ -335,6 +349,7 @@ function MainContent({ currentRoute, setCurrentRoute, activeTab, setActiveTab, c
               onGoToHome={() => setActiveTab("home")}
               onGoToOrders={() => setActiveTab("orders")}
               onOpenAuth={() => setShowAuthSheet(true)}
+              onOpenAddresses={() => setShowAddressSheet(true)}
             />
           )}
 
@@ -342,7 +357,7 @@ function MainContent({ currentRoute, setCurrentRoute, activeTab, setActiveTab, c
 
           {activeTab === "profile" && (
             role === "client" ? (
-              <ClientProfileScreen />
+              <ClientProfileScreen onOpenAddresses={() => setShowAddressSheet(true)} />
             ) : (
               <ProfileScreen onOpenAuth={() => setShowAuthSheet(true)} />
             )
@@ -397,6 +412,12 @@ function MainContent({ currentRoute, setCurrentRoute, activeTab, setActiveTab, c
         <ClientAuthBottomSheet
           isOpen={showAuthSheet}
           onClose={() => setShowAuthSheet(false)}
+        />
+        
+        {/* Address Bottom Sheet */}
+        <ClientAddressBottomSheet
+          isOpen={showAddressSheet}
+          onClose={() => setShowAddressSheet(false)}
         />
       </div>
     </div>

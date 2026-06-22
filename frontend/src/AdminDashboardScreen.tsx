@@ -22,6 +22,7 @@ import {
   RefreshCw,
   Users,
   User,
+  Camera,
 } from "lucide-react";
 import AdminProfileScreen from "./AdminProfileScreen";
 import toast from "react-hot-toast";
@@ -68,6 +69,13 @@ interface AdminDriver {
   phone: string;
   delivery_option_id: string;
   is_active: boolean;
+  vehicle_brand?: string;
+  vehicle_plate_number?: string;
+  vehicle_type?: string;
+  cubature_min?: number;
+  cubature_max?: number;
+  tonnage_min?: number;
+  tonnage_max?: number;
   moderation_status?:
     | "pending_moderation"
     | "approved"
@@ -83,15 +91,21 @@ interface AdminDriver {
     capacity_m3: number;
   };
   vehicle?: {
+    id?: string;
     title: string;
     brand?: string;
     model?: string;
     plate_number?: string;
     vehicle_type?: string;
+    cubature_min?: number;
+    cubature_max?: number;
+    tonnage_min?: number;
+    tonnage_max?: number;
     delivery_option_id?: string;
     vehicle_main_url?: string;
     vehicle_left_url?: string;
     vehicle_plate_url?: string;
+    media_files?: { id: string; public_url: string; slot_key: string }[];
     delivery_option?: {
       id?: string;
       title?: string;
@@ -162,6 +176,12 @@ export default function AdminDashboardScreen({
   >({});
   const [isSavingDriver, setIsSavingDriver] = useState(false);
   const [showDriverPassword, setShowDriverPassword] = useState(false);
+  const [fileMain, setFileMain] = useState<File | null>(null);
+  const [fileLeft, setFileLeft] = useState<File | null>(null);
+  const [filePlate, setFilePlate] = useState<File | null>(null);
+  const [previewMain, setPreviewMain] = useState<string | null>(null);
+  const [previewLeft, setPreviewLeft] = useState<string | null>(null);
+  const [previewPlate, setPreviewPlate] = useState<string | null>(null);
 
   const sortedDeliveryOptions = useMemo(() => {
     return [...deliveryOptions].sort((a, b) => (a.capacity_m3 || 0) - (b.capacity_m3 || 0));
@@ -176,16 +196,19 @@ export default function AdminDashboardScreen({
     });
 
   const renderVehicleCell = (driver: AdminDriver) => {
-    if (!driver.vehicle) {
+    const brand = driver.vehicle?.brand || driver.vehicle_brand;
+    const plate = driver.vehicle?.plate_number || driver.vehicle_plate_number;
+
+    if (!brand && !plate && !driver.vehicle) {
       return <span className="text-slate-400">Автомобиль не назначен</span>;
     }
     return (
       <div className="flex flex-col gap-1.5 items-start">
-        <span className="text-sm font-medium text-gray-900">{driver.vehicle.brand || "Неизвестно"}</span>
-        {driver.vehicle.plate_number ? (
+        <span className="text-sm font-medium text-gray-900">{brand || "Неизвестно"}</span>
+        {plate ? (
           <div className="flex items-center bg-white border border-gray-400 rounded-md shadow-sm overflow-hidden w-max">
             <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 text-gray-900">
-              {driver.vehicle.plate_number}
+              {plate}
             </span>
             <div className="border-l border-gray-400 flex flex-col items-center justify-center px-1.5 py-0.5 bg-white">
               <span className="text-[8px] font-bold leading-none text-gray-800 mb-0.5">RUS</span>
@@ -473,7 +496,7 @@ export default function AdminDashboardScreen({
       const res = await fetch(`${baseURL}/admin/moderation/pending`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) throw new Error("Failed to fetch pending requests");
+      if (!res.ok) throw new Error("Не удалось загрузить ожидающие запросы");
       const data = await res.json();
       const items = Array.isArray(data) ? data : data.results || [];
       setPendingRequests(items);
@@ -516,7 +539,7 @@ export default function AdminDashboardScreen({
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!res.ok) throw new Error("Delete failed");
+        if (!res.ok) throw new Error("Ошибка удаления");
         const data = await res.json();
         if (data.action === "hidden") {
           toast.success("Элемент скрыт (так как имеет связанные заказы)");
@@ -533,7 +556,7 @@ export default function AdminDashboardScreen({
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!res.ok) throw new Error("Delete failed");
+        if (!res.ok) throw new Error("Ошибка удаления");
         const data = await res.json();
         if (data.action === "hidden") {
           toast.success("Элемент скрыт (так как имеет связанные заказы)");
@@ -550,7 +573,7 @@ export default function AdminDashboardScreen({
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!res.ok) throw new Error("Delete failed");
+        if (!res.ok) throw new Error("Ошибка удаления");
         toast.success("Водитель успешно удален");
         fetchDrivers(true);
       } catch (err) {
@@ -565,7 +588,7 @@ export default function AdminDashboardScreen({
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) throw new Error("Delete media failed");
+      if (!res.ok) throw new Error("Ошибка удаления фото");
       toast.success("Фотография успешно удалена!");
 
       if (entityType === "material") {
@@ -599,7 +622,7 @@ export default function AdminDashboardScreen({
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) throw new Error("Make primary failed");
+      if (!res.ok) throw new Error("Ошибка назначения фото главным");
       toast.success("Главное фото успешно назначено!");
 
       if (entityType === "material") {
@@ -756,32 +779,53 @@ export default function AdminDashboardScreen({
   };
 
   const openDriverModal = (driver?: AdminDriver) => {
+    setFileMain(null);
+    setFileLeft(null);
+    setFilePlate(null);
     if (driver) {
-      const deliveryOptionId =
-        driver.delivery_option_id ||
-        driver.vehicle?.delivery_option_id ||
-        driver.vehicle?.delivery_option?.id;
+      setPreviewMain(
+        driver.vehicle?.media_files?.find((m: any) => m.slot_key === "vehicle_main")?.public_url ||
+        driver.vehicle?.vehicle_main_url || null
+      );
+      setPreviewLeft(
+        driver.vehicle?.media_files?.find((m: any) => m.slot_key === "vehicle_left")?.public_url ||
+        driver.vehicle?.vehicle_left_url || null
+      );
+      setPreviewPlate(
+        driver.vehicle?.media_files?.find((m: any) => m.slot_key === "vehicle_plate")?.public_url ||
+        driver.vehicle?.vehicle_plate_url || null
+      );
+      
       setEditingDriver({
         ...driver,
-        delivery_option_id: deliveryOptionId,
+        vehicle_brand: driver.vehicle?.brand || driver.vehicle_brand,
+        vehicle_plate_number: driver.vehicle?.plate_number || driver.vehicle_plate_number,
+        vehicle_type: driver.vehicle?.vehicle_type || driver.vehicle_type,
+        cubature_min: driver.vehicle?.cubature_min || driver.cubature_min,
+        cubature_max: driver.vehicle?.cubature_max || driver.cubature_max,
+        tonnage_min: driver.vehicle?.tonnage_min || driver.tonnage_min,
+        tonnage_max: driver.vehicle?.tonnage_max || driver.tonnage_max,
         phone: formatPhoneNumber(driver.phone),
       });
     } else {
+      setPreviewMain(null);
+      setPreviewLeft(null);
+      setPreviewPlate(null);
       setEditingDriver({ is_active: true, phone: "+7" });
     }
     setIsDriverModalOpen(true);
   };
 
-  const cleanPhone = (phone: string) => phone.replace(/[^\d+]/g, "");
+  const cleanPhone = (phone: string) => phone.replace(/[\s()-]/g, "");
 
   const handleSaveDriver = async (e: React.FormEvent) => {
     e.preventDefault();
     if (
       !editingDriver?.name ||
       !editingDriver?.phone ||
-      !editingDriver?.delivery_option_id
+      !editingDriver?.vehicle_type
     ) {
-      toast.error("Заполните обязательные поля (Имя, Телефон, Автомобиль)");
+      toast.error("Заполните обязательные поля (Имя, Телефон, Тип машины)");
       return;
     }
 
@@ -809,9 +853,19 @@ export default function AdminDashboardScreen({
       const payload: any = {
         name: editingDriver.name,
         phone: fullPhone,
-        delivery_option_id: editingDriver.delivery_option_id,
         is_active: editingDriver.is_active ?? true,
+        vehicle_type: editingDriver.vehicle_type,
+        cubature_min: editingDriver.cubature_min ? Number(editingDriver.cubature_min) : undefined,
+        cubature_max: editingDriver.cubature_max ? Number(editingDriver.cubature_max) : undefined,
+        tonnage_min: editingDriver.tonnage_min ? Number(editingDriver.tonnage_min) : undefined,
+        tonnage_max: editingDriver.tonnage_max ? Number(editingDriver.tonnage_max) : undefined,
+        vehicle_brand: editingDriver.vehicle_brand,
+        vehicle_plate_number: editingDriver.vehicle_plate_number,
       };
+
+      if (!isEdit && payload.is_active) {
+        payload.status = 'free';
+      }
 
       if (editingDriver.password) {
         payload.password = editingDriver.password;
@@ -828,7 +882,103 @@ export default function AdminDashboardScreen({
 
       if (!res.ok) {
         const errData = await res.json().catch(() => null);
-        throw new Error(errData?.detail || "Ошибка сохранения");
+        if (errData?.detail && Array.isArray(errData.detail)) {
+          const errorMessages = errData.detail.map((err: any) => {
+            const field = err.loc[err.loc.length - 1];
+            if (field === 'password') return 'Пароль: должен содержать не менее 6 символов';
+            if (field === 'phone') return 'Телефон: неверный формат';
+            if (field === 'cubature_min' || field === 'cubature_max' || field === 'tonnage_min' || field === 'tonnage_max') return 'Пожалуйста, корректно заполните кубатуру и тоннаж';
+            return 'Проверьте правильность заполнения полей';
+          });
+          const uniqueErrors = Array.from(new Set(errorMessages));
+          throw new Error(uniqueErrors.join('\n'));
+        }
+        const errorOb: any = new Error(errData?.detail || "Ошибка сохранения");
+        errorOb.response = { status: res.status, data: errData };
+        throw errorOb;
+      }
+
+      let vehicleId = editingDriver.vehicle?.id;
+      try {
+        const resData = await res.json();
+        if (resData?.vehicle?.id) vehicleId = resData.vehicle.id;
+        else if (resData?.id) vehicleId = resData.id;
+      } catch (e) {
+        // ignore if empty response
+      }
+
+      if (vehicleId) {
+        const filesToUpload = [
+          { file: fileMain, slotKey: "vehicle_main" },
+          { file: fileLeft, slotKey: "vehicle_left" },
+          { file: filePlate, slotKey: "vehicle_plate" }
+        ].filter(item => item.file !== null);
+
+        for (const item of filesToUpload) {
+          try {
+            const file = item.file as File;
+            let fileExt = file.name.split(".").pop()?.toLowerCase() || "jpg";
+            if (fileExt !== "jpg" && fileExt !== "jpeg" && fileExt !== "png" && fileExt !== "webp") {
+                fileExt = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
+            }
+            const safeFileName = `photo-${Date.now()}.${fileExt}`;
+            const safeContentType = file.type || `image/${fileExt === "jpg" ? "jpeg" : fileExt}`;
+
+            // 1: Presign
+            const presignRes = await fetch(`${baseURL}/media/presign-upload`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                file_name: safeFileName,
+                content_type: safeContentType,
+                file_size: file.size,
+                entity_type: "vehicle",
+                entity_id: vehicleId,
+                is_primary: false,
+                sort_order: 0,
+                slot_key: item.slotKey,
+              }),
+            });
+
+            if (!presignRes.ok) throw new Error(`Ошибка Presign для ${item.slotKey}`);
+            const presignData = await presignRes.json();
+            if (!presignData.upload_url) throw new Error("Нет upload_url");
+
+            // 2: Upload
+            const uploadRes = await fetch(presignData.upload_url, {
+              method: "PUT",
+              headers: { "Content-Type": safeContentType },
+              body: file,
+            });
+            if (!uploadRes.ok) throw new Error(`Ошибка S3 для ${item.slotKey}`);
+
+            // 3: Confirm
+            const confirmRes = await fetch(`${baseURL}/media/confirm`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                entity_type: "vehicle",
+                entity_id: vehicleId,
+                object_key: presignData.object_key,
+                file_name: safeFileName,
+                content_type: safeContentType,
+                file_size: file.size,
+                is_primary: false,
+                slot_key: item.slotKey,
+              }),
+            });
+            if (!confirmRes.ok) throw new Error(`Ошибка Confirm для ${item.slotKey}`);
+          } catch (err: any) {
+            console.error(err);
+            toast.error("Ошибка загрузки фото: " + err.message);
+          }
+        }
       }
 
       const previousIsActive = isEdit
@@ -861,7 +1011,17 @@ export default function AdminDashboardScreen({
       setIsDriverModalOpen(false);
       fetchDrivers(true);
     } catch (err: any) {
-      toast.error(formatErrorToRussian(err, "Ошибка сохранения водителя"));
+      if (err.response?.status === 409) {
+        const detail = err.response.data?.detail;
+        const msg = typeof detail === 'string' ? detail : "Водитель с таким номером телефона или госномером уже существует!";
+        toast.error(msg);
+        return;
+      }
+      if (err.message && (err.message.includes('Пароль:') || err.message.includes('Телефон:') || err.message.includes('Пожалуйста,') || err.message.includes('Проверьте правильность'))) {
+        toast.error(err.message);
+      } else {
+        toast.error(formatErrorToRussian(err, "Ошибка сохранения водителя"));
+      }
     } finally {
       setIsSavingDriver(false);
     }
@@ -2552,28 +2712,113 @@ export default function AdminDashboardScreen({
 
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                  Тип машины (Кубатура)
+                  Марка машины
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Например: Камаз"
+                  value={editingDriver.vehicle_brand || ""}
+                  onChange={(e) =>
+                    setEditingDriver({ ...editingDriver, vehicle_brand: e.target.value })
+                  }
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Госномер
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Например: А000ПА"
+                  value={editingDriver.vehicle_plate_number || ""}
+                  onChange={(e) =>
+                    setEditingDriver({ ...editingDriver, vehicle_plate_number: e.target.value })
+                  }
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Тип машины
                 </label>
                 <select
                   required
-                  value={editingDriver.delivery_option_id || ""}
+                  value={editingDriver.vehicle_type || ""}
                   onChange={(e) =>
-                    setEditingDriver({
-                      ...editingDriver,
-                      delivery_option_id: e.target.value,
-                    })
+                    setEditingDriver({ ...editingDriver, vehicle_type: e.target.value })
                   }
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
                 >
-                  <option value="" disabled>
-                    Выберите машину...
-                  </option>
-                  {sortedDeliveryOptions.map((opt) => (
-                    <option key={opt.id} value={opt.id}>
-                      {opt.title} ({opt.capacity_m3} м³)
-                    </option>
-                  ))}
+                  <option value="" disabled>Выберите тип машины...</option>
+                  <option value="Самосвал">Самосвал</option>
+                  <option value="Бортовой">Бортовой</option>
+                  <option value="Будка">Будка</option>
                 </select>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Кубатура (м³)
+                </label>
+                <div className="grid grid-cols-2 gap-4 w-full overflow-hidden">
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    placeholder="От"
+                    value={editingDriver.cubature_min || ""}
+                    onChange={(e) =>
+                      setEditingDriver({ ...editingDriver, cubature_min: Number(e.target.value) })
+                    }
+                    className="w-full min-w-0 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
+                  />
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    placeholder="До"
+                    value={editingDriver.cubature_max || ""}
+                    onChange={(e) =>
+                      setEditingDriver({ ...editingDriver, cubature_max: Number(e.target.value) })
+                    }
+                    className="w-full min-w-0 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5 w-full">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Тоннаж (т)
+                </label>
+                <div className="grid grid-cols-2 gap-4 w-full overflow-hidden">
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    placeholder="От"
+                    value={editingDriver.tonnage_min || ""}
+                    onChange={(e) =>
+                      setEditingDriver({ ...editingDriver, tonnage_min: Number(e.target.value) })
+                    }
+                    className="w-full min-w-0 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
+                  />
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    placeholder="До"
+                    value={editingDriver.tonnage_max || ""}
+                    onChange={(e) =>
+                      setEditingDriver({ ...editingDriver, tonnage_max: Number(e.target.value) })
+                    }
+                    className="w-full min-w-0 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
+                  />
+                </div>
               </div>
 
               <div className="flex flex-col gap-1.5">
@@ -2609,6 +2854,56 @@ export default function AdminDashboardScreen({
                       <Eye className="w-5 h-5" />
                     )}
                   </button>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3 mt-2 mb-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Фотографии машины (Загрузка)
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-2">
+                    <span className="text-xs font-bold text-slate-500">Спереди + номер</span>
+                    <label className="relative flex flex-col items-center justify-center h-28 border-2 border-slate-200 border-dashed hover:bg-slate-100 cursor-pointer rounded-xl bg-slate-50 transition-colors overflow-hidden group">
+                      {fileMain || previewMain ? (
+                        <img src={fileMain ? URL.createObjectURL(fileMain) : (previewMain || undefined)} alt="Спереди + номер" className="absolute inset-0 w-full h-full object-cover" />
+                      ) : (
+                        <div className="text-slate-400 flex flex-col items-center">
+                          <Camera className="w-6 h-6 mb-1" />
+                          <span className="text-[10px] font-medium uppercase tracking-wider">Добавить</span>
+                        </div>
+                      )}
+                      <input type="file" accept="image/*" className="hidden" onChange={(e) => { if (e.target.files?.[0]) setFileMain(e.target.files[0]); }} />
+                    </label>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <span className="text-xs font-bold text-slate-500">Сбоку</span>
+                    <label className="relative flex flex-col items-center justify-center h-28 border-2 border-slate-200 border-dashed hover:bg-slate-100 cursor-pointer rounded-xl bg-slate-50 transition-colors overflow-hidden group">
+                      {fileLeft || previewLeft ? (
+                        <img src={fileLeft ? URL.createObjectURL(fileLeft) : (previewLeft || undefined)} alt="Сбоку" className="absolute inset-0 w-full h-full object-cover" />
+                      ) : (
+                        <div className="text-slate-400 flex flex-col items-center">
+                          <Camera className="w-6 h-6 mb-1" />
+                          <span className="text-[10px] font-medium uppercase tracking-wider">Добавить</span>
+                        </div>
+                      )}
+                      <input type="file" accept="image/*" className="hidden" onChange={(e) => { if (e.target.files?.[0]) setFileLeft(e.target.files[0]); }} />
+                    </label>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <span className="text-xs font-bold text-slate-500">Только госномер</span>
+                    <label className="relative flex flex-col items-center justify-center h-28 border-2 border-slate-200 border-dashed hover:bg-slate-100 cursor-pointer rounded-xl bg-slate-50 transition-colors overflow-hidden group">
+                      {filePlate || previewPlate ? (
+                        <img src={filePlate ? URL.createObjectURL(filePlate) : (previewPlate || undefined)} alt="Только госномер" className="absolute inset-0 w-full h-full object-cover" />
+                      ) : (
+                        <div className="text-slate-400 flex flex-col items-center">
+                          <Camera className="w-6 h-6 mb-1" />
+                          <span className="text-[10px] font-medium uppercase tracking-wider">Добавить</span>
+                        </div>
+                      )}
+                      <input type="file" accept="image/*" className="hidden" onChange={(e) => { if (e.target.files?.[0]) setFilePlate(e.target.files[0]); }} />
+                    </label>
+                  </div>
                 </div>
               </div>
 

@@ -220,41 +220,41 @@ export default function DriverRegistrationScreen({ onRegister, onBack }: DriverR
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-1.5 w-full">
               <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Кубатура (м³)</label>
-              <div className="flex items-center gap-2">
+              <div className="grid grid-cols-2 gap-2 w-full overflow-hidden">
                 <input
                   type="number"
                   value={volumeMin}
                   onChange={(e) => setVolumeMin(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-[#2DB0E6] focus:border-[#2DB0E6] transition-all"
+                  className="w-full min-w-0 bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-[#2DB0E6] focus:border-[#2DB0E6] transition-all"
                   placeholder="От"
                 />
                 <input
                   type="number"
                   value={volumeMax}
                   onChange={(e) => setVolumeMax(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-[#2DB0E6] focus:border-[#2DB0E6] transition-all"
+                  className="w-full min-w-0 bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-[#2DB0E6] focus:border-[#2DB0E6] transition-all"
                   placeholder="До"
                 />
               </div>
             </div>
 
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-1.5 w-full">
               <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Тоннаж (т)</label>
-              <div className="flex items-center gap-2">
+              <div className="grid grid-cols-2 gap-2 w-full overflow-hidden">
                 <input
                   type="number"
                   value={tonnageMin}
                   onChange={(e) => setTonnageMin(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-[#2DB0E6] focus:border-[#2DB0E6] transition-all"
+                  className="w-full min-w-0 bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-[#2DB0E6] focus:border-[#2DB0E6] transition-all"
                   placeholder="От"
                 />
                 <input
                   type="number"
                   value={tonnageMax}
                   onChange={(e) => setTonnageMax(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-[#2DB0E6] focus:border-[#2DB0E6] transition-all"
+                  className="w-full min-w-0 bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-[#2DB0E6] focus:border-[#2DB0E6] transition-all"
                   placeholder="До"
                 />
               </div>

@@ -2,7 +2,7 @@ import { MaterialProps, DeliveryOption } from './MaterialDetailScreen';
 
 export const baseURL = 'https://darmavoz.ru/api/v1';
 
-export const APP_VERSION = import.meta.env.VITE_APP_VERSION || "2.1.0";
+export const APP_VERSION = import.meta.env.VITE_APP_VERSION || "2.2.0";
 
 export const orderStatusMap: Record<string, string> = {
   'created': 'СОЗДАН',
@@ -56,18 +56,18 @@ export const formatPhoneNumber = (value: string) => {
 
 export const formatErrorToRussian = (error: any, fallbackMessage: string): string => {
   if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
-    return 'Ошибка сети. Отключите VPN или проверьте интернет-соединение.';
+    return 'Ошибка соединения с сервером';
   }
   if (error?.message) {
     if (error.message.toLowerCase().includes('failed to fetch') || error.message.toLowerCase().includes('network error')) {
-      return 'Ошибка сети. Отключите VPN или проверьте интернет-соединение.';
+      return 'Ошибка соединения с сервером';
     }
     if (/[A-Za-z]/.test(error.message)) {
-      return fallbackMessage;
+      return fallbackMessage || 'Произошла непредвиденная ошибка';
     }
     return error.message;
   }
-  return fallbackMessage;
+  return fallbackMessage || 'Произошла непредвиденная ошибка';
 };
 
 export const declineReasonMap: Record<string, string> = {

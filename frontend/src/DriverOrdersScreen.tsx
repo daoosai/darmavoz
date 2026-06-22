@@ -226,7 +226,7 @@ export default function DriverOrdersScreen({
         if (!res.ok) {
           const errText = await res.text();
           console.error("Orders error text:", errText);
-          throw new Error("Failed to fetch orders");
+          throw new Error("Не удалось загрузить заказы");
         }
         setIsForbidden(false);
         const data = await res.json().catch(() => ({}));
@@ -432,7 +432,7 @@ export default function DriverOrdersScreen({
       }
 
       if (!res.ok) {
-        throw new Error("Failed to update status");
+        throw new Error("Не удалось обновить статус");
       }
 
       setStatus(newStatus);

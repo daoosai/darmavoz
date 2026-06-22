@@ -532,6 +532,88 @@ async def test_admin_can_approve_reject_and_suspend_driver_and_vehicle(client, s
 
 
 @pytest.mark.asyncio
+@pytest.mark.asyncio
+async def test_admin_driver_list_includes_vehicle_media_for_edit_modal(client, session_factory):
+    async with session_factory() as session:
+        admin_role = await ensure_role(session, "admin")
+        driver_role = await ensure_role(session, "driver")
+        admin_user = await create_user(session, username="admin_driver_media_list", role=admin_role)
+        driver_user = await create_user(session, username="+79045674122", role=driver_role)
+        vehicle = Vehicle(
+            title="Truck edit modal",
+            brand="Камаз",
+            plate_number="А890ПРЕ",
+            vehicle_type="бортовой",
+            is_active=True,
+            moderation_status=ModerationStatus.approved.value,
+        )
+        session.add(vehicle)
+        await session.flush()
+        session.add_all([
+            MediaFile(
+                entity_type="vehicle",
+                entity_id=vehicle.id,
+                bucket="test-bucket",
+                object_key="vehicles/main.jpg",
+                public_url="https://example.com/main.jpg",
+                content_type="image/jpeg",
+                file_name="main.jpg",
+                file_size=111,
+                slot_key="vehicle_main",
+                is_primary=False,
+            ),
+            MediaFile(
+                entity_type="vehicle",
+                entity_id=vehicle.id,
+                bucket="test-bucket",
+                object_key="vehicles/left.jpg",
+                public_url="https://example.com/left.jpg",
+                content_type="image/jpeg",
+                file_name="left.jpg",
+                file_size=111,
+                slot_key="vehicle_left",
+                is_primary=False,
+            ),
+            MediaFile(
+                entity_type="vehicle",
+                entity_id=vehicle.id,
+                bucket="test-bucket",
+                object_key="vehicles/plate.jpg",
+                public_url="https://example.com/plate.jpg",
+                content_type="image/jpeg",
+                file_name="plate.jpg",
+                file_size=111,
+                slot_key="vehicle_plate",
+                is_primary=False,
+            ),
+        ])
+        await session.flush()
+        driver = Driver(
+            name="Ложкин Евгений Александрович",
+            phone="+79045674122",
+            user_id=driver_user.id,
+            vehicle_id=vehicle.id,
+            status="available",
+            moderation_status=ModerationStatus.approved.value,
+        )
+        session.add(driver)
+        await session.commit()
+        admin_username = admin_user.username
+
+    response = await client.get(
+        "/api/v1/admin/drivers",
+        headers=auth_headers(admin_username),
+    )
+
+    assert response.status_code == 200
+    driver = next(item for item in response.json() if item["phone"] == "+79045674122")
+    assert sorted(media["slot_key"] for media in driver["vehicle"]["media_files"]) == [
+        "vehicle_left",
+        "vehicle_main",
+        "vehicle_plate",
+    ]
+
+
 async def test_admin_vehicle_list_includes_pending_moderation_and_vehicle_media(client, session_factory):
     async with session_factory() as session:
         admin_role = await ensure_role(session, "admin")

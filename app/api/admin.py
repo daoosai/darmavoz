@@ -146,6 +146,8 @@ async def _load_driver_or_404(db: AsyncSession, driver_id: UUID) -> Driver:
     driver = result.scalar_one_or_none()
     if driver is None:
         raise HTTPException(status_code=404, detail="Driver not found")
+    if driver.vehicle is not None:
+        await _attach_vehicle_media(db, [driver.vehicle])
     return driver
 
 
@@ -158,7 +160,9 @@ async def _list_admin_drivers(db: AsyncSession) -> list[Driver]:
         )
         .order_by(Driver.name.asc())
     )
-    return list(result.scalars().all())
+    drivers = list(result.scalars().all())
+    await _attach_vehicle_media(db, [driver.vehicle for driver in drivers if driver.vehicle is not None])
+    return drivers
 
 
 async def _list_admin_vehicles(db: AsyncSession) -> list[Vehicle]:

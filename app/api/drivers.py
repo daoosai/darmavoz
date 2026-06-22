@@ -160,7 +160,7 @@ async def create_driver(
     if existing.scalar_one_or_none() is not None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Driver with this phone already exists",
+            detail="Водитель с таким номером телефона уже существует",
         )
 
     if payload.vehicle_id is not None:

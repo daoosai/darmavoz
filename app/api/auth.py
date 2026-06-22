@@ -39,11 +39,11 @@ async def driver_register(
 
     existing_user = await db.scalar(select(User).where(User.username == normalized_phone))
     if existing_user is not None:
-        raise HTTPException(status_code=409, detail="User with this phone already exists")
+        raise HTTPException(status_code=409, detail="Водитель с таким номером телефона уже существует")
 
     existing_driver = await db.scalar(select(Driver).where(Driver.phone == normalized_phone))
     if existing_driver is not None:
-        raise HTTPException(status_code=409, detail="Driver with this phone already exists")
+        raise HTTPException(status_code=409, detail="Водитель с таким номером телефона уже существует")
 
     role = await _get_or_create_driver_role(db)
     user = User(

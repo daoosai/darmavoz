@@ -1,9 +1,10 @@
 from datetime import datetime, UTC
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import exists, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -287,13 +288,13 @@ async def _ensure_unique_driver_phone(
     if exclude_driver_id is not None:
         driver_stmt = driver_stmt.where(Driver.id != exclude_driver_id)
     if await db.scalar(driver_stmt) is not None:
-        raise HTTPException(status_code=409, detail="Driver with this phone already exists")
+        raise HTTPException(status_code=409, detail="Водитель с таким номером телефона уже существует")
 
     user_stmt = select(User).where(User.username == phone)
     if exclude_user_id is not None:
         user_stmt = user_stmt.where(User.id != exclude_user_id)
     if await db.scalar(user_stmt) is not None:
-        raise HTTPException(status_code=409, detail="User with this phone already exists")
+        raise HTTPException(status_code=409, detail="Водитель с таким номером телефона уже существует")
 
 
 async def _find_free_vehicle(db: AsyncSession, delivery_option_id: UUID) -> Vehicle | None:
@@ -325,6 +326,19 @@ def _build_vehicle_title(driver_name: str, delivery_option: DeliveryOption) -> s
     return f"{delivery_option.title} / {driver_name}"
 
 
+def _build_admin_vehicle_title(*, brand: str, plate_number: str, fallback_title: str) -> str:
+    parts = [part.strip() for part in (brand, plate_number) if part and part.strip()]
+    return " / ".join(parts) if parts else fallback_title
+
+
+def _build_deleted_unique_value(value: str | None, *, max_length: int, marker: str = "_d") -> str:
+    suffix = f"{marker}{uuid4().hex[:6]}"
+    base = (value or "deleted").strip() or "deleted"
+    if len(base) + len(suffix) > max_length:
+        base = base[: max_length - len(suffix)]
+    return f"{base}{suffix}"
+
+
 def _set_driver_moderation(driver: Driver, moderation_status: str, *, comment: str | None, admin_user_id: UUID) -> None:
     driver.moderation_status = moderation_status
     driver.moderation_comment = comment
@@ -337,6 +351,11 @@ def _set_vehicle_moderation(vehicle: Vehicle, moderation_status: str, *, comment
     vehicle.moderation_comment = comment
     vehicle.moderated_at = datetime.now(UTC)
     vehicle.moderated_by_user_id = admin_user_id
+
+
+def _promote_driver_to_available_if_ready(driver: Driver) -> None:
+    if driver.status in {DriverStatus.offline.value, "unavailable", None}:
+        driver.status = DriverStatus.available.value
 
 
 async def _assign_vehicle_by_delivery_option(
@@ -431,13 +450,7 @@ async def create_admin_driver(
     normalized_phone = normalize_phone(payload.phone)
     await _ensure_unique_driver_phone(db, normalized_phone)
 
-    vehicle = await _assign_vehicle_by_delivery_option(
-        db,
-        driver_name=payload.name,
-        delivery_option_id=payload.delivery_option_id,
-    )
     role = await _get_driver_role(db)
-    await _ensure_vehicle_is_free(db, vehicle.id)
     user = User(
         username=normalized_phone,
         hashed_password=get_password_hash(payload.password),
@@ -447,12 +460,32 @@ async def create_admin_driver(
     db.add(user)
     await db.flush()
 
+    vehicle = Vehicle(
+        title=_build_admin_vehicle_title(
+            brand=payload.vehicle_brand,
+            plate_number=payload.vehicle_plate_number,
+            fallback_title=payload.name,
+        ),
+        brand=payload.vehicle_brand,
+        plate_number=payload.vehicle_plate_number,
+        vehicle_type=payload.vehicle_type.value,
+        cubature_min=payload.cubature_min,
+        cubature_max=payload.cubature_max,
+        tonnage_min=payload.tonnage_min,
+        tonnage_max=payload.tonnage_max,
+        is_active=True,
+        notes="Created by admin onboarding",
+        moderation_status=ModerationStatus.approved.value,
+    )
+    db.add(vehicle)
+    await db.flush()
+
     driver = Driver(
         name=payload.name,
         phone=normalized_phone,
         user_id=user.id,
         vehicle_id=vehicle.id,
-        status=payload.status,
+        status=DriverStatus.available.value if payload.is_active else DriverStatus.offline.value,
         is_active=payload.is_active,
         is_auto_dispatch_enabled=payload.is_auto_dispatch_enabled,
         dispatch_priority=payload.dispatch_priority,
@@ -558,6 +591,7 @@ async def approve_driver(
             comment=comment,
             admin_user_id=current_admin.id,
         )
+    _promote_driver_to_available_if_ready(driver)
     await db.commit()
     return await _load_driver_or_404(db, driver_id)
 
@@ -648,6 +682,7 @@ async def approve_vehicle(
             comment=comment,
             admin_user_id=current_admin.id,
         )
+        _promote_driver_to_available_if_ready(linked_driver)
     await db.commit()
     return VehicleModerationDecisionOut(
         ok=True,
@@ -742,17 +777,31 @@ async def delete_admin_driver(
             order.status = OrderStatus.created.value
 
     driver.vehicle_id = None
+    driver.status = DriverStatus.offline.value
+    driver.is_active = False
+    driver.phone = _build_deleted_unique_value(driver.phone, max_length=20)
+
+    if user is not None:
+        user.is_active = False
+        user.username = _build_deleted_unique_value(user.username, max_length=50)
 
     if offer_ids:
         offers = await db.scalars(select(OrderOffer).where(OrderOffer.id.in_(offer_ids)))
         for offer in offers.all():
             await db.delete(offer)
 
-    await db.delete(driver)
-    if user is not None:
-        await db.delete(user)
+    await db.flush()
     await db.commit()
-    return DeleteResult(action="deleted", detail="Driver deleted permanently")
+
+    try:
+        await db.delete(driver)
+        if user is not None:
+            await db.delete(user)
+        await db.commit()
+        return DeleteResult(action="deleted", detail="Driver deleted permanently")
+    except IntegrityError:
+        await db.rollback()
+        return DeleteResult(action="archived", detail="Driver archived and phone number released")
 
 
 @router.post("/avito/webhook/register")

@@ -228,9 +228,7 @@ async def test_admin_can_create_driver_with_vehicle_and_password(client, session
     async with session_factory() as session:
         admin_role = await ensure_role(session, "admin")
         await create_user(session, username="drivers_admin", role=admin_role)
-        delivery_option = await create_delivery_option(session, capacity_m3=10.0, title="Самосвал 10 м3")
         await session.commit()
-        delivery_option_id = delivery_option.id
 
     response = await client.post(
         "/api/v1/admin/drivers",
@@ -239,7 +237,13 @@ async def test_admin_can_create_driver_with_vehicle_and_password(client, session
             "name": "Новый водитель",
             "phone": "+79990000123",
             "password": "secret123",
-            "delivery_option_id": str(delivery_option_id),
+            "vehicle_brand": "КамАЗ",
+            "vehicle_plate_number": "А123АА 116",
+            "vehicle_type": "самосвал",
+            "cubature_min": 10.0,
+            "cubature_max": 12.0,
+            "tonnage_min": 5.0,
+            "tonnage_max": 7.5,
         },
     )
 
@@ -247,8 +251,13 @@ async def test_admin_can_create_driver_with_vehicle_and_password(client, session
     body = response.json()
     assert body["name"] == "Новый водитель"
     assert body["phone"] == "+79990000123"
-    assert body["status"] == "offline"
-    assert body["vehicle"]["delivery_option_id"] == str(delivery_option_id)
+    assert body["status"] == "available"
+    assert body["vehicle"]["id"]
+    assert body["vehicle"]["delivery_option_id"] is None
+    assert body["vehicle"]["brand"] == "КамАЗ"
+    assert body["vehicle"]["plate_number"] == "А123АА 116"
+    assert body["vehicle"]["vehicle_type"] == "самосвал"
+    assert body["vehicle"]["moderation_status"] == "approved"
 
     async with session_factory() as session:
         driver = await session.scalar(select(Driver).where(Driver.phone == "+79990000123"))
@@ -259,7 +268,95 @@ async def test_admin_can_create_driver_with_vehicle_and_password(client, session
     assert user is not None
     assert verify_password("secret123", user.hashed_password)
     assert vehicle is not None
-    assert vehicle.delivery_option_id == delivery_option_id
+    assert vehicle.delivery_option_id is None
+    assert vehicle.brand == "КамАЗ"
+    assert vehicle.plate_number == "А123АА 116"
+    assert vehicle.vehicle_type == "самосвал"
+    assert vehicle.cubature_min == 10.0
+    assert vehicle.cubature_max == 12.0
+    assert vehicle.tonnage_min == 5.0
+    assert vehicle.tonnage_max == 7.5
+    assert vehicle.moderation_status == "approved"
+    assert driver.status == "available"
+
+
+@pytest.mark.asyncio
+async def test_admin_can_recreate_driver_with_same_phone_after_delete(client, session_factory):
+    async with session_factory() as session:
+        admin_role = await ensure_role(session, "admin")
+        driver_role = await ensure_role(session, "driver")
+        await create_user(session, username="drivers_recreate_admin", role=admin_role)
+        driver_user = await create_user(session, username="+79990000125", role=driver_role)
+        vehicle = Vehicle(title="Truck recreate", is_active=True)
+        session.add(vehicle)
+        await session.flush()
+        driver = Driver(
+            name="Удаляемый водитель",
+            phone="+79990000125",
+            user_id=driver_user.id,
+            vehicle_id=vehicle.id,
+            status="available",
+            is_active=True,
+        )
+        session.add(driver)
+        await session.commit()
+        driver_id = driver.id
+
+    delete_response = await client.delete(
+        f"/api/v1/admin/drivers/{driver_id}",
+        headers=auth_headers("drivers_recreate_admin"),
+    )
+
+    assert delete_response.status_code == 200
+
+    create_response = await client.post(
+        "/api/v1/admin/drivers",
+        headers=auth_headers("drivers_recreate_admin"),
+        json={
+            "name": "Новый водитель",
+            "phone": "+79990000125",
+            "password": "secret123",
+            "vehicle_brand": "Shacman",
+            "vehicle_plate_number": "А125АА 116",
+            "vehicle_type": "самосвал",
+            "cubature_min": 10.0,
+            "cubature_max": 12.0,
+            "tonnage_min": 5.0,
+            "tonnage_max": 7.5
+        },
+    )
+
+    assert create_response.status_code == 201
+    assert create_response.json()["phone"] == "+79990000125"
+
+
+@pytest.mark.asyncio
+async def test_admin_can_create_inactive_driver_as_offline(client, session_factory):
+    async with session_factory() as session:
+        admin_role = await ensure_role(session, "admin")
+        await create_user(session, username="drivers_admin_inactive", role=admin_role)
+        await session.commit()
+
+    response = await client.post(
+        "/api/v1/admin/drivers",
+        headers=auth_headers("drivers_admin_inactive"),
+        json={
+            "name": "Неактивный водитель",
+            "phone": "+79990000124",
+            "password": "secret123",
+            "vehicle_brand": "КамАЗ",
+            "vehicle_plate_number": "А124АА 116",
+            "vehicle_type": "самосвал",
+            "cubature_min": 10.0,
+            "cubature_max": 12.0,
+            "tonnage_min": 5.0,
+            "tonnage_max": 7.5,
+            "is_active": False
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["status"] == "offline"
 
 
 @pytest.mark.asyncio

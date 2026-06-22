@@ -73,11 +73,32 @@ class AdminDriverCreate(BaseModel):
     name: str
     phone: str
     password: str = Field(min_length=6, max_length=128)
-    delivery_option_id: UUID
+    vehicle_brand: str = Field(min_length=1, max_length=255)
+    vehicle_plate_number: str = Field(min_length=1, max_length=50)
+    vehicle_type: DriverRegisterVehicleType
+    cubature_min: float
+    cubature_max: float
+    tonnage_min: float
+    tonnage_max: float
     status: str = "offline"
     is_active: bool = True
     is_auto_dispatch_enabled: bool = True
     dispatch_priority: int = 100
+
+    @field_validator("vehicle_type", mode="before")
+    @classmethod
+    def normalize_vehicle_type(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip().lower()
+        return value
+
+    @model_validator(mode="after")
+    def validate_ranges(self) -> "AdminDriverCreate":
+        if self.cubature_max < self.cubature_min:
+            raise ValueError("cubature_max must be greater than or equal to cubature_min")
+        if self.tonnage_max < self.tonnage_min:
+            raise ValueError("tonnage_max must be greater than or equal to tonnage_min")
+        return self
 
 
 class AdminDriverUpdate(BaseModel):

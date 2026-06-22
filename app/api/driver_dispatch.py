@@ -118,13 +118,13 @@ async def _validate_unique_driver_phone(
         select(Driver).where(Driver.phone == phone, Driver.id != current_driver_id)
     )
     if existing_driver is not None:
-        raise HTTPException(status_code=409, detail="Driver with this phone already exists")
+        raise HTTPException(status_code=409, detail="Водитель с таким номером телефона уже существует")
 
     existing_user = await db.scalar(
         select(User).where(User.username == phone, User.id != current_user_id)
     )
     if existing_user is not None:
-        raise HTTPException(status_code=409, detail="User with this phone already exists")
+        raise HTTPException(status_code=409, detail="Водитель с таким номером телефона уже существует")
 
 
 async def _validate_delivery_option(db: AsyncSession, delivery_option_id: UUID) -> DeliveryOption:

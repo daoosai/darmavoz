@@ -100,6 +100,45 @@ async def test_driver_can_self_register_with_incomplete_moderation(client, sessi
 
 
 @pytest.mark.asyncio
+@pytest.mark.asyncio
+async def test_driver_register_returns_russian_conflict_for_duplicate_phone(client, session_factory):
+    async with session_factory() as session:
+        driver_role = await ensure_role(session, "driver")
+        driver_user = await create_user(session, username="+79990010101", role=driver_role)
+        vehicle = Vehicle(title="Duplicate phone vehicle", is_active=True)
+        session.add(vehicle)
+        await session.flush()
+        driver = Driver(
+            name="Существующий водитель",
+            phone="+79990010101",
+            user_id=driver_user.id,
+            vehicle_id=vehicle.id,
+            status="offline",
+            moderation_status=ModerationStatus.incomplete.value,
+        )
+        session.add(driver)
+        await session.commit()
+
+    response = await client.post(
+        "/api/v1/auth/driver/register",
+        json={
+            "phone": "+79990010101",
+            "password": "driver123",
+            "name": "Новый водитель",
+            "vehicle_brand": "КамАЗ",
+            "vehicle_plate_number": "А123АА72",
+            "cubature_min": 10.0,
+            "cubature_max": 14.0,
+            "tonnage_min": 8.0,
+            "tonnage_max": 12.0,
+            "vehicle_type": "самосвал",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Водитель с таким номером телефона уже существует"
+
+
 async def test_driver_register_accepts_title_case_vehicle_type(client):
     response = await client.post(
         "/api/v1/auth/driver/register",
@@ -454,6 +493,7 @@ async def test_admin_can_approve_reject_and_suspend_driver_and_vehicle(client, s
     )
     assert approve_driver.status_code == 200
     assert approve_driver.json()["moderation_status"] == ModerationStatus.approved.value
+    assert approve_driver.json()["status"] == "available"
 
     reject_vehicle = await client.post(
         f"/api/v1/admin/vehicles/{vehicle_id}/reject",
@@ -486,6 +526,7 @@ async def test_admin_can_approve_reject_and_suspend_driver_and_vehicle(client, s
     assert driver is not None
     assert vehicle is not None
     assert driver.moderation_status == ModerationStatus.suspended.value
+    assert driver.status == "available"
     assert driver.moderated_by_user_id is not None
     assert vehicle.moderation_status == ModerationStatus.approved.value
 
@@ -622,6 +663,69 @@ class FakeStorageService:
 
 
 @pytest.mark.asyncio
+async def test_admin_media_upload_can_target_vehicle_by_entity_id(client, session_factory, monkeypatch):
+    monkeypatch.setattr("app.api.media.get_storage_service", lambda: FakeStorageService())
+
+    async with session_factory() as session:
+        admin_role = await ensure_role(session, "admin")
+        await create_user(session, username="admin_media_uploader", role=admin_role)
+        vehicle = Vehicle(
+            title="Admin uploaded vehicle",
+            brand="КамАЗ",
+            plate_number="А555АА72",
+            vehicle_type="самосвал",
+            is_active=True,
+            moderation_status=ModerationStatus.approved.value,
+        )
+        session.add(vehicle)
+        await session.commit()
+        vehicle_id = vehicle.id
+
+    presign_response = await client.post(
+        "/api/v1/media/presign-upload",
+        headers=auth_headers("admin_media_uploader"),
+        json={
+            "file_name": "vehicle-left.jpg",
+            "content_type": "image/jpeg",
+            "file_size": 2048,
+            "entity_type": "vehicle",
+            "entity_id": str(vehicle_id),
+            "slot_key": "vehicle_left",
+        },
+    )
+
+    assert presign_response.status_code == 200
+    object_key = presign_response.json()["object_key"]
+
+    confirm_response = await client.post(
+        "/api/v1/media/confirm",
+        headers=auth_headers("admin_media_uploader"),
+        json={
+            "entity_type": "vehicle",
+            "entity_id": str(vehicle_id),
+            "object_key": object_key,
+            "slot_key": "vehicle_left",
+        },
+    )
+
+    assert confirm_response.status_code == 201
+    assert confirm_response.json()["media_file"]["entity_id"] == str(vehicle_id)
+    assert confirm_response.json()["media_file"]["slot_key"] == "vehicle_left"
+
+    async with session_factory() as session:
+        vehicle = await session.get(Vehicle, vehicle_id)
+        media_rows = (
+            await session.execute(
+                select(MediaFile).where(MediaFile.entity_type == "vehicle", MediaFile.entity_id == vehicle_id)
+            )
+        ).scalars().all()
+
+    assert vehicle is not None
+    assert vehicle.moderation_status == ModerationStatus.approved.value
+    assert len(media_rows) == 1
+    assert media_rows[0].public_url == f"https://cdn.example.com/{object_key}"
+
+
 async def test_driver_media_upload_uses_driver_token_and_resets_vehicle_to_pending(client, session_factory, monkeypatch):
     monkeypatch.setattr("app.api.media.get_storage_service", lambda: FakeStorageService())
 
@@ -970,3 +1074,4 @@ async def test_admin_vehicle_patch_decisions_sync_driver_moderation(client, sess
     assert driver is not None
     assert vehicle.moderation_status == ModerationStatus.approved.value
     assert driver.moderation_status == ModerationStatus.approved.value
+    assert driver.status == "available"

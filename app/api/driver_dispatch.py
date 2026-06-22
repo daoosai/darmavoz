@@ -1,14 +1,16 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.database import get_db
-from app.models.models import DeliveryOption, Driver, DriverStatus, MediaFile, ModerationStatus, Order, OrderStatus, User, Vehicle
+from app.models.models import DeliveryOption, Driver, DriverStatus, MediaFile, ModerationStatus, Order, OrderStatus, Role, User, Vehicle
 from app.schemas.driver import (
+    DriverFcmTokenIn,
+    DriverFcmTokenOut,
     DriverResponse,
     DriverFullProfileResponse,
     DriverIncomingOfferOut,
@@ -31,6 +33,7 @@ from app.services.dispatch_service import (
     list_orders_for_driver,
     mask_phone,
 )
+from app.services.email_service import send_admin_moderation_email
 from app.services.vehicle_moderation import (
     REQUIRED_VEHICLE_MEDIA_SLOTS,
     set_incomplete_moderation,
@@ -420,6 +423,7 @@ async def update_driver_vehicle(
 
 @router.post("/vehicle/submit", response_model=DriverFullProfileResponse)
 async def submit_driver_vehicle_for_moderation(
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_driver: Driver = Depends(get_current_driver),
 ) -> Driver:
@@ -458,7 +462,45 @@ async def submit_driver_vehicle_for_moderation(
     set_pending_moderation(vehicle)
     set_pending_moderation(driver)
     await db.commit()
+
+    admin_users = (
+        await db.execute(
+            select(User)
+            .join(Role, User.role_id == Role.id)
+            .where(Role.name == "admin", User.email.is_not(None))
+        )
+    ).scalars().all()
+    driver_label = (driver.name or "").strip() or driver.phone
+    for admin_user in admin_users:
+        if admin_user.email:
+            background_tasks.add_task(
+                send_admin_moderation_email,
+                to_email=admin_user.email,
+                driver_label=driver_label,
+            )
+
     return await _load_driver_with_vehicle(db, driver.id)
+
+
+@router.post("/fcm-token", response_model=DriverFcmTokenOut)
+async def save_driver_fcm_token(
+    payload: DriverFcmTokenIn,
+    db: AsyncSession = Depends(get_db),
+    current_driver: Driver = Depends(get_current_driver),
+) -> DriverFcmTokenOut:
+    current_driver.fcm_token = payload.token.strip()
+    await db.commit()
+    return DriverFcmTokenOut(ok=True, token=current_driver.fcm_token)
+
+
+@router.delete("/fcm-token", response_model=DriverFcmTokenOut)
+async def delete_driver_fcm_token(
+    db: AsyncSession = Depends(get_db),
+    current_driver: Driver = Depends(get_current_driver),
+) -> DriverFcmTokenOut:
+    current_driver.fcm_token = None
+    await db.commit()
+    return DriverFcmTokenOut(ok=True, token=None)
 
 
 @router.patch("/profile/status", response_model=dict[str, str | bool])

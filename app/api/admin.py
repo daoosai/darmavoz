@@ -1,8 +1,9 @@
 from datetime import datetime, UTC
+import re
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy import exists, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -52,11 +53,67 @@ from app.services.vehicle_moderation import (
 )
 
 router = APIRouter()
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 @router.get("/stats")
 async def get_admin_stats(current_admin: User = Depends(get_current_admin_user)):
     return {"status": "ok", "message": "Admin area", "role": current_admin.role.name}
+
+
+class AdminMeOut(BaseModel):
+    username: str
+    email: str | None = None
+    role: str | None = None
+
+
+class AdminMeUpdate(BaseModel):
+    email: str | None = None
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip().lower()
+        if not normalized:
+            return None
+        if not EMAIL_RE.match(normalized):
+            raise ValueError("Invalid email format")
+        return normalized
+
+
+@router.get("/me", response_model=AdminMeOut)
+async def get_admin_me(current_admin: User = Depends(get_current_admin_user)) -> AdminMeOut:
+    return AdminMeOut(
+        username=current_admin.username,
+        email=current_admin.email,
+        role=current_admin.role.name if current_admin.role else None,
+    )
+
+
+@router.patch("/me", response_model=AdminMeOut)
+async def update_admin_me(
+    payload: AdminMeUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+) -> AdminMeOut:
+    normalized_email = payload.email
+    if normalized_email is not None:
+        email_taken = await db.scalar(
+            select(exists().where(func.lower(User.email) == normalized_email).where(User.id != current_admin.id))
+        )
+        if email_taken:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already in use")
+
+    current_admin.email = normalized_email
+    await db.commit()
+    await db.refresh(current_admin)
+    return AdminMeOut(
+        username=current_admin.username,
+        email=current_admin.email,
+        role=current_admin.role.name if current_admin.role else None,
+    )
 
 
 @router.get("/logist-area")

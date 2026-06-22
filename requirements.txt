@@ -16,3 +16,4 @@ pytest-asyncio
 httpx
 openai>=1.40.0
 boto3==1.35.24
+firebase-admin

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -52,6 +54,11 @@ class Settings(BaseSettings):
     WEB_VERSION: str = "2.2.0"
     APK_DOWNLOAD_URL: str = "https://darmavoz.ru/static/darmavoz.apk"
     APK_FORCE_UPDATE: bool = False
+    SMTP_HOST: str | None = None
+    SMTP_PORT: int = 465
+    SMTP_USER: str | None = None
+    SMTP_PASSWORD: str | None = None
+    FIREBASE_CREDENTIALS_PATH: str = "/app/firebase-key.json"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -68,5 +75,13 @@ class Settings(BaseSettings):
         if not self.S3_PUBLIC_BASE_URL:
             return ""
         return self.S3_PUBLIC_BASE_URL.rstrip("/") + "/"
+
+    @property
+    def firebase_credentials_candidates(self) -> list[Path]:
+        candidates = [Path(self.FIREBASE_CREDENTIALS_PATH)]
+        fallback = Path("/opt/darmavoz/firebase-key.json")
+        if fallback not in candidates:
+            candidates.append(fallback)
+        return candidates
 
 settings = Settings()

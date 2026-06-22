@@ -1,19 +1,22 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
 from app.models.models import Client, Order, User
-from app.schemas.order import CheckoutRequest, ManualAssignRequest, OrderDeleteOut, OrderOut
+from app.schemas.order import CheckoutRequest, ManualOrderAssignIn, OrderDeleteOut, OrderOut
 from app.security.auth import get_current_logist_user, get_current_user, get_optional_current_client
 from app.services.dispatch_service import (
-    assign_order_to_driver,
+    NEW_ORDER_PUSH_BODY,
+    NEW_ORDER_PUSH_TITLE,
+    assign_order_to_driver_manually,
     create_checkout_order,
     delete_order_by_id,
     get_order_by_id,
     list_recent_orders,
 )
+from app.services.push_service import send_push_to_driver
 
 router = APIRouter()
 
@@ -50,12 +53,24 @@ async def delete_order(
 @router.post("/{order_id}/assign", response_model=OrderOut)
 async def assign_order(
     order_id: UUID,
-    payload: ManualAssignRequest,
+    payload: ManualOrderAssignIn,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_logist_user),
     session: AsyncSession = Depends(get_db),
 ) -> Order:
     del current_user
-    return await assign_order_to_driver(session, order_id=order_id, driver_id=payload.driver_id)
+    order = await assign_order_to_driver_manually(
+        session,
+        order_id=order_id,
+        driver_id=payload.driver_id,
+    )
+    background_tasks.add_task(
+        send_push_to_driver,
+        payload.driver_id,
+        NEW_ORDER_PUSH_TITLE,
+        NEW_ORDER_PUSH_BODY,
+    )
+    return order
 
 
 @router.post("/checkout", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
@@ -69,10 +84,7 @@ async def checkout_order(
         client_id=current_client.id if current_client is not None else payload.client_id,
         material_id=payload.material_id,
         delivery_option_id=payload.delivery_option_id,
-        address=payload.delivery_address or payload.address,
-        address_id=payload.address_id,
-        delivery_lat=payload.delivery_lat,
-        delivery_lon=payload.delivery_lon,
+        address=payload.address,
         notes=payload.notes,
         source=payload.source,
         quantity=payload.quantity,

@@ -38,6 +38,7 @@ class User(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     username: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    email: Mapped[Optional[str]] = mapped_column(String(255), unique=True, index=True, nullable=True)
     hashed_password: Mapped[str] = mapped_column(String(255))
     role_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("roles.id"))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -123,6 +124,7 @@ class Driver(Base):
     moderation_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     moderated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     moderated_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    fcm_token: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
 
     user: Mapped[Optional["User"]] = relationship(
         "User",

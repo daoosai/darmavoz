@@ -39,9 +39,11 @@ import ClientAuthBottomSheet from "./ClientAuthBottomSheet";
 import ClientAddressBottomSheet from "./ClientAddressBottomSheet";
 import ClientProfileScreen from "./ClientProfileScreen";
 import InstallPWA from "./InstallPWA";
+import { usePushNotifications } from "./usePushNotifications";
 
 // Reuse Material type as MaterialProps by exporting it from MaterialDetailScreen or type matching
 export default function App() {
+  usePushNotifications();
   const { role, token } = useAuthStore();
   const [currentRoute, setCurrentRoute] = useState<
     "welcome" | "main" | "login" | "driver" | "logist" | "admin" | "driver_register"

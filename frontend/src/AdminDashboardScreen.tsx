@@ -195,29 +195,6 @@ export default function AdminDashboardScreen({
       return { ...driver, is_active: driverActiveOverrides[driver.id] };
     });
 
-  const resolveDriverVehiclePreviewUrl = (
-    driver: Partial<AdminDriver> | null | undefined,
-    slotKey: "vehicle_main" | "vehicle_left" | "vehicle_plate",
-  ): string | null => {
-    if (!driver) return null;
-
-    const vehicle = driver.vehicle;
-    const mediaUrl =
-      vehicle?.media_files?.find((media) => media.slot_key === slotKey)?.public_url ||
-      driver.media_files?.find((media) => media.slot_key === slotKey)?.public_url ||
-      null;
-
-    if (mediaUrl) return mediaUrl;
-
-    if (slotKey === "vehicle_main") {
-      return vehicle?.vehicle_main_url || driver.vehicle_main_url || null;
-    }
-    if (slotKey === "vehicle_left") {
-      return vehicle?.vehicle_left_url || driver.vehicle_left_url || null;
-    }
-    return vehicle?.vehicle_plate_url || driver.vehicle_plate_url || null;
-  };
-
   const renderVehicleCell = (driver: AdminDriver) => {
     const brand = driver.vehicle?.brand || driver.vehicle_brand;
     const plate = driver.vehicle?.plate_number || driver.vehicle_plate_number;
@@ -544,16 +521,6 @@ export default function AdminDashboardScreen({
     }
   }, [activeTab]);
 
-  useEffect(() => {
-    if (!isDriverModalOpen) {
-      return;
-    }
-
-    setPreviewMain(resolveDriverVehiclePreviewUrl(editingDriver, "vehicle_main"));
-    setPreviewLeft(resolveDriverVehiclePreviewUrl(editingDriver, "vehicle_left"));
-    setPreviewPlate(resolveDriverVehiclePreviewUrl(editingDriver, "vehicle_plate"));
-  }, [editingDriver, isDriverModalOpen]);
-
   const [itemToDelete, setItemToDelete] = useState<{
     id: string;
     type: "material" | "delivery" | "driver";
@@ -816,6 +783,19 @@ export default function AdminDashboardScreen({
     setFileLeft(null);
     setFilePlate(null);
     if (driver) {
+      setPreviewMain(
+        driver.vehicle?.media_files?.find((m: any) => m.slot_key === "vehicle_main")?.public_url ||
+        driver.vehicle?.vehicle_main_url || null
+      );
+      setPreviewLeft(
+        driver.vehicle?.media_files?.find((m: any) => m.slot_key === "vehicle_left")?.public_url ||
+        driver.vehicle?.vehicle_left_url || null
+      );
+      setPreviewPlate(
+        driver.vehicle?.media_files?.find((m: any) => m.slot_key === "vehicle_plate")?.public_url ||
+        driver.vehicle?.vehicle_plate_url || null
+      );
+      
       setEditingDriver({
         ...driver,
         vehicle_brand: driver.vehicle?.brand || driver.vehicle_brand,
@@ -828,6 +808,9 @@ export default function AdminDashboardScreen({
         phone: formatPhoneNumber(driver.phone),
       });
     } else {
+      setPreviewMain(null);
+      setPreviewLeft(null);
+      setPreviewPlate(null);
       setEditingDriver({ is_active: true, phone: "+7" });
     }
     setIsDriverModalOpen(true);
@@ -2373,7 +2356,7 @@ export default function AdminDashboardScreen({
                   Описание
                 </label>
                 <textarea
-                  rows={2}
+                  rows={5}
                   value={editingMaterial.description || ""}
                   onChange={(e) =>
                     setEditingMaterial({
@@ -2381,7 +2364,7 @@ export default function AdminDashboardScreen({
                       description: e.target.value,
                     })
                   }
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium resize-none"
+                  className="w-full min-h-[120px] bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium resize-y"
                 />
               </div>
 

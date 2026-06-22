@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "559008540227",
+    "project_id": "darmavoz-81a61",
+    "storage_bucket": "darmavoz-81a61.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:559008540227:android:4dc1e2ecd3323b4392d6f6",
+        "android_client_info": {
+          "package_name": "com.darmavoz.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDwszkWab9wvJpZNZvS6FP0eC2iLXbcqps"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

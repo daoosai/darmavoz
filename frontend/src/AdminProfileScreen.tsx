@@ -17,7 +17,7 @@ export default function AdminProfileScreen({ onLogout }: AdminProfileScreenProps
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const res = await fetch(`${baseURL}/users/me`, {
+        const res = await fetch(`${baseURL}/admin/me`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -38,7 +38,7 @@ export default function AdminProfileScreen({ onLogout }: AdminProfileScreenProps
   const handleSave = async () => {
     try {
       setIsSaving(true);
-      const res = await fetch(`${baseURL}/users/me`, {
+      const res = await fetch(`${baseURL}/admin/me`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -47,7 +47,11 @@ export default function AdminProfileScreen({ onLogout }: AdminProfileScreenProps
         body: JSON.stringify({ email }),
       });
       if (res.ok) {
-        toast.success("Почта сохранена");
+        toast.success("Email для уведомлений сохранен!");
+      } else if (res.status === 422) {
+        toast.error("Неверный формат e-mail адреса");
+      } else if (res.status === 409) {
+        toast.error("Этот e-mail уже используется другим пользователем");
       } else {
         toast.error("Не удалось сохранить почту");
       }

@@ -568,6 +568,16 @@ export default function DriverProfileScreen({
           onClick={async () => {
             try {
               const currentToken = useAuthStore.getState().token;
+              
+              // Remove FCM token
+              await fetch(`${baseURL}/driver/fcm-token`, {
+                method: "DELETE",
+                headers: {
+                  Authorization: `Bearer ${currentToken}`,
+                },
+              });
+
+              // Set offline status
               await fetch(`${baseURL}/driver/profile/status`, {
                 method: "PATCH",
                 headers: {

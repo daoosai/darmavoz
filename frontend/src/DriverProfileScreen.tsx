@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useAuthStore } from "./store";
-import { baseURL, formatPhoneNumber, formatErrorToRussian } from "./utils";
+import { baseURL, formatPhoneNumber, handleApiError } from "./utils";
 import {
   LogOut,
   Truck,
@@ -137,7 +137,7 @@ export default function DriverProfileScreen({
       await fetchProfile();
       onProfileUpdate?.();
     } catch (e: any) {
-      toast.error(formatErrorToRussian(e, "Ошибка при отправке на модерацию"));
+      toast.error(handleApiError(e, "Ошибка при отправке на модерацию"));
     } finally {
       setIsSaving(false);
     }
@@ -236,11 +236,13 @@ export default function DriverProfileScreen({
 
       toast.success("Фото загружено!");
       fetchProfile();
-    } catch (e: any) {
-      if (e instanceof TypeError && e.message.includes('Failed to fetch')) {
-        toast.error("Ошибка сети при загрузке. Отключите VPN или проверьте интернет-соединение.");
+    } catch (error: any) {
+      if (error instanceof TypeError && error.message.includes("fetch")) {
+        toast.error(
+          "Не удалось загрузить фото. Проверьте интернет или отключите VPN.",
+        );
       } else {
-        toast.error("Не удалось загрузить фотографию. Попробуйте еще раз.");
+        toast.error("Сбой при загрузке медиафайла.");
       }
       setLocalPreviews((prev) => {
         const copy = { ...prev };
@@ -264,7 +266,9 @@ export default function DriverProfileScreen({
     profile?.vehicle_moderation_status ||
     profile?.moderation_status ||
     "incomplete";
-  const isReadOnly = moderationStatus === "approved" || moderationStatus === "pending_moderation";
+  const isReadOnly =
+    moderationStatus === "approved" ||
+    moderationStatus === "pending_moderation";
 
   const renderPhotoSlot = (slotKey: string, label: string) => {
     const media = profile?.vehicle?.media_files?.find(
@@ -277,7 +281,9 @@ export default function DriverProfileScreen({
     return (
       <div className="flex flex-col gap-2">
         <span className="text-xs font-bold text-slate-500">{label}</span>
-        <label className={`relative flex flex-col items-center justify-center h-28 border-2 ${isReadOnly ? 'border-transparent cursor-default' : 'border-slate-200 border-dashed hover:bg-slate-100 cursor-pointer'} rounded-xl bg-slate-50 transition-colors overflow-hidden group`}>
+        <label
+          className={`relative flex flex-col items-center justify-center h-28 border-2 ${isReadOnly ? "border-transparent cursor-default" : "border-slate-200 border-dashed hover:bg-slate-100 cursor-pointer"} rounded-xl bg-slate-50 transition-colors overflow-hidden group`}
+        >
           {isUploading ? (
             <Loader2 className="w-6 h-6 text-[#2DB0E6] animate-spin" />
           ) : imageUrl ? (
@@ -399,167 +405,196 @@ export default function DriverProfileScreen({
 
   const showModerationBadge = moderationStatus === "pending_moderation";
 
+  if (isLoading) {
+    return (
+      <div className="flex flex-col min-h-[calc(100vh-80px)] items-center justify-center bg-slate-50 w-full relative">
+        <Loader2 className="w-8 h-8 animate-spin text-[#2DB0E6]" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col min-h-[calc(100vh-80px)] overflow-y-auto bg-slate-50 w-full relative">
       <div className="flex-1 flex flex-col gap-4 p-5 pb-6">
         <UpdateBanner />
 
-      {getModerationBanner()}
+        {getModerationBanner()}
 
-      {showModerationBadge ? (
-        <div className="w-full bg-slate-100 text-slate-500 py-12 font-bold rounded-3xl shadow-sm border border-slate-200 text-center flex flex-col items-center justify-center gap-2 mt-4 mb-2">
-          <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mb-2 shadow-sm">
-            <CheckCircle2 className="w-8 h-8 text-[#2DB0E6]" />
-          </div>
-          <span className="text-lg text-slate-600">Анкета на проверке</span>
-          <span className="text-sm font-medium text-slate-400">
-            Ожидайте подтверждения диспетчером
-          </span>
-        </div>
-      ) : moderationStatus === "rejected" ? (
-        <div className="flex flex-col items-center justify-center p-10 text-rose-600 text-center mt-4 mb-2 bg-rose-50 rounded-3xl border border-rose-200 shadow-sm">
-          <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mb-4 shadow-sm">
-            <Ban className="w-10 h-10 text-rose-500" />
-          </div>
-          <p className="text-xl font-bold text-rose-700 mb-2 leading-tight">
-            Профиль отклонен
-          </p>
-          <p className="text-sm text-rose-600">
-            Ваши данные не прошли проверку.
-          </p>
-        </div>
-      ) : (
-        <>
-          <div className="flex flex-col gap-2 p-4 bg-white rounded-2xl shadow-sm h-auto w-full relative">
-            <div className="flex justify-between items-start gap-4 mb-2 pb-2 border-b border-slate-50 w-full">
-              <div className="flex items-center gap-4 flex-1 min-w-0">
-                <div className="w-12 h-12 rounded-full overflow-hidden bg-slate-100 flex items-center justify-center flex-shrink-0">
-                  <UserIcon className="w-6 h-6 text-slate-400" />
-                </div>
-                <div className="flex flex-col flex-1 min-w-0 w-full">
-                  <h2 className="text-lg font-bold text-slate-800 leading-tight truncate break-words w-full">
-                    {profile?.name || "Водитель"}
-                  </h2>
-                  <span className="text-sm font-medium text-slate-500 truncate w-full">
-                    {formatPhoneNumber(profile?.phone || "")}
-                  </span>
-                </div>
-              </div>
-              {profile?.moderation_status === "approved" && (
-                <div className="flex-shrink-0 pt-1">
-                  <BadgeCheck className="w-8 h-8 text-[#2DB0E6] opacity-30" />
-                </div>
-              )}
+        {showModerationBadge ? (
+          <div className="w-full bg-slate-100 text-slate-500 py-12 font-bold rounded-3xl shadow-sm border border-slate-200 text-center flex flex-col items-center justify-center gap-2 mt-4 mb-2">
+            <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mb-2 shadow-sm">
+              <CheckCircle2 className="w-8 h-8 text-[#2DB0E6]" />
             </div>
-
-            <div className="flex flex-col gap-2 text-sm pt-2">
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500">Марка:</span>
-                <span className="font-bold text-slate-800">
-                  {profile?.vehicle?.brand ||
-                    profile?.vehicle?.brand ||
-                    "Не указана"}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500">Госномер:</span>
-                {profile?.vehicle?.plate_number ? (
-                  <div className="flex items-stretch bg-white border border-gray-400 rounded-md shadow-sm h-7 overflow-hidden">
-                    <div className="flex items-center px-2 text-sm font-bold uppercase tracking-wider text-slate-900 leading-none pt-0.5">
-                      {profile.vehicle.plate_number}
-                    </div>
-                    <div className="flex flex-col items-center justify-center border-l border-gray-400 bg-white h-full px-1.5 py-0.5">
-                      <span className="text-[7px] font-bold leading-none text-slate-800 mb-0.5">
-                        RUS
-                      </span>
-                      <img
-                        src="/russian.png"
-                        alt="RUS"
-                        className="w-4 h-3 object-cover rounded-[1px]"
-                      />
-                    </div>
+            <span className="text-lg text-slate-600">Анкета на проверке</span>
+            <span className="text-sm font-medium text-slate-400">
+              Ожидайте подтверждения диспетчером
+            </span>
+          </div>
+        ) : moderationStatus === "rejected" ? (
+          <div className="flex flex-col items-center justify-center p-10 text-rose-600 text-center mt-4 mb-2 bg-rose-50 rounded-3xl border border-rose-200 shadow-sm">
+            <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mb-4 shadow-sm">
+              <Ban className="w-10 h-10 text-rose-500" />
+            </div>
+            <p className="text-xl font-bold text-rose-700 mb-2 leading-tight">
+              Профиль отклонен
+            </p>
+            <p className="text-sm text-rose-600">
+              Ваши данные не прошли проверку.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="flex flex-col gap-2 p-4 bg-white rounded-2xl shadow-sm h-auto w-full relative">
+              <div className="flex justify-between items-start gap-4 mb-2 pb-2 border-b border-slate-50 w-full">
+                <div className="flex items-center gap-4 flex-1 min-w-0">
+                  <div className="w-12 h-12 rounded-full overflow-hidden bg-slate-100 flex items-center justify-center flex-shrink-0">
+                    <UserIcon className="w-6 h-6 text-slate-400" />
                   </div>
-                ) : (
-                  <span className="font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                    Нет
-                  </span>
-                )}
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500">Тип машины:</span>
-                <span className="font-bold text-slate-800">
-                  {profile?.vehicle?.vehicle_type ||
-                    profile?.vehicle?.vehicle_type ||
-                    "Не указан"}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500">Кубатура (м³):</span>
-                <span className="font-bold text-slate-800">
-                  {profile?.vehicle?.cubature_min !== undefined ||
-                  profile?.vehicle?.cubature_max !== undefined
-                    ? `${profile.vehicle.cubature_min || 0} - ${profile.vehicle.cubature_max || 0}`
-                    : profile?.vehicle?.body_volume_m3
-                      ? `${profile?.vehicle?.body_volume_m3}`
-                      : "—"}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500">Тоннаж (т):</span>
-                <span className="font-bold text-slate-800">
-                  {profile?.vehicle?.tonnage_min !== undefined ||
-                  profile?.vehicle?.tonnage_max !== undefined
-                    ? `${profile.vehicle.tonnage_min || 0} - ${profile.vehicle.tonnage_max || 0}`
-                    : "—"}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-2 p-4 bg-white rounded-2xl shadow-sm h-auto w-full relative">
-            <div className="flex items-center justify-between mb-3 px-1">
-              <h3 className="font-bold text-slate-800">
-                Фотографии автомобиля
-              </h3>
-              {moderationStatus === 'approved' ? (
-                <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md">
-                  <CheckCircle2 className="w-4 h-4" /> Одобрен
-                </span>
-              ) : hasAllPhotos ? (
-                 <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-              ) : null}
-            </div>
-            {/* Убрали ложное условие на profile.vehicle.id */}
-            <div className="grid grid-cols-2 gap-3">
-              {renderPhotoSlot("vehicle_main", "Спереди + номер")}
-              {renderPhotoSlot("vehicle_left", "Сбоку")}
-              {renderPhotoSlot("vehicle_plate", "Только госномер")}
-            </div>
-          </div>
-
-          {!isReadOnly && (
-            <div className="flex flex-col gap-2 mt-4 mb-2">
-              {!hasAllPhotos && (
-                <div className="bg-orange-50 text-orange-700 p-4 rounded-2xl border border-orange-200 text-sm font-medium text-center shadow-sm">
-                  Загрузите все 3 фото для отправки на модерацию
+                  <div className="flex flex-col flex-1 min-w-0 w-full">
+                    <h2 className="text-lg font-bold text-slate-800 leading-tight truncate break-words w-full">
+                      {profile?.name || "Водитель"}
+                    </h2>
+                    <span className="text-sm font-medium text-slate-500 truncate w-full">
+                      {formatPhoneNumber(profile?.phone || "")}
+                    </span>
+                  </div>
                 </div>
-              )}
-              <button
-                onClick={handleSubmitForModeration}
-                disabled={isSaving || isDriverInactive || !isProfileComplete}
-                className={`w-full py-4 font-bold rounded-full shadow-sm transition-all flex items-center justify-center gap-2 ${!isProfileComplete || isDriverInactive || isSaving ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-[#2DB0E6] text-white hover:bg-[#209BD6] active:bg-[#1b8bc2]"}`}
-              >
-                {isSaving ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  <CheckCircle2 className="w-5 h-5" />
+                {profile?.moderation_status === "approved" && (
+                  <div className="flex-shrink-0 pt-1">
+                    <BadgeCheck className="w-8 h-8 text-[#2DB0E6] opacity-30" />
+                  </div>
                 )}
-                {isSaving ? "Отправка..." : "Отправить на проверку"}
-              </button>
+              </div>
+
+              <div className="flex flex-col gap-2 text-sm pt-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Марка:</span>
+                  <span className="font-bold text-slate-800">
+                    {profile?.vehicle?.brand ||
+                      profile?.vehicle?.brand ||
+                      "Не указана"}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Госномер:</span>
+                  {profile?.vehicle?.plate_number ? (
+                    <div className="flex items-stretch bg-white border border-gray-400 rounded-md shadow-sm h-7 overflow-hidden">
+                      <div className="flex items-center px-2 text-sm font-bold uppercase tracking-wider text-slate-900 leading-none pt-0.5">
+                        {profile.vehicle.plate_number}
+                      </div>
+                      <div className="flex flex-col items-center justify-center border-l border-gray-400 bg-white h-full px-1.5 py-0.5">
+                        <span className="text-[7px] font-bold leading-none text-slate-800 mb-0.5">
+                          RUS
+                        </span>
+                        <img
+                          src="/russian.png"
+                          alt="RUS"
+                          className="w-4 h-3 object-cover rounded-[1px]"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                      Нет
+                    </span>
+                  )}
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Тип машины:</span>
+                  <span className="font-bold text-slate-800">
+                    {profile?.vehicle?.vehicle_type ||
+                      profile?.vehicle?.vehicle_type ||
+                      "Не указан"}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Кубатура (м³):</span>
+                  <span className="font-bold text-slate-800">
+                    {(() => {
+                      const min = profile?.vehicle?.cubature_min;
+                      const max = profile?.vehicle?.cubature_max;
+                      const fallback = profile?.vehicle?.body_volume_m3;
+                      if (
+                        min !== undefined &&
+                        max !== undefined &&
+                        min !== null &&
+                        max !== null
+                      ) {
+                        return min === max ? `${min}` : `${min} - ${max}`;
+                      }
+                      if (min !== undefined && min !== null) return `${min}`;
+                      if (max !== undefined && max !== null) return `${max}`;
+                      return fallback ? `${fallback}` : "—";
+                    })()}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Тоннаж (т):</span>
+                  <span className="font-bold text-slate-800">
+                    {(() => {
+                      const min = profile?.vehicle?.tonnage_min;
+                      const max = profile?.vehicle?.tonnage_max;
+                      if (
+                        min !== undefined &&
+                        max !== undefined &&
+                        min !== null &&
+                        max !== null
+                      ) {
+                        return min === max ? `${min}` : `${min} - ${max}`;
+                      }
+                      if (min !== undefined && min !== null) return `${min}`;
+                      if (max !== undefined && max !== null) return `${max}`;
+                      return "—";
+                    })()}
+                  </span>
+                </div>
+              </div>
             </div>
-          )}
-        </>
-      )}
+
+            <div className="flex flex-col gap-2 p-4 bg-white rounded-2xl shadow-sm h-auto w-full relative">
+              <div className="flex items-center justify-between mb-3 px-1">
+                <h3 className="font-bold text-slate-800">
+                  Фотографии автомобиля
+                </h3>
+                {moderationStatus === "approved" ? (
+                  <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md">
+                    <CheckCircle2 className="w-4 h-4" /> Одобрен
+                  </span>
+                ) : hasAllPhotos ? (
+                  <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                ) : null}
+              </div>
+              {/* Убрали ложное условие на profile.vehicle.id */}
+              <div className="grid grid-cols-2 gap-3">
+                {renderPhotoSlot("vehicle_main", "Спереди + номер")}
+                {renderPhotoSlot("vehicle_left", "Сбоку")}
+                {renderPhotoSlot("vehicle_plate", "Только госномер")}
+              </div>
+            </div>
+
+            {!isReadOnly && (
+              <div className="flex flex-col gap-2 mt-4 mb-2">
+                {!hasAllPhotos && (
+                  <div className="bg-orange-50 text-orange-700 p-4 rounded-2xl border border-orange-200 text-sm font-medium text-center shadow-sm">
+                    Загрузите все 3 фото для отправки на модерацию
+                  </div>
+                )}
+                <button
+                  onClick={handleSubmitForModeration}
+                  disabled={isSaving || isDriverInactive || !isProfileComplete}
+                  className={`w-full py-4 font-bold rounded-full shadow-sm transition-all flex items-center justify-center gap-2 ${!isProfileComplete || isDriverInactive || isSaving ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-[#2DB0E6] text-white hover:bg-[#209BD6] active:bg-[#1b8bc2]"}`}
+                >
+                  {isSaving ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="w-5 h-5" />
+                  )}
+                  {isSaving ? "Отправка..." : "Отправить на проверку"}
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {/* Выход */}
@@ -568,7 +603,7 @@ export default function DriverProfileScreen({
           onClick={async () => {
             try {
               const currentToken = useAuthStore.getState().token;
-              
+
               // Remove FCM token
               await fetch(`${baseURL}/driver/fcm-token`, {
                 method: "DELETE",

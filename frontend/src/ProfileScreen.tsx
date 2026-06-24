@@ -1,11 +1,11 @@
 import React from 'react';
-import { User, MessageSquare, Share2, Info, ChevronRight } from 'lucide-react';
+import { User } from 'lucide-react';
 import { APP_VERSION } from './utils';
 import UpdateBanner from './UpdateBanner';
 
 export default function ProfileScreen({ onOpenAuth }: { onOpenAuth?: () => void }) {
   return (
-    <div className="flex flex-col h-full bg-slate-50 p-4 pb-24">
+    <div className="flex flex-col h-full bg-slate-50 p-4 pb-[84px]">
       <UpdateBanner />
       
       {/* Auth Card */}
@@ -21,31 +21,12 @@ export default function ProfileScreen({ onOpenAuth }: { onOpenAuth?: () => void 
         </div>
       </div>
 
-      {/* Menu List */}
-      <div className="bg-white rounded-[24px] flex flex-col overflow-hidden border border-slate-100 shadow-sm mb-auto">
-        <MenuButton icon={MessageSquare} label="Обратная связь" />
-        <div className="h-[1px] bg-slate-50 ml-[52px]"></div>
-        <MenuButton icon={Share2} label="Поделиться приложением" />
-        <div className="h-[1px] bg-slate-50 ml-[52px]"></div>
-        <MenuButton icon={Info} label="О компании" />
-      </div>
+      <div className="flex-1"></div>
 
       {/* Version */}
-      <div className="flex justify-center mt-8">
-        <span className="text-sm text-slate-400 font-medium font-mono">Версия приложения {APP_VERSION}</span>
+      <div className="flex justify-center pb-2">
+        <span className="text-sm text-slate-400/80 font-medium font-mono">Версия приложения {APP_VERSION}</span>
       </div>
     </div>
-  );
-}
-
-function MenuButton({ icon: Icon, label }: { icon: any, label: string }) {
-  return (
-    <button className="flex items-center gap-3 p-4 bg-white active:bg-slate-50 transition-colors w-full text-left">
-      <div className="w-7 h-7 flex items-center justify-center">
-        <Icon className="w-5 h-5 text-[#2DB0E6]" />
-      </div>
-      <span className="flex-1 font-medium text-slate-700">{label}</span>
-      <ChevronRight className="w-5 h-5 text-slate-400" />
-    </button>
   );
 }

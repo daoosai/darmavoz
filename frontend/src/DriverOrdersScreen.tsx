@@ -1,7 +1,13 @@
 import React, { useState, useEffect } from "react";
 import PullToRefresh from "react-simple-pull-to-refresh";
 import { useAuthStore } from "./store";
-import { baseURL, orderStatusMap, orderStatusColors, formatErrorToRussian } from "./utils";
+import {
+  baseURL,
+  orderStatusMap,
+  orderStatusColors,
+  handleApiError,
+  playNewOrderSound,
+} from "./utils";
 import DriverProfileScreen from "./DriverProfileScreen";
 import {
   LogOut,
@@ -52,6 +58,23 @@ export default function DriverOrdersScreen({
 
   const [orders, setOrders] = useState<DriverOrder[]>([]);
   const [historyOrders, setHistoryOrders] = useState<DriverOrder[]>([]);
+  const prevOffersCount = React.useRef(0);
+  const prevOfferId = React.useRef<string | null>(null);
+
+  useEffect(() => {
+    if (prevOffersCount.current === 0 && orders.length > 0) {
+      playNewOrderSound();
+    }
+    prevOffersCount.current = orders.length;
+  }, [orders.length]);
+
+  useEffect(() => {
+    const offerId = currentOffer?.offer_id || currentOffer?.id;
+    if (offerId && prevOfferId.current !== offerId) {
+      playNewOrderSound();
+    }
+    prevOfferId.current = offerId || null;
+  }, [currentOffer]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [moderationStatus, setModerationStatus] = useState<string | null>(null);
@@ -61,8 +84,11 @@ export default function DriverOrdersScreen({
   const [currentOffer, setCurrentOffer] = useState<any>(null);
   const [timeLeft, setTimeLeft] = useState(0);
 
+  const [isProfileLoading, setIsProfileLoading] = useState(true);
+
   const fetchProfile = async () => {
     try {
+      setIsProfileLoading(true);
       const currentToken = useAuthStore.getState().token;
       if (!currentToken) return;
       const res = await fetch(`${baseURL}/driver/profile/full`, {
@@ -89,11 +115,11 @@ export default function DriverOrdersScreen({
         ) {
           setActiveTab("profile");
         }
-      } else {
-        setIsLoading(false);
       }
     } catch (e) {
-      setIsLoading(false);
+      // Ignore error for now
+    } finally {
+      setIsProfileLoading(false);
     }
   };
 
@@ -330,7 +356,7 @@ export default function DriverOrdersScreen({
         throw new Error(err.detail || "Не удалось принять заказ");
       }
     } catch (error: any) {
-      toast.error(formatErrorToRussian(error, "Не удалось принять заказ"));
+      toast.error(handleApiError(error, "Не удалось принять заказ"));
     }
   };
 
@@ -369,7 +395,7 @@ export default function DriverOrdersScreen({
         throw new Error(err.detail || "Не удалось отказаться от заказа");
       }
     } catch (error: any) {
-      toast.error(formatErrorToRussian(error, "Не удалось отказаться от заказа"));
+      toast.error(handleApiError(error, "Не удалось отказаться от заказа"));
     }
   };
 
@@ -547,7 +573,12 @@ export default function DriverOrdersScreen({
             {ordersTab === "current" ? "Активные заказы" : "История поездок"}
           </h2>
 
-          {!isDriverActive ? (
+          {isProfileLoading ? (
+            <div className="flex flex-col items-center justify-center p-10 text-slate-400 min-h-[50vh]">
+              <Loader2 className="w-8 h-8 animate-spin mb-3 text-[#2DB0E6]" />
+              <p className="text-sm font-medium">Загрузка профиля...</p>
+            </div>
+          ) : !isDriverActive ? (
             <div className="flex flex-col items-center justify-center p-10 text-slate-500 text-center mt-10 min-h-[50vh] bg-amber-50 rounded-3xl border border-amber-200 shadow-sm">
               <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mb-4 shadow-sm">
                 <AlertCircle className="w-10 h-10 text-amber-500" />
@@ -905,7 +936,7 @@ const DriverOrderCard: React.FC<{
       toast.success("Отличной дороги!");
       onRefresh();
     } catch (e: any) {
-      toast.error(formatErrorToRussian(e, "Не удалось начать поездку"));
+      toast.error(handleApiError(e, "Не удалось начать поездку"));
     } finally {
       setIsStarting(false);
     }
@@ -935,7 +966,7 @@ const DriverOrderCard: React.FC<{
       toast.success("Заказ успешно завершен! Вы снова свободны.");
       onRefresh();
     } catch (e: any) {
-      toast.error(formatErrorToRussian(e, "Не удалось завершить заказ"));
+      toast.error(handleApiError(e, "Не удалось завершить заказ"));
     } finally {
       setIsCompleting(false);
     }

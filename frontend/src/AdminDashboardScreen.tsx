@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useAuthStore } from "./store";
-import { baseURL, formatErrorToRussian } from "./utils";
+import { baseURL, handleApiError } from "./utils";
 import {
   LogOut,
   Lock,
@@ -184,7 +184,9 @@ export default function AdminDashboardScreen({
   const [previewPlate, setPreviewPlate] = useState<string | null>(null);
 
   const sortedDeliveryOptions = useMemo(() => {
-    return [...deliveryOptions].sort((a, b) => (a.capacity_m3 || 0) - (b.capacity_m3 || 0));
+    return [...deliveryOptions].sort(
+      (a, b) => (a.capacity_m3 || 0) - (b.capacity_m3 || 0),
+    );
   }, [deliveryOptions]);
 
   const applyDriverActiveOverrides = (items: AdminDriver[]) =>
@@ -204,15 +206,23 @@ export default function AdminDashboardScreen({
     }
     return (
       <div className="flex flex-col gap-1.5 items-start">
-        <span className="text-sm font-medium text-gray-900">{brand || "Неизвестно"}</span>
+        <span className="text-sm font-medium text-gray-900">
+          {brand || "Неизвестно"}
+        </span>
         {plate ? (
           <div className="flex items-center bg-white border border-gray-400 rounded-md shadow-sm overflow-hidden w-max">
             <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 text-gray-900">
               {plate}
             </span>
             <div className="border-l border-gray-400 flex flex-col items-center justify-center px-1.5 py-0.5 bg-white">
-              <span className="text-[8px] font-bold leading-none text-gray-800 mb-0.5">RUS</span>
-              <img src="/russian.png" alt="RUS" className="w-3 h-2 object-cover rounded-sm" />
+              <span className="text-[8px] font-bold leading-none text-gray-800 mb-0.5">
+                RUS
+              </span>
+              <img
+                src="/russian.png"
+                alt="RUS"
+                className="w-3 h-2 object-cover rounded-sm"
+              />
             </div>
           </div>
         ) : null}
@@ -426,7 +436,7 @@ export default function AdminDashboardScreen({
       }
     } catch (err: any) {
       console.error("Full Upload Error:", err);
-      toast.error(formatErrorToRussian(err, "Сбой загрузки фото"));
+      toast.error(handleApiError(err, "Сбой загрузки фото"));
     } finally {
       setUploadingSlots((prev) => ({ ...prev, [slotId]: false }));
     }
@@ -749,7 +759,7 @@ export default function AdminDashboardScreen({
       setIsDeliveryModalOpen(false);
       fetchDeliveryOptions(true);
     } catch (err: any) {
-      toast.error(formatErrorToRussian(err, "Ошибка сохранения опции доставки"));
+      toast.error(handleApiError(err, "Ошибка сохранения опции доставки"));
     } finally {
       setIsSavingDelivery(false);
     }
@@ -784,22 +794,32 @@ export default function AdminDashboardScreen({
     setFilePlate(null);
     if (driver) {
       setPreviewMain(
-        driver.vehicle?.media_files?.find((m: any) => m.slot_key === "vehicle_main")?.public_url ||
-        driver.vehicle?.vehicle_main_url || null
+        driver.vehicle?.media_files?.find(
+          (m: any) => m.slot_key === "vehicle_main",
+        )?.public_url ||
+          driver.vehicle?.vehicle_main_url ||
+          null,
       );
       setPreviewLeft(
-        driver.vehicle?.media_files?.find((m: any) => m.slot_key === "vehicle_left")?.public_url ||
-        driver.vehicle?.vehicle_left_url || null
+        driver.vehicle?.media_files?.find(
+          (m: any) => m.slot_key === "vehicle_left",
+        )?.public_url ||
+          driver.vehicle?.vehicle_left_url ||
+          null,
       );
       setPreviewPlate(
-        driver.vehicle?.media_files?.find((m: any) => m.slot_key === "vehicle_plate")?.public_url ||
-        driver.vehicle?.vehicle_plate_url || null
+        driver.vehicle?.media_files?.find(
+          (m: any) => m.slot_key === "vehicle_plate",
+        )?.public_url ||
+          driver.vehicle?.vehicle_plate_url ||
+          null,
       );
-      
+
       setEditingDriver({
         ...driver,
         vehicle_brand: driver.vehicle?.brand || driver.vehicle_brand,
-        vehicle_plate_number: driver.vehicle?.plate_number || driver.vehicle_plate_number,
+        vehicle_plate_number:
+          driver.vehicle?.plate_number || driver.vehicle_plate_number,
         vehicle_type: driver.vehicle?.vehicle_type || driver.vehicle_type,
         cubature_min: driver.vehicle?.cubature_min || driver.cubature_min,
         cubature_max: driver.vehicle?.cubature_max || driver.cubature_max,
@@ -850,21 +870,26 @@ export default function AdminDashboardScreen({
         fullPhone = "+" + fullPhone;
       }
 
+      const parseNumber = (val: any) => {
+        if (val === undefined || val === null || val === "") return undefined;
+        return Number(val);
+      };
+
       const payload: any = {
         name: editingDriver.name,
         phone: fullPhone,
         is_active: editingDriver.is_active ?? true,
         vehicle_type: editingDriver.vehicle_type,
-        cubature_min: editingDriver.cubature_min ? Number(editingDriver.cubature_min) : undefined,
-        cubature_max: editingDriver.cubature_max ? Number(editingDriver.cubature_max) : undefined,
-        tonnage_min: editingDriver.tonnage_min ? Number(editingDriver.tonnage_min) : undefined,
-        tonnage_max: editingDriver.tonnage_max ? Number(editingDriver.tonnage_max) : undefined,
+        cubature_min: parseNumber(editingDriver.cubature_min),
+        cubature_max: parseNumber(editingDriver.cubature_max),
+        tonnage_min: parseNumber(editingDriver.tonnage_min),
+        tonnage_max: parseNumber(editingDriver.tonnage_max),
         vehicle_brand: editingDriver.vehicle_brand,
         vehicle_plate_number: editingDriver.vehicle_plate_number,
       };
 
       if (!isEdit && payload.is_active) {
-        payload.status = 'free';
+        payload.status = "free";
       }
 
       if (editingDriver.password) {
@@ -885,13 +910,20 @@ export default function AdminDashboardScreen({
         if (errData?.detail && Array.isArray(errData.detail)) {
           const errorMessages = errData.detail.map((err: any) => {
             const field = err.loc[err.loc.length - 1];
-            if (field === 'password') return 'Пароль: должен содержать не менее 6 символов';
-            if (field === 'phone') return 'Телефон: неверный формат';
-            if (field === 'cubature_min' || field === 'cubature_max' || field === 'tonnage_min' || field === 'tonnage_max') return 'Пожалуйста, корректно заполните кубатуру и тоннаж';
-            return 'Проверьте правильность заполнения полей';
+            if (field === "password")
+              return "Пароль: должен содержать не менее 6 символов";
+            if (field === "phone") return "Телефон: неверный формат";
+            if (
+              field === "cubature_min" ||
+              field === "cubature_max" ||
+              field === "tonnage_min" ||
+              field === "tonnage_max"
+            )
+              return "Пожалуйста, корректно заполните кубатуру и тоннаж";
+            return "Проверьте правильность заполнения полей";
           });
           const uniqueErrors = Array.from(new Set(errorMessages));
-          throw new Error(uniqueErrors.join('\n'));
+          throw new Error(uniqueErrors.join("\n"));
         }
         const errorOb: any = new Error(errData?.detail || "Ошибка сохранения");
         errorOb.response = { status: res.status, data: errData };
@@ -911,18 +943,29 @@ export default function AdminDashboardScreen({
         const filesToUpload = [
           { file: fileMain, slotKey: "vehicle_main" },
           { file: fileLeft, slotKey: "vehicle_left" },
-          { file: filePlate, slotKey: "vehicle_plate" }
-        ].filter(item => item.file !== null);
+          { file: filePlate, slotKey: "vehicle_plate" },
+        ].filter((item) => item.file !== null);
 
         for (const item of filesToUpload) {
           try {
             const file = item.file as File;
             let fileExt = file.name.split(".").pop()?.toLowerCase() || "jpg";
-            if (fileExt !== "jpg" && fileExt !== "jpeg" && fileExt !== "png" && fileExt !== "webp") {
-                fileExt = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
+            if (
+              fileExt !== "jpg" &&
+              fileExt !== "jpeg" &&
+              fileExt !== "png" &&
+              fileExt !== "webp"
+            ) {
+              fileExt =
+                file.type === "image/png"
+                  ? "png"
+                  : file.type === "image/webp"
+                    ? "webp"
+                    : "jpg";
             }
             const safeFileName = `photo-${Date.now()}.${fileExt}`;
-            const safeContentType = file.type || `image/${fileExt === "jpg" ? "jpeg" : fileExt}`;
+            const safeContentType =
+              file.type || `image/${fileExt === "jpg" ? "jpeg" : fileExt}`;
 
             // 1: Presign
             const presignRes = await fetch(`${baseURL}/media/presign-upload`, {
@@ -943,7 +986,8 @@ export default function AdminDashboardScreen({
               }),
             });
 
-            if (!presignRes.ok) throw new Error(`Ошибка Presign для ${item.slotKey}`);
+            if (!presignRes.ok)
+              throw new Error(`Ошибка Presign для ${item.slotKey}`);
             const presignData = await presignRes.json();
             if (!presignData.upload_url) throw new Error("Нет upload_url");
 
@@ -973,10 +1017,17 @@ export default function AdminDashboardScreen({
                 slot_key: item.slotKey,
               }),
             });
-            if (!confirmRes.ok) throw new Error(`Ошибка Confirm для ${item.slotKey}`);
+            if (!confirmRes.ok)
+              throw new Error(`Ошибка Confirm для ${item.slotKey}`);
           } catch (err: any) {
             console.error(err);
-            toast.error("Ошибка загрузки фото: " + err.message);
+            if (err instanceof TypeError && err.message.includes("fetch")) {
+              toast.error(
+                "Не удалось загрузить фото. Проверьте интернет или отключите VPN.",
+              );
+            } else {
+              toast.error("Сбой при загрузке медиафайла.");
+            }
           }
         }
       }
@@ -1013,14 +1064,23 @@ export default function AdminDashboardScreen({
     } catch (err: any) {
       if (err.response?.status === 409) {
         const detail = err.response.data?.detail;
-        const msg = typeof detail === 'string' ? detail : "Водитель с таким номером телефона или госномером уже существует!";
+        const msg =
+          typeof detail === "string"
+            ? detail
+            : "Водитель с таким номером телефона или госномером уже существует!";
         toast.error(msg);
         return;
       }
-      if (err.message && (err.message.includes('Пароль:') || err.message.includes('Телефон:') || err.message.includes('Пожалуйста,') || err.message.includes('Проверьте правильность'))) {
+      if (
+        err.message &&
+        (err.message.includes("Пароль:") ||
+          err.message.includes("Телефон:") ||
+          err.message.includes("Пожалуйста,") ||
+          err.message.includes("Проверьте правильность"))
+      ) {
         toast.error(err.message);
       } else {
-        toast.error(formatErrorToRussian(err, "Ошибка сохранения водителя"));
+        toast.error(handleApiError(err, "Ошибка сохранения водителя"));
       }
     } finally {
       setIsSavingDriver(false);
@@ -2083,12 +2143,27 @@ export default function AdminDashboardScreen({
                                   Кубатура (м³)
                                 </span>
                                 <span className="font-semibold text-slate-700">
-                                  {request.vehicle_cubature_min !== undefined ||
-                                  request.vehicle_cubature_max !== undefined
-                                    ? `${request.vehicle_cubature_min || 0} - ${request.vehicle_cubature_max || 0}`
-                                    : request.vehicle_body_volume_m3
-                                      ? request.vehicle_body_volume_m3
-                                      : "—"}
+                                  {(() => {
+                                    const min = request.vehicle_cubature_min;
+                                    const max = request.vehicle_cubature_max;
+                                    const fallback =
+                                      request.vehicle_body_volume_m3;
+                                    if (
+                                      min !== undefined &&
+                                      max !== undefined &&
+                                      min !== null &&
+                                      max !== null
+                                    ) {
+                                      return min === max
+                                        ? `${min}`
+                                        : `${min} - ${max}`;
+                                    }
+                                    if (min !== undefined && min !== null)
+                                      return `${min}`;
+                                    if (max !== undefined && max !== null)
+                                      return `${max}`;
+                                    return fallback ? `${fallback}` : "—";
+                                  })()}
                                 </span>
                               </div>
                               <div className="flex justify-between border-b border-slate-50 pb-2">
@@ -2096,10 +2171,25 @@ export default function AdminDashboardScreen({
                                   Тоннаж (т)
                                 </span>
                                 <span className="font-semibold text-slate-700">
-                                  {request.vehicle_tonnage_min !== undefined ||
-                                  request.vehicle_tonnage_max !== undefined
-                                    ? `${request.vehicle_tonnage_min || 0} - ${request.vehicle_tonnage_max || 0}`
-                                    : "—"}
+                                  {(() => {
+                                    const min = request.vehicle_tonnage_min;
+                                    const max = request.vehicle_tonnage_max;
+                                    if (
+                                      min !== undefined &&
+                                      max !== undefined &&
+                                      min !== null &&
+                                      max !== null
+                                    ) {
+                                      return min === max
+                                        ? `${min}`
+                                        : `${min} - ${max}`;
+                                    }
+                                    if (min !== undefined && min !== null)
+                                      return `${min}`;
+                                    if (max !== undefined && max !== null)
+                                      return `${max}`;
+                                    return "—";
+                                  })()}
                                 </span>
                               </div>
                             </div>
@@ -2110,97 +2200,97 @@ export default function AdminDashboardScreen({
                             <span className="text-sm font-bold text-slate-700 uppercase tracking-wider">
                               Фотографии автомобиля
                             </span>
-                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-2">
-                                {/* Основное фото / Спереди */}
-                                <div className="flex flex-col gap-2">
-                                  {request.vehicle_main_url ? (
-                                    <a
-                                      href={request.vehicle_main_url}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="block relative group rounded-xl overflow-hidden h-48 sm:h-56 border border-slate-200"
-                                    >
-                                      <img
-                                        src={request.vehicle_main_url}
-                                        alt="Спереди"
-                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                                      />
-                                      <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                        <Eye className="w-8 h-8 text-white" />
-                                      </div>
-                                    </a>
-                                  ) : (
-                                    <div className="h-48 sm:h-56 bg-slate-100 rounded-xl flex items-center justify-center border border-slate-200">
-                                      <span className="text-sm font-medium text-slate-400">
-                                        Фото не загружено
-                                      </span>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-2">
+                              {/* Основное фото / Спереди */}
+                              <div className="flex flex-col gap-2">
+                                {request.vehicle_main_url ? (
+                                  <a
+                                    href={request.vehicle_main_url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="block relative group rounded-xl overflow-hidden h-48 sm:h-56 border border-slate-200"
+                                  >
+                                    <img
+                                      src={request.vehicle_main_url}
+                                      alt="Спереди"
+                                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                    />
+                                    <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                      <Eye className="w-8 h-8 text-white" />
                                     </div>
-                                  )}
-                                  <span className="text-xs font-bold text-center text-slate-600">
-                                    Спереди
-                                  </span>
-                                </div>
-
-                                {/* Сбоку / Слева */}
-                                <div className="flex flex-col gap-2">
-                                  {request.vehicle_left_url ? (
-                                    <a
-                                      href={request.vehicle_left_url}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="block relative group rounded-xl overflow-hidden h-48 sm:h-56 border border-slate-200"
-                                    >
-                                      <img
-                                        src={request.vehicle_left_url}
-                                        alt="Сбоку"
-                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                                      />
-                                      <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                        <Eye className="w-8 h-8 text-white" />
-                                      </div>
-                                    </a>
-                                  ) : (
-                                    <div className="h-48 sm:h-56 bg-slate-100 rounded-xl flex items-center justify-center border border-slate-200">
-                                      <span className="text-sm font-medium text-slate-400">
-                                        Фото не загружено
-                                      </span>
-                                    </div>
-                                  )}
-                                  <span className="text-xs font-bold text-center text-slate-600">
-                                    Сбоку
-                                  </span>
-                                </div>
-
-                                {/* Номер / Plate */}
-                                <div className="flex flex-col gap-2">
-                                  {request.vehicle_plate_url ? (
-                                    <a
-                                      href={request.vehicle_plate_url}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="block relative group rounded-xl overflow-hidden h-48 sm:h-56 border border-slate-200"
-                                    >
-                                      <img
-                                        src={request.vehicle_plate_url}
-                                        alt="Госномер"
-                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                                      />
-                                      <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                        <Eye className="w-8 h-8 text-white" />
-                                      </div>
-                                    </a>
-                                  ) : (
-                                    <div className="h-48 sm:h-56 bg-slate-100 rounded-xl flex items-center justify-center border border-slate-200">
-                                      <span className="text-sm font-medium text-slate-400">
-                                        Фото не загружено
-                                      </span>
-                                    </div>
-                                  )}
-                                  <span className="text-xs font-bold text-center text-slate-600">
-                                    Фото госномера
-                                  </span>
-                                </div>
+                                  </a>
+                                ) : (
+                                  <div className="h-48 sm:h-56 bg-slate-100 rounded-xl flex items-center justify-center border border-slate-200">
+                                    <span className="text-sm font-medium text-slate-400">
+                                      Фото не загружено
+                                    </span>
+                                  </div>
+                                )}
+                                <span className="text-xs font-bold text-center text-slate-600">
+                                  Спереди
+                                </span>
                               </div>
+
+                              {/* Сбоку / Слева */}
+                              <div className="flex flex-col gap-2">
+                                {request.vehicle_left_url ? (
+                                  <a
+                                    href={request.vehicle_left_url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="block relative group rounded-xl overflow-hidden h-48 sm:h-56 border border-slate-200"
+                                  >
+                                    <img
+                                      src={request.vehicle_left_url}
+                                      alt="Сбоку"
+                                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                    />
+                                    <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                      <Eye className="w-8 h-8 text-white" />
+                                    </div>
+                                  </a>
+                                ) : (
+                                  <div className="h-48 sm:h-56 bg-slate-100 rounded-xl flex items-center justify-center border border-slate-200">
+                                    <span className="text-sm font-medium text-slate-400">
+                                      Фото не загружено
+                                    </span>
+                                  </div>
+                                )}
+                                <span className="text-xs font-bold text-center text-slate-600">
+                                  Сбоку
+                                </span>
+                              </div>
+
+                              {/* Номер / Plate */}
+                              <div className="flex flex-col gap-2">
+                                {request.vehicle_plate_url ? (
+                                  <a
+                                    href={request.vehicle_plate_url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="block relative group rounded-xl overflow-hidden h-48 sm:h-56 border border-slate-200"
+                                  >
+                                    <img
+                                      src={request.vehicle_plate_url}
+                                      alt="Госномер"
+                                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                    />
+                                    <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                      <Eye className="w-8 h-8 text-white" />
+                                    </div>
+                                  </a>
+                                ) : (
+                                  <div className="h-48 sm:h-56 bg-slate-100 rounded-xl flex items-center justify-center border border-slate-200">
+                                    <span className="text-sm font-medium text-slate-400">
+                                      Фото не загружено
+                                    </span>
+                                  </div>
+                                )}
+                                <span className="text-xs font-bold text-center text-slate-600">
+                                  Фото госномера
+                                </span>
+                              </div>
+                            </div>
                           </div>
                         </div>
 
@@ -2247,7 +2337,9 @@ export default function AdminDashboardScreen({
               : "text-slate-400 hover:text-slate-600"
           }`}
         >
-          <div className={`p-1.5 rounded-xl transition-colors ${activeTab === "materials" ? "bg-[#2DB0E6]/10" : ""}`}>
+          <div
+            className={`p-1.5 rounded-xl transition-colors ${activeTab === "materials" ? "bg-[#2DB0E6]/10" : ""}`}
+          >
             <Layers className="w-6 h-6" />
           </div>
           <span className="text-[10px] font-bold">Каталог</span>
@@ -2260,7 +2352,9 @@ export default function AdminDashboardScreen({
               : "text-slate-400 hover:text-slate-600"
           }`}
         >
-          <div className={`p-1.5 rounded-xl transition-colors ${activeTab === "delivery" ? "bg-[#2DB0E6]/10" : ""}`}>
+          <div
+            className={`p-1.5 rounded-xl transition-colors ${activeTab === "delivery" ? "bg-[#2DB0E6]/10" : ""}`}
+          >
             <Truck className="w-6 h-6" />
           </div>
           <span className="text-[10px] font-bold">Автопарк</span>
@@ -2273,7 +2367,9 @@ export default function AdminDashboardScreen({
               : "text-slate-400 hover:text-slate-600"
           }`}
         >
-          <div className={`p-1.5 rounded-xl transition-colors ${activeTab === "drivers" ? "bg-[#2DB0E6]/10" : ""}`}>
+          <div
+            className={`p-1.5 rounded-xl transition-colors ${activeTab === "drivers" ? "bg-[#2DB0E6]/10" : ""}`}
+          >
             <Users className="w-6 h-6" />
           </div>
           <span className="text-[10px] font-bold">Водители</span>
@@ -2286,11 +2382,18 @@ export default function AdminDashboardScreen({
               : "text-slate-400 hover:text-slate-600"
           }`}
         >
-          <div className={`relative p-1.5 rounded-xl transition-colors ${activeTab === "moderation" ? "bg-[#2DB0E6]/10" : ""}`}>
+          <div
+            className={`relative p-1.5 rounded-xl transition-colors ${activeTab === "moderation" ? "bg-[#2DB0E6]/10" : ""}`}
+          >
             <ClipboardCheck className="w-6 h-6" />
-            {drivers.filter((d) => d.moderation_status === "pending_moderation").length > 0 && (
+            {drivers.filter((d) => d.moderation_status === "pending_moderation")
+              .length > 0 && (
               <div className="absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] font-bold w-3.5 h-3.5 rounded-full flex items-center justify-center shadow-sm">
-                {drivers.filter((d) => d.moderation_status === "pending_moderation").length}
+                {
+                  drivers.filter(
+                    (d) => d.moderation_status === "pending_moderation",
+                  ).length
+                }
               </div>
             )}
           </div>
@@ -2304,7 +2407,9 @@ export default function AdminDashboardScreen({
               : "text-slate-400 hover:text-slate-600"
           }`}
         >
-          <div className={`p-1.5 rounded-xl transition-colors ${activeTab === "profile" ? "bg-[#2DB0E6]/10" : ""}`}>
+          <div
+            className={`p-1.5 rounded-xl transition-colors ${activeTab === "profile" ? "bg-[#2DB0E6]/10" : ""}`}
+          >
             <User className="w-6 h-6" />
           </div>
           <span className="text-[10px] font-bold">Профиль</span>
@@ -2720,7 +2825,10 @@ export default function AdminDashboardScreen({
                   placeholder="Например: Камаз"
                   value={editingDriver.vehicle_brand || ""}
                   onChange={(e) =>
-                    setEditingDriver({ ...editingDriver, vehicle_brand: e.target.value })
+                    setEditingDriver({
+                      ...editingDriver,
+                      vehicle_brand: e.target.value,
+                    })
                   }
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
                 />
@@ -2736,7 +2844,10 @@ export default function AdminDashboardScreen({
                   placeholder="Например: А000ПА"
                   value={editingDriver.vehicle_plate_number || ""}
                   onChange={(e) =>
-                    setEditingDriver({ ...editingDriver, vehicle_plate_number: e.target.value })
+                    setEditingDriver({
+                      ...editingDriver,
+                      vehicle_plate_number: e.target.value,
+                    })
                   }
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
                 />
@@ -2750,11 +2861,16 @@ export default function AdminDashboardScreen({
                   required
                   value={editingDriver.vehicle_type || ""}
                   onChange={(e) =>
-                    setEditingDriver({ ...editingDriver, vehicle_type: e.target.value })
+                    setEditingDriver({
+                      ...editingDriver,
+                      vehicle_type: e.target.value,
+                    })
                   }
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
                 >
-                  <option value="" disabled>Выберите тип машины...</option>
+                  <option value="" disabled>
+                    Выберите тип машины...
+                  </option>
                   <option value="Самосвал">Самосвал</option>
                   <option value="Бортовой">Бортовой</option>
                   <option value="Будка">Будка</option>
@@ -2773,7 +2889,10 @@ export default function AdminDashboardScreen({
                     placeholder="От"
                     value={editingDriver.cubature_min || ""}
                     onChange={(e) =>
-                      setEditingDriver({ ...editingDriver, cubature_min: Number(e.target.value) })
+                      setEditingDriver({
+                        ...editingDriver,
+                        cubature_min: Number(e.target.value),
+                      })
                     }
                     className="w-full min-w-0 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
                   />
@@ -2784,7 +2903,10 @@ export default function AdminDashboardScreen({
                     placeholder="До"
                     value={editingDriver.cubature_max || ""}
                     onChange={(e) =>
-                      setEditingDriver({ ...editingDriver, cubature_max: Number(e.target.value) })
+                      setEditingDriver({
+                        ...editingDriver,
+                        cubature_max: Number(e.target.value),
+                      })
                     }
                     className="w-full min-w-0 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
                   />
@@ -2803,7 +2925,10 @@ export default function AdminDashboardScreen({
                     placeholder="От"
                     value={editingDriver.tonnage_min || ""}
                     onChange={(e) =>
-                      setEditingDriver({ ...editingDriver, tonnage_min: Number(e.target.value) })
+                      setEditingDriver({
+                        ...editingDriver,
+                        tonnage_min: Number(e.target.value),
+                      })
                     }
                     className="w-full min-w-0 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
                   />
@@ -2814,7 +2939,10 @@ export default function AdminDashboardScreen({
                     placeholder="До"
                     value={editingDriver.tonnage_max || ""}
                     onChange={(e) =>
-                      setEditingDriver({ ...editingDriver, tonnage_max: Number(e.target.value) })
+                      setEditingDriver({
+                        ...editingDriver,
+                        tonnage_max: Number(e.target.value),
+                      })
                     }
                     className="w-full min-w-0 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
                   />
@@ -2863,45 +2991,105 @@ export default function AdminDashboardScreen({
                 </label>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="flex flex-col gap-2">
-                    <span className="text-xs font-bold text-slate-500">Спереди + номер</span>
+                    <span className="text-xs font-bold text-slate-500">
+                      Спереди + номер
+                    </span>
                     <label className="relative flex flex-col items-center justify-center h-28 border-2 border-slate-200 border-dashed hover:bg-slate-100 cursor-pointer rounded-xl bg-slate-50 transition-colors overflow-hidden group">
                       {fileMain || previewMain ? (
-                        <img src={fileMain ? URL.createObjectURL(fileMain) : (previewMain || undefined)} alt="Спереди + номер" className="absolute inset-0 w-full h-full object-cover" />
+                        <img
+                          src={
+                            fileMain
+                              ? URL.createObjectURL(fileMain)
+                              : previewMain || undefined
+                          }
+                          alt="Спереди + номер"
+                          className="absolute inset-0 w-full h-full object-cover"
+                        />
                       ) : (
                         <div className="text-slate-400 flex flex-col items-center">
                           <Camera className="w-6 h-6 mb-1" />
-                          <span className="text-[10px] font-medium uppercase tracking-wider">Добавить</span>
+                          <span className="text-[10px] font-medium uppercase tracking-wider">
+                            Добавить
+                          </span>
                         </div>
                       )}
-                      <input type="file" accept="image/*" className="hidden" onChange={(e) => { if (e.target.files?.[0]) setFileMain(e.target.files[0]); }} />
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          if (e.target.files?.[0])
+                            setFileMain(e.target.files[0]);
+                        }}
+                      />
                     </label>
                   </div>
                   <div className="flex flex-col gap-2">
-                    <span className="text-xs font-bold text-slate-500">Сбоку</span>
+                    <span className="text-xs font-bold text-slate-500">
+                      Сбоку
+                    </span>
                     <label className="relative flex flex-col items-center justify-center h-28 border-2 border-slate-200 border-dashed hover:bg-slate-100 cursor-pointer rounded-xl bg-slate-50 transition-colors overflow-hidden group">
                       {fileLeft || previewLeft ? (
-                        <img src={fileLeft ? URL.createObjectURL(fileLeft) : (previewLeft || undefined)} alt="Сбоку" className="absolute inset-0 w-full h-full object-cover" />
+                        <img
+                          src={
+                            fileLeft
+                              ? URL.createObjectURL(fileLeft)
+                              : previewLeft || undefined
+                          }
+                          alt="Сбоку"
+                          className="absolute inset-0 w-full h-full object-cover"
+                        />
                       ) : (
                         <div className="text-slate-400 flex flex-col items-center">
                           <Camera className="w-6 h-6 mb-1" />
-                          <span className="text-[10px] font-medium uppercase tracking-wider">Добавить</span>
+                          <span className="text-[10px] font-medium uppercase tracking-wider">
+                            Добавить
+                          </span>
                         </div>
                       )}
-                      <input type="file" accept="image/*" className="hidden" onChange={(e) => { if (e.target.files?.[0]) setFileLeft(e.target.files[0]); }} />
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          if (e.target.files?.[0])
+                            setFileLeft(e.target.files[0]);
+                        }}
+                      />
                     </label>
                   </div>
                   <div className="flex flex-col gap-2">
-                    <span className="text-xs font-bold text-slate-500">Только госномер</span>
+                    <span className="text-xs font-bold text-slate-500">
+                      Только госномер
+                    </span>
                     <label className="relative flex flex-col items-center justify-center h-28 border-2 border-slate-200 border-dashed hover:bg-slate-100 cursor-pointer rounded-xl bg-slate-50 transition-colors overflow-hidden group">
                       {filePlate || previewPlate ? (
-                        <img src={filePlate ? URL.createObjectURL(filePlate) : (previewPlate || undefined)} alt="Только госномер" className="absolute inset-0 w-full h-full object-cover" />
+                        <img
+                          src={
+                            filePlate
+                              ? URL.createObjectURL(filePlate)
+                              : previewPlate || undefined
+                          }
+                          alt="Только госномер"
+                          className="absolute inset-0 w-full h-full object-cover"
+                        />
                       ) : (
                         <div className="text-slate-400 flex flex-col items-center">
                           <Camera className="w-6 h-6 mb-1" />
-                          <span className="text-[10px] font-medium uppercase tracking-wider">Добавить</span>
+                          <span className="text-[10px] font-medium uppercase tracking-wider">
+                            Добавить
+                          </span>
                         </div>
                       )}
-                      <input type="file" accept="image/*" className="hidden" onChange={(e) => { if (e.target.files?.[0]) setFilePlate(e.target.files[0]); }} />
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          if (e.target.files?.[0])
+                            setFilePlate(e.target.files[0]);
+                        }}
+                      />
                     </label>
                   </div>
                 </div>

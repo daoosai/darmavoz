@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from "react";
 import toast from "react-hot-toast";
 import { LogOut } from "lucide-react";
-import { baseURL } from "./utils";
+import { baseURL, handleApiError } from "./utils";
 import { useAuthStore } from "./store";
 
 interface AdminProfileScreenProps {
   onLogout: () => void;
 }
 
-export default function AdminProfileScreen({ onLogout }: AdminProfileScreenProps) {
+export default function AdminProfileScreen({
+  onLogout,
+}: AdminProfileScreenProps) {
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -55,9 +57,9 @@ export default function AdminProfileScreen({ onLogout }: AdminProfileScreenProps
       } else {
         toast.error("Не удалось сохранить почту");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error("Ошибка при сохранении почты");
+      toast.error(handleApiError(err, "Ошибка при сохранении почты"));
     } finally {
       setIsSaving(false);
     }
@@ -76,7 +78,7 @@ export default function AdminProfileScreen({ onLogout }: AdminProfileScreenProps
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
         <div className="p-6">
           <h2 className="text-xl font-bold text-slate-800 mb-6">Профиль</h2>
-          
+
           <div className="flex flex-col gap-5">
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1.5">
@@ -90,7 +92,7 @@ export default function AdminProfileScreen({ onLogout }: AdminProfileScreenProps
                 className="w-full bg-white border border-slate-200 text-slate-800 rounded-xl px-4 py-3 font-medium outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] transition-all"
               />
             </div>
-            
+
             <button
               onClick={handleSave}
               disabled={isSaving}
@@ -101,7 +103,7 @@ export default function AdminProfileScreen({ onLogout }: AdminProfileScreenProps
           </div>
         </div>
       </div>
-      
+
       <button
         onClick={onLogout}
         className="flex items-center justify-center gap-2 w-full bg-red-50 text-red-600 rounded-xl py-3.5 font-bold hover:bg-red-100 transition-colors mt-2"

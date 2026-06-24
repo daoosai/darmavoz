@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { ArrowLeft, Loader2, Eye, EyeOff } from "lucide-react";
 import toast from "react-hot-toast";
-import { baseURL, formatPhoneNumber, formatErrorToRussian } from "./utils";
+import { baseURL, formatPhoneNumber, handleApiError } from "./utils";
 import { useAuthStore, UserRole } from "./store";
 
 interface DriverRegistrationScreenProps {
@@ -9,12 +9,15 @@ interface DriverRegistrationScreenProps {
   onBack: () => void;
 }
 
-export default function DriverRegistrationScreen({ onRegister, onBack }: DriverRegistrationScreenProps) {
+export default function DriverRegistrationScreen({
+  onRegister,
+  onBack,
+}: DriverRegistrationScreenProps) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  
+
   const [vehicleBrand, setVehicleBrand] = useState("");
   const [vehiclePlate, setVehiclePlate] = useState("");
   const [volumeMin, setVolumeMin] = useState("");
@@ -28,15 +31,21 @@ export default function DriverRegistrationScreen({ onRegister, onBack }: DriverR
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !phone.trim() || !password.trim() || !vehicleBrand.trim() || !vehiclePlate.trim()) {
+    if (
+      !name.trim() ||
+      !phone.trim() ||
+      !password.trim() ||
+      !vehicleBrand.trim() ||
+      !vehiclePlate.trim()
+    ) {
       toast.error("Пожалуйста, заполните все обязательные поля");
       return;
     }
     setIsLoading(true);
 
     try {
-      const cleanPhone = phone.replace(/[^\d+]/g, '');
-      
+      const cleanPhone = phone.replace(/[^\d+]/g, "");
+
       const payload = {
         name: name.trim(),
         phone: cleanPhone,
@@ -47,13 +56,13 @@ export default function DriverRegistrationScreen({ onRegister, onBack }: DriverR
         cubature_max: volumeMax ? Number(volumeMax) : null,
         tonnage_min: tonnageMin ? Number(tonnageMin) : null,
         tonnage_max: tonnageMax ? Number(tonnageMax) : null,
-        vehicle_type: vehicleType
+        vehicle_type: vehicleType,
       };
 
       const response = await fetch(`${baseURL}/auth/driver/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
@@ -70,50 +79,55 @@ export default function DriverRegistrationScreen({ onRegister, onBack }: DriverR
           cubature_max: "Максимальная кубатура",
           tonnage_min: "Минимальный тоннаж",
           tonnage_max: "Максимальный тоннаж",
-          vehicle_type: "Тип кузова"
+          vehicle_type: "Тип кузова",
         };
-        
+
         const msgMap: Record<string, string> = {
-          "String should have at least 6 characters": "должен содержать не менее 6 символов",
-          "String should have at least 1 characters": "обязательное поле для заполнения",
+          "String should have at least 6 characters":
+            "должен содержать не менее 6 символов",
+          "String should have at least 1 characters":
+            "обязательное поле для заполнения",
           "Field required": "обязательное поле для заполнения",
           "value is not a valid float": "должно быть числом",
         };
 
         if (errData.detail && Array.isArray(errData.detail)) {
-          const errMsg = errData.detail.map((e: any) => {
-            const field = e.loc ? e.loc[e.loc.length - 1] : '';
-            const translatedField = fieldMap[field] || field;
-            
-            // Try partial matches for tricky strings if needed, or exact match
-            let translatedMsg = e.msg;
-            for (const [key, val] of Object.entries(msgMap)) {
-              if (e.msg.includes(key)) {
-                translatedMsg = val;
-                break;
-              }
-            }
+          const errMsg = errData.detail
+            .map((e: any) => {
+              const field = e.loc ? e.loc[e.loc.length - 1] : "";
+              const translatedField = fieldMap[field] || field;
 
-            return `${translatedField}: ${translatedMsg}`;
-          }).join(', ');
+              // Try partial matches for tricky strings if needed, or exact match
+              let translatedMsg = e.msg;
+              for (const [key, val] of Object.entries(msgMap)) {
+                if (e.msg.includes(key)) {
+                  translatedMsg = val;
+                  break;
+                }
+              }
+
+              return `${translatedField}: ${translatedMsg}`;
+            })
+            .join(", ");
           throw new Error(errMsg);
         }
-        throw new Error(errData.detail || errData.message || "Ошибка при регистрации");
+        throw new Error(
+          errData.detail || errData.message || "Ошибка при регистрации",
+        );
       }
 
       const data = await response.json();
-      
+
       if (data.access_token) {
-        useAuthStore.getState().login(data.access_token, data.role || 'driver');
+        useAuthStore.getState().login(data.access_token, data.role || "driver");
         toast.success("Регистрация успешна!");
-        onRegister(data.role || 'driver');
+        onRegister(data.role || "driver");
       } else {
         throw new Error("Токен не получен от сервера");
       }
-
     } catch (err: any) {
       console.error(err);
-      toast.error(formatErrorToRussian(err, "Сбой при регистрации"));
+      toast.error(handleApiError(err, "Сбой при регистрации"));
     } finally {
       setIsLoading(false);
     }
@@ -138,9 +152,14 @@ export default function DriverRegistrationScreen({ onRegister, onBack }: DriverR
           Создание аккаунта водителя
         </h2>
 
-        <form onSubmit={handleSubmit} className="w-full max-w-sm flex flex-col space-y-4">
+        <form
+          onSubmit={handleSubmit}
+          className="w-full max-w-sm flex flex-col space-y-4"
+        >
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">ФИО</label>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">
+              ФИО
+            </label>
             <input
               type="text"
               value={name}
@@ -151,7 +170,9 @@ export default function DriverRegistrationScreen({ onRegister, onBack }: DriverR
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Номер телефона</label>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">
+              Номер телефона
+            </label>
             <input
               type="tel"
               value={phone}
@@ -163,7 +184,9 @@ export default function DriverRegistrationScreen({ onRegister, onBack }: DriverR
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Пароль</label>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">
+              Пароль
+            </label>
             <div className="relative w-full">
               <input
                 type={showPassword ? "text" : "password"}
@@ -177,15 +200,21 @@ export default function DriverRegistrationScreen({ onRegister, onBack }: DriverR
                 className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
                 onClick={() => setShowPassword(!showPassword)}
               >
-                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                {showPassword ? (
+                  <EyeOff className="w-5 h-5" />
+                ) : (
+                  <Eye className="w-5 h-5" />
+                )}
               </button>
             </div>
           </div>
-          
+
           <div className="w-full h-px bg-slate-100 my-2"></div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Марка машины</label>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">
+              Марка машины
+            </label>
             <input
               type="text"
               value={vehicleBrand}
@@ -196,7 +225,9 @@ export default function DriverRegistrationScreen({ onRegister, onBack }: DriverR
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Госномер</label>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">
+              Госномер
+            </label>
             <input
               type="text"
               value={vehiclePlate}
@@ -207,7 +238,9 @@ export default function DriverRegistrationScreen({ onRegister, onBack }: DriverR
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Тип машины</label>
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">
+              Тип машины
+            </label>
             <select
               value={vehicleType}
               onChange={(e) => setVehicleType(e.target.value)}
@@ -221,7 +254,9 @@ export default function DriverRegistrationScreen({ onRegister, onBack }: DriverR
 
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5 w-full">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Кубатура (м³)</label>
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">
+                Кубатура (м³)
+              </label>
               <div className="grid grid-cols-2 gap-2 w-full overflow-hidden">
                 <input
                   type="number"
@@ -241,7 +276,9 @@ export default function DriverRegistrationScreen({ onRegister, onBack }: DriverR
             </div>
 
             <div className="flex flex-col gap-1.5 w-full">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Тоннаж (т)</label>
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">
+                Тоннаж (т)
+              </label>
               <div className="grid grid-cols-2 gap-2 w-full overflow-hidden">
                 <input
                   type="number"

@@ -1,6 +1,16 @@
 import React, { useState, useEffect, useRef } from "react";
-import { X, MapPin, Plus, Loader2, Navigation, Trash2, Edit2, CheckCircle2, Circle } from "lucide-react";
-import { baseURL } from "./utils";
+import {
+  X,
+  MapPin,
+  Plus,
+  Loader2,
+  Navigation,
+  Trash2,
+  Edit2,
+  CheckCircle2,
+  Circle,
+} from "lucide-react";
+import { baseURL, handleApiError } from "./utils";
 import { useAuthStore, useAddressStore } from "./store";
 import toast from "react-hot-toast";
 
@@ -55,11 +65,15 @@ export default function ClientAddressBottomSheet({
     }
     return () => {
       if (suggestViewRef.current) {
-        try { suggestViewRef.current.destroy(); } catch (e) {}
+        try {
+          suggestViewRef.current.destroy();
+        } catch (e) {}
         suggestViewRef.current = null;
       }
       if (mapRef.current) {
-        try { mapRef.current.destroy(); } catch (e) {}
+        try {
+          mapRef.current.destroy();
+        } catch (e) {}
         mapRef.current = null;
       }
       placemarkRef.current = null;
@@ -72,11 +86,15 @@ export default function ClientAddressBottomSheet({
 
     if (mapRef.current) {
       if (!placemarkRef.current) {
-        placemarkRef.current = new (window as any).ymaps.Placemark(coords, {}, { 
-          preset: 'islands#redIcon', 
-          draggable: true 
-        });
-        placemarkRef.current.events.add('dragend', () => {
+        placemarkRef.current = new (window as any).ymaps.Placemark(
+          coords,
+          {},
+          {
+            preset: "islands#redIcon",
+            draggable: true,
+          },
+        );
+        placemarkRef.current.events.add("dragend", () => {
           const newCoords = placemarkRef.current.geometry.getCoordinates();
           handleMapClickOrDrag(newCoords);
         });
@@ -104,28 +122,35 @@ export default function ClientAddressBottomSheet({
     (window as any).ymaps.ready(() => {
       try {
         if (!mapContainerRef.current || !inputRef.current) return;
-        
+
         // Clean up previous instances just in case
         if (suggestViewRef.current) {
-          try { suggestViewRef.current.destroy(); } catch (e) {}
+          try {
+            suggestViewRef.current.destroy();
+          } catch (e) {}
           suggestViewRef.current = null;
         }
         if (mapRef.current) {
-          try { mapRef.current.destroy(); } catch (e) {}
+          try {
+            mapRef.current.destroy();
+          } catch (e) {}
           mapRef.current = null;
         }
         placemarkRef.current = null;
 
         // Init map
         if (mapContainerRef.current) {
-          mapRef.current = new (window as any).ymaps.Map(mapContainerRef.current, {
-            center: [57.152223, 65.527202], // Tyumen
-            zoom: 12,
-            controls: ['zoomControl']
-          });
+          mapRef.current = new (window as any).ymaps.Map(
+            mapContainerRef.current,
+            {
+              center: [57.152223, 65.527202], // Tyumen
+              zoom: 12,
+              controls: ["zoomControl"],
+            },
+          );
 
-          mapRef.current.events.add('click', (e: any) => {
-             handleMapClickOrDrag(e.get('coords'));
+          mapRef.current.events.add("click", (e: any) => {
+            handleMapClickOrDrag(e.get("coords"));
           });
         }
 
@@ -133,39 +158,49 @@ export default function ClientAddressBottomSheet({
         if (inputRef.current && (window as any).ymaps.SuggestView) {
           setTimeout(() => {
             if (!inputRef.current) return;
-            suggestViewRef.current = new (window as any).ymaps.SuggestView('suggest-address', {
-              provider: 'yandex#map',
-              results: 5
-            });
-            suggestViewRef.current.events.add('select', (e: any) => {
-              const selected = e.get('item').value;
+            suggestViewRef.current = new (window as any).ymaps.SuggestView(
+              "suggest-address",
+              {
+                provider: "yandex#map",
+                results: 5,
+              },
+            );
+            suggestViewRef.current.events.add("select", (e: any) => {
+              const selected = e.get("item").value;
               setNewAddress(selected);
               if (inputRef.current) {
                 inputRef.current.value = selected;
               }
-              
+
               (window as any).ymaps.geocode(selected).then((res: any) => {
                 const firstGeoObject = res.geoObjects.get(0);
                 if (firstGeoObject) {
                   const coords = firstGeoObject.geometry.getCoordinates();
-                  
+
                   setLat(coords[0]);
                   setLon(coords[1]);
 
                   if (mapRef.current) {
                     mapRef.current.setCenter(coords, 16, {
                       duration: 400,
-                      timingFunction: 'ease-in-out'
+                      timingFunction: "ease-in-out",
                     });
 
                     if (!placemarkRef.current) {
-                      placemarkRef.current = new (window as any).ymaps.Placemark(coords, {}, { 
-                        preset: 'islands#redIcon',
-                        draggable: true
-                      });
-                      
-                      placemarkRef.current.events.add('dragend', () => {
-                        const newCoords = placemarkRef.current.geometry.getCoordinates();
+                      placemarkRef.current = new (
+                        window as any
+                      ).ymaps.Placemark(
+                        coords,
+                        {},
+                        {
+                          preset: "islands#redIcon",
+                          draggable: true,
+                        },
+                      );
+
+                      placemarkRef.current.events.add("dragend", () => {
+                        const newCoords =
+                          placemarkRef.current.geometry.getCoordinates();
                         handleMapClickOrDrag(newCoords);
                       });
 
@@ -190,22 +225,25 @@ export default function ClientAddressBottomSheet({
     try {
       const res = await fetch(`${baseURL}/client/addresses`, {
         headers: {
-          Authorization: `Bearer ${token}`
-        }
+          Authorization: `Bearer ${token}`,
+        },
       });
       if (res.ok) {
         const data = await res.json();
         const addressList = Array.isArray(data) ? data : data.results || [];
         setAddresses(addressList);
-        
+
         if (addressList.length === 0) {
           setIsAdding(true);
         } else {
-          const match = selectedAddress ? addressList.find((a: any) => a.full_address === selectedAddress) : null;
+          const match = selectedAddress
+            ? addressList.find((a: any) => a.full_address === selectedAddress)
+            : null;
           if (match) {
             setLocalSelectedId(match.id);
           } else {
-            const def = addressList.find((a: any) => a.is_default) || addressList[0];
+            const def =
+              addressList.find((a: any) => a.is_default) || addressList[0];
             setSelectedAddress(def.full_address);
             setLocalSelectedId(def.id);
           }
@@ -220,7 +258,7 @@ export default function ClientAddressBottomSheet({
 
   const handleSaveList = () => {
     if (localSelectedId) {
-      const selectedAddr = addresses.find(a => a.id === localSelectedId);
+      const selectedAddr = addresses.find((a) => a.id === localSelectedId);
       if (selectedAddr) {
         setSelectedAddress(selectedAddr.full_address);
       }
@@ -233,7 +271,7 @@ export default function ClientAddressBottomSheet({
     try {
       const res = await fetch(`${baseURL}/client/addresses/${id}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
         toast.success("Адрес удален");
@@ -241,8 +279,8 @@ export default function ClientAddressBottomSheet({
       } else {
         toast.error("Ошибка при удалении адреса");
       }
-    } catch (err) {
-      toast.error("Ошибка при удалении");
+    } catch (err: any) {
+      toast.error(handleApiError(err, "Ошибка при удалении"));
     }
   };
 
@@ -260,7 +298,7 @@ export default function ClientAddressBottomSheet({
     setIsSubmitting(true);
     try {
       const method = editingAddressId ? "PUT" : "POST";
-      const url = editingAddressId 
+      const url = editingAddressId
         ? `${baseURL}/client/addresses/${editingAddressId}`
         : `${baseURL}/client/addresses`;
 
@@ -268,7 +306,7 @@ export default function ClientAddressBottomSheet({
         method,
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           address: addressToSave,
@@ -276,8 +314,8 @@ export default function ClientAddressBottomSheet({
           lat: lat,
           lon: lon,
           comment: newComment,
-          is_default: addresses.length === 0
-        })
+          is_default: addresses.length === 0,
+        }),
       });
 
       if (res.ok) {
@@ -291,9 +329,9 @@ export default function ClientAddressBottomSheet({
       } else {
         toast.error("Не удалось сохранить адрес");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error("Ошибка сохранения");
+      toast.error(handleApiError(err, "Ошибка сохранения"));
     } finally {
       setIsSubmitting(false);
     }
@@ -306,8 +344,8 @@ export default function ClientAddressBottomSheet({
     setIsAdding(true);
     // clean map if necessary
     if (placemarkRef.current && mapRef.current) {
-        mapRef.current.geoObjects.remove(placemarkRef.current);
-        placemarkRef.current = null;
+      mapRef.current.geoObjects.remove(placemarkRef.current);
+      placemarkRef.current = null;
     }
   };
 
@@ -320,7 +358,7 @@ export default function ClientAddressBottomSheet({
         onClick={onClose}
       />
       <div
-        className={`fixed inset-x-0 bottom-0 z-[70] bg-white rounded-t-[32px] shadow-2xl transform transition-transform duration-300 ease-out flex flex-col max-h-[95vh] ${isAdding ? 'h-[95vh]' : 'h-auto'} sm:max-w-xl sm:mx-auto`}
+        className={`fixed inset-x-0 bottom-0 z-[70] bg-white rounded-t-[32px] shadow-2xl transform transition-transform duration-300 ease-out flex flex-col max-h-[95vh] ${isAdding ? "h-[95vh]" : "h-auto"} sm:max-w-xl sm:mx-auto`}
       >
         <div className="w-full flex justify-center pt-3 pb-1 shrink-0">
           <div className="w-12 h-1.5 bg-slate-200 rounded-full"></div>
@@ -344,15 +382,17 @@ export default function ClientAddressBottomSheet({
           {isAdding ? (
             <div className="flex flex-col h-full bg-slate-50">
               {/* Map Container */}
-              <div 
-                ref={mapContainerRef} 
+              <div
+                ref={mapContainerRef}
                 className="w-full min-h-[240px] shrink-0 bg-slate-200"
               />
 
               {/* Form */}
               <div className="flex-1 bg-white flex flex-col gap-5 px-6 py-5 rounded-t-3xl -mt-4 relative z-10">
                 <div className="flex flex-col gap-2">
-                  <label className="text-sm font-semibold text-slate-700 ml-1">Город, улица, дом</label>
+                  <label className="text-sm font-semibold text-slate-700 ml-1">
+                    Город, улица, дом
+                  </label>
                   <div className="relative">
                     <Navigation className="absolute left-3.5 top-[14px] w-5 h-5 text-slate-400" />
                     <input
@@ -367,7 +407,9 @@ export default function ClientAddressBottomSheet({
                 </div>
 
                 <div className="flex flex-col gap-2">
-                  <label className="text-sm font-semibold text-slate-700 ml-1">Комментарий водителю</label>
+                  <label className="text-sm font-semibold text-slate-700 ml-1">
+                    Комментарий водителю
+                  </label>
                   <textarea
                     value={newComment}
                     onChange={(e) => setNewComment(e.target.value)}
@@ -402,7 +444,9 @@ export default function ClientAddressBottomSheet({
                   <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center mb-3">
                     <MapPin className="w-8 h-8 text-slate-300" />
                   </div>
-                  <p className="text-slate-500 font-medium mb-1">У вас пока нет сохраненных адресов</p>
+                  <p className="text-slate-500 font-medium mb-1">
+                    У вас пока нет сохраненных адресов
+                  </p>
                 </div>
               ) : (
                 <div className="flex flex-col gap-3">
@@ -426,7 +470,9 @@ export default function ClientAddressBottomSheet({
                           )}
                         </div>
                         <div className="flex-1 min-w-0 flex flex-col">
-                          <p className={`font-semibold text-[15px] leading-tight truncate ${isSelected ? 'text-[#2DB0E6]' : 'text-slate-800'}`}>
+                          <p
+                            className={`font-semibold text-[15px] leading-tight truncate ${isSelected ? "text-[#2DB0E6]" : "text-slate-800"}`}
+                          >
                             {addr.full_address || addr.address}
                           </p>
                           {addr.comment && (
@@ -444,7 +490,9 @@ export default function ClientAddressBottomSheet({
                               <Edit2 className="w-4 h-4" />
                             </button>
                             <button
-                              onClick={(e) => handleDeleteAddress(addr.id as string, e)}
+                              onClick={(e) =>
+                                handleDeleteAddress(addr.id as string, e)
+                              }
                               className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
                             >
                               <Trash2 className="w-4 h-4" />

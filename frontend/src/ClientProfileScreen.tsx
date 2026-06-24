@@ -1,6 +1,16 @@
 import React, { useEffect, useState } from "react";
-import { User, MapPin, LogOut, Loader2, Edit2, ChevronLeft, PackageCheck, History, PhoneCall } from "lucide-react";
-import { baseURL, APP_VERSION } from "./utils";
+import {
+  User,
+  MapPin,
+  LogOut,
+  Loader2,
+  Edit2,
+  ChevronLeft,
+  PackageCheck,
+  History,
+  PhoneCall,
+} from "lucide-react";
+import { baseURL, APP_VERSION, handleApiError } from "./utils";
 import { useAuthStore } from "./store";
 import toast from "react-hot-toast";
 
@@ -14,12 +24,14 @@ interface ClientProfileScreenProps {
   onOpenAddresses?: () => void;
 }
 
-export default function ClientProfileScreen({ onOpenAddresses }: ClientProfileScreenProps) {
+export default function ClientProfileScreen({
+  onOpenAddresses,
+}: ClientProfileScreenProps) {
   const { token, logout } = useAuthStore();
   const [client, setClient] = useState<ClientData | null>(null);
   const [stats, setStats] = useState({ active: 0, total: 0 });
   const [isLoading, setIsLoading] = useState(true);
-  
+
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -33,19 +45,21 @@ export default function ClientProfileScreen({ onOpenAddresses }: ClientProfileSc
         }),
         fetch(`${baseURL}/clients/me/orders`, {
           headers: { Authorization: `Bearer ${token}` },
-        })
+        }),
       ]);
 
       if (clientRes.ok) {
         setClient(await clientRes.json());
       }
-      
+
       if (ordersRes.ok) {
         const orders = await ordersRes.json();
         if (Array.isArray(orders)) {
           setStats({
             total: orders.length,
-            active: orders.filter((o: any) => o.status === 'in_progress' || o.status === 'assigned').length
+            active: orders.filter(
+              (o: any) => o.status === "in_progress" || o.status === "assigned",
+            ).length,
           });
         }
       }
@@ -73,7 +87,7 @@ export default function ClientProfileScreen({ onOpenAddresses }: ClientProfileSc
       toast.error("Имя не может быть пустым");
       return;
     }
-    
+
     setIsSubmitting(true);
     try {
       const res = await fetch(`${baseURL}/clients/me`, {
@@ -84,7 +98,7 @@ export default function ClientProfileScreen({ onOpenAddresses }: ClientProfileSc
         },
         body: JSON.stringify({ name: newName }),
       });
-      
+
       if (res.ok) {
         toast.success("Данные обновлены");
         setIsEditModalOpen(false);
@@ -92,8 +106,8 @@ export default function ClientProfileScreen({ onOpenAddresses }: ClientProfileSc
       } else {
         toast.error("Ошибка при сохранении");
       }
-    } catch (e) {
-      toast.error("Сетевая ошибка");
+    } catch (e: any) {
+      toast.error(handleApiError(e, "Сетевая ошибка"));
     } finally {
       setIsSubmitting(false);
     }
@@ -115,10 +129,14 @@ export default function ClientProfileScreen({ onOpenAddresses }: ClientProfileSc
           <User className="w-8 h-8 text-white" />
         </div>
         <div className="flex flex-col flex-1">
-          <h2 className="text-xl font-bold leading-tight">{client?.name || "Имя не указано"}</h2>
-          <span className="text-white/80 font-medium mt-1">{client?.phone || "+7 (___) ___ __ __"}</span>
+          <h2 className="text-xl font-bold leading-tight">
+            {client?.name || "Имя не указано"}
+          </h2>
+          <span className="text-white/80 font-medium mt-1">
+            {client?.phone || "+7 (___) ___ __ __"}
+          </span>
         </div>
-        <button 
+        <button
           onClick={openEditModal}
           className="w-10 h-10 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-sm transition-colors shrink-0"
         >
@@ -133,37 +151,47 @@ export default function ClientProfileScreen({ onOpenAddresses }: ClientProfileSc
             <PackageCheck className="w-5 h-5 text-[#2DB0E6]" />
             <span className="text-sm font-medium text-slate-500">Активные</span>
           </div>
-          <span className="text-2xl font-bold text-slate-900">{stats.active}</span>
+          <span className="text-2xl font-bold text-slate-900">
+            {stats.active}
+          </span>
         </div>
         <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-2">
           <div className="flex items-center gap-2">
             <History className="w-5 h-5 text-[#2DB0E6]" />
-            <span className="text-sm font-medium text-slate-500">Всего заказов</span>
+            <span className="text-sm font-medium text-slate-500">
+              Всего заказов
+            </span>
           </div>
-          <span className="text-2xl font-bold text-slate-900">{stats.total}</span>
+          <span className="text-2xl font-bold text-slate-900">
+            {stats.total}
+          </span>
         </div>
       </div>
 
       {/* Useful Actions */}
       <div className="px-4 mt-6 flex flex-col gap-3">
-        <button 
+        <button
           onClick={onOpenAddresses}
           className="w-full bg-white p-4 rounded-2xl shadow-sm flex items-center gap-4 active:scale-[0.98] transition-transform"
         >
           <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center shrink-0">
             <MapPin className="w-5 h-5 text-[#2DB0E6]" />
           </div>
-          <span className="font-semibold text-slate-800 text-left flex-1">Мои адреса</span>
+          <span className="font-semibold text-slate-800 text-left flex-1">
+            Мои адреса
+          </span>
         </button>
 
-        <button 
-          onClick={() => window.location.href = 'tel:+79000000000'}
+        <button
+          onClick={() => (window.location.href = "tel:+79000000000")}
           className="w-full bg-white p-4 rounded-2xl shadow-sm flex items-center gap-4 active:scale-[0.98] transition-transform"
         >
           <div className="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center shrink-0">
             <PhoneCall className="w-5 h-5 text-green-500" />
           </div>
-          <span className="font-semibold text-slate-800 text-left flex-1">Позвонить диспетчеру</span>
+          <span className="font-semibold text-slate-800 text-left flex-1">
+            Позвонить диспетчеру
+          </span>
         </button>
       </div>
 
@@ -171,7 +199,7 @@ export default function ClientProfileScreen({ onOpenAddresses }: ClientProfileSc
 
       {/* Footer Area */}
       <div className="px-4 mt-8 mt-auto pt-6 flex flex-col items-center">
-        <button 
+        <button
           onClick={() => logout()}
           className="w-full bg-white border border-slate-200 text-slate-600 font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 active:bg-slate-50 transition-colors"
         >
@@ -186,29 +214,33 @@ export default function ClientProfileScreen({ onOpenAddresses }: ClientProfileSc
       {/* Edit Profile Modal */}
       {isEditModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div 
+          <div
             className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
             onClick={() => setIsEditModalOpen(false)}
           />
-          
+
           <div className="w-full max-w-lg bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl relative z-10 flex flex-col max-h-[90vh]">
             <div className="w-full flex justify-center pt-3 pb-2 sm:hidden">
               <div className="w-12 h-1.5 bg-slate-200 rounded-full"></div>
             </div>
-            
+
             <div className="px-6 py-4 flex items-center gap-4 border-b border-slate-50">
-              <button 
+              <button
                 onClick={() => setIsEditModalOpen(false)}
                 className="p-2 -ml-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-full transition-colors"
               >
                 <ChevronLeft className="w-6 h-6" />
               </button>
-              <h2 className="text-[20px] font-bold text-slate-900">Личные данные</h2>
+              <h2 className="text-[20px] font-bold text-slate-900">
+                Личные данные
+              </h2>
             </div>
 
             <div className="p-6 flex flex-col gap-6 overflow-y-auto">
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2 ml-1">Имя</label>
+                <label className="block text-sm font-semibold text-slate-700 mb-2 ml-1">
+                  Имя
+                </label>
                 <input
                   type="text"
                   value={firstName}
@@ -217,9 +249,11 @@ export default function ClientProfileScreen({ onOpenAddresses }: ClientProfileSc
                   placeholder="Ваше имя"
                 />
               </div>
-              
+
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2 ml-1">Фамилия</label>
+                <label className="block text-sm font-semibold text-slate-700 mb-2 ml-1">
+                  Фамилия
+                </label>
                 <input
                   type="text"
                   value={lastName}

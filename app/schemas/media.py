@@ -26,7 +26,7 @@ class PresignUploadResponse(BaseModel):
 
 class ConfirmUploadRequest(BaseModel):
     entity_type: str | None = None
-    entity_id: UUID
+    entity_id: UUID | None = None
     object_key: str
     file_name: str | None = None
     content_type: str | None = None

@@ -56,10 +56,6 @@ router = APIRouter()
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
-def _error_detail(code: str, message: str) -> dict[str, str]:
-    return {"code": code, "message": message}
-
-
 @router.get("/stats")
 async def get_admin_stats(current_admin: User = Depends(get_current_admin_user)):
     return {"status": "ok", "message": "Admin area", "role": current_admin.role.name}
@@ -83,7 +79,7 @@ class AdminMeUpdate(BaseModel):
         if not normalized:
             return None
         if not EMAIL_RE.match(normalized):
-            raise ValueError("Некорректный формат email")
+            raise ValueError("Invalid email format")
         return normalized
 
 
@@ -108,10 +104,7 @@ async def update_admin_me(
             select(exists().where(func.lower(User.email) == normalized_email).where(User.id != current_admin.id))
         )
         if email_taken:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=_error_detail("ADMIN_EMAIL_ALREADY_IN_USE", "Email уже используется"),
-            )
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already in use")
 
     current_admin.email = normalized_email
     await db.commit()
@@ -356,19 +349,13 @@ async def _ensure_unique_driver_phone(
     if exclude_driver_id is not None:
         driver_stmt = driver_stmt.where(Driver.id != exclude_driver_id)
     if await db.scalar(driver_stmt) is not None:
-        raise HTTPException(
-            status_code=409,
-            detail=_error_detail("DRIVER_PHONE_ALREADY_EXISTS", "Водитель с таким номером телефона уже существует"),
-        )
+        raise HTTPException(status_code=409, detail="Водитель с таким номером телефона уже существует")
 
     user_stmt = select(User).where(User.username == phone)
     if exclude_user_id is not None:
         user_stmt = user_stmt.where(User.id != exclude_user_id)
     if await db.scalar(user_stmt) is not None:
-        raise HTTPException(
-            status_code=409,
-            detail=_error_detail("DRIVER_PHONE_ALREADY_EXISTS", "Водитель с таким номером телефона уже существует"),
-        )
+        raise HTTPException(status_code=409, detail="Водитель с таким номером телефона уже существует")
 
 
 async def _find_free_vehicle(db: AsyncSession, delivery_option_id: UUID) -> Vehicle | None:
@@ -393,10 +380,7 @@ async def _ensure_vehicle_is_free(
     if exclude_driver_id is not None:
         stmt = stmt.where(Driver.id != exclude_driver_id)
     if await db.scalar(stmt) is not None:
-        raise HTTPException(
-            status_code=409,
-            detail=_error_detail("VEHICLE_ALREADY_ASSIGNED", "Транспорт уже назначен другому водителю"),
-        )
+        raise HTTPException(status_code=409, detail="Vehicle is already assigned to another driver")
 
 
 def _build_vehicle_title(driver_name: str, delivery_option: DeliveryOption) -> str:
@@ -408,7 +392,7 @@ def _build_admin_vehicle_title(*, brand: str, plate_number: str, fallback_title:
     return " / ".join(parts) if parts else fallback_title
 
 
-def _build_deleted_unique_value(value: str | None, *, max_length: int, marker: str = "_del_") -> str:
+def _build_deleted_unique_value(value: str | None, *, max_length: int, marker: str = "_d") -> str:
     suffix = f"{marker}{uuid4().hex[:6]}"
     base = (value or "deleted").strip() or "deleted"
     if len(base) + len(suffix) > max_length:
@@ -470,10 +454,7 @@ async def _ensure_driver_user(
 
     if user is None:
         if not password:
-            raise HTTPException(
-                status_code=400,
-                detail=_error_detail("DRIVER_PASSWORD_REQUIRED", "Для водителя без учётной записи нужно указать пароль"),
-            )
+            raise HTTPException(status_code=400, detail="Password is required for driver without auth user")
         user = User(
             username=phone,
             hashed_password=get_password_hash(password),
@@ -930,10 +911,10 @@ async def delete_admin_driver(
         if user is not None:
             await db.delete(user)
         await db.commit()
-        return DeleteResult(action="deleted", detail="Водитель удалён окончательно")
+        return DeleteResult(action="deleted", detail="Driver deleted permanently")
     except IntegrityError:
         await db.rollback()
-        return DeleteResult(action="archived", detail="Водитель архивирован, номер телефона освобождён")
+        return DeleteResult(action="archived", detail="Driver archived and phone number released")
 
 
 @router.post("/avito/webhook/register")

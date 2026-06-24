@@ -1,3 +1,4 @@
+import logging
 from uuid import UUID
 from pathlib import Path
 
@@ -27,6 +28,7 @@ from app.services.vehicle_moderation import (
 
 router = APIRouter()
 DRIVER_VEHICLE_MEDIA_SLOTS = REQUIRED_VEHICLE_MEDIA_SLOTS
+logger = logging.getLogger("uvicorn.error")
 
 
 def _get_entity_model(entity_type: str):
@@ -147,12 +149,13 @@ async def presign_upload(
 
     object_key = storage.build_object_key(entity_type, payload.file_name)
     upload_url = storage.generate_presigned_put(object_key, payload.content_type)
+    logger.info("Generated upload URL: %s", upload_url)
     return PresignUploadResponse(
         bucket=storage.bucket,
         object_key=object_key,
         upload_url=upload_url,
         public_url=storage.build_public_url(object_key),
-        expires_in=900,
+        expires_in=3600,
     )
 
 
@@ -254,6 +257,7 @@ async def confirm_upload(
 
     await db.commit()
     await db.refresh(media_file)
+    logger.info("Confirmed media %s, Public URL: %s", media_file.id, media_file.public_url)
     return ConfirmUploadResponse(media_file=media_file)
 
 

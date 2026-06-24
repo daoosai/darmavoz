@@ -16,10 +16,6 @@ from app.utils.phones import normalize_phone, normalize_phone_like_username
 router = APIRouter()
 
 
-def _error_detail(code: str, message: str) -> dict[str, str]:
-    return {"code": code, "message": message}
-
-
 def _build_registration_vehicle_title(*, brand: str, plate_number: str) -> str:
     parts = [part.strip() for part in (brand, plate_number) if part.strip()]
     return " / ".join(parts) if parts else "Черновик машины"
@@ -43,17 +39,11 @@ async def driver_register(
 
     existing_user = await db.scalar(select(User).where(User.username == normalized_phone))
     if existing_user is not None:
-        raise HTTPException(
-            status_code=409,
-            detail=_error_detail("DRIVER_PHONE_ALREADY_EXISTS", "Водитель с таким номером телефона уже существует"),
-        )
+        raise HTTPException(status_code=409, detail="Водитель с таким номером телефона уже существует")
 
     existing_driver = await db.scalar(select(Driver).where(Driver.phone == normalized_phone))
     if existing_driver is not None:
-        raise HTTPException(
-            status_code=409,
-            detail=_error_detail("DRIVER_PHONE_ALREADY_EXISTS", "Водитель с таким номером телефона уже существует"),
-        )
+        raise HTTPException(status_code=409, detail="Водитель с таким номером телефона уже существует")
 
     role = await _get_or_create_driver_role(db)
     user = User(
@@ -129,15 +119,12 @@ async def login(
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=_error_detail("INVALID_CREDENTIALS", "Неверный логин или пароль"),
+            detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
     if not user.is_active:
-        raise HTTPException(
-            status_code=400,
-            detail=_error_detail("USER_INACTIVE", "Пользователь деактивирован"),
-        )
+        raise HTTPException(status_code=400, detail="Inactive user")
     
     access_token = create_access_token(
         data={

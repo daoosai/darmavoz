@@ -438,18 +438,15 @@ async def delete_order_by_id(session: AsyncSession, order_id: UUID) -> None:
 
 
 def _matching_drivers_base_query(order: Order) -> Select[tuple[Driver]]:
-    requested_volume = get_order_requested_volume(order)
     return (
         select(Driver)
         .join(Driver.vehicle)
         .options(selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option))
         .where(Driver.status == DriverStatus.available.value)
-        .where(Driver.moderation_status == ModerationStatus.approved.value)
         .where(Driver.is_auto_dispatch_enabled.is_(True))
         .where(Driver.vehicle_id.is_not(None))
         .where(Vehicle.is_active.is_(True))
-        .where(Vehicle.moderation_status == ModerationStatus.approved.value)
-        .where(build_vehicle_volume_match_clause(requested_volume))
+        .where(Vehicle.delivery_option_id == order.delivery_option_id)
     )
 
 

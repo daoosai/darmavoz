@@ -1,6 +1,34 @@
 darmavoz.ru {
+  @minio_preflight {
+    path /darmavoz-media/* /s3/*
+    method OPTIONS
+  }
+  handle @minio_preflight {
+    header Access-Control-Allow-Origin "*"
+    header Access-Control-Allow-Methods "GET, PUT, POST, HEAD, DELETE, OPTIONS"
+    header Access-Control-Allow-Headers "*"
+    header Access-Control-Expose-Headers "ETag, x-amz-request-id"
+    respond "" 204
+  }
+
+  handle /darmavoz-media/* {
+    header Access-Control-Allow-Origin "*"
+    header Access-Control-Allow-Methods "GET, PUT, POST, HEAD, DELETE, OPTIONS"
+    header Access-Control-Allow-Headers "*"
+    header Access-Control-Expose-Headers "ETag, x-amz-request-id"
+    reverse_proxy minio:9000 {
+      header_down -Access-Control-*
+    }
+  }
+
   handle_path /s3/* {
-    reverse_proxy minio:9000
+    header Access-Control-Allow-Origin "*"
+    header Access-Control-Allow-Methods "GET, PUT, POST, HEAD, DELETE, OPTIONS"
+    header Access-Control-Allow-Headers "*"
+    header Access-Control-Expose-Headers "ETag, x-amz-request-id"
+    reverse_proxy minio:9000 {
+      header_down -Access-Control-*
+    }
   }
 
   handle_path /static/* {
@@ -8,13 +36,13 @@ darmavoz.ru {
     file_server
   }
 
-  @api path /api/* /health /ping
+  @api path /api/* /docs /openapi.json /health
   handle @api {
     reverse_proxy darmavoz_backend:8000
   }
 
   handle {
-    root * /opt/darmavoz/frontend/dist
+    root * /srv/darmavoz/react_web
     try_files {path} /index.html
     file_server
   }

@@ -41,6 +41,14 @@ def _send_push(token: str, title: str, body: str) -> str | None:
     message = messaging.Message(
         token=token,
         notification=messaging.Notification(title=title, body=body),
+        android=messaging.AndroidConfig(
+            notification=messaging.AndroidNotification(sound="default"),
+        ),
+        apns=messaging.APNSConfig(
+            payload=messaging.APNSPayload(
+                aps=messaging.Aps(sound="default"),
+            ),
+        ),
     )
     return messaging.send(message, app=app)
 

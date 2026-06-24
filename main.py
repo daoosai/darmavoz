@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api import admin, auth, catalog, client_addresses, client_auth, clients, driver_dispatch, drivers, logist_orders, media, orders, system, webhooks
 from app.core.config import settings
 from app.db.seed import seed_data
+from app.services.storage import StorageNotConfiguredError, get_storage_service
 from app.services.dispatch_worker import start_dispatch_worker, stop_dispatch_worker
 from app.services.redis_client import close_redis
 
@@ -30,6 +31,12 @@ async def lifespan(app: FastAPI):
     if not settings.LLM_API_KEY:
         logger.warning("LLM_API_KEY is not set. AI processing will fail!")
     await seed_data()
+    try:
+        get_storage_service()
+    except StorageNotConfiguredError:
+        logger.info("S3 storage is not configured; skipping startup storage initialization")
+    except Exception:
+        logger.exception("Failed to initialize S3 storage during startup")
     stop_event, task = await start_dispatch_worker()
     try:
         yield

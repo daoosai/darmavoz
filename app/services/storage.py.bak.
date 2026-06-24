@@ -1,8 +1,6 @@
-import logging
 import mimetypes
 import uuid
 from pathlib import Path
-from urllib.parse import urlsplit, urlunsplit
 
 import boto3
 from botocore.client import Config as BotoConfig
@@ -28,19 +26,6 @@ ALLOWED_ENTITY_TYPES = {
     "order",
     "vehicle",
 }
-UPLOAD_CORS_CONFIGURATION = {
-    "CORSRules": [
-        {
-            "AllowedHeaders": ["*"],
-            "AllowedMethods": ["PUT", "POST", "GET", "HEAD", "DELETE"],
-            "AllowedOrigins": ["*"],
-            "ExposeHeaders": ["ETag", "x-amz-request-id"],
-            "MaxAgeSeconds": 3600,
-        }
-    ]
-}
-logger = logging.getLogger(__name__)
-_BUCKET_CORS_UPDATE_UNSUPPORTED = False
 
 
 class StorageNotConfiguredError(RuntimeError):
@@ -56,10 +41,6 @@ def _slugify_file_name(file_name: str) -> str:
     return sanitized.strip("-") or "file"
 
 
-def _join_url(base: str, path: str) -> str:
-    return f"{base.rstrip('/')}/{path.lstrip('/')}"
-
-
 class S3StorageService:
     def __init__(self) -> None:
         if not settings.S3_ENABLED:
@@ -70,13 +51,6 @@ class S3StorageService:
         self.bucket = settings.S3_BUCKET
         self.prefix = settings.S3_PREFIX.strip("/")
         self.public_base_url = settings.s3_public_base_url
-        self._external_upload_base_url = (settings.S3_PRESIGN_ENDPOINT or settings.s3_public_base_url or "").rstrip("/")
-        self._external_public_base_url = (
-            settings.S3_PRESIGN_ENDPOINT
-            or settings.s3_public_base_url
-            or settings.S3_ENDPOINT
-            or ""
-        ).rstrip("/")
         self._client = boto3.client(
             "s3",
             endpoint_url=settings.S3_ENDPOINT,
@@ -99,45 +73,6 @@ class S3StorageService:
             use_ssl=presign_endpoint.startswith("https://"),
             config=BotoConfig(signature_version="s3v4", s3={"addressing_style": "path"}),
         )
-        self._ensure_bucket_cors()
-
-    def _ensure_bucket_cors(self) -> None:
-        try:
-            self._client.head_bucket(Bucket=self.bucket)
-        except ClientError as exc:
-            error_code = exc.response.get("Error", {}).get("Code", "")
-            if error_code not in {"404", "NoSuchBucket", "NotFound"}:
-                raise
-            self._client.create_bucket(Bucket=self.bucket)
-
-        current_rules = None
-        try:
-            current_rules = self._client.get_bucket_cors(Bucket=self.bucket).get("CORSRules")
-        except ClientError as exc:
-            error_code = exc.response.get("Error", {}).get("Code", "")
-            if error_code not in {"NoSuchCORSConfiguration", "NoSuchBucket", "NotFound"}:
-                logger.warning("Unable to read bucket CORS for %s: %s", self.bucket, exc)
-
-        global _BUCKET_CORS_UPDATE_UNSUPPORTED
-
-        if current_rules == UPLOAD_CORS_CONFIGURATION["CORSRules"] or _BUCKET_CORS_UPDATE_UNSUPPORTED:
-            return
-
-        try:
-            self._client.put_bucket_cors(
-                Bucket=self.bucket,
-                CORSConfiguration=UPLOAD_CORS_CONFIGURATION,
-            )
-        except ClientError as exc:
-            error_code = exc.response.get("Error", {}).get("Code", "")
-            if error_code == "NotImplemented":
-                _BUCKET_CORS_UPDATE_UNSUPPORTED = True
-                logger.info(
-                    "Bucket CORS update is unsupported by this S3 endpoint for %s; using proxy CORS headers",
-                    self.bucket,
-                )
-                return
-            logger.warning("Unable to update bucket CORS for %s: %s", self.bucket, exc)
 
     def assert_supported_image(self, file_name: str, content_type: str, file_size: int) -> None:
         suffix = Path(file_name).suffix.lower()
@@ -166,45 +101,20 @@ class S3StorageService:
         return f"{entity_type}s/{object_name}"
 
     def build_public_url(self, object_key: str) -> str:
-        path = f"{self.bucket}/{object_key}"
-        if self._external_public_base_url:
-            return _join_url(self._external_public_base_url, path)
-        return _join_url(settings.S3_ENDPOINT.rstrip('/'), path)
-
-    def _externalize_presigned_url(self, presigned_url: str) -> str:
-        if not self._external_upload_base_url:
-            return presigned_url
-
-        parsed = urlsplit(presigned_url)
-        if not parsed.netloc:
-            return presigned_url
-
-        external_base = urlsplit(self._external_upload_base_url)
-        internal_base = urlsplit((settings.S3_ENDPOINT or "").rstrip("/"))
-        if parsed.netloc != internal_base.netloc:
-            return presigned_url
-
-        return urlunsplit(
-            (
-                external_base.scheme or parsed.scheme,
-                external_base.netloc or parsed.netloc,
-                parsed.path,
-                parsed.query,
-                parsed.fragment,
-            )
-        )
+        if self.public_base_url:
+            return f"{self.public_base_url}{self.bucket}/{object_key}"
+        return f"{settings.S3_ENDPOINT.rstrip('/')}/{self.bucket}/{object_key}"
 
     def generate_presigned_put(self, object_key: str, content_type: str) -> str:
-        presigned_url = self._presign_client.generate_presigned_url(
+        return self._presign_client.generate_presigned_url(
             "put_object",
             Params={
                 "Bucket": self.bucket,
                 "Key": object_key,
                 "ContentType": content_type,
             },
-            ExpiresIn=3600,
+            ExpiresIn=settings.S3_PRESIGN_TTL_SECONDS,
         )
-        return self._externalize_presigned_url(presigned_url)
 
     def generate_presigned_get(self, object_key: str, expires_in: int | None = None) -> str:
         return self._presign_client.generate_presigned_url(

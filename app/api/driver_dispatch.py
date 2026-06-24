@@ -33,7 +33,7 @@ from app.services.dispatch_service import (
     list_orders_for_driver,
     mask_phone,
 )
-from app.services.email_service import send_admin_moderation_email
+from app.services.email_service import send_email
 from app.services.vehicle_moderation import (
     REQUIRED_VEHICLE_MEDIA_SLOTS,
     set_incomplete_moderation,
@@ -47,6 +47,23 @@ router = APIRouter()
 def _build_vehicle_title(vehicle: Vehicle) -> str:
     parts = [part.strip() for part in [vehicle.brand or "", vehicle.model or "", vehicle.plate_number or ""] if part]
     return " / ".join(parts) if parts else "Черновик машины"
+
+
+def _email_value(value: str | float | int | None) -> str:
+    if value is None:
+        return "Не указано"
+    if isinstance(value, str):
+        value = value.strip()
+        return value or "Не указано"
+    return str(value)
+
+
+def _email_range(min_value: float | int | None, max_value: float | int | None) -> str:
+    safe_min = _email_value(min_value)
+    safe_max = _email_value(max_value)
+    if safe_min == safe_max:
+        return safe_min
+    return f"{safe_min} - {safe_max}"
 
 
 async def _attach_vehicle_media(db: AsyncSession, vehicle: Vehicle | None) -> None:
@@ -470,13 +487,24 @@ async def submit_driver_vehicle_for_moderation(
             .where(Role.name == "admin", User.email.is_not(None))
         )
     ).scalars().all()
-    driver_label = (driver.name or "").strip() or driver.phone
+    email_body = (
+        "Здравствуйте!\n\n"
+        f"Водитель {_email_value(driver.name)} ({_email_value(driver.phone)}) отправил данные автомобиля на проверку.\n\n"
+        "Информация об автомобиле:\n"
+        f"- Марка/Модель: {_email_value(vehicle.brand)}\n"
+        f"- Госномер: {_email_value(vehicle.plate_number)}\n"
+        f"- Тип машины: {_email_value(vehicle.vehicle_type)}\n"
+        f"- Кубатура (м³): {_email_range(vehicle.cubature_min, vehicle.cubature_max)}\n"
+        f"- Тоннаж (т): {_email_range(vehicle.tonnage_min, vehicle.tonnage_max)}\n\n"
+        "Пожалуйста, зайдите в панель администратора для проверки фотографий и одобрения заявки."
+    )
     for admin_user in admin_users:
         if admin_user.email:
             background_tasks.add_task(
-                send_admin_moderation_email,
+                send_email,
                 to_email=admin_user.email,
-                driver_label=driver_label,
+                subject="ДАРМАВОЗ: Новая заявка на модерацию!",
+                body=email_body,
             )
 
     return await _load_driver_with_vehicle(db, driver.id)

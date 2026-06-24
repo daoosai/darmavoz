@@ -68,6 +68,14 @@ export default function DriverOrdersScreen({
     prevOffersCount.current = orders.length;
   }, [orders.length]);
 
+  const [currentOffer, setCurrentOffer] = useState<any>(null);
+  const [timeLeft, setTimeLeft] = useState(0);
+
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [moderationStatus, setModerationStatus] = useState<string | null>(null);
+  const [isDriverActive, setIsDriverActive] = useState(true);
+
   useEffect(() => {
     const offerId = currentOffer?.offer_id || currentOffer?.id;
     if (offerId && prevOfferId.current !== offerId) {
@@ -75,14 +83,6 @@ export default function DriverOrdersScreen({
     }
     prevOfferId.current = offerId || null;
   }, [currentOffer]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-  const [moderationStatus, setModerationStatus] = useState<string | null>(null);
-  const [isDriverActive, setIsDriverActive] = useState(true);
-
-  // Incoming offer state
-  const [currentOffer, setCurrentOffer] = useState<any>(null);
-  const [timeLeft, setTimeLeft] = useState(0);
 
   const [isProfileLoading, setIsProfileLoading] = useState(true);
 
@@ -499,8 +499,8 @@ export default function DriverOrdersScreen({
   return (
     <div className="flex flex-col h-screen bg-slate-50 sm:max-w-md sm:mx-auto shadow-2xl relative overflow-y-auto overflow-x-hidden pb-24">
       {/* Header */}
-      <div className="bg-white px-5 pt-6 pb-4 shadow-sm z-10 sticky top-0 border-b border-slate-100">
-        <div className="flex justify-between items-center mb-6">
+      <div className="bg-white px-5 pt-3 pb-3 shadow-sm z-10 sticky top-0 border-b border-slate-100">
+        <div className="flex justify-between items-center mb-3">
           <div>
             <h1 className="text-2xl font-black text-[#2DB0E6] tracking-tight">
               Дармавоз

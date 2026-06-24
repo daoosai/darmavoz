@@ -58,15 +58,6 @@ export default function DriverOrdersScreen({
 
   const [orders, setOrders] = useState<DriverOrder[]>([]);
   const [historyOrders, setHistoryOrders] = useState<DriverOrder[]>([]);
-  const prevOffersCount = React.useRef(0);
-  const prevOfferId = React.useRef<string | null>(null);
-
-  useEffect(() => {
-    if (prevOffersCount.current === 0 && orders.length > 0) {
-      playNewOrderSound();
-    }
-    prevOffersCount.current = orders.length;
-  }, [orders.length]);
 
   const [currentOffer, setCurrentOffer] = useState<any>(null);
   const [timeLeft, setTimeLeft] = useState(0);
@@ -77,11 +68,9 @@ export default function DriverOrdersScreen({
   const [isDriverActive, setIsDriverActive] = useState(true);
 
   useEffect(() => {
-    const offerId = currentOffer?.offer_id || currentOffer?.id;
-    if (offerId && prevOfferId.current !== offerId) {
+    if (currentOffer) {
       playNewOrderSound();
     }
-    prevOfferId.current = offerId || null;
   }, [currentOffer]);
 
   const [isProfileLoading, setIsProfileLoading] = useState(true);

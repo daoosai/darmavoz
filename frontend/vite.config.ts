@@ -11,6 +11,9 @@ export default defineConfig(() => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
+        workbox: {
+          navigateFallbackDenylist: [/^\/api/, /^\/s3/, /^\/static/, /.*\.apk$/],
+        },
         manifest: {
           name: 'Дармавоз',
           short_name: 'Дармавоз',

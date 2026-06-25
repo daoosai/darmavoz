@@ -487,16 +487,16 @@ async def submit_driver_vehicle_for_moderation(
             .where(Role.name == "admin", User.email.is_not(None))
         )
     ).scalars().all()
-    email_body = (
-        "Здравствуйте!\n\n"
+    body = (
+        f"Здравствуйте!\n\n"
         f"Водитель {_email_value(driver.name)} ({_email_value(driver.phone)}) отправил данные автомобиля на проверку.\n\n"
-        "Информация об автомобиле:\n"
-        f"- Марка/Модель: {_email_value(vehicle.brand)}\n"
-        f"- Госномер: {_email_value(vehicle.plate_number)}\n"
-        f"- Тип машины: {_email_value(vehicle.vehicle_type)}\n"
+        f"Информация об автомобиле:\n"
+        f"- Марка/Модель: {vehicle.brand or 'Не указано'}\n"
+        f"- Госномер: {vehicle.plate_number or 'Не указано'}\n"
+        f"- Тип машины: {vehicle.vehicle_type or 'Не указано'}\n"
         f"- Кубатура (м³): {_email_range(vehicle.cubature_min, vehicle.cubature_max)}\n"
         f"- Тоннаж (т): {_email_range(vehicle.tonnage_min, vehicle.tonnage_max)}\n\n"
-        "Пожалуйста, зайдите в панель администратора для проверки фотографий и одобрения заявки."
+        f"Пожалуйста, зайдите в панель администратора для проверки."
     )
     for admin_user in admin_users:
         if admin_user.email:
@@ -504,7 +504,7 @@ async def submit_driver_vehicle_for_moderation(
                 send_email,
                 to_email=admin_user.email,
                 subject="ДАРМАВОЗ: Новая заявка на модерацию!",
-                body=email_body,
+                body=body,
             )
 
     return await _load_driver_with_vehicle(db, driver.id)

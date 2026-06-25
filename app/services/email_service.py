@@ -45,7 +45,8 @@ def send_admin_moderation_email(*, to_email: str, driver_label: str) -> None:
         to_email=to_email,
         subject="ДАРМАВОЗ: Новая заявка на модерацию!",
         body=(
-            f"Водитель {driver_label} отправил данные автомобиля на проверку. "
+            "Здравствуйте!\n\n"
+            f"Водитель {driver_label} отправил данные автомобиля на проверку.\n\n"
             "Пожалуйста, зайдите в панель администратора для проверки."
         ),
     )

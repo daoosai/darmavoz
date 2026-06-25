@@ -52,7 +52,6 @@ export default function DriverOrdersScreen({
   const { logout, token } = useAuthStore();
   const [status, setStatus] = useState<DriverStatus>("offline");
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
-  const [isForbidden, setIsForbidden] = useState(false);
   const [activeTab, setActiveTab] = useState<"orders" | "profile">("orders");
   const [ordersTab, setOrdersTab] = useState<"current" | "history">("current");
 
@@ -175,14 +174,11 @@ export default function DriverOrdersScreen({
         }
 
         if (assignedRes.status === 403) {
-          setOrders([]);
-          setIsForbidden(true);
           if (!silent) setIsLoading(false);
           return;
         }
 
         if (assignedRes.ok) {
-          setIsForbidden(false);
           let assignedData = await assignedRes.json().catch(() => null);
           if (assignedData) {
             if (Array.isArray(assignedData)) {
@@ -232,8 +228,6 @@ export default function DriverOrdersScreen({
         }
 
         if (res.status === 403) {
-          setOrders([]);
-          setIsForbidden(true);
           if (!silent) setIsLoading(false);
           return;
         }
@@ -243,7 +237,6 @@ export default function DriverOrdersScreen({
           console.error("Orders error text:", errText);
           throw new Error("Не удалось загрузить заказы");
         }
-        setIsForbidden(false);
         const data = await res.json().catch(() => ({}));
         const loadedOrders = Array.isArray(data) ? data : data.orders || [];
         const activeOrders = loadedOrders.filter(
@@ -252,7 +245,7 @@ export default function DriverOrdersScreen({
         setOrders(activeOrders);
       } catch (error) {
         console.error("Error fetching orders:", error);
-        setOrders([]);
+        toast.error("Ошибка при загрузке заказов");
       } finally {
         if (!silent) setIsLoading(false);
       }
@@ -486,7 +479,7 @@ export default function DriverOrdersScreen({
     "?";
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50 sm:max-w-md sm:mx-auto shadow-2xl relative overflow-y-auto overflow-x-hidden pb-24">
+    <div className="flex flex-col min-h-screen bg-slate-50 sm:max-w-md sm:mx-auto shadow-2xl relative overflow-y-auto overflow-x-hidden pb-28">
       {/* Header */}
       <div className="bg-white px-5 pt-3 pb-3 shadow-sm z-10 sticky top-0 border-b border-slate-100">
         <div className="flex justify-between items-center mb-3">
@@ -567,19 +560,7 @@ export default function DriverOrdersScreen({
               <Loader2 className="w-8 h-8 animate-spin mb-3 text-[#2DB0E6]" />
               <p className="text-sm font-medium">Загрузка профиля...</p>
             </div>
-          ) : !isDriverActive ? (
-            <div className="flex flex-col items-center justify-center p-10 text-slate-500 text-center mt-10 min-h-[50vh] bg-amber-50 rounded-3xl border border-amber-200 shadow-sm">
-              <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mb-4 shadow-sm">
-                <AlertCircle className="w-10 h-10 text-amber-500" />
-              </div>
-              <p className="text-xl font-bold text-amber-900 mb-2">
-                Профиль не активен
-              </p>
-              <p className="text-sm text-amber-700">
-                Ваш профиль не активен, обратитесь к администратору.
-              </p>
-            </div>
-          ) : moderationStatus === "rejected" || isForbidden ? (
+          ) : !isDriverActive || moderationStatus === "rejected" ? (
             <div className="flex flex-col items-center justify-center p-10 text-red-600 text-center mt-10 min-h-[50vh] bg-red-50 rounded-3xl border border-red-200 shadow-sm">
               <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mb-4 shadow-sm">
                 <Ban className="w-10 h-10 text-red-500" />
@@ -717,8 +698,8 @@ export default function DriverOrdersScreen({
       )}
 
       {/* Bottom Navigation */}
-      <div className="fixed sm:absolute bottom-0 left-0 right-0 sm:max-w-md sm:mx-auto bg-white border-t border-slate-100 shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.1)] z-40 pb-safe">
-        <div className="flex justify-around items-center p-2">
+      <div className="fixed bottom-0 left-0 right-0 w-full bg-white z-[9999] border-t border-gray-200 pb-safe">
+        <div className="flex justify-around items-center p-2 sm:max-w-md sm:mx-auto">
           <button
             onClick={() => setActiveTab("orders")}
             className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${

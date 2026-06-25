@@ -256,7 +256,7 @@ export default function DriverProfileScreen({
 
   if (isLoading) {
     return (
-      <div className="flex-1 overflow-y-auto p-5 pb-24 bg-slate-50 flex justify-center items-center min-h-[50vh]">
+      <div className="flex-1 p-5 bg-slate-50 flex justify-center items-center min-h-[50vh]">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#2DB0E6]"></div>
       </div>
     );
@@ -414,7 +414,7 @@ export default function DriverProfileScreen({
   }
 
   return (
-    <div className="flex flex-col min-h-[calc(100vh-80px)] overflow-y-auto bg-slate-50 w-full relative">
+    <div className="flex flex-col flex-1 bg-slate-50 w-full relative">
       <div className="flex-1 flex flex-col gap-4 p-5 pb-6">
         <UpdateBanner />
 

@@ -10,28 +10,29 @@ export const playNewOrderSound = () => {
     let playCount = 1;
     const maxPlays = 4; // Количество повторений
 
+    const playSequence = () => {
+      audio.play().catch((e) => {
+        console.warn(
+          "Автовоспроизведение заблокировано браузером. Водитель должен тапнуть по экрану.",
+          e,
+        );
+      });
+    };
+
     // Слушаем событие завершения трека
     audio.addEventListener("ended", () => {
       if (playCount < maxPlays) {
         playCount++;
         // Сбрасываем время в начало (на всякий случай) и запускаем снова
         audio.currentTime = 0;
-        audio
-          .play()
-          .catch((e) =>
-            console.error("Автовоспроизведение заблокировано браузером:", e),
-          );
+        playSequence();
       }
     });
 
     // Первый запуск
-    audio
-      .play()
-      .catch((e) =>
-        console.error("Автовоспроизведение заблокировано браузером:", e),
-      );
+    playSequence();
   } catch (error) {
-    console.error("Ошибка воспроизведения звука:", error);
+    console.error("Ошибка инициализации звука:", error);
   }
 };
 

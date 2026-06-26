@@ -59,6 +59,7 @@ class Settings(BaseSettings):
     SMTP_USER: str | None = None
     SMTP_PASSWORD: str | None = None
     FIREBASE_CREDENTIALS_PATH: str = "/app/firebase-key.json"
+    SMS_RU_API_ID: str | None = None
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

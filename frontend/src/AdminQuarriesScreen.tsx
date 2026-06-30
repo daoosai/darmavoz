@@ -77,9 +77,6 @@ export default function AdminQuarriesScreen({
     <div className="flex flex-col gap-4">
       <div className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-slate-100 text-slate-600 rounded-xl flex items-center justify-center">
-            <Mountain className="w-5 h-5" />
-          </div>
           <div>
             <h2 className="text-lg font-bold text-slate-800">Карьеры</h2>
             <p className="text-sm text-slate-500">

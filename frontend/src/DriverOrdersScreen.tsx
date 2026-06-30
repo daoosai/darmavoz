@@ -39,8 +39,10 @@ interface DriverOrder {
   capacity_m3?: number;
   client_phone?: string;
   client?: { phone?: string; name?: string };
+  pickup_address?: string;
   pickup_lat?: number;
   pickup_lon?: number;
+  delivery_address?: string;
   delivery_lat?: number;
   delivery_lon?: number;
 }
@@ -212,6 +214,12 @@ export default function DriverOrdersScreen({
                   capacity_m3: detail.capacity_m3,
                   client_phone: detail.client_phone,
                   client: detail.client,
+                  pickup_lat: detail.pickup_lat,
+                  pickup_lon: detail.pickup_lon,
+                  pickup_address: detail.pickup_address,
+                  delivery_lat: detail.delivery_lat,
+                  delivery_lon: detail.delivery_lon,
+                  delivery_address: detail.delivery_address,
                 };
                 setOrders([currentOrder]);
                 return;

@@ -172,12 +172,12 @@ export default function AdminDashboardScreen({
   const [fleetSubTab, setFleetSubTab] = useState<"live" | "tariffs">("live");
   const [cars, setCars] = useState<LiveFleetCar[]>([]);
   const [carsFilter, setCarsFilter] = useState({
-    license_plate: "",
+    plate_number: "",
     driver_name: "",
-    capacity: "",
+    volume: "",
     status: "",
   });
-  const [debouncedLicensePlate, setDebouncedLicensePlate] = useState("");
+  const [debouncedPlateNumber, setDebouncedPlateNumber] = useState("");
   const [isLoadingCars, setIsLoadingCars] = useState(false);
   const [isOrderHistoryModalOpen, setIsOrderHistoryModalOpen] = useState(false);
   const [selectedHistoryDriverId, setSelectedHistoryDriverId] = useState<
@@ -565,12 +565,12 @@ export default function AdminDashboardScreen({
     setIsLoadingCars(true);
     try {
       const params = new URLSearchParams();
-      if (debouncedLicensePlate)
-        params.append("license_plate", debouncedLicensePlate);
+      if (debouncedPlateNumber)
+        params.append("plate_number", debouncedPlateNumber);
       if (carsFilter.driver_name)
         params.append("driver_name", carsFilter.driver_name);
-      if (carsFilter.capacity && carsFilter.capacity !== "all")
-        params.append("capacity", carsFilter.capacity);
+      if (carsFilter.volume && carsFilter.volume !== "all")
+        params.append("volume", carsFilter.volume);
       if (carsFilter.status && carsFilter.status !== "all")
         params.append("status", carsFilter.status);
 
@@ -591,19 +591,19 @@ export default function AdminDashboardScreen({
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      setDebouncedLicensePlate(carsFilter.license_plate);
+      setDebouncedPlateNumber(carsFilter.plate_number);
     }, 500);
     return () => clearTimeout(timer);
-  }, [carsFilter.license_plate]);
+  }, [carsFilter.plate_number]);
 
   useEffect(() => {
     if (activeTab === "delivery" && fleetSubTab === "live") {
       fetchLiveCars();
     }
   }, [
-    debouncedLicensePlate,
+    debouncedPlateNumber,
     carsFilter.driver_name,
-    carsFilter.capacity,
+    carsFilter.volume,
     carsFilter.status,
     activeTab,
     fleetSubTab,
@@ -1651,7 +1651,7 @@ export default function AdminDashboardScreen({
             </>
           ) : activeTab === "delivery" ? (
             <div className="flex flex-col gap-4">
-              <div className="flex gap-2 border-b border-slate-200 pb-2 overflow-x-auto">
+              <div className="flex gap-2 border-b border-slate-200 pb-2 overflow-x-auto scrollbar-hide hide-scrollbar">
                 <button
                   onClick={() => setFleetSubTab("live")}
                   className={`px-4 py-2 font-bold text-sm rounded-xl transition-colors whitespace-nowrap ${fleetSubTab === "live" ? "bg-[#2DB0E6] text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
@@ -1676,11 +1676,11 @@ export default function AdminDashboardScreen({
                         type="text"
                         placeholder="Поиск по госномеру"
                         className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 text-sm font-medium"
-                        value={carsFilter.license_plate}
+                        value={carsFilter.plate_number}
                         onChange={(e) =>
                           setCarsFilter({
                             ...carsFilter,
-                            license_plate: e.target.value,
+                            plate_number: e.target.value,
                           })
                         }
                       />
@@ -1704,11 +1704,11 @@ export default function AdminDashboardScreen({
                       <Filter className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                       <select
                         className="w-full pl-10 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 appearance-none text-sm font-medium"
-                        value={carsFilter.capacity}
+                        value={carsFilter.volume}
                         onChange={(e) =>
                           setCarsFilter({
                             ...carsFilter,
-                            capacity: e.target.value,
+                            volume: e.target.value,
                           })
                         }
                       >
@@ -1719,6 +1719,7 @@ export default function AdminDashboardScreen({
                         <option value="20">20 м³</option>
                         <option value="25">25 м³</option>
                         <option value="30">30 м³</option>
+                        <option value="40">40 м³</option>
                       </select>
                       <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
                         <svg
@@ -1749,8 +1750,8 @@ export default function AdminDashboardScreen({
                         }
                       >
                         <option value="all">Все статусы</option>
-                        <option value="free">Свободен</option>
-                        <option value="on_order">На заказе</option>
+                        <option value="available">Свободен</option>
+                        <option value="busy">На заказе</option>
                       </select>
                       <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
                         <svg
@@ -1851,49 +1852,11 @@ export default function AdminDashboardScreen({
                                   </div>
                                 </td>
                                 <td className="px-6 py-4">
-                                  {(() => {
-                                    const rawStatus =
-                                      car.driver?.status || car.status || "";
-
-                                    const getStatusLabel = (status: string) => {
-                                      if (!status) return "Неизвестно";
-                                      const s = status.toLowerCase();
-                                      if (s === "busy") return "На заказе";
-                                      if (s === "free") return "Свободен";
-                                      return (
-                                        s.charAt(0).toUpperCase() + s.slice(1)
-                                      );
-                                    };
-
-                                    const label = getStatusLabel(rawStatus);
-
-                                    let colorClass =
-                                      "bg-slate-100 text-slate-800";
-                                    let dotClass = "bg-slate-500";
-
-                                    if (label === "Свободен") {
-                                      colorClass =
-                                        "bg-emerald-100 text-emerald-800";
-                                      dotClass = "bg-emerald-500";
-                                    } else if (label === "На заказе") {
-                                      colorClass = "bg-blue-100 text-blue-800";
-                                      dotClass = "bg-blue-500 animate-pulse";
-                                    } else if (label === "Заблокирован") {
-                                      colorClass = "bg-red-100 text-red-800";
-                                      dotClass = "bg-red-500";
-                                    }
-
-                                    return (
-                                      <span
-                                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-bold tracking-wider ${colorClass}`}
-                                      >
-                                        <span
-                                          className={`w-1.5 h-1.5 rounded-full ${dotClass}`}
-                                        ></span>
-                                        {label}
-                                      </span>
-                                    );
-                                  })()}
+                                  <span className="text-gray-700 capitalize">
+                                    {car.driver?.status ||
+                                      car.status ||
+                                      "Нет статуса"}
+                                  </span>
                                 </td>
                                 <td className="px-6 py-4 text-right">
                                   <button
@@ -1987,44 +1950,11 @@ export default function AdminDashboardScreen({
                                 </div>
                               </div>
                               <div>
-                                {(() => {
-                                  const rawStatus =
-                                    car.driver?.status || car.status || "";
-                                  const getStatusLabel = (status: string) => {
-                                    if (!status) return "Неизвестно";
-                                    const s = status.toLowerCase();
-                                    if (s === "busy") return "На заказе";
-                                    if (s === "free") return "Свободен";
-                                    return (
-                                      s.charAt(0).toUpperCase() + s.slice(1)
-                                    );
-                                  };
-                                  const label = getStatusLabel(rawStatus);
-                                  let colorClass =
-                                    "bg-slate-100 text-slate-800";
-                                  let dotClass = "bg-slate-500";
-                                  if (label === "Свободен") {
-                                    colorClass =
-                                      "bg-emerald-100 text-emerald-800";
-                                    dotClass = "bg-emerald-500";
-                                  } else if (label === "На заказе") {
-                                    colorClass = "bg-blue-100 text-blue-800";
-                                    dotClass = "bg-blue-500 animate-pulse";
-                                  } else if (label === "Заблокирован") {
-                                    colorClass = "bg-red-100 text-red-800";
-                                    dotClass = "bg-red-500";
-                                  }
-                                  return (
-                                    <span
-                                      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider ${colorClass}`}
-                                    >
-                                      <span
-                                        className={`w-1.5 h-1.5 rounded-full ${dotClass}`}
-                                      ></span>
-                                      {label}
-                                    </span>
-                                  );
-                                })()}
+                                <span className="text-gray-700 capitalize">
+                                  {car.driver?.status ||
+                                    car.status ||
+                                    "Нет статуса"}
+                                </span>
                               </div>
                             </div>
                             <div className="flex flex-col gap-1">

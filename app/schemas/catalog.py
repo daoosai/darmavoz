@@ -63,6 +63,7 @@ class DeliveryOptionOut(BaseModel):
     title: str
     description: str | None = None
     base_price: float | None = None
+    delivery_rate_per_km: float | None = None
     is_active: bool
     sort_order: int
     image_url: str | None = None
@@ -115,6 +116,7 @@ class DeliveryOptionCreate(BaseModel):
     title: str
     description: str | None = None
     base_price: float | None = None
+    delivery_rate_per_km: float | None = None
     is_active: bool = True
     sort_order: int = 0
 
@@ -134,6 +136,7 @@ class DeliveryOptionUpdate(BaseModel):
     title: str | None = None
     description: str | None = None
     base_price: float | None = None
+    delivery_rate_per_km: float | None = None
     is_active: bool | None = None
     sort_order: int | None = None
 

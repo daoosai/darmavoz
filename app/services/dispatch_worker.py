@@ -1,9 +1,8 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
 import contextlib
 import logging
-from collections.abc import Awaitable, Callable
 from uuid import UUID
 
 from redis.asyncio import Redis
@@ -11,7 +10,7 @@ from redis.asyncio import Redis
 from app.core.config import settings
 from app.db.database import AsyncSessionLocal
 from app.services.dispatch_service import get_orders_needing_dispatch, process_dispatch_for_order
-from app.services.redis_client import get_redis
+from app.services.redis_client import get_redis, pop_dispatch_orders
 
 logger = logging.getLogger(__name__)
 
@@ -31,14 +30,30 @@ async def release_dispatch_lock(redis: Redis, order_id: UUID) -> None:
     await redis.delete(f"dispatch:order:{order_id}")
 
 
+async def _collect_order_ids(redis_client: Redis, session_factory, limit: int = 50) -> list[UUID]:
+    queued_ids = await pop_dispatch_orders(limit=limit)
+    async with session_factory() as session:
+        db_ids = await get_orders_needing_dispatch(session, limit=limit)
+
+    merged: list[UUID] = []
+    seen: set[UUID] = set()
+    for order_id in [*queued_ids, *db_ids]:
+        if order_id in seen:
+            continue
+        seen.add(order_id)
+        merged.append(order_id)
+        if len(merged) >= limit:
+            break
+    return merged
+
+
 async def run_dispatch_tick(
     redis: Redis | None = None,
     session_factory=AsyncSessionLocal,
 ) -> int:
     redis_client = redis or get_redis()
     processed = 0
-    async with session_factory() as session:
-        order_ids = await get_orders_needing_dispatch(session)
+    order_ids = await _collect_order_ids(redis_client, session_factory)
 
     for order_id in order_ids:
         if not await acquire_dispatch_lock(redis_client, order_id):

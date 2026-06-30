@@ -5,12 +5,14 @@ from typing import List, Optional
 
 from sqlalchemy import (
     Boolean,
+    Column,
     DateTime,
     Enum as SQLEnum,
     Float,
     ForeignKey,
     Integer,
     String,
+    Table,
     Text,
     UniqueConstraint,
 )
@@ -21,6 +23,14 @@ from sqlalchemy.sql import func
 
 class Base(DeclarativeBase):
     pass
+
+
+quarry_materials = Table(
+    "quarry_materials",
+    Base.metadata,
+    Column("quarry_id", UUID(as_uuid=True), ForeignKey("quarries.id"), primary_key=True),
+    Column("material_id", UUID(as_uuid=True), ForeignKey("materials.id"), primary_key=True),
+)
 
 
 class Role(Base):
@@ -220,7 +230,30 @@ class Material(Base):
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     category: Mapped["Category"] = relationship("Category", back_populates="materials")
+    quarries: Mapped[List["Quarry"]] = relationship(
+        "Quarry",
+        secondary=quarry_materials,
+        back_populates="materials",
+    )
     cart_items: Mapped[List["CartItem"]] = relationship("CartItem", back_populates="material")
+
+
+class Quarry(Base):
+    __tablename__ = "quarries"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    address: Mapped[str] = mapped_column(Text, nullable=False)
+    lat: Mapped[float] = mapped_column(Float, nullable=False)
+    lon: Mapped[float] = mapped_column(Float, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    materials: Mapped[List["Material"]] = relationship(
+        "Material",
+        secondary=quarry_materials,
+        back_populates="quarries",
+    )
+    orders: Mapped[List["Order"]] = relationship("Order", back_populates="quarry")
 
 
 class CartItem(Base):
@@ -248,6 +281,7 @@ class DeliveryOption(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     base_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    delivery_rate_per_km: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     image_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
@@ -322,11 +356,20 @@ class Order(Base):
     delivery_option_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         ForeignKey("delivery_options.id"), nullable=True
     )
+    quarry_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("quarries.id"), nullable=True)
     current_offer_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("order_offers.id"), nullable=True)
     address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    pickup_address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    pickup_lat: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    pickup_lon: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     delivery_address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     delivery_lat: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     delivery_lon: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    mileage_km: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    delivery_rate_per_km_snapshot: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    delivery_cost: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    calculation_source: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    route_calculated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     total_amount: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     status: Mapped[str] = mapped_column(String(50), default=OrderStatus.draft.value)
     source: Mapped[Optional[str]] = mapped_column(String(50), default="avito", nullable=True)
@@ -344,6 +387,7 @@ class Order(Base):
     delivery_option: Mapped[Optional["DeliveryOption"]] = relationship(
         "DeliveryOption", back_populates="orders"
     )
+    quarry: Mapped[Optional["Quarry"]] = relationship("Quarry", back_populates="orders")
     items: Mapped[List["OrderItem"]] = relationship(
         "OrderItem", back_populates="order", cascade="all, delete-orphan"
     )

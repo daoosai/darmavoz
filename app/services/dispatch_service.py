@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime, timedelta
+import logging
+from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -12,6 +13,7 @@ from sqlalchemy.orm import selectinload
 from app.core.config import settings
 from app.models.models import (
     Client,
+    ClientAddress,
     DeliveryOption,
     Dialogue,
     Driver,
@@ -20,6 +22,7 @@ from app.models.models import (
     Material,
     ModerationStatus,
     Order,
+    Quarry,
     OrderItem,
     OrderOffer,
     OrderOfferStatus,
@@ -27,11 +30,14 @@ from app.models.models import (
     Vehicle,
 )
 from app.schemas.order import DispatchHistoryAttemptOut, DispatchHistoryOut, LogistOrderCreate
+from app.services.order_pricing import MIN_DELIVERY_COST, calculate_client_order_pricing
 from app.services.push_service import send_push_to_driver
+from app.services.redis_client import enqueue_dispatch_order
 
 GUEST_CLIENT_PHONE = "00000000000"
 GUEST_CLIENT_NAME = "Гость (Демо)"
 MANUAL_ASSIGN_APPROVAL_ERROR = "Невозможно назначить заказ: профиль водителя или автомобиль не прошли модерацию"
+logger = logging.getLogger(__name__)
 
 
 def utcnow() -> datetime:
@@ -142,6 +148,13 @@ def schedule_new_order_push(order: Order, driver_id: UUID | None) -> None:
     )
 
 
+async def enqueue_order_for_dispatch_safe(order_id: UUID) -> None:
+    try:
+        await enqueue_dispatch_order(order_id)
+    except Exception:
+        logger.exception("dispatch_enqueue_failed", extra={"order_id": str(order_id)})
+
+
 async def add_event(session: AsyncSession, order_id: UUID, event_type: str, description: str | None = None) -> None:
     session.add(EventLog(order_id=order_id, event_type=event_type, description=description))
     await session.flush()
@@ -201,15 +214,40 @@ async def build_order(
     created_by_source: str,
     quantity: int,
     auto_dispatch: bool,
+    pickup_address: str | None = None,
+    pickup_lat: float | None = None,
+    pickup_lon: float | None = None,
+    delivery_address: str | None = None,
+    delivery_lat: float | None = None,
+    delivery_lon: float | None = None,
+    mileage_km: float | None = None,
+    delivery_rate_per_km_snapshot: float | None = None,
+    delivery_cost: float | None = None,
+    calculation_source: str | None = None,
+    route_calculated_at: datetime | None = None,
+    quarry_id: UUID | None = None,
 ) -> Order:
     volume = delivery_option.capacity_m3 * quantity
     unit_price = material.price
     amount = volume * unit_price if unit_price is not None else None
     now = utcnow()
+    delivery_address_value = delivery_address or address
     order = Order(
         client_id=client.id,
         delivery_option_id=delivery_option.id,
+        quarry_id=quarry_id,
         address=address,
+        pickup_address=pickup_address,
+        pickup_lat=pickup_lat,
+        pickup_lon=pickup_lon,
+        delivery_address=delivery_address_value,
+        delivery_lat=delivery_lat,
+        delivery_lon=delivery_lon,
+        mileage_km=round(mileage_km, 2) if mileage_km is not None else None,
+        delivery_rate_per_km_snapshot=delivery_rate_per_km_snapshot,
+        delivery_cost=round(delivery_cost, 2) if delivery_cost is not None else None,
+        calculation_source=calculation_source,
+        route_calculated_at=route_calculated_at,
         notes=notes,
         source=source,
         created_by_source=created_by_source,
@@ -244,10 +282,15 @@ async def create_checkout_order(
     client_id: UUID | None,
     material_id: UUID,
     delivery_option_id: UUID,
-    address: str,
+    delivery_address: str | None,
     notes: str | None,
     source: str | None,
     quantity: int,
+    address_id: UUID | None = None,
+    quarry_id: UUID | None = None,
+    delivery_lat: float | None = None,
+    delivery_lon: float | None = None,
+    mileage_km: float | None = None,
 ) -> Order:
     if client_id is None:
         client = await get_or_create_guest_client(session)
@@ -257,21 +300,132 @@ async def create_checkout_order(
             raise HTTPException(status_code=404, detail="Client not found")
 
     material, delivery_option = await validate_material_and_delivery_option(
-        session, material_id=material_id, delivery_option_id=delivery_option_id
+        session,
+        material_id=material_id,
+        delivery_option_id=delivery_option_id,
     )
+
+    resolved_delivery_address = delivery_address
+    resolved_delivery_lat = delivery_lat
+    resolved_delivery_lon = delivery_lon
+
+    if address_id is not None:
+        address_result = await session.execute(
+            select(ClientAddress).where(
+                ClientAddress.id == address_id,
+                ClientAddress.client_id == client.id,
+            )
+        )
+        client_address = address_result.scalar_one_or_none()
+        if client_address is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Address not found")
+
+        if not resolved_delivery_address:
+            resolved_delivery_address = client_address.full_address
+        if resolved_delivery_lat is None:
+            resolved_delivery_lat = client_address.lat
+        if resolved_delivery_lon is None:
+            resolved_delivery_lon = client_address.lon
+
+    if not resolved_delivery_address:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="delivery_address or address_id is required",
+        )
+
+    selected_quarry: Quarry | None = None
+    resolved_mileage_km: float | None = round(mileage_km, 2) if mileage_km is not None else None
+    delivery_rate_per_km_snapshot: float | None = None
+    delivery_cost: float | None = None
+    route_calculated_at: datetime | None = None
+    calculation_source: str | None = None
+
+    if quarry_id is not None:
+        selected_quarry = await session.get(Quarry, quarry_id)
+        if selected_quarry is None or not selected_quarry.is_active:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Quarry not found")
+
+        if resolved_mileage_km is None:
+            if resolved_delivery_lat is None or resolved_delivery_lon is None:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="mileage_km or delivery coordinates are required when quarry_id is provided",
+                )
+
+            pricing = await calculate_client_order_pricing(
+                session,
+                material_id=material_id,
+                delivery_option_id=delivery_option_id,
+                delivery_lat=resolved_delivery_lat,
+                delivery_lon=resolved_delivery_lon,
+                quantity=quantity,
+                quarry_id=quarry_id,
+            )
+            selected_quarry = pricing.quarry
+            resolved_mileage_km = pricing.mileage_km
+
+        if delivery_option.delivery_rate_per_km is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Delivery rate is not configured",
+            )
+
+        delivery_rate_per_km_snapshot = round(float(delivery_option.delivery_rate_per_km), 2)
+        delivery_cost = round(resolved_mileage_km * delivery_rate_per_km_snapshot, 2)
+        if delivery_cost < MIN_DELIVERY_COST:
+            delivery_cost = MIN_DELIVERY_COST
+        route_calculated_at = utcnow()
+        calculation_source = "yandex_auto"
+    elif (
+        resolved_delivery_lat is not None
+        and resolved_delivery_lon is not None
+        and delivery_option.delivery_rate_per_km is not None
+    ):
+        pricing = await calculate_client_order_pricing(
+            session,
+            material_id=material_id,
+            delivery_option_id=delivery_option_id,
+            delivery_lat=resolved_delivery_lat,
+            delivery_lon=resolved_delivery_lon,
+            quantity=quantity,
+        )
+        selected_quarry = pricing.quarry
+        resolved_mileage_km = pricing.mileage_km
+        if pricing.delivery_option.delivery_rate_per_km is not None:
+            delivery_rate_per_km_snapshot = round(float(pricing.delivery_option.delivery_rate_per_km), 2)
+            delivery_cost = round(resolved_mileage_km * delivery_rate_per_km_snapshot, 2)
+            if delivery_cost < MIN_DELIVERY_COST:
+                delivery_cost = MIN_DELIVERY_COST
+        route_calculated_at = utcnow()
+        calculation_source = "yandex_auto"
+
     order = await build_order(
         session,
         client=client,
         material=material,
         delivery_option=delivery_option,
-        address=address,
+        address=resolved_delivery_address,
         notes=notes,
         source=source or "mobile",
         created_by_source="client_app",
         quantity=quantity,
         auto_dispatch=True,
+        pickup_address=(selected_quarry.address or selected_quarry.name) if selected_quarry is not None else None,
+        pickup_lat=selected_quarry.lat if selected_quarry is not None else None,
+        pickup_lon=selected_quarry.lon if selected_quarry is not None else None,
+        delivery_address=resolved_delivery_address,
+        delivery_lat=resolved_delivery_lat,
+        delivery_lon=resolved_delivery_lon,
+        mileage_km=resolved_mileage_km,
+        delivery_rate_per_km_snapshot=delivery_rate_per_km_snapshot,
+        delivery_cost=delivery_cost,
+        calculation_source=calculation_source,
+        route_calculated_at=route_calculated_at,
+        quarry_id=selected_quarry.id if selected_quarry is not None else None,
     )
+
     await session.commit()
+    await enqueue_order_for_dispatch_safe(order.id)
     return await get_order_by_id(session, order.id)
 
 
@@ -284,19 +438,42 @@ async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate)
         material_id=payload.material_id,
         delivery_option_id=payload.delivery_option_id,
     )
+    delivery_rate_per_km = delivery_option.delivery_rate_per_km
+    if delivery_rate_per_km is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Тариф доставки не настроен",
+        )
+
+    delivery_rate_per_km = round(float(delivery_rate_per_km), 2)
+    route_calculated_at = utcnow()
+    delivery_cost = round(payload.mileage_km * delivery_rate_per_km, 2)
     order = await build_order(
         session,
         client=client,
         material=material,
         delivery_option=delivery_option,
-        address=payload.address,
+        address=payload.delivery_address,
         notes=payload.notes,
         source=payload.source or "dispatcher",
         created_by_source="dispatcher",
         quantity=payload.quantity,
         auto_dispatch=payload.auto_dispatch,
+        pickup_address=payload.pickup_address,
+        pickup_lat=payload.pickup_lat,
+        pickup_lon=payload.pickup_lon,
+        delivery_address=payload.delivery_address,
+        delivery_lat=payload.delivery_lat,
+        delivery_lon=payload.delivery_lon,
+        mileage_km=payload.mileage_km,
+        delivery_rate_per_km_snapshot=delivery_rate_per_km,
+        delivery_cost=delivery_cost,
+        calculation_source=payload.calculation_source,
+        route_calculated_at=route_calculated_at,
     )
     await session.commit()
+    if payload.auto_dispatch:
+        await enqueue_order_for_dispatch_safe(order.id)
     return await get_order_by_id(session, order.id)
 
 
@@ -378,11 +555,37 @@ async def assign_order_to_driver_manually(session: AsyncSession, *, order_id: UU
     return await get_order_by_id(session, order.id)
 
 
+def hydrate_order_route_fields(order: Order | None) -> Order | None:
+    if order is None:
+        return None
+
+    quarry = getattr(order, "quarry", None)
+    if quarry is not None:
+        if not order.pickup_address:
+            order.pickup_address = quarry.address or quarry.name
+        if order.pickup_lat is None:
+            order.pickup_lat = quarry.lat
+        if order.pickup_lon is None:
+            order.pickup_lon = quarry.lon
+
+    if not order.delivery_address and order.address:
+        order.delivery_address = order.address
+
+    return order
+
+
+def hydrate_orders_route_fields(orders: list[Order]) -> list[Order]:
+    for order in orders:
+        hydrate_order_route_fields(order)
+    return orders
+
+
 def order_load_options() -> tuple:
     return (
         selectinload(Order.client),
         selectinload(Order.driver).selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option),
         selectinload(Order.delivery_option),
+        selectinload(Order.quarry),
         selectinload(Order.items).selectinload(OrderItem.material),
         selectinload(Order.current_offer),
         selectinload(Order.offers).selectinload(OrderOffer.driver).selectinload(Driver.vehicle),
@@ -394,14 +597,28 @@ async def get_order_by_id(session: AsyncSession, order_id: UUID) -> Order:
     order = result.scalar_one_or_none()
     if order is None:
         raise HTTPException(status_code=404, detail="Order not found")
-    return order
+    return hydrate_order_route_fields(order)
 
 
-async def list_recent_orders(session: AsyncSession, limit: int = 20) -> list[Order]:
-    result = await session.execute(
-        select(Order).options(*order_load_options()).order_by(Order.created_at.desc()).limit(limit)
-    )
-    return list(result.scalars().unique().all())
+async def list_recent_orders(
+    session: AsyncSession,
+    limit: int = 20,
+    *,
+    driver_id: UUID | None = None,
+    created_on: date | None = None,
+) -> list[Order]:
+    stmt = select(Order).options(*order_load_options())
+
+    if driver_id is not None:
+        stmt = stmt.where(Order.driver_id == driver_id)
+
+    if created_on is not None:
+        day_start = datetime.combine(created_on, time.min, tzinfo=UTC)
+        next_day_start = day_start + timedelta(days=1)
+        stmt = stmt.where(Order.created_at >= day_start).where(Order.created_at < next_day_start)
+
+    result = await session.execute(stmt.order_by(Order.created_at.desc()).limit(limit))
+    return hydrate_orders_route_fields(list(result.scalars().unique().all()))
 
 
 async def list_orders_for_client(session: AsyncSession, client_id: UUID) -> list[Order]:
@@ -411,7 +628,7 @@ async def list_orders_for_client(session: AsyncSession, client_id: UUID) -> list
         .where(Order.client_id == client_id)
         .order_by(Order.created_at.desc())
     )
-    return list(result.scalars().unique().all())
+    return hydrate_orders_route_fields(list(result.scalars().unique().all()))
 
 
 async def delete_order_by_id(session: AsyncSession, order_id: UUID) -> None:
@@ -633,6 +850,7 @@ async def accept_offer(session: AsyncSession, *, offer_id: UUID, driver_id: UUID
             selectinload(OrderOffer.order).selectinload(Order.items).selectinload(OrderItem.material),
             selectinload(OrderOffer.order).selectinload(Order.client),
             selectinload(OrderOffer.order).selectinload(Order.delivery_option),
+            selectinload(OrderOffer.order).selectinload(Order.quarry),
             selectinload(OrderOffer.driver).selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option),
         )
         .where(OrderOffer.id == offer_id)
@@ -696,6 +914,7 @@ async def decline_offer(session: AsyncSession, *, offer_id: UUID, driver_id: UUI
             selectinload(OrderOffer.order).selectinload(Order.items).selectinload(OrderItem.material),
             selectinload(OrderOffer.order).selectinload(Order.client),
             selectinload(OrderOffer.order).selectinload(Order.delivery_option),
+            selectinload(OrderOffer.order).selectinload(Order.quarry),
             selectinload(OrderOffer.driver).selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option),
         )
         .where(OrderOffer.id == offer_id)
@@ -738,6 +957,70 @@ async def decline_offer(session: AsyncSession, *, offer_id: UUID, driver_id: UUI
     return await get_order_by_id(session, order.id)
 
 
+async def cancel_driver_assigned_order(
+    session: AsyncSession,
+    *,
+    order_id: UUID,
+    driver_id: UUID,
+    reason: str,
+) -> Order:
+    order = await get_order_by_id(session, order_id)
+    if order.driver_id != driver_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Order does not belong to this driver")
+    if order.status != OrderStatus.driver_assigned.value:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Order cannot be cancelled in its current status")
+
+    now = utcnow()
+    current_offer = order.current_offer
+    if current_offer is None:
+        next_sequence_no = (
+            await session.scalar(
+                select(func.coalesce(func.max(OrderOffer.sequence_no), 0)).where(OrderOffer.order_id == order.id)
+            )
+        ) or 0
+        current_offer = OrderOffer(
+            order_id=order.id,
+            driver_id=driver_id,
+            price=order.total_amount,
+            sequence_no=next_sequence_no + 1,
+            status=OrderOfferStatus.cancelled.value,
+            offered_at=order.assigned_at or order.dispatch_started_at or order.created_at or now,
+            expires_at=now,
+            responded_at=now,
+            decision_reason=reason,
+            priority_snapshot={"driver_cancelled_after_accept": True},
+        )
+        session.add(current_offer)
+        await session.flush()
+    else:
+        current_offer.status = OrderOfferStatus.cancelled.value
+        current_offer.responded_at = now
+        current_offer.decision_reason = reason
+
+    driver = order.driver
+    if driver is None:
+        driver = await session.get(Driver, driver_id)
+    if driver is not None:
+        driver.status = DriverStatus.available.value
+
+    order.driver_id = None
+    order.driver = None
+    order.assigned_at = None
+    order.current_offer_id = None
+    order.current_offer = None
+    order.status = OrderStatus.searching_driver.value
+
+    await add_event(
+        session,
+        order.id,
+        "driver_cancelled_assigned_order",
+        f"Driver {driver_id} cancelled the order. Reason: {reason}",
+    )
+    await session.commit()
+    await enqueue_order_for_dispatch_safe(order.id)
+    return await get_order_by_id(session, order.id)
+
+
 async def restart_dispatch_for_order(session: AsyncSession, order_id: UUID) -> Order:
     order = await get_order_by_id(session, order_id)
     if order.status in {
@@ -777,6 +1060,7 @@ async def get_current_incoming_offer_for_driver(session: AsyncSession, driver_id
             selectinload(OrderOffer.order).selectinload(Order.items).selectinload(OrderItem.material),
             selectinload(OrderOffer.order).selectinload(Order.client),
             selectinload(OrderOffer.order).selectinload(Order.delivery_option),
+            selectinload(OrderOffer.order).selectinload(Order.quarry),
         )
         .where(OrderOffer.driver_id == driver_id)
         .where(OrderOffer.status == OrderOfferStatus.pending.value)
@@ -784,7 +1068,10 @@ async def get_current_incoming_offer_for_driver(session: AsyncSession, driver_id
         .order_by(OrderOffer.offered_at.desc())
         .limit(1)
     )
-    return result.scalar_one_or_none()
+    offer = result.scalar_one_or_none()
+    if offer is not None and offer.order is not None:
+        hydrate_order_route_fields(offer.order)
+    return offer
 
 
 async def get_current_assigned_order_for_driver(session: AsyncSession, driver_id: UUID) -> Order | None:
@@ -796,7 +1083,8 @@ async def get_current_assigned_order_for_driver(session: AsyncSession, driver_id
         .order_by(Order.assigned_at.desc().nullslast(), Order.created_at.desc())
         .limit(1)
     )
-    return result.scalar_one_or_none()
+    order = result.scalar_one_or_none()
+    return hydrate_order_route_fields(order)
 
 
 async def list_orders_for_driver(session: AsyncSession, driver_id: UUID, limit: int = 50) -> list[Order]:
@@ -807,7 +1095,7 @@ async def list_orders_for_driver(session: AsyncSession, driver_id: UUID, limit: 
         .order_by(Order.assigned_at.desc().nullslast(), Order.created_at.desc())
         .limit(limit)
     )
-    return list(result.scalars().unique().all())
+    return hydrate_orders_route_fields(list(result.scalars().unique().all()))
 
 
 async def build_dispatch_history(session: AsyncSession, order_id: UUID) -> DispatchHistoryOut:

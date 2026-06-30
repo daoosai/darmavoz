@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str | None = None
     FIREBASE_CREDENTIALS_PATH: str = "/app/firebase-key.json"
     SMS_RU_API_ID: str | None = None
+    TWOGIS_API_KEY: str | None = None
+    YANDEX_GEOCODER_API_KEY: str | None = None
+    YANDEX_ROUTER_API_KEY: str | None = None
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

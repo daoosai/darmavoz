@@ -1,10 +1,11 @@
+from datetime import date as date_type
 from datetime import datetime, UTC
 import re
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 from pydantic import BaseModel, field_validator
-from sqlalchemy import exists, func, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -37,8 +38,18 @@ from app.schemas.catalog import (
     MaterialOut,
     MaterialUpdate,
 )
-from app.schemas.driver import AdminDriverCreate, AdminDriverUpdate, DriverResponse, VehicleOut
-from app.schemas.driver import PendingModerationItemOut, VehicleModerationDecisionOut
+from app.schemas.driver import (
+    AdminCarOut,
+    AdminCarDriverOut,
+    AdminCarStatsOut,
+    AdminDriverCreate,
+    AdminDriverUpdate,
+    DriverResponse,
+    PendingModerationItemOut,
+    VehicleModerationDecisionOut,
+    VehicleOut,
+)
+from app.schemas.order import OrderOut
 from app.security.auth import (
     get_current_admin_user,
     get_current_logist_user,
@@ -46,6 +57,7 @@ from app.security.auth import (
     get_password_hash,
 )
 from app.utils.phones import normalize_phone
+from app.services.dispatch_service import list_recent_orders
 from app.services.vehicle_moderation import (
     REQUIRED_VEHICLE_MEDIA_SLOTS,
     vehicle_has_required_photos,
@@ -131,6 +143,17 @@ async def get_logist_area(current_user: User = Depends(get_current_logist_user))
 @router.get("/manager-area")
 async def get_manager_area(current_user: User = Depends(get_current_manager_user)):
     return {"status": "ok", "message": "Manager area", "role": current_user.role.name}
+
+
+@router.get("/orders", response_model=list[OrderOut])
+async def list_admin_panel_orders(
+    driver_id: UUID | None = None,
+    date: date_type | None = None,
+    current_user: User = Depends(get_current_logist_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[Order]:
+    del current_user
+    return await list_recent_orders(db, driver_id=driver_id, created_on=date)
 
 
 class WebhookRegistrationRequest(BaseModel):
@@ -282,6 +305,211 @@ def _collect_vehicle_slot_urls(vehicle: Vehicle | None) -> dict[str, str | None]
         elif media_file.slot_key == "vehicle_plate":
             slot_urls["vehicle_plate_url"] = media_file.public_url
     return slot_urls
+
+
+ADMIN_CAR_VOLUME_BUCKETS = ("5", "10", "17", "20", "25", "30")
+ADMIN_CAR_BLOCKED_STATUSES = {ModerationStatus.rejected.value, ModerationStatus.suspended.value}
+
+
+def _resolve_vehicle_volume(vehicle: Vehicle | None) -> float | None:
+    if vehicle is None:
+        return None
+
+    candidates = [
+        vehicle.body_volume_m3,
+        vehicle.delivery_option.capacity_m3 if vehicle.delivery_option is not None else None,
+        vehicle.cubature_max,
+        vehicle.cubature_min,
+    ]
+    for candidate in candidates:
+        if candidate is not None:
+            return float(candidate)
+    return None
+
+
+def _normalize_admin_car_volume_bucket(value: float | None) -> str | None:
+    if value is None:
+        return None
+
+    rounded = int(round(float(value)))
+    if abs(float(value) - rounded) > 0.05:
+        return None
+
+    bucket = str(rounded)
+    if bucket not in ADMIN_CAR_VOLUME_BUCKETS:
+        return None
+    return bucket
+
+
+def _is_admin_car_blocked(driver: Driver, vehicle: Vehicle | None) -> bool:
+    if vehicle is None:
+        return True
+    if not driver.is_active or not vehicle.is_active:
+        return True
+    if driver.moderation_status in ADMIN_CAR_BLOCKED_STATUSES:
+        return True
+    if vehicle.moderation_status in ADMIN_CAR_BLOCKED_STATUSES:
+        return True
+    return False
+
+
+def _resolve_admin_car_status(driver: Driver, vehicle: Vehicle | None) -> str:
+    if _is_admin_car_blocked(driver, vehicle):
+        return "????????????"
+    if driver.status == DriverStatus.busy.value:
+        return "?? ??????"
+    return "????????"
+
+
+def _normalize_admin_car_status_filter(status_value: str | None) -> str | None:
+    if status_value is None:
+        return None
+
+    normalized = status_value.strip().lower()
+    if not normalized:
+        return None
+
+    aliases = {
+        "????????": "available",
+        "available": "available",
+        "free": "available",
+        "?? ??????": "busy",
+        "busy": "busy",
+        "????????????": "blocked",
+        "blocked": "blocked",
+    }
+    return aliases.get(normalized, normalized)
+
+
+def _resolve_admin_car_photo_url(vehicle: Vehicle | None) -> str | None:
+    if vehicle is None:
+        return None
+
+    fallback_url: str | None = None
+    for media_file in getattr(vehicle, "media_files", []):
+        if media_file.public_url and fallback_url is None:
+            fallback_url = media_file.public_url
+        if media_file.slot_key == "vehicle_main" and media_file.public_url:
+            return media_file.public_url
+        if media_file.is_primary and media_file.public_url:
+            fallback_url = media_file.public_url
+    return fallback_url
+
+
+def _build_admin_car_item(driver: Driver) -> AdminCarOut | None:
+    vehicle = driver.vehicle
+    if vehicle is None:
+        return None
+
+    return AdminCarOut(
+        id=vehicle.id,
+        plate_number=vehicle.plate_number,
+        volume=_resolve_vehicle_volume(vehicle),
+        car_type=vehicle.vehicle_type,
+        photo_url=_resolve_admin_car_photo_url(vehicle),
+        driver=AdminCarDriverOut(
+            id=driver.id,
+            name=driver.name,
+            phone=driver.phone,
+            status=_resolve_admin_car_status(driver, vehicle),
+        ),
+    )
+
+
+async def _list_admin_cars(
+    db: AsyncSession,
+    *,
+    volume: float | None = None,
+    car_type: str | None = None,
+    status_value: str | None = None,
+    plate_number: str | None = None,
+    driver_id: UUID | None = None,
+    driver_name: str | None = None,
+) -> list[AdminCarOut]:
+    stmt = (
+        select(Driver)
+        .join(Vehicle, Driver.vehicle_id == Vehicle.id)
+        .outerjoin(DeliveryOption, Vehicle.delivery_option_id == DeliveryOption.id)
+        .options(
+            selectinload(Driver.user),
+            selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option),
+        )
+        .where(Driver.vehicle_id.is_not(None))
+    )
+
+    if volume is not None:
+        stmt = stmt.where(
+            func.coalesce(
+                Vehicle.body_volume_m3,
+                DeliveryOption.capacity_m3,
+                Vehicle.cubature_max,
+                Vehicle.cubature_min,
+            ) == float(volume)
+        )
+    if car_type:
+        stmt = stmt.where(Vehicle.vehicle_type.ilike(f"%{car_type.strip()}%"))
+    if plate_number:
+        stmt = stmt.where(Vehicle.plate_number.ilike(f"%{plate_number.strip()}%"))
+    if driver_id is not None:
+        stmt = stmt.where(Driver.id == driver_id)
+    if driver_name:
+        stmt = stmt.where(Driver.name.ilike(f"%{driver_name.strip()}%"))
+
+    normalized_status = _normalize_admin_car_status_filter(status_value)
+    blocked_clause = or_(
+        Driver.is_active.is_(False),
+        Vehicle.is_active.is_(False),
+        Driver.moderation_status.in_(tuple(ADMIN_CAR_BLOCKED_STATUSES)),
+        Vehicle.moderation_status.in_(tuple(ADMIN_CAR_BLOCKED_STATUSES)),
+    )
+    if normalized_status == "blocked":
+        stmt = stmt.where(blocked_clause)
+    elif normalized_status == "busy":
+        stmt = stmt.where(~blocked_clause).where(Driver.status == DriverStatus.busy.value)
+    elif normalized_status == "available":
+        stmt = stmt.where(~blocked_clause).where(Driver.status == DriverStatus.available.value)
+
+    result = await db.execute(stmt.order_by(Driver.name.asc(), Vehicle.created_at.desc()))
+    drivers = list(result.scalars().unique().all())
+    await _attach_vehicle_media(db, [driver.vehicle for driver in drivers if driver.vehicle is not None])
+
+    items: list[AdminCarOut] = []
+    for driver in drivers:
+        item = _build_admin_car_item(driver)
+        if item is not None:
+            items.append(item)
+    return items
+
+
+async def _get_admin_car_stats(db: AsyncSession) -> AdminCarStatsOut:
+    stmt = (
+        select(Driver)
+        .join(Vehicle, Driver.vehicle_id == Vehicle.id)
+        .outerjoin(DeliveryOption, Vehicle.delivery_option_id == DeliveryOption.id)
+        .options(selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option))
+        .where(Driver.vehicle_id.is_not(None))
+        .where(Driver.is_active.is_(True))
+        .where(Vehicle.is_active.is_(True))
+        .where(Driver.moderation_status == ModerationStatus.approved.value)
+        .where(Vehicle.moderation_status == ModerationStatus.approved.value)
+    )
+    result = await db.execute(stmt)
+    drivers = list(result.scalars().unique().all())
+
+    counts = {bucket: 0 for bucket in ADMIN_CAR_VOLUME_BUCKETS}
+    for driver in drivers:
+        bucket = _normalize_admin_car_volume_bucket(_resolve_vehicle_volume(driver.vehicle))
+        if bucket is not None:
+            counts[bucket] += 1
+
+    return AdminCarStatsOut(
+        volume_5=counts["5"],
+        volume_10=counts["10"],
+        volume_17=counts["17"],
+        volume_20=counts["20"],
+        volume_25=counts["25"],
+        volume_30=counts["30"],
+    )
 
 
 async def _list_pending_moderation_items(db: AsyncSession) -> list[PendingModerationItemOut]:
@@ -491,6 +719,38 @@ async def _ensure_driver_user(
     if password:
         user.hashed_password = get_password_hash(password)
     return user
+
+
+@router.get("/cars/stats", response_model=AdminCarStatsOut)
+async def get_admin_cars_stats(
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    del current_admin
+    return await _get_admin_car_stats(db)
+
+
+@router.get("/cars", response_model=list[AdminCarOut])
+async def list_admin_cars(
+    volume: float | None = None,
+    car_type: str | None = None,
+    status: str | None = None,
+    plate_number: str | None = None,
+    driver_id: UUID | None = None,
+    driver_name: str | None = None,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    del current_admin
+    return await _list_admin_cars(
+        db,
+        volume=volume,
+        car_type=car_type,
+        status_value=status,
+        plate_number=plate_number,
+        driver_id=driver_id,
+        driver_name=driver_name,
+    )
 
 
 @router.get("/drivers", response_model=list[DriverResponse])

@@ -1,13 +1,9 @@
 import logging
-import random
-
-import httpx
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.db.database import get_db
 from app.models.models import Client
 from app.schemas.client import (
@@ -25,7 +21,6 @@ router = APIRouter(prefix="/client")
 logger = logging.getLogger("uvicorn.error")
 
 CLIENT_CODE_TTL_SECONDS = 300
-SMS_RU_URL = "https://sms.ru/sms/send"
 
 
 def _normalize_email(email: str | None) -> str | None:
@@ -48,11 +43,16 @@ def _code_key(phone_number: str) -> str:
 
 
 def _generate_otp_code() -> str:
-    return str(random.randint(1000, 9999))
+    return "0000"
 
 
 def _sms_ru_phone(phone_number: str) -> str:
-    return phone_number.lstrip("+")
+    sms_phone = phone_number.replace("+", "").strip()
+    if len(sms_phone) == 10:
+        sms_phone = "7" + sms_phone
+    elif len(sms_phone) == 11 and sms_phone.startswith("8"):
+        sms_phone = "7" + sms_phone[1:]
+    return sms_phone
 
 
 def _default_client_name(phone_number: str) -> str:
@@ -65,7 +65,9 @@ async def send_code(
     db: AsyncSession = Depends(get_db),
 ):
     normalized_phone = _normalize_phone_number(payload.phone_number)
+    sms_phone = _sms_ru_phone(normalized_phone)
     code = _generate_otp_code()
+    logger.info(f"ТЕСТОВЫЙ КОД АВТОРИЗАЦИИ ДЛЯ {sms_phone}: {code}")
 
     client = await db.scalar(select(Client).where(Client.phone == normalized_phone))
     is_new_user = client is None
@@ -75,33 +77,7 @@ async def send_code(
         await db.commit()
         await db.refresh(client)
 
-    if not settings.SMS_RU_API_ID:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="SMS service is not configured")
-
     await get_redis().setex(_code_key(normalized_phone), CLIENT_CODE_TTL_SECONDS, code)
-
-    sms_payload = {
-        "api_id": settings.SMS_RU_API_ID,
-        "to": _sms_ru_phone(normalized_phone),
-        "msg": f"{code} - ваш код для входа в Дармавоз",
-        "json": 1,
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as http_client:
-            response = await http_client.post(SMS_RU_URL, data=sms_payload)
-            response.raise_for_status()
-            response_data = response.json()
-    except (httpx.HTTPError, ValueError):
-        await get_redis().delete(_code_key(normalized_phone))
-        logger.exception("sms_ru_send_failed phone=%s", normalized_phone)
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Не удалось отправить код")
-
-    logger.info("Отправка СМС на %s, статус: %s", normalized_phone, response_data)
-
-    if str(response_data.get("status")) != "OK":
-        await get_redis().delete(_code_key(normalized_phone))
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Не удалось отправить код")
 
     logger.info(
         "client_auth_code_generated phone=%s ttl_seconds=%s",

@@ -6,6 +6,7 @@ from sqlalchemy import select
 from app.models.models import (
     Category,
     Client,
+    EventLog,
     DeliveryOption,
     Driver,
     DriverStatus,
@@ -254,6 +255,152 @@ async def test_dispatch_skips_wrong_vehicle_and_moves_to_next_driver(client, ses
         refreshed_driver_2 = await session.get(Driver, driver_2.id)
         assert refreshed_driver_2 is not None
         assert refreshed_driver_2.status == DriverStatus.busy.value
+
+
+@pytest.mark.asyncio
+async def test_driver_can_cancel_assigned_order_and_return_it_to_dispatch(client, session_factory, monkeypatch):
+    queued_order_ids: list[str] = []
+
+    async def fake_enqueue(order_id):
+        queued_order_ids.append(str(order_id))
+
+    monkeypatch.setattr("app.services.dispatch_service.enqueue_order_for_dispatch_safe", fake_enqueue)
+
+    async with session_factory() as session:
+        driver_role = await ensure_role(session, "driver")
+
+        category = Category(name="??????", slug="driver-cancel-order", sort_order=0, is_active=True)
+        material = Material(
+            category=category,
+            name="?????? ??? ??????",
+            description="",
+            price=2100.0,
+            unit="m3",
+            min_volume=5.0,
+            is_active=True,
+            sort_order=0,
+        )
+        delivery_option = DeliveryOption(
+            capacity_m3=10.0,
+            title="10 ?3",
+            description="",
+            base_price=0.0,
+            is_active=True,
+            sort_order=0,
+        )
+        session.add_all([category, material, delivery_option])
+        await session.flush()
+
+        driver_user = await create_driver_user(session, username="driver_cancel_assigned", role=driver_role)
+        vehicle = Vehicle(
+            title="???????? ??? ??????",
+            delivery_option_id=delivery_option.id,
+            is_active=True,
+            moderation_status=ModerationStatus.approved.value,
+        )
+        session.add(vehicle)
+        await session.flush()
+
+        driver = Driver(
+            user_id=driver_user.id,
+            vehicle_id=vehicle.id,
+            name="???????? ??????",
+            phone="+79000000888",
+            status=DriverStatus.busy.value,
+            dispatch_priority=100,
+            is_auto_dispatch_enabled=True,
+            is_active=True,
+            moderation_status=ModerationStatus.approved.value,
+        )
+        session.add(driver)
+        await session.flush()
+
+        client_record = Client(name="?????? ??????", phone="+79990008888")
+        session.add(client_record)
+        await session.flush()
+
+        now = datetime.now(UTC)
+        order = Order(
+            client_id=client_record.id,
+            driver_id=driver.id,
+            delivery_option_id=delivery_option.id,
+            address="?????, ?????? 1",
+            delivery_address="?????, ?????? 1",
+            total_amount=21000.0,
+            status=OrderStatus.driver_assigned.value,
+            source="mobile",
+            created_by_source="client_app",
+            dispatch_started_at=now - timedelta(minutes=5),
+            assigned_at=now - timedelta(minutes=1),
+        )
+        session.add(order)
+        await session.flush()
+
+        session.add(
+            OrderItem(
+                order_id=order.id,
+                material_id=material.id,
+                quantity=1,
+                volume=10.0,
+                price=2100.0,
+                amount=21000.0,
+            )
+        )
+        accepted_offer = OrderOffer(
+            order_id=order.id,
+            driver_id=driver.id,
+            price=order.total_amount,
+            sequence_no=1,
+            status=OrderOfferStatus.accepted.value,
+            offered_at=now - timedelta(minutes=2),
+            expires_at=now + timedelta(minutes=1),
+            responded_at=now - timedelta(minutes=1),
+            decision_reason="accepted",
+        )
+        session.add(accepted_offer)
+        await session.flush()
+        order.current_offer_id = accepted_offer.id
+        await session.commit()
+        await session.refresh(driver)
+        await session.refresh(order)
+
+    response = await client.patch(
+        f"/api/v1/orders/{order.id}/driver-cancel",
+        json={"reason": "????????? ??????"},
+        headers=auth_headers("driver_cancel_assigned"),
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == OrderStatus.searching_driver.value
+    assert payload["driver_id"] is None
+    assert payload["current_offer_id"] is None
+    assert queued_order_ids == [str(order.id)]
+
+    async with session_factory() as session:
+        refreshed_order = await session.scalar(select(Order).where(Order.id == order.id))
+        assert refreshed_order is not None
+        assert refreshed_order.status == OrderStatus.searching_driver.value
+        assert refreshed_order.driver_id is None
+        assert refreshed_order.current_offer_id is None
+        assert refreshed_order.assigned_at is None
+
+        refreshed_driver = await session.get(Driver, driver.id)
+        assert refreshed_driver is not None
+        assert refreshed_driver.status == DriverStatus.available.value
+
+        refreshed_offer = await session.scalar(select(OrderOffer).where(OrderOffer.order_id == order.id))
+        assert refreshed_offer is not None
+        assert refreshed_offer.status == OrderOfferStatus.cancelled.value
+        assert refreshed_offer.decision_reason == "????????? ??????"
+
+        cancel_event = await session.scalar(
+            select(EventLog).where(
+                EventLog.order_id == order.id,
+                EventLog.event_type == "driver_cancelled_assigned_order",
+            )
+        )
+        assert cancel_event is not None
+        assert "????????? ??????" in (cancel_event.description or "")
 
 
 @pytest.mark.asyncio

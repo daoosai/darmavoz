@@ -235,6 +235,12 @@ class DriverOfferOrderOut(BaseModel):
     material_name: str
     quantity: int
     address: str | None = None
+    pickup_address: str | None = None
+    pickup_lat: float | None = None
+    pickup_lon: float | None = None
+    delivery_address: str | None = None
+    delivery_lat: float | None = None
+    delivery_lon: float | None = None
     notes: str | None = None
     client_phone_masked: str | None = None
     delivery_option: DeliveryOptionOut | None = None
@@ -292,3 +298,31 @@ class VehicleModerationDecisionOut(BaseModel):
     moderation_comment: str | None = None
     driver_moderation_status: str | None = None
     driver_moderation_comment: str | None = None
+
+
+
+class AdminCarDriverOut(BaseModel):
+    id: UUID
+    name: str
+    phone: str
+    status: str
+
+
+class AdminCarOut(BaseModel):
+    id: UUID
+    plate_number: str | None = None
+    volume: float | None = None
+    car_type: str | None = None
+    photo_url: str | None = None
+    driver: AdminCarDriverOut
+
+
+class AdminCarStatsOut(BaseModel):
+    volume_5: int = Field(default=0, alias="5")
+    volume_10: int = Field(default=0, alias="10")
+    volume_17: int = Field(default=0, alias="17")
+    volume_20: int = Field(default=0, alias="20")
+    volume_25: int = Field(default=0, alias="25")
+    volume_30: int = Field(default=0, alias="30")
+
+    model_config = ConfigDict(populate_by_name=True)

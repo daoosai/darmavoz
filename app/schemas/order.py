@@ -1,10 +1,22 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 
 from app.schemas.catalog import DeliveryOptionOut, MaterialOut
 from app.schemas.driver import DriverResponse
+
+
+CalculationSource = Literal["yandex_auto", "manual", "osrm_auto"]
 
 
 class OrderItemOut(BaseModel):
@@ -20,25 +32,232 @@ class OrderItemOut(BaseModel):
 
 
 class CheckoutRequest(BaseModel):
-    client_id: UUID | None = None
-    material_id: UUID
-    delivery_option_id: UUID
-    address: str
+    client_id: UUID | None = Field(default=None, validation_alias=AliasChoices("client_id", "clientId"))
+    material_id: UUID = Field(validation_alias=AliasChoices("material_id", "materialId"))
+    delivery_option_id: UUID = Field(
+        validation_alias=AliasChoices("delivery_option_id", "deliveryOptionId")
+    )
+    delivery_address: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=500,
+        validation_alias=AliasChoices("delivery_address", "address", "deliveryAddress"),
+    )
+    address_id: UUID | None = Field(default=None, validation_alias=AliasChoices("address_id", "addressId"))
+    delivery_lat: float | None = Field(default=None, validation_alias=AliasChoices("delivery_lat", "deliveryLat"))
+    delivery_lon: float | None = Field(default=None, validation_alias=AliasChoices("delivery_lon", "deliveryLon"))
+    quarry_id: UUID | None = Field(default=None, validation_alias=AliasChoices("quarry_id", "quarryId"))
+    mileage_km: float | None = Field(default=None, validation_alias=AliasChoices("mileage_km", "mileageKm"))
     notes: str | None = None
     source: str | None = "mobile"
     quantity: int = Field(default=1, ge=1)
 
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        populate_by_name=True,
+        extra="ignore",
+    )
 
-class LogistOrderCreate(BaseModel):
-    client_name: str
-    client_phone: str
+    @field_validator("notes", "source", mode="before")
+    @classmethod
+    def normalize_optional_strings(cls, value):
+        if value is None:
+            return None
+        if isinstance(value, str):
+            value = value.strip()
+            return value or None
+        return value
+
+    @field_validator("delivery_lat", "delivery_lon", "mileage_km", mode="before")
+    @classmethod
+    def normalize_optional_numbers(cls, value):
+        if value is None:
+            return None
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                return None
+        return value
+
+    @field_validator("delivery_lat")
+    @classmethod
+    def validate_delivery_lat(cls, value: float | None):
+        if value is None:
+            return value
+        if value < -90 or value > 90:
+            raise ValueError("Latitude must be between -90 and 90")
+        return value
+
+    @field_validator("delivery_lon")
+    @classmethod
+    def validate_delivery_lon(cls, value: float | None):
+        if value is None:
+            return value
+        if value < -180 or value > 180:
+            raise ValueError("Longitude must be between -180 and 180")
+        return value
+
+    @field_validator("mileage_km")
+    @classmethod
+    def validate_mileage_km(cls, value: float | None):
+        if value is None:
+            return value
+        if value <= 0:
+            raise ValueError("mileage_km must be greater than 0")
+        return round(value, 2)
+
+    @model_validator(mode="after")
+    def validate_checkout_requirements(self):
+        if not self.delivery_address and self.address_id is None:
+            raise ValueError("delivery_address or address_id must be provided")
+        if (self.delivery_lat is None) != (self.delivery_lon is None):
+            raise ValueError("delivery_lat and delivery_lon must be provided together")
+        return self
+
+
+class ClientOrderCalculationRequest(BaseModel):
     material_id: UUID
     delivery_option_id: UUID
-    address: str
-    notes: str | None = None
-    source: str | None = "dispatcher"
+    delivery_lat: float
+    delivery_lon: float
     quantity: int = Field(default=1, ge=1)
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("delivery_lat")
+    @classmethod
+    def validate_delivery_lat(cls, value: float) -> float:
+        if value < -90 or value > 90:
+            raise ValueError("Latitude must be between -90 and 90")
+        return value
+
+    @field_validator("delivery_lon")
+    @classmethod
+    def validate_delivery_lon(cls, value: float) -> float:
+        if value < -180 or value > 180:
+            raise ValueError("Longitude must be between -180 and 180")
+        return value
+
+
+class ClientOrderCalculationOut(BaseModel):
+    quarry_id: UUID
+    quarry_name: str
+    mileage_km: float
+    delivery_cost: float
+    total_amount: float
+
+
+class LogistOrderCreate(BaseModel):
+    client_name: str = Field(min_length=1, max_length=255)
+    client_phone: str = Field(min_length=11, max_length=20)
+    material_id: UUID
+    delivery_option_id: UUID
+    quantity: int = Field(default=1, ge=1)
+    pickup_address: str = Field(min_length=1, max_length=500)
+    pickup_lat: float | None = None
+    pickup_lon: float | None = None
+    delivery_address: str = Field(
+        min_length=1,
+        max_length=500,
+        validation_alias=AliasChoices("delivery_address", "address"),
+    )
+    delivery_lat: float | None = None
+    delivery_lon: float | None = None
+    mileage_km: float = Field(gt=0)
+    calculation_source: CalculationSource
+    notes: str | None = Field(default=None, max_length=2000)
+    source: str | None = "dispatcher"
     auto_dispatch: bool = True
+
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        populate_by_name=True,
+        extra="forbid",
+    )
+
+    @field_validator(
+        "client_name",
+        "client_phone",
+        "pickup_address",
+        "delivery_address",
+        "notes",
+        "source",
+        mode="before",
+    )
+    @classmethod
+    def normalize_strings(cls, value):
+        if value is None:
+            return None
+        if isinstance(value, str):
+            value = value.strip()
+            return value or None
+        return value
+
+    @field_validator(
+        "pickup_lat",
+        "pickup_lon",
+        "delivery_lat",
+        "delivery_lon",
+        "mileage_km",
+        mode="before",
+    )
+    @classmethod
+    def normalize_numbers(cls, value):
+        if value is None:
+            return None
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                return None
+        return value
+
+    @field_validator("pickup_lat", "delivery_lat")
+    @classmethod
+    def validate_lat(cls, value: float | None):
+        if value is None:
+            return value
+        if value < -90 or value > 90:
+            raise ValueError("Latitude must be between -90 and 90")
+        return value
+
+    @field_validator("pickup_lon", "delivery_lon")
+    @classmethod
+    def validate_lon(cls, value: float | None):
+        if value is None:
+            return value
+        if value < -180 or value > 180:
+            raise ValueError("Longitude must be between -180 and 180")
+        return value
+
+    @field_validator("mileage_km")
+    @classmethod
+    def round_mileage(cls, value: float):
+        return round(value, 2)
+
+    @model_validator(mode="after")
+    def validate_route_requirements(self):
+        if self.calculation_source == "yandex_auto":
+            required_coords = (
+                self.pickup_lat,
+                self.pickup_lon,
+                self.delivery_lat,
+                self.delivery_lon,
+            )
+            if any(coord is None for coord in required_coords):
+                raise ValueError(
+                    "For yandex_auto calculation_source, pickup and delivery coordinates are required"
+                )
+
+        if self.calculation_source == "manual" and self.mileage_km <= 0:
+            raise ValueError("For manual calculation_source, mileage_km must be greater than 0")
+
+        return self
+
+
+class DriverCancelOrderRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=2000)
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
 
 class ManualAssignRequest(BaseModel):
@@ -75,8 +294,20 @@ class OrderOut(BaseModel):
     client_id: UUID
     driver_id: UUID | None = None
     delivery_option_id: UUID | None = None
+    quarry_id: UUID | None = None
     current_offer_id: UUID | None = None
     address: str | None = None
+    pickup_address: str | None = None
+    pickup_lat: float | None = None
+    pickup_lon: float | None = None
+    delivery_address: str | None = None
+    delivery_lat: float | None = None
+    delivery_lon: float | None = None
+    mileage_km: float | None = None
+    delivery_rate_per_km_snapshot: float | None = None
+    delivery_cost: float | None = None
+    calculation_source: CalculationSource | None = None
+    route_calculated_at: datetime | None = None
     total_amount: float
     status: str
     source: str | None = None
@@ -91,6 +322,11 @@ class OrderOut(BaseModel):
     items: list[OrderItemOut] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
+
+    @computed_field(return_type=float)
+    @property
+    def estimated_total_amount(self) -> float:
+        return round((self.total_amount or 0.0) + (self.delivery_cost or 0.0), 2)
 
 
 class DriverAssignedOrderOut(BaseModel):

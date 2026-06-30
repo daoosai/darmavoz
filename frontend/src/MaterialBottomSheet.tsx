@@ -157,47 +157,63 @@ export default function MaterialBottomSheet({
                   </div>
                 ) : (
                   <div className="flex gap-3 overflow-x-auto pb-2 hide-scrollbar -mx-4 px-4">
-                    {[...deliveryOptions].sort((a, b) => (a.capacity_m3 || 0) - (b.capacity_m3 || 0)).map((option) => {
-                      const isSelected = selectedOption?.id === option.id;
-                      const imgSrc =
-                        option.media_files?.[0]?.public_url ||
-                        option.primary_image_url ||
-                        option.image_url ||
-                        "https://placehold.co/100x100/e2e8f0/64748b?text=Truck";
+                    {[...deliveryOptions]
+                      .sort(
+                        (a, b) => (a.capacity_m3 || 0) - (b.capacity_m3 || 0),
+                      )
+                      .map((option) => {
+                        const isSelected = selectedOption?.id === option.id;
+                        const imgSrc =
+                          option.media_files?.[0]?.public_url ||
+                          option.primary_image_url ||
+                          option.image_url ||
+                          "https://placehold.co/100x100/e2e8f0/64748b?text=Truck";
 
-                      return (
-                        <button
-                          key={option.id}
-                          onClick={() => setSelectedOption(option)}
-                          className={`shrink-0 min-w-[130px] p-3 rounded-2xl border text-left transition-all ${
-                            isSelected
-                              ? "border-[#2DB0E6] bg-[#2DB0E6]/5 shadow-sm ring-1 ring-[#2DB0E6]/20"
-                              : "border-slate-200 bg-white hover:border-slate-300"
-                          }`}
-                        >
-                          <div className="w-full h-16 bg-white rounded-lg mb-2 overflow-hidden flex items-center justify-center">
-                            <img
-                              src={imgSrc}
-                              alt={option.title}
-                              className="max-w-full max-h-full object-contain"
-                            />
-                          </div>
-                          <span
-                            className={`block font-semibold text-base mb-1 whitespace-nowrap ${isSelected ? "text-[#2DB0E6]" : "text-slate-900"}`}
+                        return (
+                          <button
+                            key={option.id}
+                            onClick={() => setSelectedOption(option)}
+                            className={`shrink-0 min-w-[130px] p-3 rounded-2xl border text-left transition-all ${
+                              isSelected
+                                ? "border-[#2DB0E6] bg-[#2DB0E6]/5 shadow-sm ring-1 ring-[#2DB0E6]/20"
+                                : "border-slate-200 bg-white hover:border-slate-300"
+                            }`}
                           >
-                            {option.capacity_m3} м³
-                          </span>
-                          <span
-                            className={`block text-xs font-medium whitespace-nowrap ${isSelected ? "text-[#2DB0E6]/80" : "text-slate-500"}`}
-                          >
-                            {option.title}
-                          </span>
-                        </button>
-                      );
-                    })}
+                            <div className="w-full h-16 bg-white rounded-lg mb-2 overflow-hidden flex items-center justify-center">
+                              <img
+                                src={imgSrc}
+                                alt={option.title}
+                                className="max-w-full max-h-full object-contain"
+                              />
+                            </div>
+                            <span
+                              className={`block font-semibold text-base mb-1 whitespace-nowrap ${isSelected ? "text-[#2DB0E6]" : "text-slate-900"}`}
+                            >
+                              {option.capacity_m3} м³
+                            </span>
+                            <span
+                              className={`block text-xs font-medium whitespace-nowrap ${isSelected ? "text-[#2DB0E6]/80" : "text-slate-500"}`}
+                            >
+                              {option.title}
+                            </span>
+                          </button>
+                        );
+                      })}
                   </div>
                 )}
               </div>
+
+              {/* Description */}
+              {material.description && (
+                <div>
+                  <h3 className="font-semibold text-slate-800 mb-2">
+                    Описание
+                  </h3>
+                  <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">
+                    {material.description}
+                  </p>
+                </div>
+              )}
 
               {/* Comment */}
               <div className="flex flex-col gap-4">
@@ -216,25 +232,11 @@ export default function MaterialBottomSheet({
             </div>
 
             {/* Bottom Bar */}
-            <div className="bg-white border-t border-slate-100 shadow-[0_-10px_20px_rgba(0,0,0,0.03)] px-4 py-4 pb-safe flex items-center justify-between">
-              <div className="flex flex-col">
-                <span className="text-xs text-slate-500 font-medium mb-0.5">
-                  Итого:
-                </span>
-                {selectedOption ? (
-                  <span className="font-bold text-xl text-slate-900">
-                    {totalPrice} ₽
-                  </span>
-                ) : (
-                  <span className="font-bold text-sm text-slate-400">
-                    Выберите объем
-                  </span>
-                )}
-              </div>
+            <div className="w-full bg-white border-t border-gray-100 px-6 py-4 mt-6 flex justify-center items-center">
               <button
                 disabled={isSubmitDisabled}
                 onClick={handleSubmit}
-                className="bg-[#2DB0E6] text-white px-8 py-3.5 rounded-xl font-semibold shadow-sm active:bg-[#209dd0] transition-colors disabled:opacity-50 flex items-center gap-2"
+                className="w-full bg-[#2DB0E6] hover:bg-[#209ccf] text-white font-bold py-3.5 px-6 rounded-full shadow-md transition-all text-center disabled:opacity-50"
               >
                 В корзину
               </button>

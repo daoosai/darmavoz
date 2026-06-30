@@ -11,26 +11,30 @@ export const playNewOrderSound = () => {
     const maxPlays = 4; // Количество повторений
 
     const playSequence = () => {
+      /*
       audio.play().catch((e) => {
         console.warn(
           "Автовоспроизведение заблокировано браузером. Водитель должен тапнуть по экрану.",
           e,
         );
       });
+      */
     };
 
     // Слушаем событие завершения трека
     audio.addEventListener("ended", () => {
+      /*
       if (playCount < maxPlays) {
         playCount++;
         // Сбрасываем время в начало (на всякий случай) и запускаем снова
         audio.currentTime = 0;
         playSequence();
       }
+      */
     });
 
     // Первый запуск
-    playSequence();
+    // playSequence();
   } catch (error) {
     console.error("Ошибка инициализации звука:", error);
   }

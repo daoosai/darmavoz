@@ -45,7 +45,7 @@ export default function ClientAuthBottomSheet({ isOpen, onClose }: Props) {
   };
 
   const cleanPhoneNumber = (p: string) => {
-    return p.replace(/[\s()-]/g, '');
+    return p.replace(/[\s()+-]/g, '');
   };
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -105,10 +105,13 @@ export default function ClientAuthBottomSheet({ isOpen, onClose }: Props) {
         setStep(2);
         setTimer(40);
       } else {
-        setErrorText("Ошибка отправки кода");
+        const errorData = await res.json().catch(() => ({}));
+        const errorMsg = errorData.detail || "Ошибка отправки кода";
+        setErrorText(errorMsg);
       }
-    } catch {
-      setErrorText("Сетевая ошибка");
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.detail || "Сетевая ошибка";
+      setErrorText(errorMsg);
     } finally {
       setIsSubmitting(false);
     }
@@ -132,10 +135,13 @@ export default function ClientAuthBottomSheet({ isOpen, onClose }: Props) {
         // Since we emit CustomEvent inside login, or we can just fetch Profile here
         // usually it's handled globally by useAuthStore -> fetch profile
       } else {
-        setErrorText("Неверный код");
+        const errorData = await res.json().catch(() => ({}));
+        const errorMsg = errorData.detail || "Неверный код";
+        setErrorText(errorMsg);
       }
-    } catch {
-      setErrorText("Сетевая ошибка");
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.detail || "Сетевая ошибка";
+      setErrorText(errorMsg);
     } finally {
       setIsSubmitting(false);
     }

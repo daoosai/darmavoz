@@ -31,6 +31,8 @@ import {
 import toast from "react-hot-toast";
 import UpdateBanner from "./UpdateBanner";
 import AdminProfileScreen from "./AdminProfileScreen";
+import LogistCreateOrderModal from "./LogistCreateOrderModal";
+import { OrdersFilterBar } from "./components/admin/OrdersFilterBar";
 
 interface AdminOrder {
   id: string;
@@ -141,6 +143,7 @@ export default function LogistDashboardScreen({
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingDrivers, setIsLoadingDrivers] = useState(true);
   const [assigningOrderId, setAssigningOrderId] = useState<string | null>(null);
+  const [orderDateFilter, setOrderDateFilter] = useState<string>("");
   const [manualAssignOrder, setManualAssignOrder] = useState<AdminOrder | null>(
     null,
   );
@@ -150,17 +153,8 @@ export default function LogistDashboardScreen({
 
   // Create Order State
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [isCreating, setIsCreating] = useState(false);
   const [materials, setMaterials] = useState<any[]>([]);
   const [deliveryOptions, setDeliveryOptions] = useState<any[]>([]);
-  const [newOrder, setNewOrder] = useState({
-    client_name: "",
-    client_phone: "",
-    material_id: "",
-    delivery_option_id: "",
-    address: "",
-    notes: "",
-  });
 
   // Dispatch History State
   interface DispatchAttempt {
@@ -211,7 +205,7 @@ export default function LogistDashboardScreen({
     }, 7000);
 
     return () => clearInterval(intervalId);
-  }, []);
+  }, [orderDateFilter]);
 
   useEffect(() => {
     if (activeTab === "drivers" && drivers.length === 0) {
@@ -236,98 +230,6 @@ export default function LogistDashboardScreen({
     }
   };
 
-  const formatPhoneNumber = (value: string) => {
-    let digits = value.replace(/\D/g, "");
-    if (digits.startsWith("7") || digits.startsWith("8")) {
-      digits = digits.substring(1);
-    }
-    digits = digits.substring(0, 10);
-
-    let formatted = "+7";
-    if (digits.length > 0) {
-      formatted += " (" + digits.substring(0, 3);
-    }
-    if (digits.length >= 3) {
-      formatted += ") " + digits.substring(3, 6);
-    }
-    if (digits.length >= 6) {
-      formatted += "-" + digits.substring(6, 8);
-    }
-    if (digits.length >= 8) {
-      formatted += "-" + digits.substring(8, 10);
-    }
-    return formatted;
-  };
-
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setNewOrder({
-      ...newOrder,
-      client_phone: formatPhoneNumber(e.target.value),
-    });
-  };
-
-  const handleCreateOrder = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const digitsOnly = newOrder.client_phone.replace(/\D/g, "");
-    if (
-      digitsOnly.length < 11 ||
-      !newOrder.material_id ||
-      !newOrder.delivery_option_id ||
-      !newOrder.address
-    ) {
-      toast.error("Пожалуйста, заполните все обязательные поля корректно");
-      return;
-    }
-
-    const cleanPhone = "+" + digitsOnly;
-
-    try {
-      setIsCreating(true);
-      const res = await fetch(`${baseURL}/logist/orders`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          ...newOrder,
-          client_phone: cleanPhone,
-          quantity: 1,
-          source: "dispatcher",
-          auto_dispatch: true,
-        }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || "Ошибка при создании заказа");
-      }
-
-      const createdOrder = await res.json().catch(() => ({}));
-
-      toast.success("Заказ создан");
-      setIsCreateOpen(false);
-      setNewOrder({
-        client_name: "",
-        client_phone: "",
-        material_id: "",
-        delivery_option_id: "",
-        address: "",
-        notes: "",
-      });
-      fetchOrders(true);
-
-      if (createdOrder && createdOrder.id) {
-        handleOpenHistory(createdOrder.id);
-      }
-    } catch (error: any) {
-      console.error("Error creating order:", error);
-      toast.error(handleApiError(error, "Ошибка при создании заказа"));
-    } finally {
-      setIsCreating(false);
-    }
-  };
-
   const fetchOrders = async (silent = false) => {
     if (!token) {
       if (!silent) setIsLoading(false);
@@ -335,7 +237,11 @@ export default function LogistDashboardScreen({
     }
     try {
       if (!silent) setIsLoading(true);
-      const res = await fetch(`${baseURL}/orders/admin`, {
+      const url = new URL(`${baseURL}/orders/admin`);
+      if (orderDateFilter) {
+        url.searchParams.append("date", orderDateFilter);
+      }
+      const res = await fetch(url.toString(), {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -600,9 +506,9 @@ export default function LogistDashboardScreen({
         <div className="max-w-7xl mx-auto flex flex-col gap-6">
           {activeTab === "orders" ? (
             <>
-              <div className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-2">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-2 gap-4">
                 <h2 className="text-xl font-bold text-slate-800">Все заказы</h2>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 w-full sm:w-auto flex-wrap justify-end">
                   <button
                     onClick={() => fetchOrders()}
                     className="text-sm font-semibold text-slate-500 hover:text-slate-700 transition-colors"
@@ -618,6 +524,11 @@ export default function LogistDashboardScreen({
                   </button>
                 </div>
               </div>
+
+              <OrdersFilterBar
+                date={orderDateFilter}
+                onDateChange={setOrderDateFilter}
+              />
 
               {isLoading ? (
                 <div className="flex flex-col items-center justify-center p-20 text-slate-400">
@@ -1009,11 +920,25 @@ export default function LogistDashboardScreen({
                                   <span className="text-[7px] font-bold leading-none text-slate-800 mb-0.5">
                                     RUS
                                   </span>
-                                  <img
-                                    src="/russian.png"
-                                    alt="RUS"
-                                    className="w-4 h-3 object-cover rounded-[1px]"
-                                  />
+                                  <svg
+                                    className="w-4 h-3 rounded-[1px] block"
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    viewBox="0 0 9 6"
+                                  >
+                                    <rect fill="#fff" width="9" height="2" />
+                                    <rect
+                                      fill="#0039a6"
+                                      y="2"
+                                      width="9"
+                                      height="2"
+                                    />
+                                    <rect
+                                      fill="#d52b1e"
+                                      y="4"
+                                      width="9"
+                                      height="2"
+                                    />
+                                  </svg>
                                 </div>
                               </div>
                             </div>
@@ -1114,158 +1039,14 @@ export default function LogistDashboardScreen({
       </div>
 
       {/* Create Order Modal */}
-      {isCreateOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
-            <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-              <h3 className="text-xl font-bold text-slate-800">Новый заказ</h3>
-              <button
-                onClick={() => setIsCreateOpen(false)}
-                className="p-2 text-slate-400 hover:bg-slate-200 hover:text-slate-600 rounded-full transition-colors bg-slate-100"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form
-              onSubmit={handleCreateOrder}
-              className="p-6 overflow-y-auto flex flex-col gap-4"
-            >
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                  Телефон клиента <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="tel"
-                  required
-                  placeholder="+7 (999) 000-00-00"
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] text-sm"
-                  value={newOrder.client_phone}
-                  onChange={handlePhoneChange}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                  Имя клиента
-                </label>
-                <input
-                  type="text"
-                  placeholder="Иван"
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] text-sm"
-                  value={newOrder.client_name}
-                  onChange={(e) =>
-                    setNewOrder({ ...newOrder, client_name: e.target.value })
-                  }
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                    Материал <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    required
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] text-sm bg-white"
-                    value={newOrder.material_id}
-                    onChange={(e) =>
-                      setNewOrder({ ...newOrder, material_id: e.target.value })
-                    }
-                  >
-                    <option value="" disabled>
-                      Выберите...
-                    </option>
-                    {materials.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                    Кубатура <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    required
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] text-sm bg-white"
-                    value={newOrder.delivery_option_id}
-                    onChange={(e) =>
-                      setNewOrder({
-                        ...newOrder,
-                        delivery_option_id: e.target.value,
-                      })
-                    }
-                  >
-                    <option value="" disabled>
-                      Выберите...
-                    </option>
-                    {[...deliveryOptions]
-                      .sort(
-                        (a, b) => (a.capacity_m3 || 0) - (b.capacity_m3 || 0),
-                      )
-                      .map((o) => (
-                        <option key={o.id} value={o.id}>
-                          {o.capacity_m3} м³
-                        </option>
-                      ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                  Адрес доставки <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="ул. Ленина, д. 1"
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] text-sm"
-                  value={newOrder.address}
-                  onChange={(e) =>
-                    setNewOrder({ ...newOrder, address: e.target.value })
-                  }
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                  Комментарий
-                </label>
-                <textarea
-                  placeholder="Уточнения по доставке..."
-                  rows={3}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] text-sm resize-none"
-                  value={newOrder.notes}
-                  onChange={(e) =>
-                    setNewOrder({ ...newOrder, notes: e.target.value })
-                  }
-                />
-              </div>
-
-              <div className="mt-4 pt-4 border-t border-slate-100 pb-2">
-                <button
-                  type="submit"
-                  disabled={isCreating}
-                  className="w-full py-3.5 bg-[#2DB0E6] text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-[#209BD6] transition-colors disabled:opacity-70 disabled:cursor-not-allowed shadow-md"
-                >
-                  {isCreating ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      Создаем заказ...
-                    </>
-                  ) : (
-                    "Создать заказ"
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <LogistCreateOrderModal
+        isOpen={isCreateOpen}
+        onClose={() => setIsCreateOpen(false)}
+        token={token}
+        materials={materials}
+        deliveryOptions={deliveryOptions}
+        onOrderCreated={() => fetchOrders(true)}
+      />
 
       {manualAssignOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">

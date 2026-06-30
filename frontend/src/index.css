@@ -5,11 +5,8 @@
 }
 
 /* Вытаскиваем подсказки Яндекса поверх всех модалок */
-.ymaps-b-form-suggest,
-[class*="ymaps-"][class*="-suggest"],
-[class*="ymaps-2"][class*="islets_style_form-suggest"],
-body > ymaps {
-    z-index: 2147483647 !important; /* Максимально возможный z-index */
+.ymaps-2-1-79-search__suggest, [class*="ymaps-"][class*="-suggest"] {
+    z-index: 99999 !important;
 }
 
 @layer utilities {

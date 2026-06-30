@@ -486,11 +486,15 @@ export default function DriverProfileScreen({
                         <span className="text-[7px] font-bold leading-none text-slate-800 mb-0.5">
                           RUS
                         </span>
-                        <img
-                          src="/russian.png"
-                          alt="RUS"
-                          className="w-4 h-3 object-cover rounded-[1px]"
-                        />
+                        <svg
+                          className="w-4 h-3 rounded-[1px] block"
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 9 6"
+                        >
+                          <rect fill="#fff" width="9" height="2" />
+                          <rect fill="#0039a6" y="2" width="9" height="2" />
+                          <rect fill="#d52b1e" y="4" width="9" height="2" />
+                        </svg>
                       </div>
                     </div>
                   ) : (

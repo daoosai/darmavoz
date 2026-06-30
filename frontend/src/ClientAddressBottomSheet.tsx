@@ -46,12 +46,11 @@ export default function ClientAddressBottomSheet({
   const [localSelectedId, setLocalSelectedId] = useState<string | null>(null);
   const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
 
-  // Ref for the ymaps script and suggest view
-  const suggestViewRef = useRef<any>(null);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
-  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
-  const placemarkRef = useRef<any>(null);
+  const markerRef = useRef<any>(null);
 
   useEffect(() => {
     if (isOpen && token && role === "client" && !isAdding) {
@@ -60,164 +59,123 @@ export default function ClientAddressBottomSheet({
   }, [isOpen, token, role, isAdding]);
 
   useEffect(() => {
-    if (isAdding && isOpen) {
-      initYandexMapAndSuggest();
-    }
-    return () => {
-      if (suggestViewRef.current) {
-        try {
-          suggestViewRef.current.destroy();
-        } catch (e) {}
-        suggestViewRef.current = null;
-      }
-      if (mapRef.current) {
-        try {
-          mapRef.current.destroy();
-        } catch (e) {}
-        mapRef.current = null;
-      }
-      placemarkRef.current = null;
-    };
-  }, [isAdding, isOpen]);
+    let mapInstance: any = null;
 
-  const handleMapClickOrDrag = (coords: number[]) => {
-    setLat(coords[0]);
-    setLon(coords[1]);
+    if (isOpen && (window as any).mapgl && !mapRef.current) {
+      const container = document.getElementById("client-map");
+      if (container) {
+        const initialLon = lon || 65.527202;
+        const initialLat = lat || 57.152223;
 
-    if (mapRef.current) {
-      if (!placemarkRef.current) {
-        placemarkRef.current = new (window as any).ymaps.Placemark(
-          coords,
-          {},
-          {
-            preset: "islands#redIcon",
-            draggable: true,
-          },
-        );
-        placemarkRef.current.events.add("dragend", () => {
-          const newCoords = placemarkRef.current.geometry.getCoordinates();
-          handleMapClickOrDrag(newCoords);
+        mapInstance = new (window as any).mapgl.Map("client-map", {
+          center: [initialLon, initialLat],
+          zoom: 12,
+          key: "1ee6f536-8494-4bb2-adc0-d011444c567a",
         });
-        mapRef.current.geoObjects.add(placemarkRef.current);
-      } else {
-        placemarkRef.current.geometry.setCoordinates(coords);
-      }
-    }
 
-    (window as any).ymaps.geocode(coords).then((res: any) => {
-      const firstGeoObject = res.geoObjects.get(0);
-      if (firstGeoObject) {
-        const addressText = firstGeoObject.getAddressLine();
-        setNewAddress(addressText);
-        if (inputRef.current) {
-          inputRef.current.value = addressText;
-        }
-      }
-    });
-  };
+        mapRef.current = mapInstance;
 
-  const initYandexMapAndSuggest = () => {
-    if (!(window as any).ymaps) return;
-
-    (window as any).ymaps.ready(() => {
-      try {
-        if (!mapContainerRef.current || !inputRef.current) return;
-
-        // Clean up previous instances just in case
-        if (suggestViewRef.current) {
-          try {
-            suggestViewRef.current.destroy();
-          } catch (e) {}
-          suggestViewRef.current = null;
-        }
-        if (mapRef.current) {
-          try {
-            mapRef.current.destroy();
-          } catch (e) {}
-          mapRef.current = null;
-        }
-        placemarkRef.current = null;
-
-        // Init map
-        if (mapContainerRef.current) {
-          mapRef.current = new (window as any).ymaps.Map(
-            mapContainerRef.current,
-            {
-              center: [57.152223, 65.527202], // Tyumen
-              zoom: 12,
-              controls: ["zoomControl"],
-            },
-          );
-
-          mapRef.current.events.add("click", (e: any) => {
-            handleMapClickOrDrag(e.get("coords"));
+        if (lat && lon) {
+          markerRef.current = new (window as any).mapgl.Marker(mapInstance, {
+            coordinates: [lon, lat],
           });
         }
-
-        // Init suggest
-        if (inputRef.current && (window as any).ymaps.SuggestView) {
-          setTimeout(() => {
-            if (!inputRef.current) return;
-            suggestViewRef.current = new (window as any).ymaps.SuggestView(
-              "suggest-address",
-              {
-                provider: "yandex#map",
-                results: 5,
-              },
-            );
-            suggestViewRef.current.events.add("select", (e: any) => {
-              const selected = e.get("item").value;
-              setNewAddress(selected);
-              if (inputRef.current) {
-                inputRef.current.value = selected;
-              }
-
-              (window as any).ymaps.geocode(selected).then((res: any) => {
-                const firstGeoObject = res.geoObjects.get(0);
-                if (firstGeoObject) {
-                  const coords = firstGeoObject.geometry.getCoordinates();
-
-                  setLat(coords[0]);
-                  setLon(coords[1]);
-
-                  if (mapRef.current) {
-                    mapRef.current.setCenter(coords, 16, {
-                      duration: 400,
-                      timingFunction: "ease-in-out",
-                    });
-
-                    if (!placemarkRef.current) {
-                      placemarkRef.current = new (
-                        window as any
-                      ).ymaps.Placemark(
-                        coords,
-                        {},
-                        {
-                          preset: "islands#redIcon",
-                          draggable: true,
-                        },
-                      );
-
-                      placemarkRef.current.events.add("dragend", () => {
-                        const newCoords =
-                          placemarkRef.current.geometry.getCoordinates();
-                        handleMapClickOrDrag(newCoords);
-                      });
-
-                      mapRef.current.geoObjects.add(placemarkRef.current);
-                    } else {
-                      placemarkRef.current.geometry.setCoordinates(coords);
-                    }
-                  }
-                }
-              });
-            });
-          }, 300);
-        }
-      } catch (error) {
-        console.warn("Yandex Map/Suggest init failed", error);
       }
-    });
+    }
+
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.destroy();
+        mapRef.current = null;
+      }
+      if (markerRef.current) {
+        markerRef.current.destroy();
+        markerRef.current = null;
+      }
+    };
+  }, [isOpen]); // Initialize when modal opens
+
+  useEffect(() => {
+    if (mapRef.current && lat && lon) {
+      const coords: [number, number] = [lon, lat];
+
+      mapRef.current.setCenter(coords);
+      mapRef.current.setZoom(15);
+
+      if (markerRef.current) {
+        markerRef.current.setCoordinates(coords);
+      } else {
+        markerRef.current = new (window as any).mapgl.Marker(mapRef.current, {
+          coordinates: coords,
+        });
+      }
+    }
+  }, [lat, lon]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+      if (
+        wrapperRef.current &&
+        !wrapperRef.current.contains(event.target as Node)
+      ) {
+        setSuggestions([]);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("touchstart", handleClickOutside);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
+  }, []);
+
+  const fetch2GISSuggests = async (query: string) => {
+    if (query.length < 3) return [];
+    try {
+      const res = await fetch(
+        `https://catalog.api.2gis.com/3.0/suggests?q=${encodeURIComponent(query)}&suggest_type=address&key=1ee6f536-8494-4bb2-adc0-d011444c567a`,
+      );
+      const data = await res.json();
+      return (
+        data.result?.items?.map(
+          (item: any) => item.search_attributes?.suggested_text,
+        ) || []
+      );
+    } catch (e) {
+      return [];
+    }
+  };
+
+  const handleAddressChange = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const val = e.target.value;
+    setNewAddress(val);
+    const suggests = await fetch2GISSuggests(val);
+    setSuggestions(suggests.filter(Boolean));
+  };
+
+  const selectSuggestion = async (address: string) => {
+    setNewAddress(address);
+    setSuggestions([]);
+
+    try {
+      const response = await fetch(
+        `${baseURL}/geo/geocode?address=${encodeURIComponent(address)}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      if (response.ok) {
+        const data = await response.json();
+        setLat(data.lat);
+        setLon(data.lon);
+      }
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const fetchAddresses = async () => {
@@ -293,7 +251,7 @@ export default function ClientAddressBottomSheet({
   };
 
   const handleAddAddress = async () => {
-    const addressToSave = inputRef.current?.value || newAddress;
+    const addressToSave = newAddress;
     if (!addressToSave.trim()) return;
     setIsSubmitting(true);
     try {
@@ -342,11 +300,7 @@ export default function ClientAddressBottomSheet({
     setNewComment("");
     setEditingAddressId(null);
     setIsAdding(true);
-    // clean map if necessary
-    if (placemarkRef.current && mapRef.current) {
-      mapRef.current.geoObjects.remove(placemarkRef.current);
-      placemarkRef.current = null;
-    }
+    setSuggestions([]);
   };
 
   if (!isOpen) return null;
@@ -379,30 +333,43 @@ export default function ClientAddressBottomSheet({
         </div>
 
         <div className="flex-1 overflow-y-auto flex flex-col">
+          <div className="flex flex-col shrink-0 bg-slate-50 px-6 pt-4">
+            {/* Map Container */}
+            <div
+              id="client-map"
+              className="w-full h-48 bg-gray-100 rounded-xl overflow-hidden"
+            />
+          </div>
           {isAdding ? (
             <div className="flex flex-col h-full bg-slate-50">
-              {/* Map Container */}
-              <div
-                ref={mapContainerRef}
-                className="w-full min-h-[240px] shrink-0 bg-slate-200"
-              />
-
               {/* Form */}
-              <div className="flex-1 bg-white flex flex-col gap-5 px-6 py-5 rounded-t-3xl -mt-4 relative z-10">
+              <div className="flex-1 bg-white flex flex-col gap-5 px-6 py-5 rounded-t-3xl relative z-10 mt-4">
                 <div className="flex flex-col gap-2">
                   <label className="text-sm font-semibold text-slate-700 ml-1">
                     Город, улица, дом
                   </label>
-                  <div className="relative">
+                  <div className="relative" ref={wrapperRef}>
                     <Navigation className="absolute left-3.5 top-[14px] w-5 h-5 text-slate-400" />
                     <input
-                      id="suggest-address"
-                      ref={inputRef}
                       type="text"
-                      defaultValue={newAddress}
+                      value={newAddress}
+                      onChange={handleAddressChange}
                       placeholder="Введите адрес..."
                       className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3.5 pl-11 pr-4 text-[15px] font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6]/50 transition-all"
                     />
+                    {suggestions.length > 0 && (
+                      <ul className="absolute z-[9999] top-full mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-2xl max-h-48 overflow-y-auto">
+                        {suggestions.map((addr, idx) => (
+                          <li
+                            key={idx}
+                            onClick={() => selectSuggestion(addr)}
+                            className="px-4 py-3 hover:bg-slate-50 cursor-pointer border-b border-gray-100 last:border-0 text-sm"
+                          >
+                            {addr}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 </div>
 

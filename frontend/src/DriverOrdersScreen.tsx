@@ -22,6 +22,7 @@ import {
   CheckCircle2,
   Phone,
   Ban,
+  Navigation,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -38,6 +39,10 @@ interface DriverOrder {
   capacity_m3?: number;
   client_phone?: string;
   client?: { phone?: string; name?: string };
+  pickup_lat?: number;
+  pickup_lon?: number;
+  delivery_lat?: number;
+  delivery_lon?: number;
 }
 
 type DriverStatus = "available" | "busy" | "offline";
@@ -736,77 +741,76 @@ export default function DriverOrdersScreen({
 
       {/* Incoming Offer Modal */}
       {currentOffer && (
-        <div className="absolute inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl p-6 flex flex-col gap-6 animate-in zoom-in-95 duration-200">
-            <div className="flex flex-col items-center text-center gap-2">
-              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-2">
-                <PackageOpen className="w-8 h-8 text-[#2DB0E6] animate-bounce" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="relative w-full max-w-sm bg-white rounded-2xl flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="p-4 flex flex-col gap-3">
+              <div className="flex flex-col items-center text-center gap-1">
+                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-0.5">
+                  <PackageOpen className="w-6 h-6 text-[#2DB0E6] animate-bounce" />
+                </div>
+                <h3 className="text-xl font-black text-slate-800 tracking-tight">
+                  Новый заказ!
+                </h3>
+                <div className="text-2xl font-black text-rose-500 tracking-tighter tabular-nums mt-1">
+                  {Math.floor(timeLeft / 60)
+                    .toString()
+                    .padStart(2, "0")}
+                  :{(timeLeft % 60).toString().padStart(2, "0")}
+                </div>
               </div>
-              <h3 className="text-2xl font-black text-slate-800 tracking-tight">
-                Новый заказ!
-              </h3>
-              <p className="text-sm font-semibold text-slate-500">
-                Предложение исчезнет через:
-              </p>
-              <div className="text-3xl font-black text-rose-500 tracking-tighter tabular-nums mb-1">
-                {Math.floor(timeLeft / 60)
-                  .toString()
-                  .padStart(2, "0")}
-                :{(timeLeft % 60).toString().padStart(2, "0")}
+
+              <div className="flex flex-col gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">
+                    Адрес доставки
+                  </p>
+                  <div className="flex items-start gap-1.5">
+                    <MapPin className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+                    <p className="text-sm font-bold text-slate-800 leading-snug">
+                      {currentOffer.order?.address || currentOffer.address}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">
+                      Материал
+                    </p>
+                    <p className="text-sm font-bold text-slate-700">
+                      {materialName}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">
+                      Кубатура
+                    </p>
+                    <p className="text-sm font-bold text-slate-700">
+                      {capacity} м³
+                    </p>
+                  </div>
+                </div>
+
+                {(currentOffer.order?.notes || currentOffer.notes) && (
+                  <div className="mt-0.5 bg-amber-50 p-2.5 rounded-lg border border-amber-100">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-amber-600 mb-0.5 flex items-center gap-1.5">
+                      <MessageSquare className="w-3 h-3" />
+                      Комментарий
+                    </p>
+                    <p className="text-xs font-medium text-amber-900 leading-snug line-clamp-2">
+                      {currentOffer.order?.notes || currentOffer.notes}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 
-            <div className="flex flex-col gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                  Адрес доставки
-                </p>
-                <div className="flex items-start gap-2">
-                  <MapPin className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-                  <p className="text-base font-bold text-slate-800 leading-snug">
-                    {currentOffer.order?.address || currentOffer.address}
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                    Материал
-                  </p>
-                  <p className="text-sm font-bold text-slate-700">
-                    {materialName}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                    Кубатура
-                  </p>
-                  <p className="text-sm font-bold text-slate-700">
-                    {capacity} м³
-                  </p>
-                </div>
-              </div>
-
-              {(currentOffer.order?.notes || currentOffer.notes) && (
-                <div className="mt-2 bg-amber-50 p-3 rounded-lg border border-amber-100">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-amber-600 mb-1 flex items-center gap-1.5">
-                    <MessageSquare className="w-3.5 h-3.5" />
-                    Комментарий клиента
-                  </p>
-                  <p className="text-sm font-medium text-amber-900 leading-snug">
-                    {currentOffer.order?.notes || currentOffer.notes}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-3 mt-2">
+            <div className="px-4 pb-4 flex flex-col gap-2">
               <button
                 onClick={() =>
                   handleAcceptOffer(currentOffer.offer_id || currentOffer.id)
                 }
-                className="w-full bg-emerald-500 text-white font-bold text-lg py-4 rounded-xl hover:bg-emerald-600 active:scale-[0.98] transition-all shadow-sm shadow-emerald-500/20"
+                className="w-full bg-emerald-500 text-white font-bold text-lg h-12 rounded-xl hover:bg-emerald-600 active:scale-[0.98] transition-all shadow-sm shadow-emerald-500/20"
               >
                 ПРИНЯТЬ ЗАКАЗ
               </button>
@@ -814,7 +818,7 @@ export default function DriverOrdersScreen({
                 onClick={() =>
                   handleDeclineOffer(currentOffer.offer_id || currentOffer.id)
                 }
-                className="w-full bg-rose-50 text-rose-600 font-bold text-base py-3 rounded-xl hover:bg-rose-100 active:scale-[0.98] transition-all"
+                className="w-full bg-rose-50 text-rose-600 font-bold text-base h-12 rounded-xl hover:bg-rose-100 active:scale-[0.98] transition-all"
               >
                 ОТКАЗАТЬСЯ
               </button>
@@ -826,6 +830,14 @@ export default function DriverOrdersScreen({
   );
 }
 
+const CANCEL_REASONS = [
+  "Сломалась машина",
+  "Не успеваю по времени",
+  "Прокол колеса / ДТП",
+  "Не устраивает маршрут",
+  "Другое",
+];
+
 const DriverOrderCard: React.FC<{
   order: DriverOrder;
   onRefresh?: () => void;
@@ -833,10 +845,53 @@ const DriverOrderCard: React.FC<{
 }> = ({ order, onRefresh, isHistory }) => {
   const [isCompleting, setIsCompleting] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
+
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [selectedReason, setSelectedReason] = useState("");
+  const [customReason, setCustomReason] = useState("");
+  const [isCancelling, setIsCancelling] = useState(false);
+
+  const [localStep, setLocalStep] = useState<string>(
+    order.status === "in_progress" ? "heading_to_quarry" : order.status,
+  );
+
+  React.useEffect(() => {
+    if (order.status === "in_progress" && localStep !== "heading_to_client") {
+      setLocalStep("heading_to_quarry");
+    } else if (order.status !== "in_progress") {
+      setLocalStep(order.status);
+    }
+  }, [order.status]);
+
   const materialName =
     order.material_name || order.items?.[0]?.material?.name || "Неизвестно";
   const capacity =
     order.capacity_m3 || order.delivery_option?.capacity_m3 || "?";
+
+  const open2GIS = (type: "quarry" | "client") => {
+    const lat = type === "quarry" ? order?.pickup_lat : order?.delivery_lat;
+    const lon = type === "quarry" ? order?.pickup_lon : order?.delivery_lon;
+
+    console.log("2GIS Routing Data:", { type, lat, lon, order });
+
+    if (!lat || !lon) {
+      const address =
+        type === "quarry" ? order?.pickup_address : order?.delivery_address;
+      if (address) {
+        window.open(
+          `https://2gis.ru/routeSearch/rsType/car/to/${encodeURIComponent(address)}`,
+          "_blank",
+        );
+        return;
+      }
+      toast.error("Координаты и адрес отсутствуют");
+      return;
+    }
+    window.open(
+      `https://2gis.ru/routeSearch/rsType/car/to/${lon},${lat}`,
+      "_blank",
+    );
+  };
 
   if (isHistory) {
     return (
@@ -882,14 +937,23 @@ const DriverOrderCard: React.FC<{
     );
   }
 
-  const handleStart = async () => {
+  const handleCancelOrder = async () => {
     if (!onRefresh) return;
+
+    const finalReason =
+      selectedReason === "Другое" ? customReason : selectedReason;
+    if (!finalReason.trim()) return;
+
     try {
-      setIsStarting(true);
+      setIsCancelling(true);
       const token = useAuthStore.getState().token;
-      const res = await fetch(`${baseURL}/driver/orders/${order.id}/start`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
+      const res = await fetch(`${baseURL}/orders/${order.id}/driver-cancel`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ reason: finalReason }),
       });
       if (res.status === 401) {
         useAuthStore.getState().logout();
@@ -901,172 +965,305 @@ const DriverOrderCard: React.FC<{
       }
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || "Не удалось начать поездку");
+        throw new Error(err.detail || "Не удалось отменить заказ");
       }
-      toast.success("Отличной дороги!");
-      onRefresh();
+      toast.success("Заказ отменен");
+      setIsCancelModalOpen(false);
+      setSelectedReason("");
+      setCustomReason("");
+      onRefresh(); // This clears the order state and loads the empty state
     } catch (e: any) {
-      toast.error(handleApiError(e, "Не удалось начать поездку"));
+      toast.error(handleApiError(e, "Не удалось отменить заказ"));
     } finally {
-      setIsStarting(false);
+      setIsCancelling(false);
     }
   };
 
-  const handleComplete = async () => {
+  const updateStatus = async (step: string) => {
     if (!onRefresh) return;
-    try {
-      setIsCompleting(true);
-      const token = useAuthStore.getState().token;
-      const res = await fetch(`${baseURL}/driver/orders/${order.id}/complete`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.status === 401) {
-        useAuthStore.getState().logout();
-        return;
+
+    if (step === "heading_to_client") {
+      if (order.status === "driver_assigned" || order.status === "accepted") {
+        try {
+          setIsStarting(true);
+          const token = useAuthStore.getState().token;
+          const res = await fetch(
+            `${baseURL}/driver/orders/${order.id}/start`,
+            {
+              method: "POST",
+              headers: { Authorization: `Bearer ${token}` },
+            },
+          );
+          if (res.status === 401) {
+            useAuthStore.getState().logout();
+            return;
+          }
+          if (res.status === 403) {
+            toast.error("Недостаточно прав (403)");
+            return;
+          }
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || "Не удалось начать поездку");
+          }
+          toast.success("Отличной дороги!");
+        } catch (e: any) {
+          toast.error(handleApiError(e, "Не удалось начать поездку"));
+          return;
+        } finally {
+          setIsStarting(false);
+        }
       }
-      if (res.status === 403) {
-        toast.error("Недостаточно прав (403)");
-        return;
+      setLocalStep("heading_to_client");
+    } else if (step === "completed") {
+      try {
+        setIsCompleting(true);
+        const token = useAuthStore.getState().token;
+        const res = await fetch(
+          `${baseURL}/driver/orders/${order.id}/complete`,
+          {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        );
+        if (res.status === 401) {
+          useAuthStore.getState().logout();
+          return;
+        }
+        if (res.status === 403) {
+          toast.error("Недостаточно прав (403)");
+          return;
+        }
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || "Не удалось завершить заказ");
+        }
+        toast.success("Заказ успешно завершен! Вы снова свободны.");
+        onRefresh();
+      } catch (e: any) {
+        toast.error(handleApiError(e, "Не удалось завершить заказ"));
+      } finally {
+        setIsCompleting(false);
       }
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || "Не удалось завершить заказ");
-      }
-      toast.success("Заказ успешно завершен! Вы снова свободны.");
-      onRefresh();
-    } catch (e: any) {
-      toast.error(handleApiError(e, "Не удалось завершить заказ"));
-    } finally {
-      setIsCompleting(false);
     }
   };
 
   return (
-    <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex flex-col gap-4 text-left h-auto overflow-visible">
-      {/* Header: Status and Date */}
-      <div className="flex justify-between items-start gap-2">
-        <span
-          className={`text-[11px] font-bold px-2.5 py-1 rounded-lg uppercase tracking-wide ${
-            orderStatusColors[order.status] ||
-            "bg-slate-100 text-slate-600 border border-slate-200"
-          }`}
-        >
-          {orderStatusMap[order.status] || order.status.toUpperCase()}
-        </span>
-        <div className="flex items-center text-slate-400 text-xs font-medium">
-          <Clock className="w-3.5 h-3.5 mr-1" />
-          {new Date(order.created_at).toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-        </div>
-      </div>
-
-      {/* Address */}
-      <div className="flex items-start gap-3">
-        <div className="mt-0.5 bg-[#2DB0E6]/10 p-2.5 rounded-full text-[#2DB0E6] shrink-0">
-          <MapPin className="w-5 h-5" />
-        </div>
-        <div>
-          <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-1">
-            Адрес доставки
-          </p>
-          <p className="text-base font-bold text-slate-900 leading-snug">
-            {order.address}
-          </p>
-        </div>
-      </div>
-
-      {/* Details Grid */}
-      <div className="grid grid-cols-2 gap-px bg-slate-100 overflow-visible rounded-xl border border-slate-100">
-        <div className="flex flex-col gap-1 bg-slate-50 p-3">
-          <p className="text-[11px] text-slate-500 uppercase tracking-wide font-bold">
-            Материал
-          </p>
-          <p className="text-sm font-semibold text-slate-800">{materialName}</p>
-        </div>
-        <div className="flex flex-col gap-1 bg-slate-50 p-3">
-          <p className="text-[11px] text-slate-500 uppercase tracking-wide font-bold">
-            Объем
-          </p>
-          <p className="text-sm font-semibold text-slate-800">{capacity} м³</p>
-        </div>
-        <div className="flex items-center justify-between bg-slate-50 p-3 col-span-2">
-          <p className="text-[11px] text-slate-500 uppercase tracking-wide font-bold">
-            Сумма заказа
-          </p>
-          <p className="text-[#2DB0E6] font-black text-lg">
-            {order.total_amount} ₽
-          </p>
-        </div>
-      </div>
-
-      {/* Notes */}
-      {order.notes && order.notes.trim() !== "" && (
-        <div className="flex items-start gap-2.5 bg-amber-50 p-3.5 rounded-xl border border-amber-100 shadow-sm mt-1">
-          <MessageSquare className="w-5 h-5 shrink-0 text-amber-500 fill-amber-100 mt-0.5" />
-          <div>
-            <p className="text-[11px] font-bold text-amber-600 uppercase tracking-wider mb-0.5">
-              Комментарий клиента
-            </p>
-            <p className="text-sm font-medium text-amber-900 leading-snug">
-              {order.notes}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Client Phone for Driver */}
-      {(order.client_phone || order.client?.phone) && (
-        <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-xl border border-slate-100 mt-1">
-          <div className="flex flex-col">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">
-              Телефон клиента
-            </span>
-            <span className="text-base font-bold text-slate-800">
-              {order.client_phone || order.client?.phone}
-            </span>
-          </div>
-          <a
-            href={`tel:${order.client_phone || order.client?.phone}`}
-            className="flex items-center justify-center gap-2 bg-[#2DB0E6]/10 text-[#2DB0E6] hover:bg-[#2DB0E6]/20 py-2.5 px-4 rounded-xl transition-colors font-bold text-sm active:scale-95"
+    <>
+      <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex flex-col gap-4 text-left h-auto overflow-visible pb-5">
+        {/* Header: Status and Date */}
+        <div className="flex justify-between items-start gap-2">
+          <span
+            className={`text-[11px] font-bold px-2.5 py-1 rounded-lg uppercase tracking-wide ${
+              orderStatusColors[order.status] ||
+              "bg-slate-100 text-slate-600 border border-slate-200"
+            }`}
           >
-            <Phone className="w-4 h-4 shrink-0" />
-            Позвонить
-          </a>
+            {orderStatusMap[order.status] || order.status.toUpperCase()}
+          </span>
+          <div className="flex items-center text-slate-400 text-xs font-medium">
+            <Clock className="w-3.5 h-3.5 mr-1" />
+            {new Date(order.created_at).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </div>
+        </div>
+
+        {/* Address */}
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 bg-[#2DB0E6]/10 p-2.5 rounded-full text-[#2DB0E6] shrink-0">
+            <MapPin className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-1">
+              Адрес доставки
+            </p>
+            <p className="text-base font-bold text-slate-900 leading-snug">
+              {order.address}
+            </p>
+          </div>
+        </div>
+
+        {/* Details Grid */}
+        <div className="grid grid-cols-2 gap-px bg-slate-100 overflow-visible rounded-xl border border-slate-100">
+          <div className="flex flex-col gap-1 bg-slate-50 p-3">
+            <p className="text-[11px] text-slate-500 uppercase tracking-wide font-bold">
+              Материал
+            </p>
+            <p className="text-sm font-semibold text-slate-800">
+              {materialName}
+            </p>
+          </div>
+          <div className="flex flex-col gap-1 bg-slate-50 p-3">
+            <p className="text-[11px] text-slate-500 uppercase tracking-wide font-bold">
+              Объем
+            </p>
+            <p className="text-sm font-semibold text-slate-800">
+              {capacity} м³
+            </p>
+          </div>
+          <div className="flex items-center justify-between bg-slate-50 p-3 col-span-2">
+            <p className="text-[11px] text-slate-500 uppercase tracking-wide font-bold">
+              Сумма заказа
+            </p>
+            <p className="text-[#2DB0E6] font-black text-lg">
+              {order.total_amount} ₽
+            </p>
+          </div>
+        </div>
+
+        {/* Notes */}
+        {order.notes && order.notes.trim() !== "" && (
+          <div className="flex items-start gap-2.5 bg-amber-50 p-3.5 rounded-xl border border-amber-100 shadow-sm mt-1">
+            <MessageSquare className="w-5 h-5 shrink-0 text-amber-500 fill-amber-100 mt-0.5" />
+            <div>
+              <p className="text-[11px] font-bold text-amber-600 uppercase tracking-wider mb-0.5">
+                Комментарий клиента
+              </p>
+              <p className="text-sm font-medium text-amber-900 leading-snug">
+                {order.notes}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Client Phone for Driver */}
+        {(order.client_phone || order.client?.phone) && (
+          <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-xl border border-slate-100 mt-1">
+            <div className="flex flex-col">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">
+                Телефон клиента
+              </span>
+              <span className="text-base font-bold text-slate-800">
+                {order.client_phone || order.client?.phone}
+              </span>
+            </div>
+            <a
+              href={`tel:${order.client_phone || order.client?.phone}`}
+              className="flex items-center justify-center gap-2 bg-[#2DB0E6]/10 text-[#2DB0E6] hover:bg-[#2DB0E6]/20 py-2.5 px-4 rounded-xl transition-colors font-bold text-sm active:scale-95"
+            >
+              <Phone className="w-4 h-4 shrink-0" />
+              Позвонить
+            </a>
+          </div>
+        )}
+
+        {/* Action Buttons */}
+        {onRefresh && (
+          <>
+            {(localStep === "driver_assigned" ||
+              localStep === "accepted" ||
+              localStep === "heading_to_quarry") && (
+              <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col gap-3">
+                <button
+                  onClick={() => open2GIS("quarry")}
+                  className="w-full h-14 bg-emerald-500 active:bg-emerald-600 text-white rounded-2xl font-bold text-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-sm"
+                >
+                  🗺 Навигатор до карьера
+                </button>
+                <button
+                  disabled={isStarting}
+                  onClick={() => updateStatus("heading_to_client")}
+                  className="w-full h-14 bg-blue-500 active:bg-blue-600 text-white rounded-2xl font-bold text-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
+                >
+                  {isStarting ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    "Доставка до клиента"
+                  )}
+                </button>
+                <button
+                  onClick={() => setIsCancelModalOpen(true)}
+                  className="w-full h-12 bg-transparent text-red-500 active:bg-red-50 rounded-xl font-medium flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                >
+                  Отказаться от выполнения
+                </button>
+              </div>
+            )}
+
+            {localStep === "heading_to_client" && (
+              <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col gap-3">
+                <button
+                  onClick={() => open2GIS("client")}
+                  className="w-full h-14 bg-emerald-500 active:bg-emerald-600 text-white rounded-2xl font-bold text-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-sm"
+                >
+                  🗺 Навигатор до клиента
+                </button>
+                <button
+                  disabled={isCompleting}
+                  onClick={() => updateStatus("completed")}
+                  className="w-full h-14 bg-blue-500 active:bg-blue-600 text-white rounded-2xl font-bold text-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
+                >
+                  {isCompleting ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    "🏁 Завершить заказ"
+                  )}
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Cancel Confirmation Modal */}
+      {isCancelModalOpen && (
+        <div className="fixed inset-0 z-[99999] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl p-6 flex flex-col gap-4 animate-in zoom-in-95 duration-200">
+            <h3 className="text-xl font-bold text-slate-800">
+              Укажите причину отказа
+            </h3>
+
+            <div className="flex flex-wrap gap-2">
+              {CANCEL_REASONS.map((reason) => (
+                <button
+                  key={reason}
+                  onClick={() => setSelectedReason(reason)}
+                  className={`text-sm px-3 py-2 rounded-lg border transition-all ${
+                    selectedReason === reason
+                      ? "bg-rose-50 border-rose-500 text-rose-700 font-semibold"
+                      : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
+                  }`}
+                >
+                  {reason}
+                </button>
+              ))}
+            </div>
+
+            {selectedReason === "Другое" && (
+              <textarea
+                value={customReason}
+                onChange={(e) => setCustomReason(e.target.value)}
+                placeholder="Опишите причину отказа..."
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 min-h-[100px] resize-none"
+              />
+            )}
+
+            <div className="flex flex-col gap-2 mt-2">
+              <button
+                onClick={handleCancelOrder}
+                disabled={
+                  isCancelling ||
+                  !selectedReason ||
+                  (selectedReason === "Другое" && !customReason.trim())
+                }
+                className="w-full bg-rose-500 hover:bg-rose-600 text-white font-bold py-3.5 px-4 rounded-xl shadow-sm transition-all flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                {isCancelling && <Loader2 className="w-4 h-4 animate-spin" />}
+                Подтвердить отказ
+              </button>
+              <button
+                onClick={() => setIsCancelModalOpen(false)}
+                disabled={isCancelling}
+                className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3.5 px-4 rounded-xl transition-all"
+              >
+                Отмена
+              </button>
+            </div>
+          </div>
         </div>
       )}
-
-      {order.status === "driver_assigned" && onRefresh && (
-        <button
-          onClick={handleStart}
-          disabled={isStarting}
-          className="w-full mt-2 bg-[#2DB0E6] hover:bg-[#209acc] text-white font-bold py-3.5 px-4 rounded-xl shadow-sm transition-all focus:ring-4 focus:ring-[#2DB0E6]/20 active:scale-[0.98] flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
-        >
-          {isStarting ? (
-            <Loader2 className="w-5 h-5 animate-spin" />
-          ) : (
-            <CheckCircle2 className="w-5 h-5" />
-          )}
-          Начать поездку
-        </button>
-      )}
-
-      {order.status === "in_progress" && onRefresh && (
-        <button
-          onClick={handleComplete}
-          disabled={isCompleting}
-          className="w-full mt-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3.5 px-4 rounded-xl shadow-sm transition-all focus:ring-4 focus:ring-emerald-500/20 active:scale-[0.98] flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
-        >
-          {isCompleting ? (
-            <Loader2 className="w-5 h-5 animate-spin" />
-          ) : (
-            <CheckCircle2 className="w-5 h-5" />
-          )}
-          Завершить доставку
-        </button>
-      )}
-    </div>
+    </>
   );
 };

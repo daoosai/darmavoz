@@ -46,8 +46,22 @@ export default function App() {
   usePushNotifications();
   const { role, token } = useAuthStore();
   const [currentRoute, setCurrentRoute] = useState<
-    "welcome" | "main" | "login" | "driver" | "logist" | "admin" | "driver_register"
-  >(role === "driver" ? "driver" : role === "logist" ? "logist" : role === "admin" ? "admin" : "welcome");
+    | "welcome"
+    | "main"
+    | "login"
+    | "driver"
+    | "logist"
+    | "admin"
+    | "driver_register"
+  >(
+    role === "driver"
+      ? "driver"
+      : role === "logist"
+        ? "logist"
+        : role === "admin"
+          ? "admin"
+          : "welcome",
+  );
 
   const [activeTab, setActiveTab] = useState("home");
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
@@ -82,7 +96,9 @@ export default function App() {
           const fetchedMaterials = Array.isArray(materialsData)
             ? materialsData
             : materialsData.results || [];
-          setMaterials(fetchedMaterials.filter((m: any) => m.is_active !== false));
+          setMaterials(
+            fetchedMaterials.filter((m: any) => m.is_active !== false),
+          );
         } else {
           console.error("Failed to fetch data");
         }
@@ -126,7 +142,15 @@ export default function App() {
       return (
         <LoginScreen
           onLogin={(r) =>
-            setCurrentRoute(r === "driver" ? "driver" : r === "logist" ? "logist" : r === "admin" ? "admin" : "main")
+            setCurrentRoute(
+              r === "driver"
+                ? "driver"
+                : r === "logist"
+                  ? "logist"
+                  : r === "admin"
+                    ? "admin"
+                    : "main",
+            )
           }
           onBack={() => setCurrentRoute("welcome")}
         />
@@ -139,7 +163,15 @@ export default function App() {
       ) : (
         <LoginScreen
           onLogin={(r) =>
-            setCurrentRoute(r === "driver" ? "driver" : r === "logist" ? "logist" : r === "admin" ? "admin" : "main")
+            setCurrentRoute(
+              r === "driver"
+                ? "driver"
+                : r === "logist"
+                  ? "logist"
+                  : r === "admin"
+                    ? "admin"
+                    : "main",
+            )
           }
           onBack={() => setCurrentRoute("welcome")}
         />
@@ -152,7 +184,15 @@ export default function App() {
       ) : (
         <LoginScreen
           onLogin={(r) =>
-            setCurrentRoute(r === "driver" ? "driver" : r === "logist" ? "logist" : r === "admin" ? "admin" : "main")
+            setCurrentRoute(
+              r === "driver"
+                ? "driver"
+                : r === "logist"
+                  ? "logist"
+                  : r === "admin"
+                    ? "admin"
+                    : "main",
+            )
           }
           onBack={() => setCurrentRoute("welcome")}
         />
@@ -165,7 +205,15 @@ export default function App() {
       ) : (
         <LoginScreen
           onLogin={(r) =>
-            setCurrentRoute(r === "driver" ? "driver" : r === "logist" ? "logist" : r === "admin" ? "admin" : "main")
+            setCurrentRoute(
+              r === "driver"
+                ? "driver"
+                : r === "logist"
+                  ? "logist"
+                  : r === "admin"
+                    ? "admin"
+                    : "main",
+            )
           }
           onBack={() => setCurrentRoute("welcome")}
         />
@@ -173,7 +221,7 @@ export default function App() {
     }
 
     return (
-      <MainContent 
+      <MainContent
         currentRoute={currentRoute}
         setCurrentRoute={setCurrentRoute}
         activeTab={activeTab}
@@ -214,7 +262,25 @@ export default function App() {
   );
 }
 
-function MainContent({ currentRoute, setCurrentRoute, activeTab, setActiveTab, categories, materials, selectedMaterial, setSelectedMaterial, searchQuery, setSearchQuery, cartItemsCount, selectedCategoryId, setSelectedCategoryId, isLoading, showAuthSheet, setShowAuthSheet, role }: any) {
+function MainContent({
+  currentRoute,
+  setCurrentRoute,
+  activeTab,
+  setActiveTab,
+  categories,
+  materials,
+  selectedMaterial,
+  setSelectedMaterial,
+  searchQuery,
+  setSearchQuery,
+  cartItemsCount,
+  selectedCategoryId,
+  setSelectedCategoryId,
+  isLoading,
+  showAuthSheet,
+  setShowAuthSheet,
+  role,
+}: any) {
   const { selectedAddress } = useAddressStore();
   const { token } = useAuthStore();
   const tabs = [
@@ -244,14 +310,13 @@ function MainContent({ currentRoute, setCurrentRoute, activeTab, setActiveTab, c
     <div className="min-h-screen w-full bg-slate-100 flex sm:items-center justify-center text-slate-900">
       {/* Mobile container aligned and constrained on large screens */}
       <div className="w-full max-w-md bg-white min-h-screen sm:min-h-0 sm:h-[85vh] relative shadow-2xl flex flex-col overflow-hidden sm:rounded-[32px] sm:border-8 border-slate-900">
-        
         {/* Main Content Area */}
-        <main className="flex-1 overflow-y-auto pb-[90px] pt-4">
+        <main className="flex-1 overflow-y-auto pb-[calc(90px+env(safe-area-inset-bottom))] pt-4">
           {activeTab === "home" && (
             <>
               {/* Top Address Button */}
               <div className="px-4 mb-4">
-                <button 
+                <button
                   onClick={() => {
                     if (role !== "client") {
                       setShowAuthSheet(true);
@@ -263,7 +328,9 @@ function MainContent({ currentRoute, setCurrentRoute, activeTab, setActiveTab, c
                 >
                   <MapPin className="w-[18px] h-[18px] flex-shrink-0" />
                   <span className="truncate text-sm">
-                    {token && role === "client" && selectedAddress ? selectedAddress : "Укажите адрес доставки"}
+                    {token && role === "client" && selectedAddress
+                      ? selectedAddress
+                      : "Укажите адрес доставки"}
                   </span>
                 </button>
               </div>
@@ -330,7 +397,9 @@ function MainContent({ currentRoute, setCurrentRoute, activeTab, setActiveTab, c
                         m.category_id === selectedCategoryId,
                     )
                     .filter((m: any) =>
-                      (m?.name || "").toLowerCase().includes(searchQuery.toLowerCase()),
+                      (m?.name || "")
+                        .toLowerCase()
+                        .includes(searchQuery.toLowerCase()),
                     )
                     .map((material) => (
                       <ProductCard
@@ -344,7 +413,9 @@ function MainContent({ currentRoute, setCurrentRoute, activeTab, setActiveTab, c
             </>
           )}
 
-          {activeTab === "orders" && <OrdersScreen onOpenAuth={() => setShowAuthSheet(true)} />}
+          {activeTab === "orders" && (
+            <OrdersScreen onOpenAuth={() => setShowAuthSheet(true)} />
+          )}
 
           {activeTab === "cart" && (
             <CartScreen
@@ -357,18 +428,19 @@ function MainContent({ currentRoute, setCurrentRoute, activeTab, setActiveTab, c
 
           {activeTab === "promotions" && <PromosScreen />}
 
-          {activeTab === "profile" && (
-            role === "client" ? (
-              <ClientProfileScreen onOpenAddresses={() => setShowAddressSheet(true)} />
+          {activeTab === "profile" &&
+            (role === "client" ? (
+              <ClientProfileScreen
+                onOpenAddresses={() => setShowAddressSheet(true)}
+              />
             ) : (
               <ProfileScreen onOpenAuth={() => setShowAuthSheet(true)} />
-            )
-          )}
+            ))}
         </main>
 
         {/* Bottom Navigation */}
-        <nav className="fixed z-50 bottom-0 w-full max-w-md bg-white border-t border-slate-100 flex flex-col px-2 pb-2 sm:rounded-b-[32px]">
-          <div className="flex items-center justify-around h-[72px]">
+        <nav className="fixed bottom-0 left-0 right-0 z-50 w-full max-w-md mx-auto bg-white border-t border-gray-200 pb-[env(safe-area-inset-bottom)] flex flex-col sm:rounded-b-[32px]">
+          <div className="flex justify-around items-center h-16 px-2">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -409,13 +481,13 @@ function MainContent({ currentRoute, setCurrentRoute, activeTab, setActiveTab, c
           material={selectedMaterial}
           onClose={() => setSelectedMaterial(null)}
         />
-        
+
         {/* Auth Bottom Sheet */}
         <ClientAuthBottomSheet
           isOpen={showAuthSheet}
           onClose={() => setShowAuthSheet(false)}
         />
-        
+
         {/* Address Bottom Sheet */}
         <ClientAddressBottomSheet
           isOpen={showAddressSheet}

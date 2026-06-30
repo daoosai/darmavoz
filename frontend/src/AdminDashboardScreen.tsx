@@ -23,8 +23,14 @@ import {
   Users,
   User,
   Camera,
+  Map,
+  Search,
+  Clock,
+  Filter,
 } from "lucide-react";
 import AdminProfileScreen from "./AdminProfileScreen";
+import AdminQuarriesScreen from "./AdminQuarriesScreen";
+import { DriverHistoryModal } from "./components/admin/DriverHistoryModal";
 import toast from "react-hot-toast";
 
 interface AdminCategory {
@@ -57,6 +63,7 @@ interface AdminDeliveryOption {
   title: string;
   capacity_m3: number;
   base_price: number;
+  delivery_rate_per_km?: number;
   is_active: boolean;
   media_files?: AdminMediaFile[];
   primary_image_url?: string;
@@ -77,11 +84,7 @@ interface AdminDriver {
   tonnage_min?: number;
   tonnage_max?: number;
   moderation_status?:
-    | "pending_moderation"
-    | "approved"
-    | "rejected"
-    | "suspended"
-    | null;
+    "pending_moderation" | "approved" | "rejected" | "suspended" | null;
   rate_mode?: "fixed" | "per_ton_km";
   fixed_rate?: number;
   rate_per_ton_km?: number;
@@ -141,13 +144,49 @@ export default function AdminDashboardScreen({
 }: AdminDashboardScreenProps) {
   const { logout, token } = useAuthStore();
   const [activeTab, setActiveTab] = useState<
-    "materials" | "delivery" | "drivers" | "moderation" | "profile"
+    "materials" | "quarries" | "delivery" | "drivers" | "moderation" | "profile"
   >("materials");
 
   const [materials, setMaterials] = useState<AdminMaterial[]>([]);
   const [deliveryOptions, setDeliveryOptions] = useState<AdminDeliveryOption[]>(
     [],
   );
+
+  // --- Live Fleet State ---
+  interface LiveFleetCar {
+    id: string;
+    plate_number: string;
+    car_type: string;
+    volume: number;
+    photo_url?: string;
+    status?: string;
+    driver_id?: string;
+    driver?: {
+      id: string;
+      full_name?: string;
+      name?: string;
+      phone?: string;
+      status?: string;
+    };
+  }
+  const [fleetSubTab, setFleetSubTab] = useState<"live" | "tariffs">("live");
+  const [cars, setCars] = useState<LiveFleetCar[]>([]);
+  const [carsFilter, setCarsFilter] = useState({
+    license_plate: "",
+    driver_name: "",
+    capacity: "",
+    status: "",
+  });
+  const [debouncedLicensePlate, setDebouncedLicensePlate] = useState("");
+  const [isLoadingCars, setIsLoadingCars] = useState(false);
+  const [isOrderHistoryModalOpen, setIsOrderHistoryModalOpen] = useState(false);
+  const [selectedHistoryDriverId, setSelectedHistoryDriverId] = useState<
+    string | null
+  >(null);
+  const [selectedHistoryDriverName, setSelectedHistoryDriverName] =
+    useState("");
+  // ------------------------
+
   const [drivers, setDrivers] = useState<AdminDriver[]>([]);
   const [pendingRequests, setPendingRequests] = useState<
     PendingModerationRequest[]
@@ -218,11 +257,15 @@ export default function AdminDashboardScreen({
               <span className="text-[8px] font-bold leading-none text-gray-800 mb-0.5">
                 RUS
               </span>
-              <img
-                src="/russian.png"
-                alt="RUS"
-                className="w-3 h-2 object-cover rounded-sm"
-              />
+              <svg
+                className="w-3 h-2 rounded-[1px] block"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 9 6"
+              >
+                <rect fill="#fff" width="9" height="2" />
+                <rect fill="#0039a6" y="2" width="9" height="2" />
+                <rect fill="#d52b1e" y="4" width="9" height="2" />
+              </svg>
             </div>
           </div>
         ) : null}
@@ -517,6 +560,55 @@ export default function AdminDashboardScreen({
     }
   };
 
+  const fetchLiveCars = async () => {
+    if (!token) return;
+    setIsLoadingCars(true);
+    try {
+      const params = new URLSearchParams();
+      if (debouncedLicensePlate)
+        params.append("license_plate", debouncedLicensePlate);
+      if (carsFilter.driver_name)
+        params.append("driver_name", carsFilter.driver_name);
+      if (carsFilter.capacity && carsFilter.capacity !== "all")
+        params.append("capacity", carsFilter.capacity);
+      if (carsFilter.status && carsFilter.status !== "all")
+        params.append("status", carsFilter.status);
+
+      const url = `${baseURL}/admin/cars?${params.toString()}`;
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to fetch live cars");
+      const data = await res.json();
+      console.log("CARS DATA:", data);
+      setCars(Array.isArray(data) ? data : data.items || data.results || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoadingCars(false);
+    }
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedLicensePlate(carsFilter.license_plate);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [carsFilter.license_plate]);
+
+  useEffect(() => {
+    if (activeTab === "delivery" && fleetSubTab === "live") {
+      fetchLiveCars();
+    }
+  }, [
+    debouncedLicensePlate,
+    carsFilter.driver_name,
+    carsFilter.capacity,
+    carsFilter.status,
+    activeTab,
+    fleetSubTab,
+  ]);
+
   useEffect(() => {
     fetchCategories();
     if (activeTab === "materials" && materials.length === 0) {
@@ -730,6 +822,9 @@ export default function AdminDashboardScreen({
         title: editingDelivery.title,
         capacity_m3: Number(editingDelivery.capacity_m3),
         base_price: Number(editingDelivery.base_price || 0),
+        delivery_rate_per_km: editingDelivery.delivery_rate_per_km
+          ? Number(editingDelivery.delivery_rate_per_km)
+          : null,
         is_active: editingDelivery.is_active ?? true,
         sort_order: 10,
       };
@@ -1272,6 +1367,17 @@ export default function AdminDashboardScreen({
               Каталог
             </button>
             <button
+              onClick={() => setActiveTab("quarries")}
+              className={`flex-1 sm:w-auto flex-shrink-0 whitespace-nowrap py-2 px-3 text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2 ${
+                activeTab === "quarries"
+                  ? "bg-white text-[#209ccf] shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              <Map className="w-4 h-4" />
+              Карьеры
+            </button>
+            <button
               onClick={() => setActiveTab("delivery")}
               className={`flex-1 sm:w-auto flex-shrink-0 whitespace-nowrap py-2 px-3 text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2 ${
                 activeTab === "delivery"
@@ -1544,85 +1650,623 @@ export default function AdminDashboardScreen({
               )}
             </>
           ) : activeTab === "delivery" ? (
-            <>
-              {/* Delivery Options Tab */}
-              <div className="flex justify-between items-center bg-white p-5 rounded-2xl shadow-sm border border-slate-100 mb-2">
-                <h2 className="text-xl font-bold text-slate-800">
-                  Типы автомобилей
-                </h2>
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => fetchDeliveryOptions()}
-                    className="text-sm font-semibold text-slate-500 hover:text-slate-700 transition-colors"
-                  >
-                    Обновить
-                  </button>
-                  <button
-                    onClick={() => openDeliveryModal()}
-                    className="flex items-center gap-2 bg-[#2DB0E6] text-white px-4 py-2 rounded-xl font-semibold hover:bg-[#209ccf] transition-colors shadow-sm"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span className="hidden sm:inline">Добавить</span>
-                  </button>
-                </div>
+            <div className="flex flex-col gap-4">
+              <div className="flex gap-2 border-b border-slate-200 pb-2 overflow-x-auto">
+                <button
+                  onClick={() => setFleetSubTab("live")}
+                  className={`px-4 py-2 font-bold text-sm rounded-xl transition-colors whitespace-nowrap ${fleetSubTab === "live" ? "bg-[#2DB0E6] text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+                >
+                  Живой автопарк
+                </button>
+                <button
+                  onClick={() => setFleetSubTab("tariffs")}
+                  className={`px-4 py-2 font-bold text-sm rounded-xl transition-colors whitespace-nowrap ${fleetSubTab === "tariffs" ? "bg-[#2DB0E6] text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+                >
+                  Справочник тарифов
+                </button>
               </div>
 
-              {isLoading ? (
-                <div className="flex justify-center p-20">
-                  <Loader2 className="w-10 h-10 animate-spin text-[#2DB0E6]" />
-                </div>
+              {fleetSubTab === "live" ? (
+                <>
+                  {/* Filters */}
+                  <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row gap-4">
+                    <div className="flex-1 relative">
+                      <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Поиск по госномеру"
+                        className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 text-sm font-medium"
+                        value={carsFilter.license_plate}
+                        onChange={(e) =>
+                          setCarsFilter({
+                            ...carsFilter,
+                            license_plate: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="flex-1 relative">
+                      <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Поиск по ФИО водителя"
+                        className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 text-sm font-medium"
+                        value={carsFilter.driver_name}
+                        onChange={(e) =>
+                          setCarsFilter({
+                            ...carsFilter,
+                            driver_name: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="w-full md:w-48 relative">
+                      <Filter className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                      <select
+                        className="w-full pl-10 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 appearance-none text-sm font-medium"
+                        value={carsFilter.capacity}
+                        onChange={(e) =>
+                          setCarsFilter({
+                            ...carsFilter,
+                            capacity: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="all">Все кубатуры</option>
+                        <option value="5">5 м³</option>
+                        <option value="10">10 м³</option>
+                        <option value="17">17 м³</option>
+                        <option value="20">20 м³</option>
+                        <option value="25">25 м³</option>
+                        <option value="30">30 м³</option>
+                      </select>
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M19 9l-7 7-7-7"
+                          ></path>
+                        </svg>
+                      </div>
+                    </div>
+                    <div className="w-full md:w-48 relative">
+                      <Filter className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                      <select
+                        className="w-full pl-10 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 appearance-none text-sm font-medium"
+                        value={carsFilter.status}
+                        onChange={(e) =>
+                          setCarsFilter({
+                            ...carsFilter,
+                            status: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="all">Все статусы</option>
+                        <option value="free">Свободен</option>
+                        <option value="on_order">На заказе</option>
+                      </select>
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M19 9l-7 7-7-7"
+                          ></path>
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Table (Desktop) */}
+                  <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden hidden md:block">
+                    {isLoadingCars ? (
+                      <div className="flex justify-center p-20">
+                        <Loader2 className="w-10 h-10 animate-spin text-[#2DB0E6]" />
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto w-full">
+                        <table className="w-full text-left border-collapse min-w-[800px]">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-slate-100 text-xs uppercase tracking-wider font-bold text-slate-500">
+                              <th className="px-6 py-4">Фото</th>
+                              <th className="px-6 py-4">Госномер</th>
+                              <th className="px-6 py-4">Водитель</th>
+                              <th className="px-6 py-4">Тип / Кубатура</th>
+                              <th className="px-6 py-4">Статус</th>
+                              <th className="px-6 py-4 text-right">Действия</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100/80">
+                            {cars.map((car) => (
+                              <tr
+                                key={car.id}
+                                className="hover:bg-slate-50/50 transition-colors"
+                              >
+                                <td className="px-6 py-4">
+                                  {car.photo_url ? (
+                                    <img
+                                      src={car.photo_url}
+                                      alt={car.plate_number}
+                                      className="w-16 h-12 object-cover rounded-md border border-slate-200"
+                                    />
+                                  ) : (
+                                    <div className="w-16 h-12 rounded-md bg-slate-100 flex items-center justify-center text-slate-300">
+                                      <ImageIcon className="w-5 h-5" />
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="px-6 py-4">
+                                  <div className="flex items-center">
+                                    <div className="border border-slate-300 rounded flex overflow-hidden bg-white shadow-sm font-mono font-bold text-slate-800 h-[30px] items-center">
+                                      <div className="px-2">
+                                        {car.plate_number?.substring(0, 6) ||
+                                          "X000XX"}
+                                      </div>
+                                      <div className="border-l border-slate-300 px-1.5 flex flex-col items-center justify-center bg-white min-w-[32px] h-full">
+                                        <span className="text-[10px] leading-none mb-0.5">
+                                          {car.plate_number?.substring(6) ||
+                                            "77"}
+                                        </span>
+                                        <div className="flex items-center gap-0.5">
+                                          <span className="text-[6px] leading-none font-sans">
+                                            RUS
+                                          </span>
+                                          <div className="w-2 h-1.5 flex flex-col">
+                                            <div className="h-1/3 bg-white"></div>
+                                            <div className="h-1/3 bg-blue-600"></div>
+                                            <div className="h-1/3 bg-red-600"></div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4">
+                                  <div className="font-semibold text-slate-800">
+                                    {car.driver?.name || "Неизвестно"}
+                                  </div>
+                                  <div className="text-xs text-slate-500">
+                                    {car.driver?.phone || ""}
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4">
+                                  <div className="font-semibold text-slate-800">
+                                    {car.car_type || "Не указан"}
+                                  </div>
+                                  <div className="text-sm font-medium text-slate-500">
+                                    {car.volume} м³
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4">
+                                  {(() => {
+                                    const rawStatus =
+                                      car.driver?.status || car.status || "";
+
+                                    const getStatusLabel = (status: string) => {
+                                      if (!status) return "Неизвестно";
+                                      const s = status.toLowerCase();
+                                      if (s === "busy") return "На заказе";
+                                      if (s === "free") return "Свободен";
+                                      return (
+                                        s.charAt(0).toUpperCase() + s.slice(1)
+                                      );
+                                    };
+
+                                    const label = getStatusLabel(rawStatus);
+
+                                    let colorClass =
+                                      "bg-slate-100 text-slate-800";
+                                    let dotClass = "bg-slate-500";
+
+                                    if (label === "Свободен") {
+                                      colorClass =
+                                        "bg-emerald-100 text-emerald-800";
+                                      dotClass = "bg-emerald-500";
+                                    } else if (label === "На заказе") {
+                                      colorClass = "bg-blue-100 text-blue-800";
+                                      dotClass = "bg-blue-500 animate-pulse";
+                                    } else if (label === "Заблокирован") {
+                                      colorClass = "bg-red-100 text-red-800";
+                                      dotClass = "bg-red-500";
+                                    }
+
+                                    return (
+                                      <span
+                                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-bold tracking-wider ${colorClass}`}
+                                      >
+                                        <span
+                                          className={`w-1.5 h-1.5 rounded-full ${dotClass}`}
+                                        ></span>
+                                        {label}
+                                      </span>
+                                    );
+                                  })()}
+                                </td>
+                                <td className="px-6 py-4 text-right">
+                                  <button
+                                    onClick={() => {
+                                      setSelectedHistoryDriverId(
+                                        car.driver?.id || null,
+                                      );
+                                      setSelectedHistoryDriverName(
+                                        car.driver?.name || "",
+                                      );
+                                      setIsOrderHistoryModalOpen(true);
+                                    }}
+                                    className="p-2 text-slate-400 hover:text-[#2DB0E6] hover:bg-[#2DB0E6]/10 rounded-lg transition-colors"
+                                    title="История заказов"
+                                  >
+                                    <Clock className="w-5 h-5" />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                            {cars.length === 0 && (
+                              <tr>
+                                <td
+                                  colSpan={6}
+                                  className="px-6 py-12 text-center"
+                                >
+                                  <Truck className="w-12 h-12 text-slate-200 mx-auto mb-3" />
+                                  <div className="text-slate-500 font-medium">
+                                    Машины не найдены
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Cards (Mobile) */}
+                  <div className="flex flex-col gap-4 md:hidden">
+                    {isLoadingCars ? (
+                      <div className="flex justify-center p-20 bg-white rounded-2xl shadow-sm border border-slate-100">
+                        <Loader2 className="w-10 h-10 animate-spin text-[#2DB0E6]" />
+                      </div>
+                    ) : (
+                      <>
+                        {cars.map((car) => (
+                          <div
+                            key={car.id}
+                            className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm flex flex-col gap-3"
+                          >
+                            <div className="flex justify-between items-start">
+                              <div className="flex gap-3">
+                                {car.photo_url ? (
+                                  <img
+                                    src={car.photo_url}
+                                    alt={car.plate_number}
+                                    className="w-16 h-12 object-cover rounded-lg border border-slate-200"
+                                  />
+                                ) : (
+                                  <div className="w-16 h-12 rounded-lg bg-slate-100 flex items-center justify-center text-slate-300">
+                                    <ImageIcon className="w-5 h-5" />
+                                  </div>
+                                )}
+                                <div className="flex flex-col">
+                                  <div className="flex items-center">
+                                    <div className="border border-slate-300 rounded flex overflow-hidden bg-white shadow-sm font-mono font-bold text-slate-800 h-[28px] items-center text-sm">
+                                      <div className="px-1.5">
+                                        {car.plate_number?.substring(0, 6) ||
+                                          "X000XX"}
+                                      </div>
+                                      <div className="border-l border-slate-300 px-1 flex flex-col items-center justify-center bg-white min-w-[28px] h-full">
+                                        <span className="text-[9px] leading-none mb-0.5">
+                                          {car.plate_number?.substring(6) ||
+                                            "77"}
+                                        </span>
+                                        <div className="flex items-center gap-0.5">
+                                          <span className="text-[5px] leading-none font-sans">
+                                            RUS
+                                          </span>
+                                          <div className="w-1.5 h-1 flex flex-col">
+                                            <div className="h-1/3 bg-white"></div>
+                                            <div className="h-1/3 bg-blue-600"></div>
+                                            <div className="h-1/3 bg-red-600"></div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                              <div>
+                                {(() => {
+                                  const rawStatus =
+                                    car.driver?.status || car.status || "";
+                                  const getStatusLabel = (status: string) => {
+                                    if (!status) return "Неизвестно";
+                                    const s = status.toLowerCase();
+                                    if (s === "busy") return "На заказе";
+                                    if (s === "free") return "Свободен";
+                                    return (
+                                      s.charAt(0).toUpperCase() + s.slice(1)
+                                    );
+                                  };
+                                  const label = getStatusLabel(rawStatus);
+                                  let colorClass =
+                                    "bg-slate-100 text-slate-800";
+                                  let dotClass = "bg-slate-500";
+                                  if (label === "Свободен") {
+                                    colorClass =
+                                      "bg-emerald-100 text-emerald-800";
+                                    dotClass = "bg-emerald-500";
+                                  } else if (label === "На заказе") {
+                                    colorClass = "bg-blue-100 text-blue-800";
+                                    dotClass = "bg-blue-500 animate-pulse";
+                                  } else if (label === "Заблокирован") {
+                                    colorClass = "bg-red-100 text-red-800";
+                                    dotClass = "bg-red-500";
+                                  }
+                                  return (
+                                    <span
+                                      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider ${colorClass}`}
+                                    >
+                                      <span
+                                        className={`w-1.5 h-1.5 rounded-full ${dotClass}`}
+                                      ></span>
+                                      {label}
+                                    </span>
+                                  );
+                                })()}
+                              </div>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <div className="text-sm">
+                                <span className="text-slate-500">
+                                  Водитель:
+                                </span>{" "}
+                                <span className="font-bold text-slate-800">
+                                  {car.driver?.name || "Неизвестно"}
+                                </span>
+                              </div>
+                              <div className="text-xs text-slate-500">
+                                {car.driver?.phone || "Телефон не указан"}
+                              </div>
+                              <div className="text-sm mt-1">
+                                <span className="text-slate-500">Тип:</span>{" "}
+                                <span className="font-medium text-slate-800">
+                                  {car.car_type || "Не указан"} / {car.volume}{" "}
+                                  м³
+                                </span>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => {
+                                setSelectedHistoryDriverId(
+                                  car.driver?.id || null,
+                                );
+                                setSelectedHistoryDriverName(
+                                  car.driver?.name || "",
+                                );
+                                setIsOrderHistoryModalOpen(true);
+                              }}
+                              className="w-full h-10 bg-gray-50 text-gray-700 rounded-lg flex items-center justify-center font-medium text-sm hover:bg-gray-100 transition-colors"
+                            >
+                              <Clock className="w-4 h-4 mr-2" />
+                              История заказов
+                            </button>
+                          </div>
+                        ))}
+                        {cars.length === 0 && (
+                          <div className="p-8 text-center text-slate-500 font-medium bg-white rounded-2xl shadow-sm border border-slate-100">
+                            Машины не найдены
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </>
               ) : (
-                <div className="bg-transparent md:bg-white md:rounded-2xl md:shadow-sm md:border border-transparent md:border-slate-100 overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="hidden md:table w-full text-left border-collapse">
-                      <thead>
-                        <tr className="bg-slate-50 border-b border-slate-100 text-xs uppercase tracking-wider font-bold text-slate-500">
-                          <th className="px-6 py-4">ID</th>
-                          <th className="px-6 py-4">Фото</th>
-                          <th className="px-6 py-4">Название</th>
-                          <th className="px-6 py-4">Кубатура (м³)</th>
-                          <th className="px-6 py-4">Базовая цена</th>
-                          <th className="px-6 py-4">Статус</th>
-                          <th className="px-6 py-4 text-right">Действия</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100/80">
+                <>
+                  {/* Delivery Options Tab */}
+                  <div className="flex justify-between items-center bg-white p-5 rounded-2xl shadow-sm border border-slate-100 mb-2">
+                    <h2 className="text-xl font-bold text-slate-800">
+                      Типы автомобилей
+                    </h2>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => fetchDeliveryOptions()}
+                        className="text-sm font-semibold text-slate-500 hover:text-slate-700 transition-colors"
+                      >
+                        Обновить
+                      </button>
+                      <button
+                        onClick={() => openDeliveryModal()}
+                        className="flex items-center gap-2 bg-[#2DB0E6] text-white px-4 py-2 rounded-xl font-semibold hover:bg-[#209ccf] transition-colors shadow-sm"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span className="hidden sm:inline">Добавить</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {isLoading ? (
+                    <div className="flex justify-center p-20">
+                      <Loader2 className="w-10 h-10 animate-spin text-[#2DB0E6]" />
+                    </div>
+                  ) : (
+                    <div className="bg-transparent md:bg-white md:rounded-2xl md:shadow-sm md:border border-transparent md:border-slate-100 overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="hidden md:table w-full text-left border-collapse">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-slate-100 text-xs uppercase tracking-wider font-bold text-slate-500">
+                              <th className="px-6 py-4">ID</th>
+                              <th className="px-6 py-4">Фото</th>
+                              <th className="px-6 py-4">Название</th>
+                              <th className="px-6 py-4">Кубатура (м³)</th>
+                              <th className="px-6 py-4">Базовая цена</th>
+                              <th className="px-6 py-4">Ставка за км</th>
+                              <th className="px-6 py-4">Статус</th>
+                              <th className="px-6 py-4 text-right">Действия</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100/80">
+                            {sortedDeliveryOptions.map((opt) => {
+                              const imgUrl =
+                                opt.primary_image_url ||
+                                opt.image_url ||
+                                opt.media_files?.[0]?.public_url;
+                              return (
+                                <tr
+                                  key={opt.id}
+                                  className="hover:bg-slate-50/50 transition-colors"
+                                >
+                                  <td className="px-6 py-4 text-xs font-mono text-slate-400">
+                                    {opt.id.substring(0, 8)}
+                                  </td>
+                                  <td className="px-6 py-4">
+                                    {imgUrl ? (
+                                      <img
+                                        src={imgUrl}
+                                        alt={opt.title}
+                                        className="w-24 h-16 object-contain rounded-md border border-slate-200 bg-slate-50 p-1"
+                                      />
+                                    ) : (
+                                      <div className="w-24 h-16 rounded-md border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-300">
+                                        <ImageIcon className="w-5 h-5" />
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="px-6 py-4 font-semibold text-slate-800">
+                                    {opt.title}
+                                  </td>
+                                  <td className="px-6 py-4 text-sm font-medium">
+                                    {opt.capacity_m3} м³
+                                  </td>
+                                  <td className="px-6 py-4 text-sm font-medium">
+                                    {opt.base_price} ₽
+                                  </td>
+                                  <td className="px-6 py-4 text-sm font-medium whitespace-nowrap">
+                                    {opt.delivery_rate_per_km
+                                      ? opt.delivery_rate_per_km + " ₽/км"
+                                      : "Не задана"}
+                                  </td>
+                                  <td className="px-6 py-4">
+                                    {opt.is_active === false ? (
+                                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-100 text-amber-800 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
+                                        <XCircle className="w-3 h-3" />{" "}
+                                        Неактивен
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-50 text-emerald-700 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
+                                        <CheckCircle2 className="w-3 h-3" />{" "}
+                                        Активен
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="px-6 py-4 text-right flex justify-end gap-2">
+                                    <button
+                                      onClick={() => openDeliveryModal(opt)}
+                                      className="p-2 text-slate-400 hover:text-[#2DB0E6] bg-slate-50 hover:bg-[#2DB0E6]/10 rounded-lg transition-colors border border-transparent"
+                                    >
+                                      <Edit2 className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() =>
+                                        setItemToDelete({
+                                          id: opt.id,
+                                          type: "delivery",
+                                        })
+                                      }
+                                      className="p-2 text-slate-400 hover:text-red-600 bg-slate-50 hover:bg-red-50 rounded-lg transition-colors border border-transparent"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-4 md:hidden">
                         {sortedDeliveryOptions.map((opt) => {
                           const imgUrl =
                             opt.primary_image_url ||
                             opt.image_url ||
                             opt.media_files?.[0]?.public_url;
                           return (
-                            <tr
+                            <div
                               key={opt.id}
-                              className="hover:bg-slate-50/50 transition-colors"
+                              className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-col gap-3 relative"
                             >
-                              <td className="px-6 py-4 text-xs font-mono text-slate-400">
-                                {opt.id.substring(0, 8)}
-                              </td>
-                              <td className="px-6 py-4">
+                              <div className="flex justify-between items-center mb-1">
+                                <span className="text-xs font-mono text-slate-400">
+                                  ID: {opt.id.substring(0, 8)}
+                                </span>
+                                <div className="flex gap-2 -mt-2 -mr-2">
+                                  <button
+                                    onClick={() => openDeliveryModal(opt)}
+                                    className="p-2 text-slate-400 hover:text-[#2DB0E6] bg-slate-50 hover:bg-[#2DB0E6]/10 rounded-lg transition-colors border border-transparent"
+                                  >
+                                    <Edit2 className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() =>
+                                      setItemToDelete({
+                                        id: opt.id,
+                                        type: "delivery",
+                                      })
+                                    }
+                                    className="p-2 text-slate-400 hover:text-red-600 bg-slate-50 hover:bg-red-50 rounded-lg transition-colors border border-transparent"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="flex gap-4 items-start">
                                 {imgUrl ? (
                                   <img
                                     src={imgUrl}
                                     alt={opt.title}
-                                    className="w-24 h-16 object-contain rounded-md border border-slate-200 bg-slate-50 p-1"
+                                    className="shrink-0 w-24 h-16 object-contain rounded-md border border-slate-200 bg-slate-50 p-1"
                                   />
                                 ) : (
-                                  <div className="w-24 h-16 rounded-md border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-300">
+                                  <div className="shrink-0 w-24 h-16 rounded-md border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-300">
                                     <ImageIcon className="w-5 h-5" />
                                   </div>
                                 )}
-                              </td>
-                              <td className="px-6 py-4 font-semibold text-slate-800">
-                                {opt.title}
-                              </td>
-                              <td className="px-6 py-4 text-sm font-medium">
-                                {opt.capacity_m3} м³
-                              </td>
-                              <td className="px-6 py-4 text-sm font-medium">
-                                {opt.base_price} ₽
-                              </td>
-                              <td className="px-6 py-4">
+                                <div className="flex flex-col gap-1 min-w-0">
+                                  <h3 className="font-bold text-slate-800 text-base truncate pr-2">
+                                    {opt.title}
+                                  </h3>
+                                  <div className="flex flex-col gap-0.5 mt-1">
+                                    <span className="text-sm font-medium text-slate-700">
+                                      Кубатура: {opt.capacity_m3} м³
+                                    </span>
+                                    <span className="text-sm text-slate-500">
+                                      Базовая цена: {opt.base_price} ₽
+                                    </span>
+                                    <span className="text-sm text-slate-500">
+                                      Ставка за км:{" "}
+                                      {opt.delivery_rate_per_km
+                                        ? opt.delivery_rate_per_km + " ₽/км"
+                                        : "Не задана"}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="mt-2 flex justify-start">
                                 {opt.is_active === false ? (
                                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-100 text-amber-800 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
                                     <XCircle className="w-3 h-3" /> Неактивен
@@ -1632,120 +2276,22 @@ export default function AdminDashboardScreen({
                                     <CheckCircle2 className="w-3 h-3" /> Активен
                                   </span>
                                 )}
-                              </td>
-                              <td className="px-6 py-4 text-right flex justify-end gap-2">
-                                <button
-                                  onClick={() => openDeliveryModal(opt)}
-                                  className="p-2 text-slate-400 hover:text-[#2DB0E6] bg-slate-50 hover:bg-[#2DB0E6]/10 rounded-lg transition-colors border border-transparent"
-                                >
-                                  <Edit2 className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() =>
-                                    setItemToDelete({
-                                      id: opt.id,
-                                      type: "delivery",
-                                    })
-                                  }
-                                  className="p-2 text-slate-400 hover:text-red-600 bg-slate-50 hover:bg-red-50 rounded-lg transition-colors border border-transparent"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </td>
-                            </tr>
+                              </div>
+                            </div>
                           );
                         })}
-                      </tbody>
-                    </table>
-                  </div>
+                      </div>
 
-                  <div className="grid grid-cols-1 gap-4 md:hidden">
-                    {sortedDeliveryOptions.map((opt) => {
-                      const imgUrl =
-                        opt.primary_image_url ||
-                        opt.image_url ||
-                        opt.media_files?.[0]?.public_url;
-                      return (
-                        <div
-                          key={opt.id}
-                          className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-col gap-3 relative"
-                        >
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="text-xs font-mono text-slate-400">
-                              ID: {opt.id.substring(0, 8)}
-                            </span>
-                            <div className="flex gap-2 -mt-2 -mr-2">
-                              <button
-                                onClick={() => openDeliveryModal(opt)}
-                                className="p-2 text-slate-400 hover:text-[#2DB0E6] bg-slate-50 hover:bg-[#2DB0E6]/10 rounded-lg transition-colors border border-transparent"
-                              >
-                                <Edit2 className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() =>
-                                  setItemToDelete({
-                                    id: opt.id,
-                                    type: "delivery",
-                                  })
-                                }
-                                className="p-2 text-slate-400 hover:text-red-600 bg-slate-50 hover:bg-red-50 rounded-lg transition-colors border border-transparent"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </div>
-
-                          <div className="flex gap-4 items-start">
-                            {imgUrl ? (
-                              <img
-                                src={imgUrl}
-                                alt={opt.title}
-                                className="shrink-0 w-24 h-16 object-contain rounded-md border border-slate-200 bg-slate-50 p-1"
-                              />
-                            ) : (
-                              <div className="shrink-0 w-24 h-16 rounded-md border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-300">
-                                <ImageIcon className="w-5 h-5" />
-                              </div>
-                            )}
-                            <div className="flex flex-col gap-1 min-w-0">
-                              <h3 className="font-bold text-slate-800 text-base truncate pr-2">
-                                {opt.title}
-                              </h3>
-                              <div className="flex flex-col gap-0.5 mt-1">
-                                <span className="text-sm font-medium text-slate-700">
-                                  Кубатура: {opt.capacity_m3} м³
-                                </span>
-                                <span className="text-sm text-slate-500">
-                                  Базовая цена: {opt.base_price} ₽
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="mt-2 flex justify-start">
-                            {opt.is_active === false ? (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-100 text-amber-800 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
-                                <XCircle className="w-3 h-3" /> Неактивен
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-50 text-emerald-700 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
-                                <CheckCircle2 className="w-3 h-3" /> Активен
-                              </span>
-                            )}
-                          </div>
+                      {deliveryOptions.length === 0 && (
+                        <div className="p-8 text-center text-slate-500 font-medium">
+                          Нет типов авто
                         </div>
-                      );
-                    })}
-                  </div>
-
-                  {deliveryOptions.length === 0 && (
-                    <div className="p-8 text-center text-slate-500 font-medium">
-                      Нет типов авто
+                      )}
                     </div>
                   )}
-                </div>
+                </>
               )}
-            </>
+            </div>
           ) : activeTab === "drivers" ? (
             <>
               {/* Drivers Tab */}
@@ -2125,11 +2671,29 @@ export default function AdminDashboardScreen({
                                       <span className="text-[7px] font-bold leading-none text-slate-800 mb-0.5">
                                         RUS
                                       </span>
-                                      <img
-                                        src="/russian.png"
-                                        alt="RUS"
-                                        className="w-4 h-3 object-cover rounded-[1px]"
-                                      />
+                                      <svg
+                                        className="w-4 h-3 rounded-[1px] block"
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        viewBox="0 0 9 6"
+                                      >
+                                        <rect
+                                          fill="#fff"
+                                          width="9"
+                                          height="2"
+                                        />
+                                        <rect
+                                          fill="#0039a6"
+                                          y="2"
+                                          width="9"
+                                          height="2"
+                                        />
+                                        <rect
+                                          fill="#d52b1e"
+                                          y="4"
+                                          width="9"
+                                          height="2"
+                                        />
+                                      </svg>
                                     </div>
                                   </div>
                                 ) : (
@@ -2321,6 +2885,8 @@ export default function AdminDashboardScreen({
                 </div>
               )}
             </>
+          ) : activeTab === "quarries" ? (
+            <AdminQuarriesScreen materials={materials} />
           ) : activeTab === "profile" ? (
             <AdminProfileScreen onLogout={handleLogout} />
           ) : null}
@@ -2343,6 +2909,21 @@ export default function AdminDashboardScreen({
             <Layers className="w-6 h-6" />
           </div>
           <span className="text-[10px] font-bold">Каталог</span>
+        </button>
+        <button
+          onClick={() => setActiveTab("quarries")}
+          className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${
+            activeTab === "quarries"
+              ? "text-[#2DB0E6]"
+              : "text-slate-400 hover:text-slate-600"
+          }`}
+        >
+          <div
+            className={`p-1.5 rounded-xl transition-colors ${activeTab === "quarries" ? "bg-[#2DB0E6]/10" : ""}`}
+          >
+            <Map className="w-6 h-6" />
+          </div>
+          <span className="text-[10px] font-bold">Карьеры</span>
         </button>
         <button
           onClick={() => setActiveTab("delivery")}
@@ -2662,7 +3243,7 @@ export default function AdminDashboardScreen({
                     required
                     step="0.1"
                     min="0"
-                    value={editingDelivery.capacity_m3 || ""}
+                    value={editingDelivery.capacity_m3 ?? ""}
                     onChange={(e) =>
                       setEditingDelivery({
                         ...editingDelivery,
@@ -2685,6 +3266,27 @@ export default function AdminDashboardScreen({
                       setEditingDelivery({
                         ...editingDelivery,
                         base_price: parseFloat(e.target.value),
+                      })
+                    }
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    Ставка за 1 км (₽)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="Например, 95"
+                    value={editingDelivery.delivery_rate_per_km ?? ""}
+                    onChange={(e) =>
+                      setEditingDelivery({
+                        ...editingDelivery,
+                        delivery_rate_per_km: e.target.value
+                          ? parseFloat(e.target.value)
+                          : undefined,
                       })
                     }
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
@@ -3173,6 +3775,16 @@ export default function AdminDashboardScreen({
           </div>
         </div>
       )}
+
+      <DriverHistoryModal
+        isOpen={isOrderHistoryModalOpen}
+        onClose={() => {
+          setIsOrderHistoryModalOpen(false);
+          setSelectedHistoryDriverId(null);
+        }}
+        driverId={selectedHistoryDriverId}
+        driverName={selectedHistoryDriverName}
+      />
     </div>
   );
 }

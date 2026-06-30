@@ -122,7 +122,7 @@ export default function ClientProfileScreen({
   }
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 pb-24 overflow-y-auto">
+    <div className="flex flex-col h-[calc(100vh-68px)] bg-slate-50 pb-4 overflow-hidden">
       {/* Gradient Header */}
       <div className="bg-gradient-to-r from-[#2DB0E6] to-[#1D99D4] text-white p-6 pb-10 rounded-b-[32px] shadow-md relative z-10 flex items-center gap-4">
         <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center shrink-0 backdrop-blur-sm">

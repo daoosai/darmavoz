@@ -19,6 +19,27 @@ interface OrderOut {
   items?: { material?: { name: string } }[];
 }
 
+const ORDER_STATUS_RU: Record<string, string> = {
+  completed: "Завершен",
+  canceled: "Отменен",
+  cancelled: "Отменен",
+  driver_cancel: "Отказ водителя",
+  searching: "Поиск машины",
+  driver_assigned: "Назначен",
+  in_progress: "В пути",
+  heading_to_quarry: "На карьер",
+  heading_to_client: "К клиенту",
+};
+
+const ORDER_STATUS_COLORS: Record<string, string> = {
+  completed: "bg-green-100 text-green-800 border-green-200",
+  canceled: "bg-red-100 text-red-800 border-red-200",
+  cancelled: "bg-red-100 text-red-800 border-red-200",
+  driver_cancel: "bg-red-100 text-red-800 border-red-200",
+  searching: "bg-gray-100 text-gray-800 border-gray-200",
+  default: "bg-blue-100 text-blue-800 border-blue-200",
+};
+
 export const DriverHistoryModal: React.FC<DriverHistoryModalProps> = ({
   isOpen,
   onClose,
@@ -103,13 +124,15 @@ export const DriverHistoryModal: React.FC<DriverHistoryModalProps> = ({
                     minute: "2-digit",
                   },
                 );
-                const address =
-                  order.delivery_address || "Адрес не указан";
+                const address = order.delivery_address || "Адрес не указан";
                 const materialName =
-                  order.items?.[0]?.material?.name ||
-                  "Материал не указан";
+                  order.items?.[0]?.material?.name || "Материал не указан";
                 const amount = order.estimated_total_amount || 0;
-                const status = order.status;
+                const statusKey = order.status?.toLowerCase() || "";
+                const statusText =
+                  ORDER_STATUS_RU[statusKey] || order.status || "Неизвестно";
+                const statusColor =
+                  ORDER_STATUS_COLORS[statusKey] || ORDER_STATUS_COLORS.default;
 
                 return (
                   <div
@@ -134,8 +157,10 @@ export const DriverHistoryModal: React.FC<DriverHistoryModalProps> = ({
                       <div className="flex items-center gap-1 font-bold text-lg text-slate-800">
                         {amount} ₽
                       </div>
-                      <span className="px-2.5 py-1 bg-slate-100 text-slate-700 text-xs font-bold rounded-md uppercase tracking-wide">
-                        {status}
+                      <span
+                        className={`px-3 py-1 rounded-full text-xs font-bold uppercase border ${statusColor}`}
+                      >
+                        {statusText}
                       </span>
                     </div>
                   </div>

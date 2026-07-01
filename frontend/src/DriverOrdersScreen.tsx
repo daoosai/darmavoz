@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import PullToRefresh from "react-simple-pull-to-refresh";
 import { useAuthStore } from "./store";
 import {
@@ -6,7 +6,6 @@ import {
   orderStatusMap,
   orderStatusColors,
   handleApiError,
-  playNewOrderSound,
 } from "./utils";
 import DriverProfileScreen from "./DriverProfileScreen";
 import {
@@ -73,9 +72,40 @@ export default function DriverOrdersScreen({
   const [moderationStatus, setModerationStatus] = useState<string | null>(null);
   const [isDriverActive, setIsDriverActive] = useState(true);
 
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const playCount = useRef(0);
+
+  const stopAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+  };
+
   useEffect(() => {
     if (currentOffer) {
-      playNewOrderSound();
+      const audio = new Audio("/new_order.mp3");
+      audioRef.current = audio;
+      playCount.current = 0;
+
+      const handleEnded = () => {
+        playCount.current += 1;
+        if (playCount.current < 3) {
+          audio.play().catch((err) => console.log("Audio play error:", err));
+        }
+      };
+
+      audio.addEventListener("ended", handleEnded);
+
+      audio.play().catch((err) => console.log("Autoplay blocked:", err));
+
+      return () => {
+        audio.removeEventListener("ended", handleEnded);
+        audio.pause();
+        audio.currentTime = 0;
+      };
+    } else {
+      stopAudio();
     }
   }, [currentOffer]);
 
@@ -318,6 +348,7 @@ export default function DriverOrdersScreen({
   }, [currentOffer, timeLeft]);
 
   const handleAcceptOffer = async (offerId: string) => {
+    stopAudio();
     try {
       const currentToken = useAuthStore.getState().token;
       const res = await fetch(
@@ -356,6 +387,7 @@ export default function DriverOrdersScreen({
   };
 
   const handleDeclineOffer = async (offerId: string) => {
+    stopAudio();
     try {
       const currentToken = useAuthStore.getState().token;
       const res = await fetch(
@@ -517,10 +549,11 @@ export default function DriverOrdersScreen({
           <div className="bg-slate-100/80 p-1 rounded-xl flex items-center relative gap-1 mb-3">
             {statuses.map((s) => {
               const isActive = status === s.id;
+              const hasActiveOrder = orders.length > 0;
               return (
                 <button
                   key={s.id}
-                  disabled={isUpdatingStatus}
+                  disabled={isUpdatingStatus || hasActiveOrder}
                   onClick={() => handleStatusChange(s.id)}
                   className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all duration-200 flex justify-center items-center gap-1.5 min-h-[40px]
                     ${
@@ -528,7 +561,7 @@ export default function DriverOrdersScreen({
                         ? "bg-white shadow-sm text-slate-900 scale-100"
                         : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50 scale-95"
                     } 
-                    ${isUpdatingStatus ? "opacity-50 cursor-not-allowed" : ""}`}
+                    ${isUpdatingStatus || hasActiveOrder ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
                   <span
                     className={`w-2 h-2 rounded-full ${s.dot} ${
@@ -877,26 +910,25 @@ const DriverOrderCard: React.FC<{
     order.capacity_m3 || order.delivery_option?.capacity_m3 || "?";
 
   const open2GIS = (type: "quarry" | "client") => {
+    if (type === "client" && order?.delivery_address) {
+      window.open(
+        `https://2gis.ru/routeSearch/rsType/car/to/${encodeURIComponent(order.delivery_address)}`,
+        "_blank",
+      );
+      return;
+    }
+
     const lat = type === "quarry" ? order?.pickup_lat : order?.delivery_lat;
     const lon = type === "quarry" ? order?.pickup_lon : order?.delivery_lon;
 
-    if (lat == null || lon == null) {
-      const address =
-        type === "quarry" ? order?.pickup_address : order?.delivery_address;
-      if (address) {
-        window.open(
-          `https://2gis.ru/routeSearch/rsType/car/to/${encodeURIComponent(address)}`,
-          "_blank",
-        );
-        return;
-      }
-      alert("Координаты и адрес отсутствуют");
-      return;
+    if (lat && lon) {
+      window.open(
+        `https://2gis.ru/routeSearch/rsType/car/to/${lon},${lat}`,
+        "_blank",
+      );
+    } else {
+      toast.error("Координаты и адрес отсутствуют");
     }
-    window.open(
-      `https://2gis.ru/routeSearch/rsType/car/to/${lon},${lat}`,
-      "_blank",
-    );
   };
 
   if (isHistory) {
@@ -1119,6 +1151,24 @@ const DriverOrderCard: React.FC<{
           </div>
         </div>
 
+        {/* 2GIS Button */}
+        {onRefresh &&
+          (localStep === "driver_assigned" ||
+            localStep === "accepted" ||
+            localStep === "heading_to_quarry" ||
+            localStep === "heading_to_client") && (
+            <button
+              onClick={() =>
+                open2GIS(
+                  localStep === "heading_to_client" ? "client" : "quarry",
+                )
+              }
+              className="w-full h-14 bg-[#19AA1E] active:bg-[#158f19] text-white text-lg font-bold rounded-2xl shadow-sm transition-transform active:scale-[0.98] flex items-center justify-center gap-2 mt-4"
+            >
+              🗺 Открыть в 2ГИС
+            </button>
+          )}
+
         {/* Notes */}
         {order.notes && order.notes.trim() !== "" && (
           <div className="flex items-start gap-2.5 bg-amber-50 p-3.5 rounded-xl border border-amber-100 shadow-sm mt-1">
@@ -1157,21 +1207,15 @@ const DriverOrderCard: React.FC<{
 
         {/* Action Buttons */}
         {onRefresh && (
-          <>
+          <div className="mt-4 flex flex-col gap-3">
             {(localStep === "driver_assigned" ||
               localStep === "accepted" ||
               localStep === "heading_to_quarry") && (
-              <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col gap-3">
-                <button
-                  onClick={() => open2GIS("quarry")}
-                  className="w-full h-14 bg-emerald-500 active:bg-emerald-600 text-white rounded-2xl font-bold text-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-sm"
-                >
-                  🗺 Навигатор до карьера
-                </button>
+              <>
                 <button
                   disabled={isStarting}
                   onClick={() => updateStatus("heading_to_client")}
-                  className="w-full h-14 bg-blue-500 active:bg-blue-600 text-white rounded-2xl font-bold text-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
+                  className="w-full h-16 bg-[#2DB0E6] active:bg-[#249acb] text-white text-xl font-bold rounded-2xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                   {isStarting ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
@@ -1179,27 +1223,22 @@ const DriverOrderCard: React.FC<{
                     "Доставка до клиента"
                   )}
                 </button>
+
                 <button
                   onClick={() => setIsCancelModalOpen(true)}
-                  className="w-full h-12 bg-transparent text-red-500 active:bg-red-50 rounded-xl font-medium flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                  className="w-full py-4 text-red-500 font-medium text-lg active:bg-red-50 rounded-xl transition-colors"
                 >
                   Отказаться от выполнения
                 </button>
-              </div>
+              </>
             )}
 
             {localStep === "heading_to_client" && (
-              <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col gap-3">
-                <button
-                  onClick={() => open2GIS("client")}
-                  className="w-full h-14 bg-emerald-500 active:bg-emerald-600 text-white rounded-2xl font-bold text-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-sm"
-                >
-                  🗺 Навигатор до клиента
-                </button>
+              <>
                 <button
                   disabled={isCompleting}
                   onClick={() => updateStatus("completed")}
-                  className="w-full h-14 bg-blue-500 active:bg-blue-600 text-white rounded-2xl font-bold text-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
+                  className="w-full h-16 bg-[#2DB0E6] active:bg-[#249acb] text-white text-xl font-bold rounded-2xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                   {isCompleting ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
@@ -1207,9 +1246,9 @@ const DriverOrderCard: React.FC<{
                     "🏁 Завершить заказ"
                   )}
                 </button>
-              </div>
+              </>
             )}
-          </>
+          </div>
         )}
       </div>
 

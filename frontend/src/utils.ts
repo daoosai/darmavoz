@@ -2,7 +2,7 @@ import { MaterialProps, DeliveryOption } from "./MaterialDetailScreen";
 
 export const baseURL = "https://darmavoz.ru/api/v1";
 
-export const APP_VERSION = import.meta.env.VITE_APP_VERSION || "2.3.0";
+export const APP_VERSION = import.meta.env.VITE_APP_VERSION || "2.4.0";
 
 export const playNewOrderSound = () => {
   try {
@@ -143,12 +143,27 @@ export const declineReasonMap: Record<string, string> = {
 };
 
 export const attemptStatusMap: Record<string, string> = {
-  accepted: "Принято",
-  declined: "Отклонено",
-  expired: "Истекло",
-  timeout: "Истекло",
-  offered: "Предложено",
-  pending: "Ожидание",
+  assigned: "НАЗНАЧЕН",
+  accepted: "ПРИНЯТО",
+  declined: "ОТКЛОНЕН",
+  rejected: "ОТКЛОНЕН",
+  expired: "ИСТЕК ТАЙМАУТ",
+  timeout: "ИСТЕК ТАЙМАУТ",
+  offered: "ПРЕДЛОЖЕНО",
+  pending: "ОЖИДАНИЕ",
+  cancelled: "ОТМЕНЕН",
+  completed: "ЗАВЕРШЕН",
+};
+
+export const translateReason = (reason: string | undefined | null) => {
+  if (!reason) return 'Причина не указана';
+  const r = reason.toLowerCase();
+  if (r.includes('manual assignment')) return 'Назначено логистом вручную';
+  if (r.includes('driver declined') || r.includes('rejected')) return 'Отказ водителя';
+  if (r.includes('timeout') || r.includes('expired')) return 'Время ожидания истекло';
+  if (r.includes('cancelled by client')) return 'Отменено клиентом';
+  if (r.includes('cancelled by logist')) return 'Отменено логистом';
+  return reason;
 };
 
 export const clientOrderStatusMap: Record<string, string> = {

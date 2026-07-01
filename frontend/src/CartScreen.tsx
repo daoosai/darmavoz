@@ -180,8 +180,6 @@ export default function CartScreen({
   const hasCalculationError = cartItems.some(
     (item) => calcResults[item.id]?.error,
   );
-  const showWarning =
-    hasCalculationError || (cartItems.length > 0 && !globalAddress.trim());
 
   const totalDeliveryCost = cartItems.reduce((acc, item) => {
     const res = calcResults[item.id];
@@ -335,12 +333,13 @@ export default function CartScreen({
         </div>
 
         {/* Calculation Result / Receipt */}
-        {showWarning ? (
-          <div className="bg-orange-50 rounded-[24px] p-4 border border-orange-100 flex items-start gap-3 mt-2">
-            <div className="text-orange-600 font-medium text-[14px] leading-snug">
-              Доставка этого материала в ваш район временно невозможна (нет
-              активных карьеров).
-            </div>
+        {!globalAddress.trim() ? (
+          <div className="p-4 bg-blue-50 text-blue-700 rounded-xl text-sm mt-4">
+            💡 Укажите адрес доставки, чтобы мы рассчитали стоимость и подобрали ближайший карьер.
+          </div>
+        ) : hasCalculationError ? (
+          <div className="p-4 bg-orange-50 text-orange-700 rounded-xl text-sm mt-4">
+            Доставка этого материала по вашему адресу временно невозможна (нет активных карьеров).
           </div>
         ) : (
           (hasCalculations || isCalculating) && (

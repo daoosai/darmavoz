@@ -65,6 +65,7 @@ export default function LogistCreateOrderModal({
   const [isCalculating, setIsCalculating] = useState(false);
   const [calculationResult, setCalculationResult] =
     useState<DeliveryCalculationResult | null>(null);
+  const [calcError, setCalcError] = useState<string | null>(null);
   const [newOrder, setNewOrder] = useState({
     client_name: "",
     client_phone: "",
@@ -102,6 +103,7 @@ export default function LogistCreateOrderModal({
   useEffect(() => {
     if (!isOpen) {
       setCalculationResult(null);
+      setCalcError(null);
       setSuggestions([]);
       setIsCalculating(false);
       setIsCreating(false);
@@ -127,6 +129,7 @@ export default function LogistCreateOrderModal({
 
     if (!shouldCalculate) {
       setCalculationResult(null);
+      setCalcError(null);
       setIsCalculating(false);
       return;
     }
@@ -135,6 +138,7 @@ export default function LogistCreateOrderModal({
     const timer = setTimeout(async () => {
       try {
         setIsCalculating(true);
+        setCalcError(null);
         const response = await fetch(`${baseURL}/client/orders/calculate`, {
           method: "POST",
           headers: {
@@ -152,6 +156,11 @@ export default function LogistCreateOrderModal({
 
         const data = await response.json().catch(() => ({}));
         if (!response.ok) {
+          if (response.status === 404) {
+            throw new Error("404_NO_QUARRY");
+          } else if (response.status === 409) {
+            throw new Error("409_NO_RATE");
+          }
           throw new Error(
             formatFastApiDetail(data?.detail, "Не удалось рассчитать доставку"),
           );
@@ -163,7 +172,13 @@ export default function LogistCreateOrderModal({
       } catch (error: any) {
         if (!cancelled) {
           setCalculationResult(null);
-          toast.error(error?.message || "Не удалось рассчитать доставку");
+          if (error.message === "404_NO_QUARRY") {
+            setCalcError("❌ Нет доступного карьера с выбранным материалом.");
+          } else if (error.message === "409_NO_RATE") {
+            setCalcError("❌ У выбранного типа машины не настроена ставка за км. Настройте тарифы в справочнике.");
+          } else {
+            setCalcError("❌ " + (error?.message || "Ошибка при расчете стоимости."));
+          }
         }
       } finally {
         if (!cancelled) {
@@ -519,6 +534,12 @@ export default function LogistCreateOrderModal({
 
           <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col gap-3 text-sm text-slate-800">
             <h4 className="font-bold text-slate-900">Результат расчета</h4>
+            {calcError && (
+              <div className="p-4 bg-red-50 text-red-700 rounded-lg text-sm font-medium">
+                {calcError}
+              </div>
+            )}
+            
             {isCalculating ? (
               <div className="flex items-center gap-3 text-slate-500 py-2">
                 <Loader2 className="w-5 h-5 animate-spin text-[#2DB0E6]" />
@@ -568,7 +589,7 @@ export default function LogistCreateOrderModal({
             </button>
             <button
               type="submit"
-              disabled={isCreating || isCalculating || isFormIncomplete}
+              disabled={isCreating || isCalculating || isFormIncomplete || !!calcError}
               className="px-5 py-2.5 rounded-xl font-bold bg-[#2DB0E6] text-white hover:bg-[#259ac9] transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[120px]"
             >
               {isCreating ? (

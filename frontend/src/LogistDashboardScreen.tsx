@@ -7,6 +7,7 @@ import {
   orderStatusColors,
   declineReasonMap,
   attemptStatusMap,
+  translateReason,
   handleApiError,
 } from "./utils";
 import {
@@ -1360,8 +1361,7 @@ export default function LogistDashboardScreen({
                               <div className="text-[11px] text-rose-700 mt-1 font-semibold bg-rose-50/80 px-2.5 py-1.5 rounded-lg border border-rose-100/50">
                                 Причина:{" "}
                                 <span className="font-bold">
-                                  {declineReasonMap[entry.decision_reason] ||
-                                    entry.decision_reason}
+                                  {translateReason(entry.decision_reason)}
                                 </span>
                               </div>
                             )}

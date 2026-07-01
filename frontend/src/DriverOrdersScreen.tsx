@@ -884,25 +884,12 @@ const DriverOrderCard: React.FC<{
   onRefresh?: () => void;
   isHistory?: boolean;
 }> = ({ order, onRefresh, isHistory }) => {
-  const [isCompleting, setIsCompleting] = useState(false);
-  const [isStarting, setIsStarting] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [selectedReason, setSelectedReason] = useState("");
   const [customReason, setCustomReason] = useState("");
   const [isCancelling, setIsCancelling] = useState(false);
-
-  const [localStep, setLocalStep] = useState<string>(
-    order.status === "in_progress" ? "heading_to_quarry" : order.status,
-  );
-
-  React.useEffect(() => {
-    if (order.status === "in_progress" && localStep !== "heading_to_client") {
-      setLocalStep("heading_to_quarry");
-    } else if (order.status !== "in_progress") {
-      setLocalStep(order.status);
-    }
-  }, [order.status]);
 
   const materialName =
     order.material_name || order.items?.[0]?.material?.name || "Неизвестно";
@@ -1020,69 +1007,38 @@ const DriverOrderCard: React.FC<{
   const updateStatus = async (step: string) => {
     if (!onRefresh) return;
 
-    if (step === "heading_to_client") {
-      if (order.status === "driver_assigned" || order.status === "accepted") {
-        try {
-          setIsStarting(true);
-          const token = useAuthStore.getState().token;
-          const res = await fetch(
-            `${baseURL}/driver/orders/${order.id}/start`,
-            {
-              method: "POST",
-              headers: { Authorization: `Bearer ${token}` },
-            },
-          );
-          if (res.status === 401) {
-            useAuthStore.getState().logout();
-            return;
-          }
-          if (res.status === 403) {
-            toast.error("Недостаточно прав (403)");
-            return;
-          }
-          if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            throw new Error(err.detail || "Не удалось начать поездку");
-          }
-          toast.success("Отличной дороги!");
-        } catch (e: any) {
-          toast.error(handleApiError(e, "Не удалось начать поездку"));
-          return;
-        } finally {
-          setIsStarting(false);
-        }
-      }
-      setLocalStep("heading_to_client");
-    } else if (step === "completed") {
-      try {
-        setIsCompleting(true);
-        const token = useAuthStore.getState().token;
-        const res = await fetch(
-          `${baseURL}/driver/orders/${order.id}/complete`,
-          {
-            method: "POST",
-            headers: { Authorization: `Bearer ${token}` },
+    try {
+      setIsUpdating(true);
+      const token = useAuthStore.getState().token;
+      const res = await fetch(
+        `${baseURL}/driver/orders/${order.id}/status`,
+        {
+          method: "PATCH",
+          headers: { 
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}` 
           },
-        );
-        if (res.status === 401) {
-          useAuthStore.getState().logout();
-          return;
-        }
-        if (res.status === 403) {
-          toast.error("Недостаточно прав (403)");
-          return;
-        }
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.detail || "Не удалось завершить заказ");
-        }
-        toast.success("Заказ успешно завершен! Вы снова свободны.");
-        onRefresh();
-      } catch (e: any) {
-        toast.error(handleApiError(e, "Не удалось завершить заказ"));
-      } finally {
-        setIsCompleting(false);
+          body: JSON.stringify({ status: step }),
+        },
+      );
+      if (res.status === 401) {
+        useAuthStore.getState().logout();
+        return;
       }
+      if (res.status === 403) {
+        toast.error("Недостаточно прав (403)");
+        return;
+      }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || "Не удалось обновить статус");
+      }
+      toast.success(step === "completed" ? "Заказ успешно завершен! Вы снова свободны." : "Статус обновлен");
+      onRefresh();
+    } catch (e: any) {
+      toast.error(handleApiError(e, "Ошибка при обновлении статуса"));
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -1153,14 +1109,15 @@ const DriverOrderCard: React.FC<{
 
         {/* 2GIS Button */}
         {onRefresh &&
-          (localStep === "driver_assigned" ||
-            localStep === "accepted" ||
-            localStep === "heading_to_quarry" ||
-            localStep === "heading_to_client") && (
+          (order.status === "driver_assigned" ||
+            order.status === "accepted" ||
+            order.status === "in_progress" ||
+            order.status === "heading_to_quarry" ||
+            order.status === "heading_to_client") && (
             <button
               onClick={() =>
                 open2GIS(
-                  localStep === "heading_to_client" ? "client" : "quarry",
+                  order.status === "heading_to_client" ? "client" : "quarry",
                 )
               }
               className="w-full h-14 bg-[#19AA1E] active:bg-[#158f19] text-white text-lg font-bold rounded-2xl shadow-sm transition-transform active:scale-[0.98] flex items-center justify-center gap-2 mt-4"
@@ -1208,16 +1165,37 @@ const DriverOrderCard: React.FC<{
         {/* Action Buttons */}
         {onRefresh && (
           <div className="mt-4 flex flex-col gap-3">
-            {(localStep === "driver_assigned" ||
-              localStep === "accepted" ||
-              localStep === "heading_to_quarry") && (
+            {order.status === "driver_assigned" && (
               <>
                 <button
-                  disabled={isStarting}
+                  disabled={isUpdating}
+                  onClick={() => updateStatus("heading_to_quarry")}
+                  className="w-full h-16 bg-[#2DB0E6] active:bg-[#249acb] text-white text-xl font-bold rounded-2xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                >
+                  {isUpdating ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    "Начать поездку"
+                  )}
+                </button>
+
+                <button
+                  onClick={() => setIsCancelModalOpen(true)}
+                  className="w-full py-4 text-red-500 font-medium text-lg active:bg-red-50 rounded-xl transition-colors"
+                >
+                  Отказаться от выполнения
+                </button>
+              </>
+            )}
+
+            {(order.status === "heading_to_quarry" || order.status === "in_progress") && (
+              <>
+                <button
+                  disabled={isUpdating}
                   onClick={() => updateStatus("heading_to_client")}
                   className="w-full h-16 bg-[#2DB0E6] active:bg-[#249acb] text-white text-xl font-bold rounded-2xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                 >
-                  {isStarting ? (
+                  {isUpdating ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
                     "Доставка до клиента"
@@ -1233,14 +1211,14 @@ const DriverOrderCard: React.FC<{
               </>
             )}
 
-            {localStep === "heading_to_client" && (
+            {order.status === "heading_to_client" && (
               <>
                 <button
-                  disabled={isCompleting}
+                  disabled={isUpdating}
                   onClick={() => updateStatus("completed")}
                   className="w-full h-16 bg-[#2DB0E6] active:bg-[#249acb] text-white text-xl font-bold rounded-2xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                 >
-                  {isCompleting ? (
+                  {isUpdating ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
                     "🏁 Завершить заказ"

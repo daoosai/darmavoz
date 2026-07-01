@@ -30,14 +30,15 @@ interface ClientOrder {
   };
 }
 
-const activeStatuses = ["created", "searching_driver", "offered_to_driver", "no_driver_found", "driver_assigned", "in_progress"];
+const activeStatuses = ["created", "searching_driver", "offered_to_driver", "no_driver_found", "driver_assigned", "heading_to_quarry", "heading_to_client", "in_progress"];
 
 const getStepIndex = (status: string) => {
   if (status === 'created') return 0;
   if (['searching_driver', 'offered_to_driver', 'no_driver_found'].includes(status)) return 1;
   if (status === 'driver_assigned') return 2;
-  if (status === 'in_progress') return 3;
-  if (status === 'completed') return 4;
+  if (status === 'heading_to_quarry') return 3;
+  if (status === 'heading_to_client' || status === 'in_progress') return 4;
+  if (status === 'completed') return 5;
   return -1;
 };
 
@@ -70,8 +71,9 @@ const ActiveOrderCard: React.FC<{ order: ClientOrder }> = ({ order }) => {
           <span className="text-xs font-bold text-[#2DB0E6] uppercase tracking-widest text-center mt-1">Ищем водителя</span>
         </div>
       );
-    } else if (stepIndex === 2 || stepIndex === 3) {
+    } else if (stepIndex === 2 || stepIndex === 3 || stepIndex === 4) {
       const isAssigned = stepIndex === 2;
+      const isToQuarry = stepIndex === 3;
       const nameParts = order.driver?.name?.split(' ') || [];
       const firstName = nameParts.length > 1 ? nameParts[1] : nameParts[0] || "Водитель";
       const vehicleBrand = order.driver?.vehicle?.brand || order.driver?.vehicle?.title || "Грузовик";
@@ -87,7 +89,7 @@ const ActiveOrderCard: React.FC<{ order: ClientOrder }> = ({ order }) => {
             {isAssigned ? <UserCheck className="w-10 h-10 text-[#2DB0E6]" /> : <Truck className="w-12 h-12 text-[#2DB0E6]" />}
           </motion.div>
           <span className={`text-[10px] sm:text-xs font-bold uppercase tracking-widest text-center ${isAssigned ? "text-[#2DB0E6]" : "text-[#2DB0E6]"}`}>
-            {isAssigned ? "Водитель назначен" : "Машина в пути"}
+            {isAssigned ? "Водитель назначен" : isToQuarry ? "Едет на погрузку" : "Машина едет к вам"}
           </span>
           {order.driver && (
             <div className="flex flex-col text-slate-700 bg-white/70 w-full rounded-xl border border-white mt-1 shadow-sm overflow-hidden text-left ring-1 ring-slate-100">
@@ -119,7 +121,7 @@ const ActiveOrderCard: React.FC<{ order: ClientOrder }> = ({ order }) => {
           )}
         </div>
       );
-    } else if (stepIndex === 4) {
+    } else if (stepIndex === 5) {
       return (
         <div className="flex flex-col items-center justify-center h-full gap-3 py-4">
           <motion.div
@@ -147,7 +149,8 @@ const ActiveOrderCard: React.FC<{ order: ClientOrder }> = ({ order }) => {
     { label: 'Оформлен' },
     { label: 'Поиск' },
     { label: 'Назначен' },
-    { label: 'В пути' },
+    { label: 'На погрузку' },
+    { label: <>Машина едет<br/>к вам</> },
     { label: 'Получен' },
   ];
 
@@ -195,7 +198,7 @@ const ActiveOrderCard: React.FC<{ order: ClientOrder }> = ({ order }) => {
               {/* Active track */}
               <div 
                 className="absolute top-[14px] left-1/2 w-[3px] bg-[#2DB0E6] -translate-x-1/2 rounded-full transition-all duration-700 ease-in-out" 
-                style={{ bottom: `${100 - (Math.max(0, stepIndex) / 4) * 100}%`, height: 'auto' }} 
+                style={{ bottom: `${100 - (Math.max(0, stepIndex) / 5) * 100}%`, height: 'auto' }} 
               />
 
               {steps.map((step, idx) => {
@@ -226,7 +229,7 @@ const ActiveOrderCard: React.FC<{ order: ClientOrder }> = ({ order }) => {
                     const isPassed = idx < stepIndex;
                     const isCurrent = idx === stepIndex;
                     return (
-                        <div key={idx} className={`text-[11px] sm:text-xs uppercase tracking-wide font-bold h-4 flex items-center ${isPassed ? 'text-slate-600' : isCurrent ? 'text-[#2DB0E6]' : 'text-slate-400'}`}>
+                        <div key={idx} className={`text-[11px] sm:text-xs uppercase tracking-wide font-bold min-h-[16px] leading-[1.1] flex items-center ${isPassed ? 'text-slate-600' : isCurrent ? 'text-[#2DB0E6]' : 'text-slate-400'}`}>
                             {step.label}
                         </div>
                     )
@@ -270,9 +273,7 @@ const HistoryOrderCard = ({ order }: { order: ClientOrder }) => {
         <div className="flex flex-col items-end justify-center gap-1.5 shrink-0 pl-2">
              <span className="font-bold text-slate-700 text-base leading-none block">{order.total_amount ? `${order.total_amount} ₽` : "..."}</span>
              <span className={`text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md leading-none ${
-                order.status === 'completed' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100/50' : 
-                order.status === 'cancelled' ? 'bg-rose-50 text-rose-600 border border-rose-100/50' :
-                'bg-slate-100 text-slate-500 border border-slate-200/50'
+                clientOrderStatusColors[order.status] || 'bg-slate-100 text-slate-500 border border-slate-200/50'
              }`}>
                 {clientOrderStatusMap[order.status] || order.status}
              </span>

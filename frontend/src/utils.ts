@@ -48,6 +48,8 @@ export const orderStatusMap: Record<string, string> = {
   no_driver_found: "НЕТ СВОБОДНЫХ МАШИН",
   driver_assigned: "НАЗНАЧЕН",
   in_progress: "В ПУТИ",
+  heading_to_quarry: "НА КАРЬЕР",
+  heading_to_client: "К КЛИЕНТУ",
   completed: "ПОЛУЧЕН",
   cancelled: "ОТМЕНЕН",
 };
@@ -168,24 +170,30 @@ export const translateReason = (reason: string | undefined | null) => {
 
 export const clientOrderStatusMap: Record<string, string> = {
   created: "Заказ создан",
-  searching_driver: "Ищем водителя",
-  offered_to_driver: "Ищем водителя",
-  no_driver_found: "Ищем водителя",
-  driver_assigned: "Водитель назначен",
-  in_progress: "В ПУТИ",
-  completed: "ПОЛУЧЕН",
+  searching_driver: "Ищем машину",
+  offered_to_driver: "Ищем машину",
+  no_driver_found: "Ищем машину",
+  driver_assigned: "Машина назначена",
+  heading_to_quarry: "Машина едет на погрузку",
+  heading_to_client: "Машина едет к вам",
+  in_progress: "В пути",
+  completed: "Заказ завершен",
   cancelled: "Отменен",
+  canceled: "Отменен",
 };
 
 export const clientOrderStatusColors: Record<string, string> = {
   created: "bg-gray-100 text-gray-700 border border-gray-200",
-  searching_driver: "bg-blue-50 text-blue-700 border border-blue-200",
-  offered_to_driver: "bg-blue-50 text-blue-700 border border-blue-200",
-  no_driver_found: "bg-blue-50 text-blue-700 border border-blue-200",
-  driver_assigned: "bg-blue-100 text-blue-800 border border-blue-300",
+  searching_driver: "bg-gray-100 text-gray-600 border border-gray-200",
+  offered_to_driver: "bg-gray-100 text-gray-600 border border-gray-200",
+  no_driver_found: "bg-gray-100 text-gray-600 border border-gray-200",
+  driver_assigned: "bg-blue-100 text-blue-600 border border-blue-200",
+  heading_to_quarry: "bg-indigo-100 text-indigo-600 border border-indigo-200",
+  heading_to_client: "bg-emerald-100 text-emerald-600 border border-emerald-200",
   in_progress: "bg-[#2DB0E6]/10 text-[#2DB0E6] border border-[#2DB0E6]/20",
-  completed: "bg-green-100 text-green-800 border border-green-200",
-  cancelled: "bg-slate-100 text-slate-600 border border-slate-200",
+  completed: "bg-green-100 text-green-700 border border-green-200",
+  cancelled: "bg-red-100 text-red-600 border border-red-200",
+  canceled: "bg-red-100 text-red-600 border border-red-200",
 };
 
 export const getImageUrl = (item: MaterialProps | DeliveryOption) => {

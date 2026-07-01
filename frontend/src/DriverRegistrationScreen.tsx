@@ -1,7 +1,12 @@
 import React, { useState } from "react";
 import { ArrowLeft, Loader2, Eye, EyeOff } from "lucide-react";
 import toast from "react-hot-toast";
-import { baseURL, formatPhoneNumber, handleApiError } from "./utils";
+import {
+  baseURL,
+  extractApiErrorMessage,
+  formatPhoneNumber,
+  handleApiError,
+} from "./utils";
 import { useAuthStore, UserRole } from "./store";
 
 interface DriverRegistrationScreenProps {
@@ -97,7 +102,6 @@ export default function DriverRegistrationScreen({
               const field = e.loc ? e.loc[e.loc.length - 1] : "";
               const translatedField = fieldMap[field] || field;
 
-              // Try partial matches for tricky strings if needed, or exact match
               let translatedMsg = e.msg;
               for (const [key, val] of Object.entries(msgMap)) {
                 if (e.msg.includes(key)) {
@@ -111,9 +115,7 @@ export default function DriverRegistrationScreen({
             .join(", ");
           throw new Error(errMsg);
         }
-        throw new Error(
-          errData.detail || errData.message || "Ошибка при регистрации",
-        );
+        throw new Error(extractApiErrorMessage(errData, "Ошибка при регистрации"));
       }
 
       const data = await response.json();

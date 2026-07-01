@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { useAuthStore } from "./store";
-import { baseURL, formatPhoneNumber, handleApiError } from "./utils";
+import {
+  baseURL,
+  extractApiErrorMessage,
+  formatPhoneNumber,
+  handleApiError,
+} from "./utils";
 import {
   LogOut,
   Truck,
@@ -125,9 +130,7 @@ export default function DriverProfileScreen({
           throw new Error(errMsg);
         }
         throw new Error(
-          errData.detail ||
-            errData.message ||
-            "Ошибка при отправке на модерацию",
+          extractApiErrorMessage(errData, "Ошибка при отправке на модерацию"),
         );
       }
 

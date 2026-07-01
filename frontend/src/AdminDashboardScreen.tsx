@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useAuthStore } from "./store";
-import { baseURL, handleApiError } from "./utils";
+import { baseURL, extractApiErrorMessage, handleApiError } from "./utils";
 import {
   LogOut,
   Lock,
@@ -198,6 +198,28 @@ export default function AdminDashboardScreen({
   const [categories, setCategories] = useState<AdminCategory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingModeration, setIsLoadingModeration] = useState(false);
+
+  const getLiveFleetStatus = (car: LiveFleetCar) =>
+    car.driver?.status || car.status || "Нет статуса";
+
+  const getLiveFleetStatusClasses = (status: string) => {
+    const normalizedStatus = status.trim().toLowerCase();
+
+    if (normalizedStatus === "свободен") {
+      return "bg-emerald-100 text-emerald-800 border border-emerald-200";
+    }
+    if (normalizedStatus === "занят") {
+      return "bg-amber-100 text-amber-800 border border-amber-200";
+    }
+    if (normalizedStatus === "недоступен") {
+      return "bg-slate-100 text-slate-700 border border-slate-200";
+    }
+    if (normalizedStatus === "заблокирован") {
+      return "bg-red-100 text-red-800 border border-red-200";
+    }
+
+    return "bg-slate-100 text-slate-700 border border-slate-200";
+  };
 
   // Modals state
   const [isMaterialModalOpen, setIsMaterialModalOpen] = useState(false);
@@ -822,7 +844,6 @@ export default function AdminDashboardScreen({
       const payload: any = {
         title: editingDelivery.title,
         capacity_m3: Number(editingDelivery.capacity_m3),
-        base_price: Number(editingDelivery.base_price || 0),
         delivery_rate_per_km: editingDelivery.delivery_rate_per_km
           ? Number(editingDelivery.delivery_rate_per_km)
           : null,
@@ -842,9 +863,7 @@ export default function AdminDashboardScreen({
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        throw new Error(
-          errData.detail ? JSON.stringify(errData.detail) : "Ошибка сервера",
-        );
+        throw new Error(extractApiErrorMessage(errData, "Ошибка сервера"));
       }
 
       const savedData = await res.json();
@@ -1160,12 +1179,12 @@ export default function AdminDashboardScreen({
       fetchDrivers(true);
     } catch (err: any) {
       if (err.response?.status === 409) {
-        const detail = err.response.data?.detail;
-        const msg =
-          typeof detail === "string"
-            ? detail
-            : "Водитель с таким номером телефона или госномером уже существует!";
-        toast.error(msg);
+        toast.error(
+          extractApiErrorMessage(
+            err,
+            "Водитель с таким номером телефона или госномером уже существует",
+          ),
+        );
         return;
       }
       if (
@@ -1235,7 +1254,6 @@ export default function AdminDashboardScreen({
       setEditingDelivery({
         is_active: true,
         capacity_m3: 0,
-        base_price: 0,
         min_delivery_price: 5000,
       });
       setIsDeliveryModalOpen(true);
@@ -1759,7 +1777,9 @@ export default function AdminDashboardScreen({
                       >
                         <option value="all">Все статусы</option>
                         <option value="available">Свободен</option>
-                        <option value="busy">На заказе</option>
+                        <option value="busy">Занят</option>
+                        <option value="offline">Недоступен</option>
+                        <option value="blocked">Заблокирован</option>
                       </select>
                       <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
                         <svg
@@ -1860,8 +1880,12 @@ export default function AdminDashboardScreen({
                                   </div>
                                 </td>
                                 <td className="px-6 py-4">
-                                  <span className="text-gray-700 capitalize">
-                                    {car.driver?.status || car.status || 'Нет статуса'}
+                                  <span
+                                    className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${getLiveFleetStatusClasses(
+                                      getLiveFleetStatus(car),
+                                    )}`}
+                                  >
+                                    {getLiveFleetStatus(car)}
                                   </span>
                                 </td>
                                 <td className="px-6 py-4 text-right">
@@ -1956,8 +1980,12 @@ export default function AdminDashboardScreen({
                                 </div>
                               </div>
                               <div>
-                                <span className="text-gray-700 capitalize">
-                                  {car.driver?.status || car.status || 'Нет статуса'}
+                                <span
+                                  className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${getLiveFleetStatusClasses(
+                                    getLiveFleetStatus(car),
+                                  )}`}
+                                >
+                                  {getLiveFleetStatus(car)}
                                 </span>
                               </div>
                             </div>
@@ -2045,7 +2073,7 @@ export default function AdminDashboardScreen({
                               <th className="px-6 py-4">Фото</th>
                               <th className="px-6 py-4">Название</th>
                               <th className="px-6 py-4">Кубатура (м³)</th>
-                              <th className="px-6 py-4">Базовая цена</th>
+                              <th className="px-6 py-4">Минимальная доставка</th>
                               <th className="px-6 py-4">Ставка за км</th>
                               <th className="px-6 py-4">Статус</th>
                               <th className="px-6 py-4 text-right">Действия</th>
@@ -2085,7 +2113,7 @@ export default function AdminDashboardScreen({
                                     {opt.capacity_m3} м³
                                   </td>
                                   <td className="px-6 py-4 text-sm font-medium">
-                                    {opt.base_price} ₽
+                                    {opt.min_delivery_price ?? 5000} ₽
                                   </td>
                                   <td className="px-6 py-4 text-sm font-medium whitespace-nowrap">
                                     {opt.delivery_rate_per_km
@@ -2188,7 +2216,8 @@ export default function AdminDashboardScreen({
                                       Кубатура: {opt.capacity_m3} м³
                                     </span>
                                     <span className="text-sm text-slate-500">
-                                      Базовая цена: {opt.base_price} ₽
+                                      Минимальная доставка:{" "}
+                                      {opt.min_delivery_price ?? 5000} ₽
                                     </span>
                                     <span className="text-sm text-slate-500">
                                       Ставка за км:{" "}
@@ -3189,24 +3218,6 @@ export default function AdminDashboardScreen({
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                    Базовая цена (₽)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={editingDelivery.base_price ?? ""}
-                    onChange={(e) =>
-                      setEditingDelivery({
-                        ...editingDelivery,
-                        base_price: parseFloat(e.target.value),
-                      })
-                    }
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
                     Ставка за 1 км (₽)
                   </label>
                   <input
@@ -3225,7 +3236,8 @@ export default function AdminDashboardScreen({
                     }
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
                   />
-                </div>                <div className="flex flex-col gap-1.5">
+                </div>
+                <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
                     Минимальная доставка (₽)
                   </label>

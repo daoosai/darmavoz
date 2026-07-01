@@ -94,13 +94,80 @@ export const formatPhoneNumber = (value: string) => {
   return formatted;
 };
 
+const formatValidationErrors = (detail: any[]): string | null => {
+  const messages = detail
+    .map((entry: any) => {
+      if (!entry) return null;
+      if (typeof entry === "string") return entry;
+      if (typeof entry.msg === "string") {
+        const field =
+          Array.isArray(entry.loc) && entry.loc.length > 0
+            ? entry.loc[entry.loc.length - 1]
+            : "";
+        return field ? `${field}: ${entry.msg}` : entry.msg;
+      }
+      return null;
+    })
+    .filter(Boolean);
+
+  if (messages.length === 0) {
+    return null;
+  }
+
+  return messages.join(", ");
+};
+
+export const extractApiErrorMessage = (
+  source: any,
+  fallbackMessage: string = "Не удалось выполнить действие",
+): string => {
+  if (!source) {
+    return fallbackMessage;
+  }
+
+  const detail =
+    source.detail ??
+    source.response?.data?.detail ??
+    source.data?.detail ??
+    source.error?.detail;
+
+  if (Array.isArray(detail)) {
+    return formatValidationErrors(detail) || fallbackMessage;
+  }
+
+  if (typeof detail === "string" && detail.trim()) {
+    return detail.trim();
+  }
+
+  if (detail && typeof detail === "object") {
+    if (typeof detail.message === "string" && detail.message.trim()) {
+      return detail.message.trim();
+    }
+    if (typeof detail.msg === "string" && detail.msg.trim()) {
+      return detail.msg.trim();
+    }
+  }
+
+  const message =
+    source.message ??
+    source.response?.data?.message ??
+    source.data?.message ??
+    source.error?.message;
+
+  if (typeof message === "string" && message.trim()) {
+    return message.trim();
+  }
+
+  return fallbackMessage;
+};
+
 export const handleApiError = (
   error: any,
   fallbackMessage: string = "Не удалось выполнить действие",
 ): string => {
   if (!error) return fallbackMessage;
 
-  const msg = error.message || "";
+  const msg = extractApiErrorMessage(error, fallbackMessage);
   const lowerMsg = msg.toLowerCase();
 
   // 1. Ошибка сети (Failed to fetch / Network Error)

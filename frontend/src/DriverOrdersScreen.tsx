@@ -3,6 +3,7 @@ import PullToRefresh from "react-simple-pull-to-refresh";
 import { useAuthStore } from "./store";
 import {
   baseURL,
+  extractApiErrorMessage,
   orderStatusMap,
   orderStatusColors,
   handleApiError,
@@ -379,7 +380,7 @@ export default function DriverOrdersScreen({
         fetchOrders();
       } else {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || "Не удалось принять заказ");
+        throw new Error(extractApiErrorMessage(err, "Не удалось принять заказ"));
       }
     } catch (error: any) {
       toast.error(handleApiError(error, "Не удалось принять заказ"));
@@ -419,7 +420,9 @@ export default function DriverOrdersScreen({
         fetchOrders();
       } else {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || "Не удалось отказаться от заказа");
+        throw new Error(
+          extractApiErrorMessage(err, "Не удалось отказаться от заказа"),
+        );
       }
     } catch (error: any) {
       toast.error(handleApiError(error, "Не удалось отказаться от заказа"));
@@ -990,7 +993,7 @@ const DriverOrderCard: React.FC<{
       }
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || "Не удалось отменить заказ");
+        throw new Error(extractApiErrorMessage(err, "Не удалось отменить заказ"));
       }
       toast.success("Заказ отменен");
       setIsCancelModalOpen(false);
@@ -1031,7 +1034,9 @@ const DriverOrderCard: React.FC<{
       }
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || "Не удалось обновить статус");
+        throw new Error(
+          extractApiErrorMessage(err, "Не удалось обновить статус"),
+        );
       }
       toast.success(step === "completed" ? "Заказ успешно завершен! Вы снова свободны." : "Статус обновлен");
       onRefresh();

@@ -370,6 +370,8 @@ def _resolve_admin_car_status(driver: Driver, vehicle: Vehicle | None) -> str:
         return "Заблокирован"
     if driver.status == DriverStatus.busy.value:
         return "Занят"
+    if driver.status == DriverStatus.offline.value:
+        return "Недоступен"
     return "Свободен"
 
 
@@ -387,6 +389,8 @@ def _normalize_admin_car_status_filter(status_value: str | None) -> str | None:
         "free": "available",
         "занят": "busy",
         "busy": "busy",
+        "недоступен": "offline",
+        "offline": "offline",
         "заблокирован": "blocked",
         "blocked": "blocked",
     }
@@ -478,6 +482,8 @@ async def _list_admin_cars(
         stmt = stmt.where(blocked_clause)
     elif normalized_status == "busy":
         stmt = stmt.where(~blocked_clause).where(Driver.status == DriverStatus.busy.value)
+    elif normalized_status == "offline":
+        stmt = stmt.where(~blocked_clause).where(Driver.status == DriverStatus.offline.value)
     elif normalized_status == "available":
         stmt = stmt.where(~blocked_clause).where(Driver.status == DriverStatus.available.value)
 

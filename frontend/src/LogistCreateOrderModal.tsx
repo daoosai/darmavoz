@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Loader2, MapPin, X } from "lucide-react";
 import toast from "react-hot-toast";
+import { fetch2gisAddressSuggestions, withTyumenBias } from "./addressSearch";
 import { baseURL } from "./utils";
 
 interface CreateOrderModalProps {
@@ -167,7 +168,13 @@ export default function LogistCreateOrderModal({
         }
 
         if (!cancelled) {
-          setCalculationResult(data as DeliveryCalculationResult);
+          setCalculationResult({
+            quarry_id: data.quarry_id,
+            quarry_name: data.quarry_name,
+            mileage_km: Number(data.mileage_km ?? data.distance ?? 0),
+            delivery_cost: Number(data.delivery_cost ?? 0),
+            total_amount: Number(data.total_amount ?? 0),
+          });
         }
       } catch (error: any) {
         if (!cancelled) {
@@ -222,22 +229,8 @@ export default function LogistCreateOrderModal({
   };
 
   const fetch2GISSuggests = async (query: string) => {
-    if (query.length < 3) return [];
-    try {
-      const res = await fetch(
-        `https://catalog.api.2gis.com/3.0/suggests?q=${encodeURIComponent(
-          query,
-        )}&suggest_type=address&key=1ee6f536-8494-4bb2-adc0-d011444c567a`,
-      );
-      const data = await res.json();
-      return (
-        data.result?.items?.map(
-          (item: any) => item.search_attributes?.suggested_text,
-        ) || []
-      );
-    } catch {
-      return [];
-    }
+    const items = await fetch2gisAddressSuggestions(query);
+    return items.map((item: any) => item.search_attributes?.suggested_text);
   };
 
   const handleDeliveryChange = async (
@@ -268,7 +261,7 @@ export default function LogistCreateOrderModal({
 
     try {
       const response = await fetch(
-        `${baseURL}/geo/geocode?address=${encodeURIComponent(address)}`,
+        `${baseURL}/geo/geocode?address=${encodeURIComponent(withTyumenBias(address))}`,
         {
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         },

@@ -6,7 +6,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import Select, and_, delete, func, or_, select, update
+from sqlalchemy import Select, and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -15,7 +15,6 @@ from app.models.models import (
     Client,
     ClientAddress,
     DeliveryOption,
-    Dialogue,
     Driver,
     DriverStatus,
     EventLog,
@@ -30,7 +29,7 @@ from app.models.models import (
     Vehicle,
 )
 from app.schemas.order import DispatchHistoryAttemptOut, DispatchHistoryOut, LogistOrderCreate
-from app.services.order_pricing import MIN_DELIVERY_COST, calculate_client_order_pricing
+from app.services.order_pricing import calculate_client_order_pricing, resolve_min_delivery_price
 from app.services.push_service import send_push_to_driver
 from app.services.redis_client import enqueue_dispatch_order
 
@@ -38,6 +37,10 @@ GUEST_CLIENT_PHONE = "00000000000"
 GUEST_CLIENT_NAME = "Гость (Демо)"
 MANUAL_ASSIGN_APPROVAL_ERROR = "Невозможно назначить заказ: профиль водителя или автомобиль не прошли модерацию"
 logger = logging.getLogger(__name__)
+
+
+def active_order_clause() -> object:
+    return Order.is_deleted.is_(False)
 
 
 def utcnow() -> datetime:
@@ -371,9 +374,10 @@ async def create_checkout_order(
             )
 
         delivery_rate_per_km_snapshot = round(float(delivery_option.delivery_rate_per_km), 2)
-        delivery_cost = round(resolved_mileage_km * delivery_rate_per_km_snapshot, 2)
-        if delivery_cost < MIN_DELIVERY_COST:
-            delivery_cost = MIN_DELIVERY_COST
+        delivery_cost = max(
+            round(resolved_mileage_km * delivery_rate_per_km_snapshot, 2),
+            resolve_min_delivery_price(delivery_option),
+        )
         route_calculated_at = utcnow()
         calculation_source = "yandex_auto"
     elif (
@@ -393,9 +397,10 @@ async def create_checkout_order(
         resolved_mileage_km = pricing.mileage_km
         if pricing.delivery_option.delivery_rate_per_km is not None:
             delivery_rate_per_km_snapshot = round(float(pricing.delivery_option.delivery_rate_per_km), 2)
-            delivery_cost = round(resolved_mileage_km * delivery_rate_per_km_snapshot, 2)
-            if delivery_cost < MIN_DELIVERY_COST:
-                delivery_cost = MIN_DELIVERY_COST
+            delivery_cost = max(
+                round(resolved_mileage_km * delivery_rate_per_km_snapshot, 2),
+                resolve_min_delivery_price(pricing.delivery_option),
+            )
         route_calculated_at = utcnow()
         calculation_source = "yandex_auto"
 
@@ -491,9 +496,10 @@ async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate)
                 resolved_pickup_lon = selected_quarry.lon
                 resolved_quarry_id = selected_quarry.id
 
-        resolved_delivery_cost = round((resolved_mileage_km or 0) * delivery_rate_per_km, 2)
-        if resolved_delivery_cost < MIN_DELIVERY_COST:
-            resolved_delivery_cost = MIN_DELIVERY_COST
+        resolved_delivery_cost = max(
+            round((resolved_mileage_km or 0) * delivery_rate_per_km, 2),
+            resolve_min_delivery_price(delivery_option),
+        )
     else:
         if resolved_delivery_lat is None or resolved_delivery_lon is None:
             raise HTTPException(
@@ -664,7 +670,11 @@ def order_load_options() -> tuple:
 
 
 async def get_order_by_id(session: AsyncSession, order_id: UUID) -> Order:
-    result = await session.execute(select(Order).options(*order_load_options()).where(Order.id == order_id))
+    result = await session.execute(
+        select(Order)
+        .options(*order_load_options())
+        .where(Order.id == order_id, active_order_clause())
+    )
     order = result.scalar_one_or_none()
     if order is None:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -677,8 +687,12 @@ async def list_recent_orders(
     *,
     driver_id: UUID | None = None,
     created_on: date | None = None,
+    show_deleted: bool = False,
 ) -> list[Order]:
     stmt = select(Order).options(*order_load_options())
+
+    if not show_deleted:
+        stmt = stmt.where(active_order_clause())
 
     if driver_id is not None:
         stmt = stmt.where(Order.driver_id == driver_id)
@@ -696,7 +710,7 @@ async def list_orders_for_client(session: AsyncSession, client_id: UUID) -> list
     result = await session.execute(
         select(Order)
         .options(*order_load_options())
-        .where(Order.client_id == client_id)
+        .where(Order.client_id == client_id, active_order_clause())
         .order_by(Order.created_at.desc())
     )
     return hydrate_orders_route_fields(list(result.scalars().unique().all()))
@@ -704,24 +718,17 @@ async def list_orders_for_client(session: AsyncSession, client_id: UUID) -> list
 
 async def delete_order_by_id(session: AsyncSession, order_id: UUID) -> None:
     order = await session.get(Order, order_id)
-    if order is None:
+    if order is None or order.is_deleted:
         raise HTTPException(status_code=404, detail="Order not found")
 
-    if order.current_offer_id is not None:
-        order.current_offer_id = None
-
-    if order.source_dialogue_id is not None:
-        order.source_dialogue_id = None
-
+    order.is_deleted = True
+    order.status = OrderStatus.cancelled.value
+    order.current_offer_id = None
     await session.execute(
-        update(Dialogue)
-        .where(Dialogue.order_id == order_id)
-        .values(order_id=None)
+        update(OrderOffer)
+        .where(OrderOffer.order_id == order_id)
+        .values(status=OrderOfferStatus.cancelled.value)
     )
-    await session.execute(delete(EventLog).where(EventLog.order_id == order_id))
-    await session.execute(delete(OrderOffer).where(OrderOffer.order_id == order_id))
-    await session.flush()
-    await session.delete(order)
     await session.commit()
 
 

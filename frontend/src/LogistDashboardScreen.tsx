@@ -343,7 +343,7 @@ export default function LogistDashboardScreen({
 
   const handleDeleteOrder = async (orderId: string) => {
     try {
-      const res = await fetch(`${baseURL}/orders/${orderId}`, {
+      const res = await fetch(`${baseURL}/logist/orders/${orderId}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`,

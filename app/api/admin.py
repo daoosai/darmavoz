@@ -49,7 +49,7 @@ from app.schemas.driver import (
     VehicleModerationDecisionOut,
     VehicleOut,
 )
-from app.schemas.order import OrderOut
+from app.schemas.order import OrderDeleteOut, OrderOut
 from app.security.auth import (
     get_current_admin_user,
     get_current_logist_user,
@@ -57,7 +57,7 @@ from app.security.auth import (
     get_password_hash,
 )
 from app.utils.phones import normalize_phone
-from app.services.dispatch_service import list_recent_orders
+from app.services.dispatch_service import delete_order_by_id, list_recent_orders
 from app.services.vehicle_moderation import (
     REQUIRED_VEHICLE_MEDIA_SLOTS,
     vehicle_has_required_photos,
@@ -149,11 +149,23 @@ async def get_manager_area(current_user: User = Depends(get_current_manager_user
 async def list_admin_panel_orders(
     driver_id: UUID | None = None,
     date: date_type | None = None,
+    show_deleted: bool = False,
     current_user: User = Depends(get_current_logist_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[Order]:
     del current_user
-    return await list_recent_orders(db, driver_id=driver_id, created_on=date)
+    return await list_recent_orders(db, driver_id=driver_id, created_on=date, show_deleted=show_deleted)
+
+
+@router.delete("/orders/{order_id}", response_model=OrderDeleteOut)
+async def delete_admin_order(
+    order_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_logist_user),
+) -> OrderDeleteOut:
+    del current_user
+    await delete_order_by_id(db, order_id)
+    return OrderDeleteOut(ok=True, message="Заказ перемещен в архив")
 
 
 class WebhookRegistrationRequest(BaseModel):
@@ -355,10 +367,10 @@ def _is_admin_car_blocked(driver: Driver, vehicle: Vehicle | None) -> bool:
 
 def _resolve_admin_car_status(driver: Driver, vehicle: Vehicle | None) -> str:
     if _is_admin_car_blocked(driver, vehicle):
-        return "????????????"
+        return "Заблокирован"
     if driver.status == DriverStatus.busy.value:
-        return "?? ??????"
-    return "????????"
+        return "Занят"
+    return "Свободен"
 
 
 def _normalize_admin_car_status_filter(status_value: str | None) -> str | None:
@@ -370,12 +382,12 @@ def _normalize_admin_car_status_filter(status_value: str | None) -> str | None:
         return None
 
     aliases = {
-        "????????": "available",
+        "свободен": "available",
         "available": "available",
         "free": "available",
-        "?? ??????": "busy",
+        "занят": "busy",
         "busy": "busy",
-        "????????????": "blocked",
+        "заблокирован": "blocked",
         "blocked": "blocked",
     }
     return aliases.get(normalized, normalized)

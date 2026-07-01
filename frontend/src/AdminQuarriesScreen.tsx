@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Plus, Edit2, Map, Mountain } from "lucide-react";
 import toast from "react-hot-toast";
+import { fetch2gisAddressSuggestions, withTyumenBias } from "./addressSearch";
 import { useAuthStore } from "./store";
 import { baseURL } from "./utils";
 
@@ -306,22 +307,13 @@ function EditQuarryModal({
   };
 
   const fetch2GISSuggests = async (query: string) => {
-    if (query.length < 3) return [];
-    try {
-      const res = await fetch(
-        `https://catalog.api.2gis.com/3.0/suggests?q=${encodeURIComponent(query)}&suggest_type=address&key=1ee6f536-8494-4bb2-adc0-d011444c567a`,
-      );
-      const data = await res.json();
-      return data.result?.items || [];
-    } catch (e) {
-      return [];
-    }
+    return await fetch2gisAddressSuggestions(query);
   };
 
   const getCoordsFromBackend = async (address: string) => {
     try {
       const res = await fetch(
-        `${baseURL}/geo/geocode?address=${encodeURIComponent(address)}`,
+        `${baseURL}/geo/geocode?address=${encodeURIComponent(withTyumenBias(address))}`,
         {
           headers: { Authorization: `Bearer ${token}` },
         },

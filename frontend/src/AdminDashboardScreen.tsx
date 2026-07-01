@@ -64,6 +64,7 @@ interface AdminDeliveryOption {
   capacity_m3: number;
   base_price: number;
   delivery_rate_per_km?: number;
+  min_delivery_price?: number;
   is_active: boolean;
   media_files?: AdminMediaFile[];
   primary_image_url?: string;
@@ -825,6 +826,7 @@ export default function AdminDashboardScreen({
         delivery_rate_per_km: editingDelivery.delivery_rate_per_km
           ? Number(editingDelivery.delivery_rate_per_km)
           : null,
+        min_delivery_price: Number(editingDelivery.min_delivery_price || 5000),
         is_active: editingDelivery.is_active ?? true,
         sort_order: 10,
       };
@@ -1230,7 +1232,12 @@ export default function AdminDashboardScreen({
         console.error("Failed to fetch delivery details", err);
       }
     } else {
-      setEditingDelivery({ is_active: true, capacity_m3: 0, base_price: 0 });
+      setEditingDelivery({
+        is_active: true,
+        capacity_m3: 0,
+        base_price: 0,
+        min_delivery_price: 5000,
+      });
       setIsDeliveryModalOpen(true);
     }
   };
@@ -1468,6 +1475,7 @@ export default function AdminDashboardScreen({
                     <span className="hidden sm:inline">Добавить</span>
                   </button>
                 </div>
+
               </div>
 
               {isLoading ? (
@@ -3211,6 +3219,26 @@ export default function AdminDashboardScreen({
                       setEditingDelivery({
                         ...editingDelivery,
                         delivery_rate_per_km: e.target.value
+                          ? parseFloat(e.target.value)
+                          : undefined,
+                      })
+                    }
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
+                  />
+                </div>                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    Минимальная доставка (₽)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="Например, 5000"
+                    value={editingDelivery.min_delivery_price ?? ""}
+                    onChange={(e) =>
+                      setEditingDelivery({
+                        ...editingDelivery,
+                        min_delivery_price: e.target.value
                           ? parseFloat(e.target.value)
                           : undefined,
                       })

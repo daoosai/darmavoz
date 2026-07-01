@@ -24,22 +24,24 @@ router = APIRouter()
 
 @router.get("/", response_model=list[OrderOut])
 async def list_orders(
+    show_deleted: bool = False,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[Order]:
     del current_user
-    return await list_recent_orders(db)
+    return await list_recent_orders(db, show_deleted=show_deleted)
 
 
 @router.get("/admin", response_model=list[OrderOut])
 async def list_admin_orders(
     driver_id: UUID | None = None,
     date: date_type | None = None,
+    show_deleted: bool = False,
     current_user: User = Depends(get_current_logist_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[Order]:
     del current_user
-    return await list_recent_orders(db, driver_id=driver_id, created_on=date)
+    return await list_recent_orders(db, driver_id=driver_id, created_on=date, show_deleted=show_deleted)
 
 
 @router.delete("/{order_id}", response_model=OrderDeleteOut)
@@ -50,7 +52,7 @@ async def delete_order(
 ) -> OrderDeleteOut:
     del current_user
     await delete_order_by_id(session, order_id)
-    return OrderDeleteOut(ok=True, message="Order deleted successfully")
+    return OrderDeleteOut(ok=True, message="Заказ перемещен в архив")
 
 
 @router.post("/{order_id}/assign", response_model=OrderOut)

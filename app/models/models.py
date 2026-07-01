@@ -282,6 +282,7 @@ class DeliveryOption(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     base_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     delivery_rate_per_km: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    min_delivery_price: Mapped[float] = mapped_column(Float, default=5000.0, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     image_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
@@ -373,6 +374,7 @@ class Order(Base):
     calculation_source: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     route_calculated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     total_amount: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     status: Mapped[str] = mapped_column(String(50), default=OrderStatus.draft.value)
     source: Mapped[Optional[str]] = mapped_column(String(50), default="avito", nullable=True)
     created_by_source: Mapped[Optional[str]] = mapped_column(String(50), default="client_app", nullable=True)
@@ -441,6 +443,17 @@ class EventLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     order: Mapped[Optional["Order"]] = relationship("Order", back_populates="events")
+
+
+class ErrorLog(Base):
+    __tablename__ = "error_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    error_code: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    payload: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
 class OrderOffer(Base):

@@ -7,8 +7,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import admin, admin_quarries, auth, catalog, client_addresses, client_auth, client_orders, clients, driver_dispatch, drivers, geo, logist_orders, media, orders, system, webhooks
+from app.api import admin, admin_quarries, auth, catalog, client_addresses, client_auth, client_orders, clients, driver_dispatch, drivers, geo, logist_orders, media, orders, system, telemetry, webhooks
 from app.core.config import settings
+from app.core.error_handling import register_exception_handlers
 from app.db.seed import seed_data
 from app.services.storage import StorageNotConfiguredError, get_storage_service
 from app.services.dispatch_worker import start_dispatch_worker, stop_dispatch_worker
@@ -46,6 +47,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Дармавоз.рф API", lifespan=lifespan)
+register_exception_handlers(app)
 
 app.add_middleware(
     CORSMiddleware,
@@ -70,6 +72,7 @@ app.include_router(media.router, prefix="/api/v1/media", tags=["media"])
 app.include_router(geo.router, prefix="/api/v1/geo", tags=["geo"])
 app.include_router(orders.router, prefix="/api/v1/orders", tags=["orders"])
 app.include_router(system.router, prefix="/api/v1/system", tags=["system"])
+app.include_router(telemetry.router, prefix="/api/v1", tags=["telemetry"])
 app.include_router(webhooks.router, prefix="/api/v1/webhooks")
 
 

@@ -9,6 +9,9 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+TYUMEN_CITY_NAME = "Тюмень"
+TYUMEN_LOCATION = "65.534328,57.152286"
+TYUMEN_BOUND = "65.10,56.95,65.95,57.45"
 
 
 def _extract_2gis_error(payload: dict[str, Any]) -> str | None:
@@ -28,6 +31,13 @@ def _extract_2gis_error(payload: dict[str, Any]) -> str | None:
                     if isinstance(value, str) and value.strip():
                         return value.strip()
     return None
+
+
+def _prepare_tyumen_address(address: str) -> str:
+    normalized = address.strip()
+    if TYUMEN_CITY_NAME.casefold() in normalized.casefold():
+        return normalized
+    return f"{TYUMEN_CITY_NAME} {normalized}"
 
 
 def _parse_wkt_linestring(linestring: str) -> list[dict[str, float]]:
@@ -111,8 +121,11 @@ async def geocode_address(
             response = await client.get(
                 "https://catalog.api.2gis.com/3.0/items/geocode",
                 params={
-                    "q": address,
+                    "q": _prepare_tyumen_address(address),
                     "fields": "items.point",
+                    "location": TYUMEN_LOCATION,
+                    "radius": 40000,
+                    "bound": TYUMEN_BOUND,
                     "key": settings.TWOGIS_API_KEY,
                 },
             )

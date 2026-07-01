@@ -13,7 +13,10 @@ from app.core.config import settings
 from app.models.models import DeliveryOption, Material, Quarry
 
 logger = logging.getLogger(__name__)
-MIN_DELIVERY_COST = 5000.0
+
+
+def resolve_min_delivery_price(delivery_option: DeliveryOption) -> float:
+    return round(float(delivery_option.min_delivery_price or 5000.0), 2)
 
 
 @dataclass(slots=True)
@@ -183,9 +186,10 @@ async def calculate_client_order_pricing(
     )
     rate = round(float(delivery_option.delivery_rate_per_km), 2)
     material_cost = round(float(material.price) * float(delivery_option.capacity_m3) * quantity, 2)
-    delivery_cost = round(mileage_km * rate, 2)
-    if delivery_cost < MIN_DELIVERY_COST:
-        delivery_cost = MIN_DELIVERY_COST
+    delivery_cost = max(
+        round(mileage_km * rate, 2),
+        resolve_min_delivery_price(delivery_option),
+    )
     total_amount = round(material_cost + delivery_cost, 2)
 
     return ClientOrderPricing(

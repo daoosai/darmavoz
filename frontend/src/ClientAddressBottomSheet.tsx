@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Circle,
 } from "lucide-react";
+import { fetch2gisAddressSuggestions, withTyumenBias } from "./addressSearch";
 import { baseURL, handleApiError } from "./utils";
 import { useAuthStore, useAddressStore } from "./store";
 import toast from "react-hot-toast";
@@ -132,20 +133,8 @@ export default function ClientAddressBottomSheet({
   }, []);
 
   const fetch2GISSuggests = async (query: string) => {
-    if (query.length < 3) return [];
-    try {
-      const res = await fetch(
-        `https://catalog.api.2gis.com/3.0/suggests?q=${encodeURIComponent(query)}&suggest_type=address&key=1ee6f536-8494-4bb2-adc0-d011444c567a`,
-      );
-      const data = await res.json();
-      return (
-        data.result?.items?.map(
-          (item: any) => item.search_attributes?.suggested_text,
-        ) || []
-      );
-    } catch (e) {
-      return [];
-    }
+    const items = await fetch2gisAddressSuggestions(query);
+    return items.map((item: any) => item.search_attributes?.suggested_text);
   };
 
   const handleAddressChange = async (
@@ -163,7 +152,7 @@ export default function ClientAddressBottomSheet({
 
     try {
       const response = await fetch(
-        `${baseURL}/geo/geocode?address=${encodeURIComponent(address)}`,
+        `${baseURL}/geo/geocode?address=${encodeURIComponent(withTyumenBias(address))}`,
         {
           headers: { Authorization: `Bearer ${token}` },
         },

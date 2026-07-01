@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
@@ -25,6 +26,13 @@ def _build_registration_vehicle_title(*, brand: str, plate_number: str) -> str:
     return " / ".join(parts) if parts else "Черновик машины"
 
 
+def _blocked_profile_exception() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=_error_detail("USER_BLOCKED", "Ваш профиль заблокирован. Обратитесь в поддержку."),
+    )
+
+
 async def _get_or_create_driver_role(db: AsyncSession) -> Role:
     role = await db.scalar(select(Role).where(Role.name == "driver"))
     if role is None:
@@ -45,14 +53,14 @@ async def driver_register(
     if existing_user is not None:
         raise HTTPException(
             status_code=409,
-            detail=_error_detail("DRIVER_PHONE_ALREADY_EXISTS", "Водитель с таким номером телефона уже существует"),
+            detail=_error_detail("DRIVER_PHONE_ALREADY_EXISTS", "Пользователь с таким номером уже зарегистрирован"),
         )
 
     existing_driver = await db.scalar(select(Driver).where(Driver.phone == normalized_phone))
     if existing_driver is not None:
         raise HTTPException(
             status_code=409,
-            detail=_error_detail("DRIVER_PHONE_ALREADY_EXISTS", "Водитель с таким номером телефона уже существует"),
+            detail=_error_detail("DRIVER_PHONE_ALREADY_EXISTS", "Пользователь с таким номером уже зарегистрирован"),
         )
 
     role = await _get_or_create_driver_role(db)
@@ -94,7 +102,14 @@ async def driver_register(
         moderation_status=ModerationStatus.incomplete.value,
     )
     db.add(driver)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_error_detail("DRIVER_PHONE_ALREADY_EXISTS", "Пользователь с таким номером уже зарегистрирован"),
+        ) from exc
     result = await db.execute(
         select(Driver)
         .options(selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option))
@@ -134,10 +149,9 @@ async def login(
         )
     
     if not user.is_active:
-        raise HTTPException(
-            status_code=400,
-            detail=_error_detail("USER_INACTIVE", "Пользователь деактивирован"),
-        )
+        raise _blocked_profile_exception()
+    if user.driver_profile is not None and user.driver_profile.moderation_status == ModerationStatus.suspended.value:
+        raise _blocked_profile_exception()
     
     access_token = create_access_token(
         data={

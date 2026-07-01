@@ -65,36 +65,42 @@ MATERIALS = {
 DEFAULT_DELIVERY_OPTIONS = [
     {
         "capacity_m3": 5.0,
+        "min_delivery_price": 3500.0,
         "title": "Зил 5 м3",
         "description": "Компактная машина для небольших доставок.",
         "sort_order": 10,
     },
     {
         "capacity_m3": 10.0,
+        "min_delivery_price": 4000.0,
         "title": "КамАЗ 10 м3",
         "description": "Базовый вариант для стандартного заказа.",
         "sort_order": 20,
     },
     {
         "capacity_m3": 17.0,
+        "min_delivery_price": 5000.0,
         "title": "КамАЗ 17 м3",
         "description": "Усиленный вариант для среднего объема.",
         "sort_order": 30,
     },
     {
         "capacity_m3": 20.0,
+        "min_delivery_price": 5000.0,
         "title": "Самосвал 20 м3",
         "description": "Подходит для крупных доставок сыпучих материалов.",
         "sort_order": 40,
     },
     {
         "capacity_m3": 25.0,
+        "min_delivery_price": 5000.0,
         "title": "Самосвал 25 м3",
         "description": "Вместительный вариант для стройплощадок.",
         "sort_order": 50,
     },
     {
         "capacity_m3": 30.0,
+        "min_delivery_price": 5000.0,
         "title": "Самосвал 30 м3",
         "description": "Максимальная стартовая кубатура для крупных заявок.",
         "sort_order": 60,
@@ -162,7 +168,7 @@ async def _seed_catalog(session: AsyncSession) -> None:
             continue
 
         # Preserve admin-managed titles; only keep seed metadata in sync.
-        for field in ("description", "sort_order"):
+        for field in ("description", "sort_order", "min_delivery_price"):
             setattr(delivery_option, field, option_data[field])
         if not delivery_option.title:
             delivery_option.title = option_data["title"]

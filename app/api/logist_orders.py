@@ -5,11 +5,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
 from app.models.models import Order, User
-from app.schemas.order import DispatchHistoryOut, LogistOrderCreate, OrderOut
+from app.schemas.order import DispatchHistoryOut, LogistOrderCreate, OrderDeleteOut, OrderOut
 from app.security.auth import get_current_logist_user
 from app.services.dispatch_service import (
     build_dispatch_history,
     create_logist_order,
+    delete_order_by_id,
     get_order_by_id,
     restart_dispatch_for_order,
 )
@@ -35,6 +36,17 @@ async def get_logist_order(
 ) -> Order:
     del current_user
     return await get_order_by_id(db, order_id)
+
+
+@router.delete("/orders/{order_id}", response_model=OrderDeleteOut)
+async def delete_logist_order(
+    order_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_logist_user),
+) -> OrderDeleteOut:
+    del current_user
+    await delete_order_by_id(db, order_id)
+    return OrderDeleteOut(ok=True, message="Заказ перемещен в архив")
 
 
 @router.get("/orders/{order_id}/dispatch-history", response_model=DispatchHistoryOut)

@@ -146,6 +146,11 @@ class ClientOrderCalculationOut(BaseModel):
     delivery_cost: float
     total_amount: float
 
+    @computed_field(return_type=float)
+    @property
+    def distance(self) -> float:
+        return round(self.mileage_km, 2)
+
 
 class LogistOrderCreate(BaseModel):
     client_name: str | None = Field(default=None, max_length=255)
@@ -332,6 +337,7 @@ class OrderOut(BaseModel):
     calculation_source: CalculationSource | None = None
     route_calculated_at: datetime | None = None
     total_amount: float
+    is_deleted: bool = False
     status: str
     source: str | None = None
     created_by_source: str | None = None

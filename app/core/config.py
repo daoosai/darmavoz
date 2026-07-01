@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -59,7 +60,7 @@ class Settings(BaseSettings):
     SMTP_USER: str | None = None
     SMTP_PASSWORD: str | None = None
     FIREBASE_CREDENTIALS_PATH: str = "/app/firebase-key.json"
-    SMS_RU_API_ID: str | None = None
+    SMS_RU_API_ID: str | None = Field(default=None, validation_alias=AliasChoices("SMS_RU_API_ID", "SMSRU_API_KEY"))
     TWOGIS_API_KEY: str | None = None
     YANDEX_GEOCODER_API_KEY: str | None = None
     YANDEX_ROUTER_API_KEY: str | None = None

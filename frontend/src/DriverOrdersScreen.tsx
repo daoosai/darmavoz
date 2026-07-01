@@ -880,7 +880,7 @@ const DriverOrderCard: React.FC<{
     const lat = type === "quarry" ? order?.pickup_lat : order?.delivery_lat;
     const lon = type === "quarry" ? order?.pickup_lon : order?.delivery_lon;
 
-    if (!lat || !lon) {
+    if (lat == null || lon == null) {
       const address =
         type === "quarry" ? order?.pickup_address : order?.delivery_address;
       if (address) {

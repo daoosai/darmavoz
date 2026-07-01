@@ -429,6 +429,28 @@ async def create_checkout_order(
     return await get_order_by_id(session, order.id)
 
 
+async def _resolve_logist_order_quarry(
+    session: AsyncSession,
+    *,
+    material_id: UUID,
+    pickup_address: str | None,
+) -> Quarry | None:
+    result = await session.execute(
+        select(Quarry)
+        .join(Quarry.materials)
+        .where(Quarry.is_active.is_(True), Material.id == material_id)
+        .order_by(Quarry.name.asc())
+    )
+    quarries = list(result.scalars().unique().all())
+    normalized_pickup_address = (pickup_address or "").strip().casefold()
+    for quarry in quarries:
+        if normalized_pickup_address and normalized_pickup_address in {quarry.name.strip().casefold(), quarry.address.strip().casefold()}:
+            return quarry
+    if len(quarries) == 1:
+        return quarries[0]
+    return None
+
+
 async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate) -> Order:
     client = await get_or_create_client_by_phone(
         session, name=payload.client_name, phone=payload.client_phone
@@ -447,6 +469,23 @@ async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate)
 
     delivery_rate_per_km = round(float(delivery_rate_per_km), 2)
     route_calculated_at = utcnow()
+    resolved_pickup_address = payload.pickup_address
+    resolved_pickup_lat = payload.pickup_lat
+    resolved_pickup_lon = payload.pickup_lon
+    resolved_quarry_id: UUID | None = None
+
+    if resolved_pickup_lat is None or resolved_pickup_lon is None:
+        selected_quarry = await _resolve_logist_order_quarry(
+            session,
+            material_id=payload.material_id,
+            pickup_address=payload.pickup_address,
+        )
+        if selected_quarry is not None:
+            resolved_pickup_address = selected_quarry.address
+            resolved_pickup_lat = selected_quarry.lat
+            resolved_pickup_lon = selected_quarry.lon
+            resolved_quarry_id = selected_quarry.id
+
     delivery_cost = round(payload.mileage_km * delivery_rate_per_km, 2)
     order = await build_order(
         session,
@@ -459,9 +498,10 @@ async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate)
         created_by_source="dispatcher",
         quantity=payload.quantity,
         auto_dispatch=payload.auto_dispatch,
-        pickup_address=payload.pickup_address,
-        pickup_lat=payload.pickup_lat,
-        pickup_lon=payload.pickup_lon,
+        pickup_address=resolved_pickup_address,
+        pickup_lat=resolved_pickup_lat,
+        pickup_lon=resolved_pickup_lon,
+        quarry_id=resolved_quarry_id,
         delivery_address=payload.delivery_address,
         delivery_lat=payload.delivery_lat,
         delivery_lon=payload.delivery_lon,

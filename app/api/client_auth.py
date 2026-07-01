@@ -1,9 +1,12 @@
 import logging
+import secrets
 
-from fastapi import APIRouter, Depends, HTTPException, status
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.db.database import get_db
 from app.models.models import Client
 from app.schemas.client import (
@@ -43,7 +46,54 @@ def _code_key(phone_number: str) -> str:
 
 
 def _generate_otp_code() -> str:
-    return "0000"
+    return f"{secrets.randbelow(10000):04d}"
+
+
+async def _send_sms_ru_code(*, phone_number: str, code: str, client_ip: str | None = None) -> None:
+    api_key = settings.SMS_RU_API_ID
+    if not api_key:
+        logger.error("sms_ru_not_configured")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="SMS service is not configured",
+        )
+
+    payload = {
+        "api_id": api_key,
+        "to": phone_number,
+        "msg": f"Your Darmavoz code: {code}",
+        "json": 1,
+    }
+    if client_ip:
+        payload["ip"] = client_ip
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post("https://sms.ru/sms/send", params=payload)
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        logger.exception("sms_ru_request_failed phone=%s", phone_number)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="SMS service is temporarily unavailable",
+        ) from exc
+
+    try:
+        response_data = response.json()
+    except ValueError as exc:
+        logger.error("sms_ru_invalid_response phone=%s body=%s", phone_number, response.text[:500])
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="SMS service is temporarily unavailable",
+        ) from exc
+
+    sms_info = response_data.get("sms", {}).get(phone_number)
+    if response_data.get("status") != "OK" or not isinstance(sms_info, dict) or sms_info.get("status") != "OK":
+        logger.error("sms_ru_send_error phone=%s response=%s", phone_number, response_data)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Failed to send SMS code",
+        )
 
 
 def _sms_ru_phone(phone_number: str) -> str:
@@ -62,12 +112,15 @@ def _default_client_name(phone_number: str) -> str:
 @router.post("/send-code", response_model=ClientSendCodeResponse)
 async def send_code(
     payload: ClientSendCodeRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     normalized_phone = _normalize_phone_number(payload.phone_number)
     sms_phone = _sms_ru_phone(normalized_phone)
     code = _generate_otp_code()
-    logger.info(f"ТЕСТОВЫЙ КОД АВТОРИЗАЦИИ ДЛЯ {sms_phone}: {code}")
+    client_ip = request.client.host if request.client is not None else None
+
+    await _send_sms_ru_code(phone_number=sms_phone, code=code, client_ip=client_ip)
 
     client = await db.scalar(select(Client).where(Client.phone == normalized_phone))
     is_new_user = client is None

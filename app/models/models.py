@@ -314,6 +314,8 @@ class OrderStatus(str, Enum):
     searching_driver = "searching_driver"
     offered_to_driver = "offered_to_driver"
     driver_assigned = "driver_assigned"
+    heading_to_quarry = "heading_to_quarry"
+    heading_to_client = "heading_to_client"
     in_progress = "in_progress"
     completed = "completed"
     cancelled = "cancelled"

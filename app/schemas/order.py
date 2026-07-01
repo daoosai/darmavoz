@@ -352,6 +352,20 @@ class OrderOut(BaseModel):
         return round((self.total_amount or 0.0) + (self.delivery_cost or 0.0), 2)
 
 
+DriverOrderStatusValue = Literal[
+    "heading_to_quarry",
+    "heading_to_client",
+    "in_progress",
+    "completed",
+]
+
+
+class DriverOrderStatusUpdate(BaseModel):
+    status: DriverOrderStatusValue
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class DriverAssignedOrderOut(BaseModel):
     order_id: UUID | None = None
     status: str | None = None

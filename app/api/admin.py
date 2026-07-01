@@ -1165,7 +1165,12 @@ async def delete_admin_driver(
     for order in assigned_orders.all():
         order.driver_id = None
         order.assigned_at = None
-        if order.status in {OrderStatus.driver_assigned.value, OrderStatus.in_progress.value}:
+        if order.status in {
+            OrderStatus.driver_assigned.value,
+            OrderStatus.heading_to_quarry.value,
+            OrderStatus.heading_to_client.value,
+            OrderStatus.in_progress.value,
+        }:
             order.status = OrderStatus.created.value
 
     driver.vehicle_id = None

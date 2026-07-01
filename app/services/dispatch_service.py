@@ -860,6 +860,8 @@ async def advance_dispatch_for_order(
     order = await get_order_by_id(session, order_id)
     if order.driver_id is not None or order.status in {
         OrderStatus.driver_assigned.value,
+        OrderStatus.heading_to_quarry.value,
+        OrderStatus.heading_to_client.value,
         OrderStatus.in_progress.value,
         OrderStatus.completed.value,
         OrderStatus.cancelled.value,
@@ -1096,6 +1098,8 @@ async def restart_dispatch_for_order(session: AsyncSession, order_id: UUID) -> O
     order = await get_order_by_id(session, order_id)
     if order.status in {
         OrderStatus.driver_assigned.value,
+        OrderStatus.heading_to_quarry.value,
+        OrderStatus.heading_to_client.value,
         OrderStatus.in_progress.value,
         OrderStatus.completed.value,
         OrderStatus.cancelled.value,
@@ -1150,7 +1154,12 @@ async def get_current_assigned_order_for_driver(session: AsyncSession, driver_id
         select(Order)
         .options(*order_load_options())
         .where(Order.driver_id == driver_id)
-        .where(Order.status.in_([OrderStatus.driver_assigned.value, OrderStatus.in_progress.value]))
+        .where(Order.status.in_([
+            OrderStatus.driver_assigned.value,
+            OrderStatus.heading_to_quarry.value,
+            OrderStatus.heading_to_client.value,
+            OrderStatus.in_progress.value,
+        ]))
         .order_by(Order.assigned_at.desc().nullslast(), Order.created_at.desc())
         .limit(1)
     )

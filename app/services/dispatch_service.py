@@ -95,12 +95,27 @@ def format_order_volume(order: Order | None) -> str:
     return f"{requested_volume:g}"
 
 
+def get_order_estimated_total_amount(order: Order | None) -> float:
+    if order is None:
+        return 0.0
+    return round((order.total_amount or 0.0) + (order.delivery_cost or 0.0), 2)
+
+
+def format_money(value: float | None) -> str:
+    amount = round(float(value or 0.0), 2)
+    formatted = f"{amount:,.2f}".replace(",", " " ).rstrip("0").rstrip(".")
+    return f"{formatted} ₽"
+
+
 def build_offer_push_message(order: Order) -> tuple[str, str]:
     material_name = get_order_material_name(order)
     volume = format_order_volume(order)
     address = get_order_delivery_address(order)
     title = f"🔥 Новый заказ: {material_name}, {volume} м³"
-    body = f"📍 Адрес: {address}. Нажмите, чтобы принять!"
+    body = (
+        f"📍 Адрес: {address}. Доставка: {format_money(order.delivery_cost)}. "
+        f"Итого: {format_money(get_order_estimated_total_amount(order))}. Нажмите, чтобы принять!"
+    )
     return title, body
 
 
@@ -109,7 +124,10 @@ def build_manual_assign_push_message(order: Order) -> tuple[str, str]:
     volume = format_order_volume(order)
     address = get_order_delivery_address(order)
     title = "✅ Вы назначены на заказ!"
-    body = f"📍 Везем {material_name} ({volume} м³) по адресу: {address}."
+    body = (
+        f"📍 Везем {material_name} ({volume} м³) по адресу: {address}. "
+        f"Доставка: {format_money(order.delivery_cost)}. Итого: {format_money(get_order_estimated_total_amount(order))}."
+    )
     return title, body
 
 

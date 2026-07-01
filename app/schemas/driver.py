@@ -243,6 +243,9 @@ class DriverOfferOrderOut(BaseModel):
     delivery_lon: float | None = None
     notes: str | None = None
     client_phone_masked: str | None = None
+    total_amount: float = 0.0
+    delivery_cost: float | None = None
+    estimated_total_amount: float = 0.0
     delivery_option: DeliveryOptionOut | None = None
 
 

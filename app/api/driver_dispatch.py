@@ -21,7 +21,7 @@ from app.schemas.driver import (
     DriverStatusUpdate,
     DriverVehicleUpdate,
 )
-from app.schemas.order import DriverAssignedOrderOut, DriverOrderStatusUpdate, OrderOut
+from app.schemas.order import DriverAssignedOrderOut, DriverOrderStatusUpdate, DriverOrderOut, OrderOut
 from app.security.auth import get_current_approved_driver, get_current_driver
 from app.services.dispatch_service import (
     accept_offer,
@@ -273,6 +273,9 @@ def _build_driver_order_payload(order: Order) -> DriverOfferOrderOut:
         delivery_lon=order.delivery_lon,
         notes=order.notes,
         client_phone_masked=mask_phone(order.client.phone if order.client else None),
+        total_amount=order.total_amount or 0.0,
+        delivery_cost=order.delivery_cost,
+        estimated_total_amount=round((order.total_amount or 0.0) + (order.delivery_cost or 0.0), 2),
         delivery_option=order.delivery_option,
     )
 
@@ -351,7 +354,7 @@ async def get_current_assigned_order(
         order_id=order.id,
         status=order.status,
         assigned_at=order.assigned_at,
-        order=order,
+        order=DriverOrderOut.model_validate(order, from_attributes=True),
     )
 
 

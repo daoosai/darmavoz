@@ -417,6 +417,10 @@ class Order(Base):
     def quantity(self) -> int:
         return sum(item.quantity for item in self.items)
 
+    @property
+    def client_phone(self) -> str | None:
+        return self.client.phone if self.client is not None else None
+
 
 class OrderItem(Base):
     __tablename__ = "order_items"

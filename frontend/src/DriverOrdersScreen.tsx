@@ -33,6 +33,8 @@ interface DriverOrder {
   delivery_option?: { capacity_m3: number };
   created_at: string;
   total_amount: number;
+  delivery_cost?: number;
+  estimated_total_amount?: number;
   notes?: string;
   status: string;
   material_name?: string;
@@ -46,6 +48,18 @@ interface DriverOrder {
   delivery_lat?: number;
   delivery_lon?: number;
 }
+
+const getDeliveryCost = (order: Pick<DriverOrder, "delivery_cost">) =>
+  Number(order.delivery_cost ?? 0);
+
+const getEstimatedTotalAmount = (
+  order: Pick<DriverOrder, "delivery_cost" | "estimated_total_amount" | "total_amount">,
+) =>
+  Number(order.estimated_total_amount ?? 0) ||
+  Number(order.total_amount ?? 0) + getDeliveryCost(order);
+
+const formatCurrency = (value?: number | null) =>
+  `${Number(value ?? 0).toLocaleString("ru-RU")} ₽`;
 
 type DriverStatus = "available" | "busy" | "offline";
 
@@ -239,11 +253,13 @@ export default function DriverOrdersScreen({
                   delivery_option: detail.delivery_option,
                   created_at: detail.created_at || new Date().toISOString(),
                   total_amount: detail.total_amount || 0,
+                  delivery_cost: detail.delivery_cost,
+                  estimated_total_amount: detail.estimated_total_amount,
                   notes: detail.notes,
                   status: detail.status || "driver_assigned",
                   material_name: detail.material_name,
                   capacity_m3: detail.capacity_m3,
-                  client_phone: detail.client_phone,
+                  client_phone: detail.client_phone || detail.client?.phone,
                   client: detail.client,
                   pickup_lat: detail.pickup_lat,
                   pickup_lon: detail.pickup_lon,
@@ -525,6 +541,11 @@ export default function DriverOrdersScreen({
     offerOrder?.delivery_option?.capacity_m3 ||
     offerOrder?.volume_m3 ||
     "?";
+  const offerPickupAddress = offerOrder?.pickup_address || "Карьер уточняется";
+  const offerDeliveryAddress =
+    offerOrder?.delivery_address || offerOrder?.address || "Адрес не указан";
+  const offerDeliveryCost = Number(offerOrder?.delivery_cost ?? 0);
+  const offerEstimatedTotalAmount = getEstimatedTotalAmount(offerOrder || { total_amount: 0 });
 
   return (
     <div className="flex flex-col min-h-screen bg-slate-50 sm:max-w-md sm:mx-auto shadow-2xl relative overflow-y-auto overflow-x-hidden pb-28">
@@ -806,12 +827,24 @@ export default function DriverOrdersScreen({
               <div className="flex flex-col gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100">
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">
+                    Карьер
+                  </p>
+                  <div className="flex items-start gap-1.5">
+                    <Navigation className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+                    <p className="text-sm font-bold text-slate-800 leading-snug">
+                      {offerPickupAddress}
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">
                     Адрес доставки
                   </p>
                   <div className="flex items-start gap-1.5">
                     <MapPin className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
                     <p className="text-sm font-bold text-slate-800 leading-snug">
-                      {currentOffer.order?.address || currentOffer.address}
+                      {offerDeliveryAddress}
                     </p>
                   </div>
                 </div>
@@ -832,6 +865,27 @@ export default function DriverOrdersScreen({
                     <p className="text-sm font-bold text-slate-700">
                       {capacity} м³
                     </p>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg border border-slate-200 p-3 flex flex-col gap-2">
+                  <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
+                    <span>Сумма заказа</span>
+                    <span className="text-slate-800">
+                      {formatCurrency(offerOrder?.total_amount)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
+                    <span>Доставка</span>
+                    <span className="text-slate-800">
+                      {formatCurrency(offerDeliveryCost)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between border-t border-slate-100 pt-2 text-sm font-bold text-slate-700">
+                    <span>Итого</span>
+                    <span className="text-[#2DB0E6]">
+                      {formatCurrency(offerEstimatedTotalAmount)}
+                    </span>
                   </div>
                 </div>
 
@@ -898,6 +952,9 @@ const DriverOrderCard: React.FC<{
     order.material_name || order.items?.[0]?.material?.name || "Неизвестно";
   const capacity =
     order.capacity_m3 || order.delivery_option?.capacity_m3 || "?";
+  const deliveryCost = getDeliveryCost(order);
+  const estimatedTotalAmount = getEstimatedTotalAmount(order);
+  const clientPhone = order.client_phone || order.client?.phone;
 
   const open2GIS = (type: "quarry" | "client") => {
     if (type === "client" && order?.delivery_address) {
@@ -958,7 +1015,23 @@ const DriverOrderCard: React.FC<{
             Сумма заказа
           </span>
           <span className="text-emerald-500 font-black text-base">
-            {order.total_amount} ₽
+            {formatCurrency(order.total_amount)}
+          </span>
+        </div>
+        <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+          <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">
+            Доставка
+          </span>
+          <span className="text-slate-800 font-black text-base">
+            {formatCurrency(deliveryCost)}
+          </span>
+        </div>
+        <div className="flex justify-between items-center bg-blue-50 p-2.5 rounded-xl border border-blue-100">
+          <span className="text-[11px] text-blue-500 font-bold uppercase tracking-wider">
+            Итого
+          </span>
+          <span className="text-[#2DB0E6] font-black text-base">
+            {formatCurrency(estimatedTotalAmount)}
           </span>
         </div>
       </div>
@@ -1106,9 +1179,17 @@ const DriverOrderCard: React.FC<{
             <p className="text-[11px] text-slate-500 uppercase tracking-wide font-bold">
               Сумма заказа
             </p>
-            <p className="text-[#2DB0E6] font-black text-lg">
-              {order.total_amount} ₽
-            </p>
+            <div className="flex flex-col items-end gap-1 text-right">
+              <p className="text-[#2DB0E6] font-black text-lg">
+                {formatCurrency(order.total_amount)}
+              </p>
+              <p className="text-xs font-semibold text-slate-500">
+                Доставка: {formatCurrency(deliveryCost)}
+              </p>
+              <p className="text-sm font-bold text-emerald-600">
+                Итого: {formatCurrency(estimatedTotalAmount)}
+              </p>
+            </div>
           </div>
         </div>
 
@@ -1147,18 +1228,18 @@ const DriverOrderCard: React.FC<{
         )}
 
         {/* Client Phone for Driver */}
-        {(order.client_phone || order.client?.phone) && (
+        {clientPhone && (
           <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-xl border border-slate-100 mt-1">
             <div className="flex flex-col">
               <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">
                 Телефон клиента
               </span>
               <span className="text-base font-bold text-slate-800">
-                {order.client_phone || order.client?.phone}
+                {clientPhone}
               </span>
             </div>
             <a
-              href={`tel:${order.client_phone || order.client?.phone}`}
+              href={`tel:${clientPhone}`}
               className="flex items-center justify-center gap-2 bg-[#2DB0E6]/10 text-[#2DB0E6] hover:bg-[#2DB0E6]/20 py-2.5 px-4 rounded-xl transition-colors font-bold text-sm active:scale-95"
             >
               <Phone className="w-4 h-4 shrink-0" />

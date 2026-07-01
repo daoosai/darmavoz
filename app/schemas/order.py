@@ -364,6 +364,10 @@ class OrderOut(BaseModel):
         return round((self.total_amount or 0.0) + (self.delivery_cost or 0.0), 2)
 
 
+class DriverOrderOut(OrderOut):
+    client_phone: str | None = None
+
+
 DriverOrderStatusValue = Literal[
     "heading_to_quarry",
     "heading_to_client",
@@ -382,7 +386,7 @@ class DriverAssignedOrderOut(BaseModel):
     order_id: UUID | None = None
     status: str | None = None
     assigned_at: datetime | None = None
-    order: OrderOut | None = None
+    order: DriverOrderOut | None = None
 
 
 class OrderDeleteOut(BaseModel):

@@ -20,6 +20,39 @@ interface DeliveryCalculationResult {
   total_amount: number;
 }
 
+const formatFastApiDetail = (detail: any, fallback: string) => {
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((entry: any) => {
+        if (entry?.loc && Array.isArray(entry.loc) && entry?.msg) {
+          return `${entry.loc.join(".")} - ${entry.msg}`;
+        }
+        if (typeof entry?.msg === "string") {
+          return entry.msg;
+        }
+        if (typeof entry === "string") {
+          return entry;
+        }
+        return null;
+      })
+      .filter(Boolean);
+
+    if (messages.length > 0) {
+      return messages.join("\n");
+    }
+  }
+
+  if (typeof detail === "string" && detail.trim()) {
+    return detail;
+  }
+
+  if (detail && typeof detail === "object" && typeof detail.msg === "string") {
+    return detail.msg;
+  }
+
+  return fallback;
+};
+
 export default function LogistCreateOrderModal({
   isOpen,
   onClose,
@@ -119,7 +152,9 @@ export default function LogistCreateOrderModal({
 
         const data = await response.json().catch(() => ({}));
         if (!response.ok) {
-          throw new Error(data?.detail || "Не удалось рассчитать доставку");
+          throw new Error(
+            formatFastApiDetail(data?.detail, "Не удалось рассчитать доставку"),
+          );
         }
 
         if (!cancelled) {
@@ -225,7 +260,9 @@ export default function LogistCreateOrderModal({
       );
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(data?.detail || "Не удалось определить координаты");
+        throw new Error(
+          formatFastApiDetail(data?.detail, "Не удалось определить координаты"),
+        );
       }
 
       setNewOrder((prev) => ({
@@ -262,12 +299,13 @@ export default function LogistCreateOrderModal({
     }
 
     const cleanPhone = "+" + digitsOnly;
+    const normalizedClientName = newOrder.client_name.trim() || cleanPhone;
 
     try {
       setIsCreating(true);
 
       const payload = {
-        client_name: newOrder.client_name,
+        client_name: normalizedClientName,
         client_phone: cleanPhone,
         material_id: newOrder.material_id,
         delivery_option_id: newOrder.delivery_option_id,
@@ -295,7 +333,12 @@ export default function LogistCreateOrderModal({
 
       const responseData = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(responseData.detail || "Ошибка при создании заказа");
+        throw new Error(
+          formatFastApiDetail(
+            responseData?.detail,
+            "Ошибка при создании заказа",
+          ),
+        );
       }
 
       toast.success("Заказ создан");

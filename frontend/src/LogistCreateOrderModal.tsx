@@ -22,6 +22,11 @@ interface DeliveryCalculationResult {
   estimated_total_amount: number;
 }
 
+const calculateMaterialCost = (material: any, deliveryOption: any) =>
+  Math.round(
+    Number(material?.price ?? 0) * Number(deliveryOption?.capacity_m3 ?? 0),
+  );
+
 const formatFastApiDetail = (detail: any, fallback: string) => {
   if (Array.isArray(detail)) {
     const messages = detail
@@ -122,6 +127,16 @@ export default function LogistCreateOrderModal({
     }
   }, [isOpen]);
 
+  const selectedMaterial =
+    materials.find((item) => item.id === newOrder.material_id) || null;
+  const selectedDeliveryOption =
+    deliveryOptions.find((item) => item.id === newOrder.delivery_option_id) ||
+    null;
+  const computedMaterialCost = calculateMaterialCost(
+    selectedMaterial,
+    selectedDeliveryOption,
+  );
+
   useEffect(() => {
     const shouldCalculate =
       !!newOrder.material_id &&
@@ -169,7 +184,9 @@ export default function LogistCreateOrderModal({
         }
 
         if (!cancelled) {
-          const materialCost = Number(data.material_cost ?? data.total_amount ?? 0);
+          const materialCost =
+            computedMaterialCost ||
+            Number(data.material_cost ?? data.total_amount ?? 0);
           const deliveryCost = Number(data.delivery_cost ?? 0);
           setCalculationResult({
             quarry_id: data.quarry_id,
@@ -177,9 +194,7 @@ export default function LogistCreateOrderModal({
             mileage_km: Number(data.mileage_km ?? data.distance ?? 0),
             material_cost: materialCost,
             delivery_cost: deliveryCost,
-            estimated_total_amount: Number(
-              data.estimated_total_amount ?? materialCost + deliveryCost,
-            ),
+            estimated_total_amount: materialCost + deliveryCost,
           });
         }
       } catch (error: any) {
@@ -210,6 +225,9 @@ export default function LogistCreateOrderModal({
     newOrder.delivery_lat,
     newOrder.delivery_lon,
     token,
+    computedMaterialCost,
+    materials,
+    deliveryOptions,
   ]);
 
   const formatPhoneNumber = (value: string) => {
@@ -380,6 +398,12 @@ export default function LogistCreateOrderModal({
         minimumFractionDigits: 0,
         maximumFractionDigits: 2,
       })} км`
+    : null;
+  const materialPriceLabel = selectedMaterial
+    ? `${Number(selectedMaterial.price ?? 0).toLocaleString("ru-RU")} ₽`
+    : null;
+  const capacityLabel = selectedDeliveryOption
+    ? `${Number(selectedDeliveryOption.capacity_m3 ?? 0).toLocaleString("ru-RU")} м3`
     : null;
 
   return (
@@ -559,10 +583,17 @@ export default function LogistCreateOrderModal({
                   </span>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <span className="text-slate-500">Стоимость материала:</span>
-                  <span className="font-medium text-slate-900">
-                    {Number(calculationResult.material_cost).toLocaleString("ru-RU")} ₽
-                  </span>
+                  <span className="text-slate-500">{"Стоимость материала:"}</span>
+                  <div className="text-right">
+                    <span className="font-medium text-slate-900 block">
+                      {Number(calculationResult.material_cost).toLocaleString("ru-RU")} {"\u20BD"}
+                    </span>
+                    {materialPriceLabel && capacityLabel && (
+                      <span className="text-xs text-slate-400 block mt-0.5">
+                        {materialPriceLabel} x {capacityLabel}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="flex justify-between gap-4">
                   <span className="text-slate-500">Стоимость доставки:</span>

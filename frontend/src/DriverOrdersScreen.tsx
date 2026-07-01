@@ -955,6 +955,7 @@ const DriverOrderCard: React.FC<{
   const deliveryCost = getDeliveryCost(order);
   const estimatedTotalAmount = getEstimatedTotalAmount(order);
   const clientPhone = order.client_phone || order.client?.phone;
+  const quarryName = order.pickup_address || "\u041a\u0430\u0440\u044c\u0435\u0440 \u0443\u0442\u043e\u0447\u043d\u044f\u0435\u0442\u0441\u044f";
 
   const open2GIS = (type: "quarry" | "client") => {
     if (type === "client" && order?.delivery_address) {
@@ -1153,6 +1154,20 @@ const DriverOrderCard: React.FC<{
             </p>
             <p className="text-base font-bold text-slate-900 leading-snug">
               {order.address}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 bg-emerald-500/10 p-2.5 rounded-full text-emerald-600 shrink-0">
+            <Navigation className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-1">
+              {"\u041a\u0430\u0440\u044c\u0435\u0440"}
+            </p>
+            <p className="text-base font-bold text-slate-900 leading-snug">
+              {quarryName}
             </p>
           </div>
         </div>

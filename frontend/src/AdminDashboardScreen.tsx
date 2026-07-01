@@ -1853,9 +1853,7 @@ export default function AdminDashboardScreen({
                                 </td>
                                 <td className="px-6 py-4">
                                   <span className="text-gray-700 capitalize">
-                                    {car.driver?.status ||
-                                      car.status ||
-                                      "Нет статуса"}
+                                    {car.driver?.status || "Нет статуса"}
                                   </span>
                                 </td>
                                 <td className="px-6 py-4 text-right">
@@ -1951,9 +1949,7 @@ export default function AdminDashboardScreen({
                               </div>
                               <div>
                                 <span className="text-gray-700 capitalize">
-                                  {car.driver?.status ||
-                                    car.status ||
-                                    "Нет статуса"}
+                                  {car.driver?.status || "Нет статуса"}
                                 </span>
                               </div>
                             </div>

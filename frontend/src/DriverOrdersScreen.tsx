@@ -880,8 +880,6 @@ const DriverOrderCard: React.FC<{
     const lat = type === "quarry" ? order?.pickup_lat : order?.delivery_lat;
     const lon = type === "quarry" ? order?.pickup_lon : order?.delivery_lon;
 
-    console.log("2GIS Routing Data:", { type, lat, lon, order });
-
     if (!lat || !lon) {
       const address =
         type === "quarry" ? order?.pickup_address : order?.delivery_address;
@@ -892,7 +890,7 @@ const DriverOrderCard: React.FC<{
         );
         return;
       }
-      toast.error("Координаты и адрес отсутствуют");
+      alert("Координаты и адрес отсутствуют");
       return;
     }
     window.open(

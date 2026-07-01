@@ -453,7 +453,7 @@ async def _resolve_logist_order_quarry(
 
 async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate) -> Order:
     client = await get_or_create_client_by_phone(
-        session, name=payload.client_name, phone=payload.client_phone
+        session, name=payload.client_name or payload.client_phone, phone=payload.client_phone
     )
     material, delivery_option = await validate_material_and_delivery_option(
         session,
@@ -472,21 +472,52 @@ async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate)
     resolved_pickup_address = payload.pickup_address
     resolved_pickup_lat = payload.pickup_lat
     resolved_pickup_lon = payload.pickup_lon
-    resolved_quarry_id: UUID | None = None
+    resolved_delivery_lat = payload.delivery_lat
+    resolved_delivery_lon = payload.delivery_lon
+    resolved_quarry_id = payload.quarry_id
+    resolved_mileage_km = round(payload.mileage_km, 2) if payload.mileage_km is not None else None
+    resolved_delivery_cost: float
 
-    if resolved_pickup_lat is None or resolved_pickup_lon is None:
-        selected_quarry = await _resolve_logist_order_quarry(
+    if payload.calculation_source == "manual":
+        if resolved_pickup_lat is None or resolved_pickup_lon is None:
+            selected_quarry = await _resolve_logist_order_quarry(
+                session,
+                material_id=payload.material_id,
+                pickup_address=payload.pickup_address,
+            )
+            if selected_quarry is not None:
+                resolved_pickup_address = selected_quarry.address
+                resolved_pickup_lat = selected_quarry.lat
+                resolved_pickup_lon = selected_quarry.lon
+                resolved_quarry_id = selected_quarry.id
+
+        resolved_delivery_cost = round((resolved_mileage_km or 0) * delivery_rate_per_km, 2)
+        if resolved_delivery_cost < MIN_DELIVERY_COST:
+            resolved_delivery_cost = MIN_DELIVERY_COST
+    else:
+        if resolved_delivery_lat is None or resolved_delivery_lon is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="delivery coordinates are required for auto calculation",
+            )
+
+        pricing = await calculate_client_order_pricing(
             session,
             material_id=payload.material_id,
-            pickup_address=payload.pickup_address,
+            delivery_option_id=payload.delivery_option_id,
+            delivery_lat=resolved_delivery_lat,
+            delivery_lon=resolved_delivery_lon,
+            quantity=payload.quantity,
+            quarry_id=resolved_quarry_id,
         )
-        if selected_quarry is not None:
-            resolved_pickup_address = selected_quarry.address
-            resolved_pickup_lat = selected_quarry.lat
-            resolved_pickup_lon = selected_quarry.lon
-            resolved_quarry_id = selected_quarry.id
+        selected_quarry = pricing.quarry
+        resolved_pickup_address = selected_quarry.address or selected_quarry.name
+        resolved_pickup_lat = selected_quarry.lat
+        resolved_pickup_lon = selected_quarry.lon
+        resolved_quarry_id = selected_quarry.id
+        resolved_mileage_km = pricing.mileage_km
+        resolved_delivery_cost = pricing.delivery_cost
 
-    delivery_cost = round(payload.mileage_km * delivery_rate_per_km, 2)
     order = await build_order(
         session,
         client=client,
@@ -503,11 +534,11 @@ async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate)
         pickup_lon=resolved_pickup_lon,
         quarry_id=resolved_quarry_id,
         delivery_address=payload.delivery_address,
-        delivery_lat=payload.delivery_lat,
-        delivery_lon=payload.delivery_lon,
-        mileage_km=payload.mileage_km,
+        delivery_lat=resolved_delivery_lat,
+        delivery_lon=resolved_delivery_lon,
+        mileage_km=resolved_mileage_km,
         delivery_rate_per_km_snapshot=delivery_rate_per_km,
-        delivery_cost=delivery_cost,
+        delivery_cost=resolved_delivery_cost,
         calculation_source=payload.calculation_source,
         route_calculated_at=route_calculated_at,
     )

@@ -148,12 +148,13 @@ class ClientOrderCalculationOut(BaseModel):
 
 
 class LogistOrderCreate(BaseModel):
-    client_name: str = Field(min_length=1, max_length=255)
+    client_name: str | None = Field(default=None, max_length=255)
     client_phone: str = Field(min_length=11, max_length=20)
     material_id: UUID
     delivery_option_id: UUID
     quantity: int = Field(default=1, ge=1)
-    pickup_address: str = Field(min_length=1, max_length=500)
+    quarry_id: UUID | None = Field(default=None, validation_alias=AliasChoices("quarry_id", "quarryId"))
+    pickup_address: str | None = Field(default=None, min_length=1, max_length=500)
     pickup_lat: float | None = None
     pickup_lon: float | None = None
     delivery_address: str = Field(
@@ -163,8 +164,12 @@ class LogistOrderCreate(BaseModel):
     )
     delivery_lat: float | None = None
     delivery_lon: float | None = None
-    mileage_km: float = Field(gt=0)
-    calculation_source: CalculationSource
+    mileage_km: float | None = Field(default=None, gt=0)
+    estimated_total_amount: float | None = Field(
+        default=None,
+        validation_alias=AliasChoices("estimated_total_amount", "estimatedTotalAmount"),
+    )
+    calculation_source: CalculationSource = "yandex_auto"
     notes: str | None = Field(default=None, max_length=2000)
     source: str | None = "dispatcher"
     auto_dispatch: bool = True
@@ -199,6 +204,7 @@ class LogistOrderCreate(BaseModel):
         "delivery_lat",
         "delivery_lon",
         "mileage_km",
+        "estimated_total_amount",
         mode="before",
     )
     @classmethod
@@ -231,25 +237,42 @@ class LogistOrderCreate(BaseModel):
 
     @field_validator("mileage_km")
     @classmethod
-    def round_mileage(cls, value: float):
+    def round_mileage(cls, value: float | None):
+        if value is None:
+            return value
+        return round(value, 2)
+
+    @field_validator("estimated_total_amount")
+    @classmethod
+    def round_estimated_total_amount(cls, value: float | None):
+        if value is None:
+            return value
+        if value <= 0:
+            raise ValueError("estimated_total_amount must be greater than 0")
         return round(value, 2)
 
     @model_validator(mode="after")
     def validate_route_requirements(self):
+        if (self.pickup_lat is None) != (self.pickup_lon is None):
+            raise ValueError("pickup_lat and pickup_lon must be provided together")
+        if (self.delivery_lat is None) != (self.delivery_lon is None):
+            raise ValueError("delivery_lat and delivery_lon must be provided together")
+
         if self.calculation_source == "yandex_auto":
-            required_coords = (
-                self.pickup_lat,
-                self.pickup_lon,
-                self.delivery_lat,
-                self.delivery_lon,
-            )
-            if any(coord is None for coord in required_coords):
+            if self.quarry_id is None:
+                raise ValueError("quarry_id is required for yandex_auto calculation_source")
+            if self.delivery_lat is None or self.delivery_lon is None:
                 raise ValueError(
-                    "For yandex_auto calculation_source, pickup and delivery coordinates are required"
+                    "delivery coordinates are required for yandex_auto calculation_source"
                 )
 
-        if self.calculation_source == "manual" and self.mileage_km <= 0:
-            raise ValueError("For manual calculation_source, mileage_km must be greater than 0")
+        if self.calculation_source == "manual":
+            if not self.pickup_address:
+                raise ValueError("pickup_address is required for manual calculation_source")
+            if self.mileage_km is None or self.mileage_km <= 0:
+                raise ValueError(
+                    "For manual calculation_source, mileage_km must be greater than 0"
+                )
 
         return self
 

@@ -143,8 +143,14 @@ class ClientOrderCalculationOut(BaseModel):
     quarry_id: UUID
     quarry_name: str
     mileage_km: float
+    material_cost: float
     delivery_cost: float
     total_amount: float
+
+    @computed_field(return_type=float)
+    @property
+    def estimated_total_amount(self) -> float:
+        return round((self.total_amount or 0.0) + (self.delivery_cost or 0.0), 2)
 
     @computed_field(return_type=float)
     @property

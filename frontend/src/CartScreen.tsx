@@ -147,9 +147,6 @@ export default function CartScreen({
             quantity: item.quantity,
             quarry_id: calcResults[item.id]?.quarry_id,
             mileage_km: calcResults[item.id]?.mileage_km,
-            total_amount: calcResults[item.id]?.total_amount
-              ? calcResults[item.id].total_amount * item.quantity
-              : undefined,
           }),
         }),
       );
@@ -192,7 +189,8 @@ export default function CartScreen({
       ? cartItems.reduce((acc, item) => {
           const res = calcResults[item.id];
           if (!res || res.error) return acc;
-          const safeMaterialPrice = Number(res.total_amount) || 0;
+          const safeMaterialPrice =
+            Number(res.material_cost ?? res.total_amount) || 0;
           const safeDeliveryPrice = Number(res.delivery_cost) || 0;
           const safeEstimated =
             Number(res.estimated_total_amount) ||
@@ -362,7 +360,8 @@ export default function CartScreen({
                     if (!res || res.error) return null;
 
                     const distanceKm = res.distance_km || res.mileage_km;
-                    const safeMaterialPrice = Number(res.total_amount) || 0;
+                    const safeMaterialPrice =
+                      Number(res.material_cost ?? res.total_amount) || 0;
                     const safeDeliveryPrice = Number(res.delivery_cost) || 0;
                     const safeEstimated =
                       Number(res.estimated_total_amount) ||

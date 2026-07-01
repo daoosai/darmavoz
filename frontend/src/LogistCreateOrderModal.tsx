@@ -17,8 +17,9 @@ interface DeliveryCalculationResult {
   quarry_id: string;
   quarry_name: string;
   mileage_km: number;
+  material_cost: number;
   delivery_cost: number;
-  total_amount: number;
+  estimated_total_amount: number;
 }
 
 const formatFastApiDetail = (detail: any, fallback: string) => {
@@ -168,12 +169,17 @@ export default function LogistCreateOrderModal({
         }
 
         if (!cancelled) {
+          const materialCost = Number(data.material_cost ?? data.total_amount ?? 0);
+          const deliveryCost = Number(data.delivery_cost ?? 0);
           setCalculationResult({
             quarry_id: data.quarry_id,
             quarry_name: data.quarry_name,
             mileage_km: Number(data.mileage_km ?? data.distance ?? 0),
-            delivery_cost: Number(data.delivery_cost ?? 0),
-            total_amount: Number(data.total_amount ?? 0),
+            material_cost: materialCost,
+            delivery_cost: deliveryCost,
+            estimated_total_amount: Number(
+              data.estimated_total_amount ?? materialCost + deliveryCost,
+            ),
           });
         }
       } catch (error: any) {
@@ -322,7 +328,7 @@ export default function LogistCreateOrderModal({
         delivery_lat: newOrder.delivery_lat,
         delivery_lon: newOrder.delivery_lon,
         mileage_km: calculationResult.mileage_km,
-        estimated_total_amount: calculationResult.total_amount,
+        estimated_total_amount: calculationResult.estimated_total_amount,
         calculation_source: "yandex_auto",
         notes: newOrder.notes,
         quantity: 1,
@@ -553,6 +559,12 @@ export default function LogistCreateOrderModal({
                   </span>
                 </div>
                 <div className="flex justify-between gap-4">
+                  <span className="text-slate-500">Стоимость материала:</span>
+                  <span className="font-medium text-slate-900">
+                    {Number(calculationResult.material_cost).toLocaleString("ru-RU")} ₽
+                  </span>
+                </div>
+                <div className="flex justify-between gap-4">
                   <span className="text-slate-500">Стоимость доставки:</span>
                   <span className="font-medium text-slate-900">
                     {Number(calculationResult.delivery_cost).toLocaleString("ru-RU")} ₽
@@ -561,7 +573,7 @@ export default function LogistCreateOrderModal({
                 <div className="pt-3 border-t border-slate-200 flex justify-between gap-4 text-base">
                   <span className="font-bold text-slate-900">Итого к оплате:</span>
                   <span className="font-bold text-slate-900">
-                    {Number(calculationResult.total_amount).toLocaleString("ru-RU")} ₽
+                    {Number(calculationResult.estimated_total_amount).toLocaleString("ru-RU")} ₽
                   </span>
                 </div>
               </>

@@ -33,8 +33,9 @@ async def calculate_order(
         quarry_id=pricing.quarry.id,
         quarry_name=pricing.quarry.name,
         mileage_km=pricing.mileage_km,
+        material_cost=pricing.material_cost,
         delivery_cost=pricing.delivery_cost,
-        total_amount=pricing.total_amount,
+        total_amount=pricing.material_cost,
     )
 
 

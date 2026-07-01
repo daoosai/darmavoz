@@ -10,7 +10,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      RELEASE_VERSION: "2.4.0"
+      RELEASE_VERSION: "2.4.1"
 
     steps:
       - name: Checkout

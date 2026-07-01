@@ -2,7 +2,7 @@ import { MaterialProps, DeliveryOption } from "./MaterialDetailScreen";
 
 export const baseURL = "https://darmavoz.ru/api/v1";
 
-export const APP_VERSION = import.meta.env.VITE_APP_VERSION || "2.4.0";
+export const APP_VERSION = import.meta.env.VITE_APP_VERSION || "2.4.1";
 
 export const playNewOrderSound = () => {
   try {

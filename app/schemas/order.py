@@ -366,6 +366,8 @@ class OrderOut(BaseModel):
 
 class DriverOrderOut(OrderOut):
     client_phone: str | None = None
+    client_name: str | None = None
+    quarry_name: str | None = None
 
 
 DriverOrderStatusValue = Literal[

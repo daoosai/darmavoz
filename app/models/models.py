@@ -421,6 +421,14 @@ class Order(Base):
     def client_phone(self) -> str | None:
         return self.client.phone if self.client is not None else None
 
+    @property
+    def client_name(self) -> str | None:
+        return self.client.name if self.client is not None else None
+
+    @property
+    def quarry_name(self) -> str | None:
+        return self.quarry.name if self.quarry is not None else None
+
 
 class OrderItem(Base):
     __tablename__ = "order_items"

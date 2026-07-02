@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 
-interface DriverOrder {
+export interface DriverOrder {
   id: string;
   address: string;
   items?: { material: { name: string } }[];
@@ -40,13 +40,16 @@ interface DriverOrder {
   material_name?: string;
   capacity_m3?: number;
   client_phone?: string;
-  client?: { phone?: string; name?: string };
+  client?: { phone?: string; name?: string; full_name?: string };
   pickup_address?: string;
   pickup_lat?: number;
   pickup_lon?: number;
   delivery_address?: string;
   delivery_lat?: number;
   delivery_lon?: number;
+  client_name?: string;
+  quarry_name?: string;
+  quarry?: { name: string };
 }
 
 const getDeliveryCost = (order: Pick<DriverOrder, "delivery_cost">) =>
@@ -74,16 +77,13 @@ export default function DriverOrdersScreen({
   const [status, setStatus] = useState<DriverStatus>("offline");
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [activeTab, setActiveTab] = useState<"orders" | "profile">("orders");
-  const [ordersTab, setOrdersTab] = useState<"current" | "history">("current");
 
   const [orders, setOrders] = useState<DriverOrder[]>([]);
-  const [historyOrders, setHistoryOrders] = useState<DriverOrder[]>([]);
 
   const [currentOffer, setCurrentOffer] = useState<any>(null);
   const [timeLeft, setTimeLeft] = useState(0);
 
   const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [moderationStatus, setModerationStatus] = useState<string | null>(null);
   const [isDriverActive, setIsDriverActive] = useState(true);
 
@@ -267,6 +267,8 @@ export default function DriverOrdersScreen({
                   delivery_lat: detail.delivery_lat,
                   delivery_lon: detail.delivery_lon,
                   delivery_address: detail.delivery_address,
+                  client_name: detail.client_name,
+                  quarry_name: detail.quarry_name,
                 };
                 setOrders([currentOrder]);
                 return;
@@ -445,90 +447,10 @@ export default function DriverOrdersScreen({
     }
   };
 
-  const fetchHistory = React.useCallback(async () => {
-    try {
-      setIsLoadingHistory(true);
-      const currentToken = useAuthStore.getState().token;
-      const res = await fetch(`${baseURL}/driver/orders`, {
-        headers: { Authorization: `Bearer ${currentToken}` },
-      });
-      if (res.ok) {
-        const data = await res.json().catch(() => ({}));
-        const loadedOrders = Array.isArray(data) ? data : data.orders || [];
-        setHistoryOrders(
-          loadedOrders.filter(
-            (o: any) => o.status === "completed" || o.status === "cancelled",
-          ),
-        );
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsLoadingHistory(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (ordersTab === "history" && moderationStatus === "approved") {
-      fetchHistory();
-    }
-  }, [ordersTab, moderationStatus, fetchHistory]);
-
-  const handleStatusChange = async (newStatus: DriverStatus) => {
-    if (newStatus === status) return;
-    if (!isDriverActive) {
-      toast.error("Ваш профиль не активен, обратитесь к администратору");
-      return;
-    }
-
-    try {
-      setIsUpdatingStatus(true);
-      const currentToken = useAuthStore.getState().token;
-      const res = await fetch(`${baseURL}/driver/profile/status`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${currentToken}`,
-        },
-        body: JSON.stringify({ status: newStatus }),
-      });
-
-      if (res.status === 401) {
-        useAuthStore.getState().logout();
-        onLogout();
-        return;
-      }
-      if (res.status === 403) {
-        toast.error("Недостаточно прав (403)");
-        return;
-      }
-
-      if (!res.ok) {
-        throw new Error("Не удалось обновить статус");
-      }
-
-      setStatus(newStatus);
-      toast.success(`Статус изменен`);
-    } catch (error) {
-      console.error("Error updating status:", error);
-      // Mock success if api not really there
-      setStatus(newStatus);
-      toast.success(`[Mock] Статус изменен`);
-    } finally {
-      setIsUpdatingStatus(false);
-    }
-  };
-
   const handleLogout = () => {
     logout();
     onLogout();
   };
-
-  const statuses: { id: DriverStatus; label: string; dot: string }[] = [
-    { id: "available", label: "Свободен", dot: "bg-emerald-500" },
-    { id: "busy", label: "Занят", dot: "bg-amber-500" },
-    { id: "offline", label: "Недоступен", dot: "bg-slate-400" },
-  ];
 
   const offerOrder = currentOffer?.order || currentOffer;
   const materialName =
@@ -568,61 +490,13 @@ export default function DriverOrdersScreen({
           </button>
         </div>
 
-        {/* Status Toggle */}
-        {moderationStatus === "approved" && isDriverActive && (
-          <div className="bg-slate-100/80 p-1 rounded-xl flex items-center relative gap-1 mb-3">
-            {statuses.map((s) => {
-              const isActive = status === s.id;
-              const hasActiveOrder = orders.length > 0;
-              return (
-                <button
-                  key={s.id}
-                  disabled={isUpdatingStatus || hasActiveOrder}
-                  onClick={() => handleStatusChange(s.id)}
-                  className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all duration-200 flex justify-center items-center gap-1.5 min-h-[40px]
-                    ${
-                      isActive
-                        ? "bg-white shadow-sm text-slate-900 scale-100"
-                        : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50 scale-95"
-                    } 
-                    ${isUpdatingStatus || hasActiveOrder ? "opacity-50 cursor-not-allowed" : ""}`}
-                >
-                  <span
-                    className={`w-2 h-2 rounded-full ${s.dot} ${
-                      isActive ? "animate-pulse" : ""
-                    }`}
-                  />
-                  {s.label}
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Orders Sub-tabs */}
-        {moderationStatus === "approved" && activeTab === "orders" && (
-          <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
-            <button
-              onClick={() => setOrdersTab("current")}
-              className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors ${ordersTab === "current" ? "bg-white shadow-sm text-slate-800" : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"}`}
-            >
-              Текущие
-            </button>
-            <button
-              onClick={() => setOrdersTab("history")}
-              className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors ${ordersTab === "history" ? "bg-white shadow-sm text-slate-800" : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"}`}
-            >
-              История
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Navigation Tabs Content */}
       {activeTab === "orders" ? (
         <div className="flex-1 overflow-visible p-5 h-auto">
           <h2 className="text-lg font-bold text-slate-800 mb-4">
-            {ordersTab === "current" ? "Активные заказы" : "История поездок"}
+            Активные заказы
           </h2>
 
           {isProfileLoading ? (
@@ -675,47 +549,6 @@ export default function DriverOrdersScreen({
                 Перейти в Профиль
               </button>
             </div>
-          ) : ordersTab === "history" ? (
-            isLoadingHistory ? (
-              <div className="flex flex-col items-center justify-center p-10 text-slate-400">
-                <Loader2 className="w-8 h-8 animate-spin mb-3 text-[#2DB0E6]" />
-                <p className="text-sm font-medium">Загрузка истории...</p>
-              </div>
-            ) : historyOrders.length > 0 ? (
-              <PullToRefresh
-                onRefresh={fetchHistory}
-                pullingContent={""}
-                maxPullDownDistance={80}
-              >
-                <div className="flex flex-col gap-4 min-h-[50vh]">
-                  {historyOrders.map((order) => (
-                    <DriverOrderCard
-                      key={order.id}
-                      order={order}
-                      isHistory={true}
-                    />
-                  ))}
-                </div>
-              </PullToRefresh>
-            ) : (
-              <PullToRefresh
-                onRefresh={fetchHistory}
-                pullingContent={""}
-                maxPullDownDistance={80}
-              >
-                <div className="flex flex-col items-center justify-center p-10 text-slate-400 text-center mt-10 min-h-[50vh]">
-                  <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-4">
-                    <ClipboardList className="w-10 h-10 text-slate-300" />
-                  </div>
-                  <p className="text-base font-semibold text-slate-600 mb-1">
-                    История пуста
-                  </p>
-                  <p className="text-sm">
-                    Здесь будут отображаться ваши выполненные заказы.
-                  </p>
-                </div>
-              </PullToRefresh>
-            )
           ) : isLoading ? (
             <div className="flex flex-col items-center justify-center p-10 text-slate-400">
               <Loader2 className="w-8 h-8 animate-spin mb-3 text-[#2DB0E6]" />
@@ -764,6 +597,7 @@ export default function DriverOrdersScreen({
         <DriverProfileScreen
           onLogout={handleLogout}
           onProfileUpdate={fetchProfile}
+          hasActiveOrder={orders.length > 0}
         />
       )}
 
@@ -936,7 +770,7 @@ const CANCEL_REASONS = [
   "Другое",
 ];
 
-const DriverOrderCard: React.FC<{
+export const DriverOrderCard: React.FC<{
   order: DriverOrder;
   onRefresh?: () => void;
   isHistory?: boolean;
@@ -954,28 +788,63 @@ const DriverOrderCard: React.FC<{
     order.capacity_m3 || order.delivery_option?.capacity_m3 || "?";
   const deliveryCost = getDeliveryCost(order);
   const estimatedTotalAmount = getEstimatedTotalAmount(order);
+  const materialCost = estimatedTotalAmount - deliveryCost;
   const clientPhone = order.client_phone || order.client?.phone;
-  const quarryName = order.pickup_address || "\u041a\u0430\u0440\u044c\u0435\u0440 \u0443\u0442\u043e\u0447\u043d\u044f\u0435\u0442\u0441\u044f";
+  const clientName = order.client_name || order.client?.name || order.client?.full_name || "Имя не указано";
+  const quarryName = order.quarry_name || order.quarry?.name || (order.pickup_address && !order.pickup_address.includes('57.') ? order.pickup_address : 'Точка погрузки');
 
-  const open2GIS = (type: "quarry" | "client") => {
-    if (type === "client" && order?.delivery_address) {
-      window.open(
-        `https://2gis.ru/routeSearch/rsType/car/to/${encodeURIComponent(order.delivery_address)}`,
-        "_blank",
+  const updateStatus = async (step: string) => {
+    if (!onRefresh) return;
+
+    try {
+      setIsUpdating(true);
+      const token = useAuthStore.getState().token;
+      const res = await fetch(
+        `${baseURL}/driver/orders/${order.id}/status`,
+        {
+          method: "PATCH",
+          headers: { 
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}` 
+          },
+          body: JSON.stringify({ status: step }),
+        },
       );
-      return;
+      if (res.status === 401) {
+        useAuthStore.getState().logout();
+        return;
+      }
+      if (res.status === 403) {
+        toast.error("Недостаточно прав (403)");
+        return;
+      }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(
+          extractApiErrorMessage(err, "Не удалось обновить статус"),
+        );
+      }
+      toast.success(step === "completed" ? "Заказ успешно завершен! Вы снова свободны." : "Статус обновлен");
+      onRefresh();
+    } catch (e: any) {
+      toast.error(handleApiError(e, "Ошибка при обновлении статуса"));
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const openNavigator = async () => {
+    const lat = order.status === 'heading_to_client' ? order.delivery_lat : order.pickup_lat;
+    const lon = order.status === 'heading_to_client' ? order.delivery_lon : order.pickup_lon;
+
+    if (order.status === 'driver_assigned' || order.status === 'accepted') {
+        await updateStatus('heading_to_quarry');
     }
 
-    const lat = type === "quarry" ? order?.pickup_lat : order?.delivery_lat;
-    const lon = type === "quarry" ? order?.pickup_lon : order?.delivery_lon;
-
     if (lat && lon) {
-      window.open(
-        `https://2gis.ru/routeSearch/rsType/car/to/${lon},${lat}`,
-        "_blank",
-      );
+      window.location.href = `geo:${lat},${lon}?q=${lat},${lon}`;
     } else {
-      toast.error("Координаты и адрес отсутствуют");
+      toast.error("Координаты отсутствуют");
     }
   };
 
@@ -1081,51 +950,11 @@ const DriverOrderCard: React.FC<{
     }
   };
 
-  const updateStatus = async (step: string) => {
-    if (!onRefresh) return;
-
-    try {
-      setIsUpdating(true);
-      const token = useAuthStore.getState().token;
-      const res = await fetch(
-        `${baseURL}/driver/orders/${order.id}/status`,
-        {
-          method: "PATCH",
-          headers: { 
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}` 
-          },
-          body: JSON.stringify({ status: step }),
-        },
-      );
-      if (res.status === 401) {
-        useAuthStore.getState().logout();
-        return;
-      }
-      if (res.status === 403) {
-        toast.error("Недостаточно прав (403)");
-        return;
-      }
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(
-          extractApiErrorMessage(err, "Не удалось обновить статус"),
-        );
-      }
-      toast.success(step === "completed" ? "Заказ успешно завершен! Вы снова свободны." : "Статус обновлен");
-      onRefresh();
-    } catch (e: any) {
-      toast.error(handleApiError(e, "Ошибка при обновлении статуса"));
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
   return (
     <>
-      <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex flex-col gap-4 text-left h-auto overflow-visible pb-5">
+      <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex flex-col h-auto overflow-visible mb-6">
         {/* Header: Status and Date */}
-        <div className="flex justify-between items-start gap-2">
+        <div className="flex justify-between items-start mb-4">
           <span
             className={`text-[11px] font-bold px-2.5 py-1 rounded-lg uppercase tracking-wide ${
               orderStatusColors[order.status] ||
@@ -1143,125 +972,83 @@ const DriverOrderCard: React.FC<{
           </div>
         </div>
 
-        {/* Address */}
-        <div className="flex items-start gap-3">
-          <div className="mt-0.5 bg-[#2DB0E6]/10 p-2.5 rounded-full text-[#2DB0E6] shrink-0">
-            <MapPin className="w-5 h-5" />
-          </div>
-          <div>
-            <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-1">
-              Адрес доставки
-            </p>
-            <p className="text-base font-bold text-slate-900 leading-snug">
-              {order.address}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-start gap-3">
-          <div className="mt-0.5 bg-emerald-500/10 p-2.5 rounded-full text-emerald-600 shrink-0">
-            <Navigation className="w-5 h-5" />
-          </div>
-          <div>
-            <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-1">
-              {"\u041a\u0430\u0440\u044c\u0435\u0440"}
-            </p>
-            <p className="text-base font-bold text-slate-900 leading-snug">
-              {quarryName}
-            </p>
-          </div>
-        </div>
-
-        {/* Details Grid */}
-        <div className="grid grid-cols-2 gap-px bg-slate-100 overflow-visible rounded-xl border border-slate-100">
-          <div className="flex flex-col gap-1 bg-slate-50 p-3">
-            <p className="text-[11px] text-slate-500 uppercase tracking-wide font-bold">
-              Материал
-            </p>
-            <p className="text-sm font-semibold text-slate-800">
-              {materialName}
-            </p>
-          </div>
-          <div className="flex flex-col gap-1 bg-slate-50 p-3">
-            <p className="text-[11px] text-slate-500 uppercase tracking-wide font-bold">
-              Объем
-            </p>
-            <p className="text-sm font-semibold text-slate-800">
-              {capacity} м³
-            </p>
-          </div>
-          <div className="flex items-center justify-between bg-slate-50 p-3 col-span-2">
-            <p className="text-[11px] text-slate-500 uppercase tracking-wide font-bold">
-              Сумма заказа
-            </p>
-            <div className="flex flex-col items-end gap-1 text-right">
-              <p className="text-[#2DB0E6] font-black text-lg">
-                {formatCurrency(order.total_amount)}
+        {/* Addresses */}
+        <div className="flex flex-col gap-3">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 bg-emerald-500/10 p-2 rounded-full text-emerald-600 shrink-0">
+              <Navigation className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">
+                Откуда (Карьер)
               </p>
-              <p className="text-xs font-semibold text-slate-500">
-                Доставка: {formatCurrency(deliveryCost)}
+              <div className="font-semibold text-gray-900">
+                {quarryName}
+              </div>
+            </div>
+          </div>
+          
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 bg-[#2DB0E6]/10 p-2 rounded-full text-[#2DB0E6] shrink-0">
+              <MapPin className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">
+                Куда (Клиент)
               </p>
-              <p className="text-sm font-bold text-emerald-600">
-                Итого: {formatCurrency(estimatedTotalAmount)}
+              <p className="text-sm font-bold text-slate-900 leading-snug">
+                {order.delivery_address || order.address}
               </p>
             </div>
           </div>
         </div>
 
-        {/* 2GIS Button */}
-        {onRefresh &&
-          (order.status === "driver_assigned" ||
-            order.status === "accepted" ||
-            order.status === "in_progress" ||
-            order.status === "heading_to_quarry" ||
-            order.status === "heading_to_client") && (
-            <button
-              onClick={() =>
-                open2GIS(
-                  order.status === "heading_to_client" ? "client" : "quarry",
-                )
-              }
-              className="w-full h-14 bg-[#19AA1E] active:bg-[#158f19] text-white text-lg font-bold rounded-2xl shadow-sm transition-transform active:scale-[0.98] flex items-center justify-center gap-2 mt-4"
-            >
-              🗺 Открыть в 2ГИС
-            </button>
+        {/* Material & Volume */}
+        <div className="grid grid-cols-2 gap-4 bg-gray-50 p-3 rounded-xl mt-4">
+          <div className="flex flex-col">
+            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">Материал</span>
+            <span className="text-sm font-bold text-slate-800">{materialName}</span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">Объем</span>
+            <span className="text-sm font-bold text-slate-800">{capacity} м³</span>
+          </div>
+        </div>
+
+        {/* Client Info */}
+        <div className="flex justify-between items-center bg-gray-50 p-3 rounded-xl mt-2">
+          <div className="flex flex-col">
+            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">Клиент</span>
+            <div className="font-semibold text-gray-900">{clientName}</div>
+          </div>
+          {clientPhone && (
+            <a href={`tel:${clientPhone}`} className="text-sm font-bold text-[#2DB0E6] flex items-center gap-1.5">
+              <Phone className="w-4 h-4" />
+              {clientPhone}
+            </a>
           )}
+        </div>
 
         {/* Notes */}
         {order.notes && order.notes.trim() !== "" && (
-          <div className="flex items-start gap-2.5 bg-amber-50 p-3.5 rounded-xl border border-amber-100 shadow-sm mt-1">
-            <MessageSquare className="w-5 h-5 shrink-0 text-amber-500 fill-amber-100 mt-0.5" />
-            <div>
-              <p className="text-[11px] font-bold text-amber-600 uppercase tracking-wider mb-0.5">
-                Комментарий клиента
-              </p>
-              <p className="text-sm font-medium text-amber-900 leading-snug">
-                {order.notes}
-              </p>
-            </div>
+          <div className="bg-yellow-50 text-yellow-800 p-3 rounded-xl mt-2 text-sm font-medium">
+             <span className="font-bold uppercase tracking-wider text-[10px] block mb-1">Комментарий:</span>
+             {order.notes}
           </div>
         )}
 
-        {/* Client Phone for Driver */}
-        {clientPhone && (
-          <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-xl border border-slate-100 mt-1">
-            <div className="flex flex-col">
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">
-                Телефон клиента
-              </span>
-              <span className="text-base font-bold text-slate-800">
-                {clientPhone}
-              </span>
-            </div>
-            <a
-              href={`tel:${clientPhone}`}
-              className="flex items-center justify-center gap-2 bg-[#2DB0E6]/10 text-[#2DB0E6] hover:bg-[#2DB0E6]/20 py-2.5 px-4 rounded-xl transition-colors font-bold text-sm active:scale-95"
-            >
-              <Phone className="w-4 h-4 shrink-0" />
-              Позвонить
-            </a>
-          </div>
-        )}
+        {/* Total Amount */}
+        <div className="flex flex-col items-end mt-4 pb-4 border-b border-gray-100 space-y-1">
+          <span className="text-sm text-gray-500 font-medium">
+            Материал: {formatCurrency(materialCost)}
+          </span>
+          <span className="text-sm text-gray-500 font-medium">
+            Доставка: {formatCurrency(deliveryCost)}
+          </span>
+          <span className="text-2xl font-bold text-[#2DB0E6] mt-2">
+            Итого: {formatCurrency(estimatedTotalAmount)}
+          </span>
+        </div>
 
         {/* Action Buttons */}
         {onRefresh && (
@@ -1270,19 +1057,18 @@ const DriverOrderCard: React.FC<{
               <>
                 <button
                   disabled={isUpdating}
-                  onClick={() => updateStatus("heading_to_quarry")}
-                  className="w-full h-16 bg-[#2DB0E6] active:bg-[#249acb] text-white text-xl font-bold rounded-2xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                  onClick={openNavigator}
+                  className="w-full h-14 bg-sky-500 active:bg-sky-600 text-white text-lg font-bold rounded-xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                   {isUpdating ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
-                    "Начать поездку"
+                    "Выехать на карьер"
                   )}
                 </button>
-
                 <button
                   onClick={() => setIsCancelModalOpen(true)}
-                  className="w-full py-4 text-red-500 font-medium text-lg active:bg-red-50 rounded-xl transition-colors"
+                  className="w-full py-4 text-red-500 font-medium text-base active:bg-red-50 rounded-xl transition-colors"
                 >
                   Отказаться от выполнения
                 </button>
@@ -1292,22 +1078,21 @@ const DriverOrderCard: React.FC<{
             {(order.status === "heading_to_quarry" || order.status === "in_progress") && (
               <>
                 <button
+                  onClick={openNavigator}
+                  className="w-full h-14 bg-gradient-to-r from-emerald-700 to-emerald-500 active:from-emerald-800 active:to-emerald-600 text-white text-lg font-bold rounded-xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2"
+                >
+                  Открыть навигатор
+                </button>
+                <button
                   disabled={isUpdating}
                   onClick={() => updateStatus("heading_to_client")}
-                  className="w-full h-16 bg-[#2DB0E6] active:bg-[#249acb] text-white text-xl font-bold rounded-2xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                  className="w-full h-14 bg-sky-500 active:bg-sky-600 text-white text-lg font-bold rounded-xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                   {isUpdating ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
-                    "Доставка до клиента"
+                    "Загрузился, еду к клиенту"
                   )}
-                </button>
-
-                <button
-                  onClick={() => setIsCancelModalOpen(true)}
-                  className="w-full py-4 text-red-500 font-medium text-lg active:bg-red-50 rounded-xl transition-colors"
-                >
-                  Отказаться от выполнения
                 </button>
               </>
             )}
@@ -1315,14 +1100,20 @@ const DriverOrderCard: React.FC<{
             {order.status === "heading_to_client" && (
               <>
                 <button
+                  onClick={openNavigator}
+                  className="w-full h-14 bg-gradient-to-r from-emerald-700 to-emerald-500 active:from-emerald-800 active:to-emerald-600 text-white text-lg font-bold rounded-xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2"
+                >
+                  Открыть навигатор
+                </button>
+                <button
                   disabled={isUpdating}
                   onClick={() => updateStatus("completed")}
-                  className="w-full h-16 bg-[#2DB0E6] active:bg-[#249acb] text-white text-xl font-bold rounded-2xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                  className="w-full h-14 bg-sky-500 active:bg-sky-600 text-white text-lg font-bold rounded-xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                   {isUpdating ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
-                    "🏁 Завершить заказ"
+                    "Завершить заказ"
                   )}
                 </button>
               </>

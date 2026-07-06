@@ -766,12 +766,16 @@ def order_load_options() -> tuple:
     )
 
 
-async def get_order_by_id(session: AsyncSession, order_id: UUID) -> Order:
-    result = await session.execute(
-        select(Order)
-        .options(*order_load_options())
-        .where(Order.id == order_id, active_order_clause())
-    )
+async def get_order_by_id(
+    session: AsyncSession,
+    order_id: UUID,
+    *,
+    include_deleted: bool = False,
+) -> Order:
+    stmt = select(Order).options(*order_load_options()).where(Order.id == order_id)
+    if not include_deleted:
+        stmt = stmt.where(active_order_clause())
+    result = await session.execute(stmt)
     order = result.scalar_one_or_none()
     if order is None:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -1438,6 +1442,7 @@ async def restart_dispatch_for_order(session: AsyncSession, order_id: UUID) -> O
 
     order = await advance_dispatch_for_order(session, order.id, exclude_attempted_drivers=False)
     await session.commit()
+    await enqueue_order_for_dispatch_safe(order.id)
     if order.status == OrderStatus.offered_to_driver.value:
         schedule_new_order_push(order, order.current_offer.driver_id if order.current_offer is not None else None)
     return await get_order_by_id(session, order.id)
@@ -1490,7 +1495,7 @@ async def list_orders_for_driver(session: AsyncSession, driver_id: UUID, limit: 
 
 
 async def build_dispatch_history(session: AsyncSession, order_id: UUID) -> DispatchHistoryOut:
-    order = await get_order_by_id(session, order_id)
+    order = await get_order_by_id(session, order_id, include_deleted=True)
     offers = await session.scalars(
         select(OrderOffer)
         .options(selectinload(OrderOffer.driver).selectinload(Driver.vehicle))
@@ -1522,7 +1527,7 @@ async def build_dispatch_history(session: AsyncSession, order_id: UUID) -> Dispa
 
 
 async def build_order_status_history(session: AsyncSession, order_id: UUID) -> OrderHistoryOut:
-    order = await get_order_by_id(session, order_id)
+    order = await get_order_by_id(session, order_id, include_deleted=True)
     result = await session.execute(
         select(OrderEvent)
         .where(OrderEvent.order_id == order_id)
@@ -1547,8 +1552,11 @@ async def get_orders_needing_dispatch(session: AsyncSession, limit: int = 50) ->
         select(Order.id)
         .outerjoin(Order.current_offer)
         .where(
+            Order.is_deleted.is_(False),
             or_(
+                Order.status == OrderStatus.created.value,
                 Order.status == OrderStatus.searching_driver.value,
+                Order.status == OrderStatus.no_driver_found.value,
                 (
                     Order.status == OrderStatus.offered_to_driver.value
                 )

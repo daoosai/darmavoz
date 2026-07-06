@@ -58,7 +58,11 @@ export default function ClientProfileScreen({
           setStats({
             total: orders.length,
             active: orders.filter(
-              (o: any) => o.status === "in_progress" || o.status === "assigned",
+              (o: any) =>
+                o.status !== "completed" &&
+                o.status !== "delivered" &&
+                o.status !== "cancelled" &&
+                o.status !== "canceled",
             ).length,
           });
         }

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import PullToRefresh from "react-simple-pull-to-refresh";
 import { Package, MapPin, Calendar, Truck, List, Info, User as UserIcon, Phone, Search, UserCheck, CheckCircle, ChevronDown } from "lucide-react";
-import { clientOrderStatusMap, clientOrderStatusColors, baseURL } from "./utils";
+import {  clientOrderStatusColors, baseURL } from "./utils";
+import { getOrderStatusText } from "./utils/statusMapper";
 import { useAuthStore } from "./store";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -30,15 +31,20 @@ interface ClientOrder {
   };
 }
 
-const activeStatuses = ["created", "searching_driver", "offered_to_driver", "no_driver_found", "driver_assigned", "heading_to_quarry", "heading_to_client", "in_progress"];
+const activeStatuses = [
+  "created", "searching_driver", "offered_to_driver", "no_driver_found",
+  "driver_assigned", "driver_accepted",
+  "heading_to_pickup", "arrived_at_pickup", "loading",
+  "heading_to_client"
+];
 
 const getStepIndex = (status: string) => {
   if (status === 'created') return 0;
   if (['searching_driver', 'offered_to_driver', 'no_driver_found'].includes(status)) return 1;
-  if (status === 'driver_assigned') return 2;
-  if (status === 'heading_to_quarry') return 3;
-  if (status === 'heading_to_client' || status === 'in_progress') return 4;
-  if (status === 'completed') return 5;
+  if (['driver_assigned', 'driver_accepted'].includes(status)) return 2;
+  if (['heading_to_pickup', 'arrived_at_pickup', 'loading'].includes(status)) return 3;
+  if (status === 'heading_to_client') return 4;
+  if (status === 'completed' || status === 'delivered') return 5;
   return -1;
 };
 
@@ -275,7 +281,7 @@ const HistoryOrderCard = ({ order }: { order: ClientOrder }) => {
              <span className={`text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md leading-none ${
                 clientOrderStatusColors[order.status] || 'bg-slate-100 text-slate-500 border border-slate-200/50'
              }`}>
-                {clientOrderStatusMap[order.status] || order.status}
+                {getOrderStatusText(order.status) || order.status}
              </span>
         </div>
       </div>

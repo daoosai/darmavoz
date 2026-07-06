@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from "react";
 import PullToRefresh from "react-simple-pull-to-refresh";
 import { useAuthStore } from "./store";
+import { getOrderStatusText } from "./utils/statusMapper";
 import {
   baseURL,
   extractApiErrorMessage,
-  orderStatusMap,
+  
   orderStatusColors,
   handleApiError,
 } from "./utils";
@@ -837,8 +838,8 @@ export const DriverOrderCard: React.FC<{
     const lat = order.status === 'heading_to_client' ? order.delivery_lat : order.pickup_lat;
     const lon = order.status === 'heading_to_client' ? order.delivery_lon : order.pickup_lon;
 
-    if (order.status === 'driver_assigned' || order.status === 'accepted') {
-        await updateStatus('heading_to_quarry');
+    if (order.status === 'driver_assigned' || order.status === 'driver_accepted') {
+        await updateStatus('heading_to_pickup');
     }
 
     if (lat && lon) {
@@ -858,7 +859,7 @@ export const DriverOrderCard: React.FC<{
               "bg-slate-100 text-slate-600 border border-slate-200"
             }`}
           >
-            {orderStatusMap[order.status] || order.status.toUpperCase()}
+            {getOrderStatusText(order.status) || order.status.toUpperCase()}
           </span>
           <div className="flex items-center text-slate-400 text-xs font-medium">
             <Clock className="w-3.5 h-3.5 mr-1" />
@@ -961,7 +962,7 @@ export const DriverOrderCard: React.FC<{
               "bg-slate-100 text-slate-600 border border-slate-200"
             }`}
           >
-            {orderStatusMap[order.status] || order.status.toUpperCase()}
+            {getOrderStatusText(order.status) || order.status.toUpperCase()}
           </span>
           <div className="flex items-center text-slate-400 text-xs font-medium">
             <Clock className="w-3.5 h-3.5 mr-1" />
@@ -1053,7 +1054,7 @@ export const DriverOrderCard: React.FC<{
         {/* Action Buttons */}
         {onRefresh && (
           <div className="mt-4 flex flex-col gap-3">
-            {order.status === "driver_assigned" && (
+            {(order.status === "driver_assigned" || order.status === "driver_accepted") && (
               <>
                 <button
                   disabled={isUpdating}
@@ -1075,7 +1076,7 @@ export const DriverOrderCard: React.FC<{
               </>
             )}
 
-            {(order.status === "heading_to_quarry" || order.status === "in_progress") && (
+            {order.status === "heading_to_pickup" && (
               <>
                 <button
                   onClick={openNavigator}
@@ -1083,6 +1084,38 @@ export const DriverOrderCard: React.FC<{
                 >
                   Открыть навигатор
                 </button>
+                <button
+                  disabled={isUpdating}
+                  onClick={() => updateStatus("arrived_at_pickup")}
+                  className="w-full h-14 bg-sky-500 active:bg-sky-600 text-white text-lg font-bold rounded-xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                >
+                  {isUpdating ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    "Прибыл на карьер"
+                  )}
+                </button>
+              </>
+            )}
+
+            {order.status === "arrived_at_pickup" && (
+              <>
+                <button
+                  disabled={isUpdating}
+                  onClick={() => updateStatus("loading")}
+                  className="w-full h-14 bg-sky-500 active:bg-sky-600 text-white text-lg font-bold rounded-xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                >
+                  {isUpdating ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    "Начать погрузку"
+                  )}
+                </button>
+              </>
+            )}
+
+            {order.status === "loading" && (
+              <>
                 <button
                   disabled={isUpdating}
                   onClick={() => updateStatus("heading_to_client")}

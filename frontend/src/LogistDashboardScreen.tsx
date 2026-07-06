@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
 import PullToRefresh from "react-simple-pull-to-refresh";
 import { useAuthStore } from "./store";
+import { getOrderStatusText } from "./utils/statusMapper";
 import {
   baseURL,
-  orderStatusMap,
+  
   orderStatusColors,
   declineReasonMap,
   attemptStatusMap,
@@ -23,6 +24,7 @@ import {
   X,
   RefreshCw,
   Trash2,
+  Edit2,
   Users,
   SearchX,
   ChevronDown,
@@ -31,8 +33,10 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import UpdateBanner from "./UpdateBanner";
+const TERMINAL_STATUSES = ['completed', 'canceled', 'cancelled', 'driver_cancel'];
 import AdminProfileScreen from "./AdminProfileScreen";
 import LogistCreateOrderModal from "./LogistCreateOrderModal";
+import LogistEditOrderModal from "./LogistEditOrderModal";
 import { OrdersFilterBar } from "./components/admin/OrdersFilterBar";
 
 interface AdminOrder {
@@ -154,6 +158,8 @@ export default function LogistDashboardScreen({
 
   // Create Order State
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [editingOrder, setEditingOrder] = useState<AdminOrder | null>(null);
+  const [orderStatusTab, setOrderStatusTab] = useState<"active" | "completed" | "archived">("active");
   const [materials, setMaterials] = useState<any[]>([]);
   const [deliveryOptions, setDeliveryOptions] = useState<any[]>([]);
 
@@ -205,8 +211,16 @@ export default function LogistDashboardScreen({
       fetchDrivers(true);
     }, 7000);
 
-    return () => clearInterval(intervalId);
-  }, [orderDateFilter]);
+    
+
+
+  
+
+
+  
+
+  return () => clearInterval(intervalId);
+  }, [orderDateFilter, orderStatusTab]);
 
   useEffect(() => {
     if (activeTab === "drivers" && drivers.length === 0) {
@@ -241,6 +255,9 @@ export default function LogistDashboardScreen({
       const url = new URL(`${baseURL}/orders/admin`);
       if (orderDateFilter) {
         url.searchParams.append("date", orderDateFilter);
+      }
+      if (orderStatusTab === "archived") {
+        url.searchParams.append("is_deleted", "true");
       }
       const res = await fetch(url.toString(), {
         headers: {
@@ -342,8 +359,9 @@ export default function LogistDashboardScreen({
   };
 
   const handleDeleteOrder = async (orderId: string) => {
+    if (!window.confirm("Вы уверены, что хотите перенести заказ в архив?")) return;
     try {
-      const res = await fetch(`${baseURL}/logist/orders/${orderId}`, {
+      const res = await fetch(`${baseURL}/admin/orders/${orderId}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -438,6 +456,25 @@ export default function LogistDashboardScreen({
     return fullName;
   };
 
+
+  const activeOrders = orders.filter(o => 
+    o.status?.toLowerCase() !== 'completed' && 
+    o.status?.toLowerCase() !== 'canceled' && 
+    o.status?.toLowerCase() !== 'cancelled' &&
+    o.status?.toLowerCase() !== 'driver_cancel'
+  );
+
+  const completedOrders = orders.filter(o => 
+    o.status?.toLowerCase() === 'completed'
+  );
+
+  const displayedOrders = orderStatusTab === 'active' 
+    ? activeOrders 
+    : orderStatusTab === 'completed' 
+      ? completedOrders 
+      : orders;
+
+
   return (
     <div className="flex flex-col h-screen bg-slate-50 relative overflow-hidden">
       {/* Header */}
@@ -508,7 +545,41 @@ export default function LogistDashboardScreen({
           {activeTab === "orders" ? (
             <>
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-2 gap-4">
-                <h2 className="text-xl font-bold text-slate-800">Все заказы</h2>
+                <div className="flex flex-col gap-2">
+                  <h2 className="text-xl font-bold text-slate-800">Все заказы</h2>
+                  <div className="flex bg-slate-100 p-1 rounded-lg self-start grid grid-cols-3 gap-1 w-full max-w-md">
+                    <button
+                      onClick={() => setOrderStatusTab("active")}
+                      className={`px-3 py-1.5 text-sm font-bold rounded-md transition-colors ${
+                        orderStatusTab === "active"
+                          ? "bg-white text-slate-800 shadow-sm"
+                          : "text-slate-500 hover:text-slate-700"
+                      }`}
+                    >
+                      Активные
+                    </button>
+                    <button
+                      onClick={() => setOrderStatusTab("completed")}
+                      className={`px-3 py-1.5 text-sm font-bold rounded-md transition-colors ${
+                        orderStatusTab === "completed"
+                          ? "bg-white text-slate-800 shadow-sm"
+                          : "text-slate-500 hover:text-slate-700"
+                      }`}
+                    >
+                      Завершенные
+                    </button>
+                    <button
+                      onClick={() => setOrderStatusTab("archived")}
+                      className={`px-3 py-1.5 text-sm font-bold rounded-md transition-colors ${
+                        orderStatusTab === "archived"
+                          ? "bg-white text-slate-800 shadow-sm"
+                          : "text-slate-500 hover:text-slate-700"
+                      }`}
+                    >
+                      Архив
+                    </button>
+                  </div>
+                </div>
                 <div className="flex items-center gap-3 w-full sm:w-auto flex-wrap justify-end">
                   <button
                     onClick={() => fetchOrders()}
@@ -536,14 +607,14 @@ export default function LogistDashboardScreen({
                   <Loader2 className="w-10 h-10 animate-spin mb-4 text-[#2DB0E6]" />
                   <p className="font-medium text-lg">Загрузка заказов...</p>
                 </div>
-              ) : orders.length > 0 ? (
+              ) : displayedOrders.length > 0 ? (
                 <PullToRefresh
                   onRefresh={() => Promise.resolve(fetchOrders())}
                   pullingContent={""}
                   maxPullDownDistance={80}
                 >
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 min-h-[50vh]">
-                    {orders.map((order) => (
+                    {displayedOrders.map((order) => (
                       <div
                         key={order.id}
                         className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex flex-col gap-4 text-left hover:shadow-md transition-shadow"
@@ -580,17 +651,30 @@ export default function LogistDashboardScreen({
                                   "bg-slate-100 text-slate-600 border border-slate-200"
                                 }`}
                               >
-                                {orderStatusMap[order.status] ||
+                                {getOrderStatusText(order.status) ||
                                   order.status.toUpperCase()}
                               </span>
                             )}
-                            <button
-                              onClick={() => handleDeleteOrder(order.id)}
-                              className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
-                              title="Удалить заказ"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            {orderStatusTab !== 'archived' && (
+                              <>
+                                {!TERMINAL_STATUSES.includes(order.status?.toLowerCase() || '') && (
+                                  <button
+                                    onClick={() => setEditingOrder(order)}
+                                    className="p-1.5 text-slate-400 hover:text-[#2DB0E6] hover:bg-[#2DB0E6]/10 rounded-lg transition-colors border border-transparent hover:border-[#2DB0E6]/20"
+                                    title="Редактировать заказ"
+                                  >
+                                    <Edit2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handleDeleteOrder(order.id)}
+                                  className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
+                                  title="В архив"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </>
+                            )}
                           </div>
                         </div>
 
@@ -1039,6 +1123,19 @@ export default function LogistDashboardScreen({
         </button>
       </div>
 
+      {/* Edit Order Modal */}
+      <LogistEditOrderModal
+        isOpen={!!editingOrder}
+        onClose={() => setEditingOrder(null)}
+        token={token}
+        materials={materials}
+        deliveryOptions={deliveryOptions}
+        order={editingOrder}
+        onOrderUpdated={() => {
+          fetchOrders(true);
+          setEditingOrder(null);
+        }}
+      />
       {/* Create Order Modal */}
       <LogistCreateOrderModal
         isOpen={isCreateOpen}
@@ -1215,7 +1312,7 @@ export default function LogistDashboardScreen({
                             "bg-slate-100 text-slate-600 border border-slate-200"
                           }`}
                         >
-                          {orderStatusMap[currentHistoryOrder.status] ||
+                          {getOrderStatusText(currentHistoryOrder.status) ||
                             currentHistoryOrder.status.toUpperCase()}
                         </span>
                       </div>
@@ -1371,18 +1468,17 @@ export default function LogistDashboardScreen({
 
                       {/* Event: In Progress */}
                       {currentHistoryOrder &&
-                        (currentHistoryOrder.status === "in_progress" ||
-                          currentHistoryOrder.status === "completed") && (
+                        (["heading_to_pickup", "arrived_at_pickup", "loading", "heading_to_client", "delivered", "completed"].includes(currentHistoryOrder.status)) && (
                           <div className="relative">
                             <div className="absolute -left-[35px] top-0 bg-[#2DB0E6] w-5 h-5 rounded-full border-[3px] border-white shadow-sm flex items-center justify-center">
                               <Truck className="w-2.5 h-2.5 text-white" />
                             </div>
                             <div className="flex flex-col items-start pt-0.5">
                               <p className="text-sm font-bold text-slate-800">
-                                Водитель в пути
+                                {getOrderStatusText(currentHistoryOrder.status)}
                               </p>
                               <span className="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-wide border bg-[#2DB0E6]/10 text-[#2DB0E6] border-[#2DB0E6]/20">
-                                В пути
+                                {getOrderStatusText(currentHistoryOrder.status)}
                               </span>
                             </div>
                           </div>

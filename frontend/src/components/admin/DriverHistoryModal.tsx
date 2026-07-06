@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { getOrderStatusText } from "../../utils/statusMapper";
 import { XCircle, Clock, Loader2, MapPin, Box, DollarSign } from "lucide-react";
 import { baseURL } from "../../utils";
 import { useAuthStore } from "../../store";
@@ -19,20 +20,10 @@ interface OrderOut {
   items?: { material?: { name: string } }[];
 }
 
-const ORDER_STATUS_RU: Record<string, string> = {
-  completed: "Завершен",
-  canceled: "Отменен",
-  cancelled: "Отменен",
-  driver_cancel: "Отказ водителя",
-  searching: "Поиск машины",
-  driver_assigned: "Назначен",
-  in_progress: "В пути",
-  heading_to_quarry: "На карьер",
-  heading_to_client: "К клиенту",
-};
 
 const ORDER_STATUS_COLORS: Record<string, string> = {
   completed: "bg-green-100 text-green-800 border-green-200",
+  delivered: "bg-emerald-100 text-emerald-800 border-emerald-200",
   canceled: "bg-red-100 text-red-800 border-red-200",
   cancelled: "bg-red-100 text-red-800 border-red-200",
   driver_cancel: "bg-red-100 text-red-800 border-red-200",
@@ -130,7 +121,7 @@ export const DriverHistoryModal: React.FC<DriverHistoryModalProps> = ({
                 const amount = order.estimated_total_amount || 0;
                 const statusKey = order.status?.toLowerCase() || "";
                 const statusText =
-                  ORDER_STATUS_RU[statusKey] || order.status || "Неизвестно";
+                  getOrderStatusText(statusKey) || order.status || "Неизвестно";
                 const statusColor =
                   ORDER_STATUS_COLORS[statusKey] || ORDER_STATUS_COLORS.default;
 

@@ -71,7 +71,7 @@ export default function ClientAddressBottomSheet({
         mapInstance = new (window as any).mapgl.Map("client-map", {
           center: [initialLon, initialLat],
           zoom: 12,
-          key: "1ee6f536-8494-4bb2-adc0-d011444c567a",
+          key: import.meta.env.VITE_2GIS_KEY || "6990476e-6c34-4049-9f9c-a1333924bce4",
         });
 
         mapRef.current = mapInstance;

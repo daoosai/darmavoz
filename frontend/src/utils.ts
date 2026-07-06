@@ -1,4 +1,5 @@
 import { MaterialProps, DeliveryOption } from "./MaterialDetailScreen";
+import { CLIENT_ORDER_STATUS_COLORS, ORDER_STATUS_COLORS } from "./utils/statusMapper";
 
 export const baseURL = "https://darmavoz.ru/api/v1";
 
@@ -41,24 +42,7 @@ export const playNewOrderSound = () => {
 };
 
 
-export const orderStatusColors: Record<string, string> = {
-  created: "bg-gray-200 text-gray-700 border border-gray-300",
-  pending: "bg-yellow-100 text-yellow-800 border border-yellow-200",
-  searching_driver:
-    "bg-amber-100 text-amber-800 border border-amber-200 animate-pulse",
-  offered_to_driver:
-    "bg-[#2DB0E6]/10 text-purple-800 border border-[#2DB0E6]/20",
-  no_driver_found: "bg-red-100 text-red-800 border border-red-200",
-  driver_assigned: "bg-blue-100 text-blue-800 border border-blue-200",
-  driver_accepted: "bg-blue-100 text-blue-800 border border-blue-200",
-  heading_to_pickup: "bg-indigo-100 text-indigo-800 border border-indigo-200",
-  arrived_at_pickup: "bg-indigo-100 text-indigo-800 border border-indigo-200",
-  loading: "bg-indigo-100 text-indigo-800 border border-indigo-200",
-  heading_to_client: "bg-green-100 text-green-800 border border-green-200",
-  delivered: "bg-emerald-100 text-emerald-800 border border-emerald-200",
-  completed: "bg-emerald-100 text-emerald-800 border border-emerald-200",
-  cancelled: "bg-red-100 text-red-800 border border-red-200",
-};
+export const orderStatusColors = ORDER_STATUS_COLORS;
 
 export const formatPhoneNumber = (value: string) => {
   if (!value) return "";
@@ -228,22 +212,7 @@ export const translateReason = (reason: string | undefined | null) => {
 };
 
 
-export const clientOrderStatusColors: Record<string, string> = {
-  created: "bg-gray-100 text-gray-700 border border-gray-200",
-  searching_driver: "bg-gray-100 text-gray-600 border border-gray-200",
-  offered_to_driver: "bg-gray-100 text-gray-600 border border-gray-200",
-  no_driver_found: "bg-gray-100 text-gray-600 border border-gray-200",
-  driver_assigned: "bg-blue-100 text-blue-600 border border-blue-200",
-  driver_accepted: "bg-blue-100 text-blue-600 border border-blue-200",
-  heading_to_pickup: "bg-indigo-100 text-indigo-600 border border-indigo-200",
-  arrived_at_pickup: "bg-indigo-100 text-indigo-600 border border-indigo-200",
-  loading: "bg-indigo-100 text-indigo-600 border border-indigo-200",
-  heading_to_client: "bg-emerald-100 text-emerald-600 border border-emerald-200",
-  delivered: "bg-green-100 text-green-700 border border-green-200",
-  completed: "bg-green-100 text-green-700 border border-green-200",
-  cancelled: "bg-red-100 text-red-600 border border-red-200",
-  canceled: "bg-red-100 text-red-600 border border-red-200",
-};
+export const clientOrderStatusColors = CLIENT_ORDER_STATUS_COLORS;
 
 export const getImageUrl = (item: MaterialProps | DeliveryOption) => {
   return (

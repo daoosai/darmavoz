@@ -269,14 +269,6 @@ class LogistOrderCreate(BaseModel):
         if (self.delivery_lat is None) != (self.delivery_lon is None):
             raise ValueError("delivery_lat and delivery_lon must be provided together")
 
-        if self.calculation_source == "yandex_auto":
-            if self.quarry_id is None:
-                raise ValueError("quarry_id is required for yandex_auto calculation_source")
-            if self.delivery_lat is None or self.delivery_lon is None:
-                raise ValueError(
-                    "delivery coordinates are required for yandex_auto calculation_source"
-                )
-
         if self.calculation_source == "manual":
             if not self.pickup_address:
                 raise ValueError("pickup_address is required for manual calculation_source")
@@ -409,6 +401,20 @@ class DispatchHistoryOut(BaseModel):
     status: str
     assigned_driver_id: UUID | None = None
     attempts: list[DispatchHistoryAttemptOut] = Field(default_factory=list)
+
+
+class OrderHistoryEventOut(BaseModel):
+    id: UUID
+    status: str
+    event_type: str
+    description: str | None = None
+    created_at: datetime
+
+
+class OrderHistoryOut(BaseModel):
+    order_id: UUID
+    current_status: str
+    events: list[OrderHistoryEventOut] = Field(default_factory=list)
 
 
 class OrderOut(BaseModel):

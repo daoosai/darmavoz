@@ -20,6 +20,7 @@ from app.models.models import (
     Material,
     ModerationStatus,
     Order,
+    OrderEvent,
     Quarry,
     OrderItem,
     OrderOffer,
@@ -27,13 +28,20 @@ from app.models.models import (
     OrderStatus,
     Vehicle,
 )
-from app.schemas.order import DispatchHistoryAttemptOut, DispatchHistoryOut, LogistOrderCreate
+from app.schemas.order import (
+    DispatchHistoryAttemptOut,
+    DispatchHistoryOut,
+    LogistOrderCreate,
+    OrderHistoryEventOut,
+    OrderHistoryOut,
+)
 from app.services.notifications import (
     schedule_client_driver_assigned_notification,
     schedule_client_heading_to_client_notification,
     schedule_client_order_completed_notification,
     schedule_client_order_created_notification,
     schedule_driver_new_order_notification,
+    schedule_driver_order_changed_notification,
     schedule_logist_driver_cancelled_notification,
     schedule_logist_no_driver_found_notification,
     schedule_logist_timeout_notification,
@@ -46,6 +54,11 @@ GUEST_CLIENT_PHONE = "00000000000"
 GUEST_CLIENT_NAME = "Гость (Демо)"
 MANUAL_ASSIGN_APPROVAL_ERROR = "Невозможно назначить заказ: профиль водителя или автомобиль не прошли модерацию"
 logger = logging.getLogger(__name__)
+
+DISPATCH_ALLOWED_MODERATION_STATUSES = {
+    ModerationStatus.approved.value,
+    ModerationStatus.incomplete.value,
+}
 
 ACTIVE_ASSIGNED_ORDER_STATUSES = {
     OrderStatus.driver_assigned.value,
@@ -64,45 +77,25 @@ FULL_ORDER_EDIT_STATUSES = {
     "timeout",
 }
 
+
 DRIVER_ORDER_STATUS_TRANSITIONS: dict[str, set[str]] = {
     OrderStatus.driver_assigned.value: {
         OrderStatus.driver_accepted.value,
-        OrderStatus.heading_to_pickup.value,
-        OrderStatus.arrived_at_pickup.value,
-        OrderStatus.loading.value,
-        OrderStatus.heading_to_client.value,
-        OrderStatus.delivered.value,
-        OrderStatus.completed.value,
     },
     OrderStatus.driver_accepted.value: {
         OrderStatus.heading_to_pickup.value,
-        OrderStatus.arrived_at_pickup.value,
-        OrderStatus.loading.value,
-        OrderStatus.heading_to_client.value,
-        OrderStatus.delivered.value,
-        OrderStatus.completed.value,
     },
     OrderStatus.heading_to_pickup.value: {
         OrderStatus.arrived_at_pickup.value,
-        OrderStatus.loading.value,
-        OrderStatus.heading_to_client.value,
-        OrderStatus.delivered.value,
-        OrderStatus.completed.value,
     },
     OrderStatus.arrived_at_pickup.value: {
         OrderStatus.loading.value,
-        OrderStatus.heading_to_client.value,
-        OrderStatus.delivered.value,
-        OrderStatus.completed.value,
     },
     OrderStatus.loading.value: {
         OrderStatus.heading_to_client.value,
-        OrderStatus.delivered.value,
-        OrderStatus.completed.value,
     },
     OrderStatus.heading_to_client.value: {
         OrderStatus.delivered.value,
-        OrderStatus.completed.value,
     },
     OrderStatus.delivered.value: {
         OrderStatus.completed.value,
@@ -243,8 +236,27 @@ async def enqueue_order_for_dispatch_safe(order_id: UUID) -> None:
         logger.exception("dispatch_enqueue_failed", extra={"order_id": str(order_id)})
 
 
-async def add_event(session: AsyncSession, order_id: UUID, event_type: str, description: str | None = None) -> None:
+
+async def add_event(
+    session: AsyncSession,
+    order_id: UUID,
+    event_type: str,
+    description: str | None = None,
+    *,
+    order_status: str | None = None,
+) -> None:
     session.add(EventLog(order_id=order_id, event_type=event_type, description=description))
+    if order_status is None:
+        order_status = await session.scalar(select(Order.status).where(Order.id == order_id))
+    if order_status is not None:
+        session.add(
+            OrderEvent(
+                order_id=order_id,
+                status=order_status,
+                event_type=event_type,
+                description=description,
+            )
+        )
     await session.flush()
 
 
@@ -551,15 +563,11 @@ async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate)
         material_id=payload.material_id,
         delivery_option_id=payload.delivery_option_id,
     )
-    delivery_rate_per_km = delivery_option.delivery_rate_per_km
-    if delivery_rate_per_km is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Тариф доставки не настроен",
-        )
 
-    delivery_rate_per_km = round(float(delivery_rate_per_km), 2)
-    route_calculated_at = utcnow()
+    raw_delivery_rate = delivery_option.delivery_rate_per_km
+    delivery_rate_per_km = round(float(raw_delivery_rate), 2) if raw_delivery_rate is not None else 0.0
+    delivery_rate_snapshot = delivery_rate_per_km if raw_delivery_rate is not None else None
+    route_calculated_at: datetime | None = None
     resolved_pickup_address = payload.pickup_address
     resolved_pickup_lat = payload.pickup_lat
     resolved_pickup_lon = payload.pickup_lon
@@ -567,9 +575,11 @@ async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate)
     resolved_delivery_lon = payload.delivery_lon
     resolved_quarry_id = payload.quarry_id
     resolved_mileage_km = round(payload.mileage_km, 2) if payload.mileage_km is not None else None
-    resolved_delivery_cost: float
+    resolved_delivery_cost = 0.0
+    resolved_calculation_source: str | None = None
 
     if payload.calculation_source == "manual":
+        resolved_calculation_source = "manual"
         if resolved_pickup_lat is None or resolved_pickup_lon is None:
             selected_quarry = await _resolve_logist_order_quarry(
                 session,
@@ -582,17 +592,12 @@ async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate)
                 resolved_pickup_lon = selected_quarry.lon
                 resolved_quarry_id = selected_quarry.id
 
-        resolved_delivery_cost = max(
-            round((resolved_mileage_km or 0) * delivery_rate_per_km, 2),
-            resolve_min_delivery_price(delivery_option),
-        )
-    else:
-        if resolved_delivery_lat is None or resolved_delivery_lon is None:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="delivery coordinates are required for auto calculation",
+        if resolved_mileage_km is not None and raw_delivery_rate is not None:
+            resolved_delivery_cost = max(
+                round(resolved_mileage_km * delivery_rate_per_km, 2),
+                resolve_min_delivery_price(delivery_option),
             )
-
+    elif resolved_delivery_lat is not None and resolved_delivery_lon is not None:
         pricing = await calculate_client_order_pricing(
             session,
             material_id=payload.material_id,
@@ -609,6 +614,8 @@ async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate)
         resolved_quarry_id = selected_quarry.id
         resolved_mileage_km = pricing.mileage_km
         resolved_delivery_cost = pricing.delivery_cost
+        resolved_calculation_source = payload.calculation_source
+        route_calculated_at = utcnow()
 
     order = await build_order(
         session,
@@ -629,9 +636,9 @@ async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate)
         delivery_lat=resolved_delivery_lat,
         delivery_lon=resolved_delivery_lon,
         mileage_km=resolved_mileage_km,
-        delivery_rate_per_km_snapshot=delivery_rate_per_km,
+        delivery_rate_per_km_snapshot=delivery_rate_snapshot,
         delivery_cost=resolved_delivery_cost,
-        calculation_source=payload.calculation_source,
+        calculation_source=resolved_calculation_source,
         route_calculated_at=route_calculated_at,
     )
     await session.commit()
@@ -662,13 +669,13 @@ async def assign_order_to_driver_manually(session: AsyncSession, *, order_id: UU
     driver = result.scalar_one_or_none()
     if driver is None:
         raise HTTPException(status_code=404, detail="Driver not found")
-    if driver.moderation_status != ModerationStatus.approved.value:
+    if driver.moderation_status not in DISPATCH_ALLOWED_MODERATION_STATUSES:
         raise HTTPException(status_code=400, detail=MANUAL_ASSIGN_APPROVAL_ERROR)
     if driver.status != DriverStatus.available.value:
         raise HTTPException(status_code=409, detail="Driver is not available")
     if driver.vehicle is None or not driver.vehicle.is_active:
         raise HTTPException(status_code=409, detail="Driver has no active vehicle")
-    if driver.vehicle.moderation_status != ModerationStatus.approved.value:
+    if driver.vehicle.moderation_status not in DISPATCH_ALLOWED_MODERATION_STATUSES:
         raise HTTPException(status_code=400, detail=MANUAL_ASSIGN_APPROVAL_ERROR)
     ensure_driver_vehicle_matches_order_volume(order, driver)
 
@@ -921,9 +928,12 @@ async def update_order_by_logist(
             0.0,
         )
 
-    await add_event(session, order.id, "order_updated_by_logist", "Order updated by logist")
+    await add_event(session, order.id, "order_updated_by_logist", "Order updated by logist", order_status=order.status)
     await session.commit()
-    return await get_order_by_id(session, order.id)
+    refreshed_order = await get_order_by_id(session, order.id)
+    if refreshed_order.driver_id is not None and refreshed_order.status in ACTIVE_ASSIGNED_ORDER_STATUSES:
+        schedule_driver_order_changed_notification(refreshed_order, refreshed_order.driver_id)
+    return refreshed_order
 
 
 async def list_orders_for_client(session: AsyncSession, client_id: UUID) -> list[Order]:
@@ -954,18 +964,21 @@ async def delete_order_by_id(session: AsyncSession, order_id: UUID) -> None:
 
 def _matching_drivers_base_query(order: Order) -> Select[tuple[Driver]]:
     requested_volume = get_order_requested_volume(order)
-    return (
+    stmt = (
         select(Driver)
         .join(Driver.vehicle)
         .options(selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option))
         .where(Driver.status == DriverStatus.available.value)
-        .where(Driver.moderation_status == ModerationStatus.approved.value)
+        .where(Driver.moderation_status.in_(DISPATCH_ALLOWED_MODERATION_STATUSES))
         .where(Driver.is_auto_dispatch_enabled.is_(True))
         .where(Driver.vehicle_id.is_not(None))
         .where(Vehicle.is_active.is_(True))
-        .where(Vehicle.moderation_status == ModerationStatus.approved.value)
+        .where(Vehicle.moderation_status.in_(DISPATCH_ALLOWED_MODERATION_STATUSES))
         .where(build_vehicle_volume_match_clause(requested_volume))
     )
+    if order.delivery_option_id is not None:
+        stmt = stmt.where(Vehicle.delivery_option_id == order.delivery_option_id)
+    return stmt
 
 
 def _current_cycle_offer_driver_ids(
@@ -1268,7 +1281,7 @@ async def cancel_driver_assigned_order(
     order = await get_order_by_id(session, order_id)
     if order.driver_id != driver_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Order does not belong to this driver")
-    if order.status != OrderStatus.driver_assigned.value:
+    if order.status not in {OrderStatus.driver_assigned.value, OrderStatus.driver_accepted.value}:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Order cannot be cancelled in its current status")
 
     now = utcnow()
@@ -1316,6 +1329,7 @@ async def cancel_driver_assigned_order(
         order.id,
         "driver_cancelled_assigned_order",
         f"Driver {driver_id} cancelled the order. Reason: {reason}",
+        order_status=order.status,
     )
     await session.commit()
     schedule_logist_driver_cancelled_notification(order, driver_id, reason)
@@ -1389,7 +1403,7 @@ async def set_driver_order_status(
         driver.status = DriverStatus.busy.value
 
     event_type, event_description = _driver_order_status_event(target_status, driver_id)
-    await add_event(session, order.id, event_type, event_description)
+    await add_event(session, order.id, event_type, event_description, order_status=order.status)
     await session.commit()
 
     refreshed_order = await get_order_by_id(session, order.id)
@@ -1505,6 +1519,26 @@ async def build_dispatch_history(session: AsyncSession, order_id: UUID) -> Dispa
         assigned_driver_id=order.driver_id,
         attempts=attempts,
     )
+
+
+async def build_order_status_history(session: AsyncSession, order_id: UUID) -> OrderHistoryOut:
+    order = await get_order_by_id(session, order_id)
+    result = await session.execute(
+        select(OrderEvent)
+        .where(OrderEvent.order_id == order_id)
+        .order_by(OrderEvent.created_at.asc(), OrderEvent.id.asc())
+    )
+    events = [
+        OrderHistoryEventOut(
+            id=event.id,
+            status=event.status,
+            event_type=event.event_type,
+            description=event.description,
+            created_at=event.created_at,
+        )
+        for event in result.scalars().all()
+    ]
+    return OrderHistoryOut(order_id=order.id, current_status=order.status, events=events)
 
 
 async def get_orders_needing_dispatch(session: AsyncSession, limit: int = 50) -> list[UUID]:

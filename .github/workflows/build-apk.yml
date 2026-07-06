@@ -3,7 +3,7 @@ name: Build Android APK
 on:
   push:
     branches:
-      - feature/sprint-11-driver-profiles
+      - feature/sprint-12
   workflow_dispatch:
 
 jobs:

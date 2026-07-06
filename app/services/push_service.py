@@ -11,9 +11,10 @@ from sqlalchemy import select
 
 from app.core.config import settings
 from app.db.database import AsyncSessionLocal
-from app.models.models import Client, Driver
+from app.models.models import Client, Driver, Role, User
 
 logger = logging.getLogger(__name__)
+LOGIST_ROLE_NAMES = ("admin", "logist")
 
 
 def _get_firebase_credentials_path() -> Path | None:
@@ -34,15 +35,11 @@ def _get_firebase_app():
         return firebase_admin.initialize_app(credentials.Certificate(str(credentials_path)))
 
 
-def _send_push(
-    token: str,
-    title: str,
-    body: str,
-    data: dict[str, str] | None = None,
-) -> str | None:
+def _send_push(token: str, title: str, body: str, data: dict[str, str] | None = None) -> str | None:
     app = _get_firebase_app()
     if app is None:
         return None
+
     message = messaging.Message(
         token=token,
         notification=messaging.Notification(title=title, body=body),
@@ -165,6 +162,41 @@ async def send_push_to_client(
         )
 
 
+async def send_push_to_logists(
+    title: str,
+    body: str,
+    data: dict[str, str] | None = None,
+) -> int:
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(User)
+            .join(Role, User.role_id == Role.id)
+            .where(Role.name.in_(LOGIST_ROLE_NAMES), User.is_active.is_(True))
+        )
+        users = list(result.scalars().unique().all())
+        sent_count = 0
+
+        for user in users:
+            async def clear_token(current_user: User = user) -> None:
+                current_user.fcm_token = None
+                await session.flush()
+
+            ok = await _send_push_with_token_cleanup(
+                entity_name="logist_user",
+                entity_id=user.id,
+                token=user.fcm_token,
+                clear_token=clear_token,
+                title=title,
+                body=body,
+                data=data,
+            )
+            if ok:
+                sent_count += 1
+
+        await session.commit()
+        return sent_count
+
+
 def schedule_push_to_driver(
     driver_id: UUID,
     title: str,
@@ -186,4 +218,15 @@ def schedule_push_to_client(
     asyncio.create_task(
         send_push_to_client(client_id, title, body, data),
         name=f"push-client-{client_id}",
+    )
+
+
+def schedule_push_to_logists(
+    title: str,
+    body: str,
+    data: dict[str, str] | None = None,
+) -> None:
+    asyncio.create_task(
+        send_push_to_logists(title, body, data),
+        name="push-logists",
     )

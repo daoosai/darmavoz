@@ -30,6 +30,7 @@ from app.models.models import (
     User,
     Vehicle,
 )
+from app.schemas.client import ClientFcmTokenIn, ClientFcmTokenOut
 from app.schemas.catalog import (
     DeliveryOptionCreate,
     DeliveryOptionOut,

@@ -1,3 +1,4 @@
+
 from datetime import date as date_type
 from uuid import UUID
 
@@ -6,10 +7,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
 from app.models.models import Order, User
-from app.schemas.order import DispatchHistoryOut, LogistOrderCreate, OrderDeleteOut, OrderOut, OrderUpdate
+from app.schemas.client import ClientFcmTokenIn, ClientFcmTokenOut
+from app.schemas.order import (
+    DispatchHistoryOut,
+    LogistOrderCreate,
+    OrderDeleteOut,
+    OrderHistoryOut,
+    OrderOut,
+    OrderUpdate,
+)
 from app.security.auth import get_current_logist_user
 from app.services.dispatch_service import (
     build_dispatch_history,
+    build_order_status_history,
     create_logist_order,
     delete_order_by_id,
     get_order_by_id,
@@ -19,6 +29,27 @@ from app.services.dispatch_service import (
 )
 
 router = APIRouter()
+
+
+@router.post("/me/fcm-token", response_model=ClientFcmTokenOut)
+async def save_logist_fcm_token(
+    payload: ClientFcmTokenIn,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_logist_user),
+) -> ClientFcmTokenOut:
+    current_user.fcm_token = payload.token.strip()
+    await db.commit()
+    return ClientFcmTokenOut(ok=True, token=current_user.fcm_token)
+
+
+@router.delete("/me/fcm-token", response_model=ClientFcmTokenOut)
+async def delete_logist_fcm_token(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_logist_user),
+) -> ClientFcmTokenOut:
+    current_user.fcm_token = None
+    await db.commit()
+    return ClientFcmTokenOut(ok=True, token=None)
 
 
 @router.post("/orders", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
@@ -74,7 +105,7 @@ async def delete_logist_order(
 ) -> OrderDeleteOut:
     del current_user
     await delete_order_by_id(db, order_id)
-    return OrderDeleteOut(ok=True, message="Заказ перемещен в архив")
+    return OrderDeleteOut(ok=True, message="Order moved to archive")
 
 
 @router.get("/orders/{order_id}/dispatch-history", response_model=DispatchHistoryOut)
@@ -85,6 +116,16 @@ async def get_dispatch_history(
 ) -> DispatchHistoryOut:
     del current_user
     return await build_dispatch_history(db, order_id)
+
+
+@router.get("/orders/{order_id}/history", response_model=OrderHistoryOut)
+async def get_order_history(
+    order_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_logist_user),
+) -> OrderHistoryOut:
+    del current_user
+    return await build_order_status_history(db, order_id)
 
 
 @router.post("/orders/{order_id}/redispatch", response_model=OrderOut)

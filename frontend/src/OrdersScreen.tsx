@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import PullToRefresh from "react-simple-pull-to-refresh";
 import { Package, MapPin, Calendar, Truck, List, Info, User as UserIcon, Phone, Search, UserCheck, CheckCircle, ChevronDown } from "lucide-react";
-import {  clientOrderStatusColors, baseURL } from "./utils";
-import { getOrderStatusText } from "./utils/statusMapper";
+import { baseURL } from "./utils";
+import { getClientOrderStatusColor, getClientTrackerStepIndex, getOrderStatusText, isClientActiveOrderStatus } from "./utils/statusMapper";
 import { useAuthStore } from "./store";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -31,23 +31,6 @@ interface ClientOrder {
   };
 }
 
-const activeStatuses = [
-  "created", "searching_driver", "offered_to_driver", "no_driver_found",
-  "driver_assigned", "driver_accepted",
-  "heading_to_pickup", "arrived_at_pickup", "loading",
-  "heading_to_client"
-];
-
-const getStepIndex = (status: string) => {
-  if (status === 'created') return 0;
-  if (['searching_driver', 'offered_to_driver', 'no_driver_found'].includes(status)) return 1;
-  if (['driver_assigned', 'driver_accepted'].includes(status)) return 2;
-  if (['heading_to_pickup', 'arrived_at_pickup', 'loading'].includes(status)) return 3;
-  if (status === 'heading_to_client') return 4;
-  if (status === 'completed' || status === 'delivered') return 5;
-  return -1;
-};
-
 const formatDate = (dateString: string) => {
   try {
     const date = new Date(dateString);
@@ -62,7 +45,7 @@ const formatDate = (dateString: string) => {
 };
 
 const ActiveOrderCard: React.FC<{ order: ClientOrder }> = ({ order }) => {
-  const stepIndex = getStepIndex(order.status);
+  const stepIndex = getClientTrackerStepIndex(order.status);
   
   const renderCentralAnimation = () => {
     if (stepIndex === 1) {
@@ -279,7 +262,7 @@ const HistoryOrderCard = ({ order }: { order: ClientOrder }) => {
         <div className="flex flex-col items-end justify-center gap-1.5 shrink-0 pl-2">
              <span className="font-bold text-slate-700 text-base leading-none block">{order.total_amount ? `${order.total_amount} ₽` : "..."}</span>
              <span className={`text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md leading-none ${
-                clientOrderStatusColors[order.status] || 'bg-slate-100 text-slate-500 border border-slate-200/50'
+                getClientOrderStatusColor(order.status) || 'bg-slate-100 text-slate-500 border border-slate-200/50'
              }`}>
                 {getOrderStatusText(order.status) || order.status}
              </span>
@@ -411,10 +394,10 @@ export default function OrdersScreen({ onOpenAuth }: { onOpenAuth?: () => void }
   }
 
   const displayActiveOrders = orders.filter(o => 
-     activeStatuses.includes(o.status) || recentlyCompletedIds.includes(o.id)
+     isClientActiveOrderStatus(o.status) || recentlyCompletedIds.includes(o.id)
   );
   const displayHistoryOrders = orders.filter(o => 
-     !activeStatuses.includes(o.status) && !recentlyCompletedIds.includes(o.id)
+     !isClientActiveOrderStatus(o.status) && !recentlyCompletedIds.includes(o.id)
   );
 
   if (orders.length === 0) {

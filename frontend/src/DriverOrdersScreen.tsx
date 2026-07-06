@@ -308,8 +308,8 @@ export default function DriverOrdersScreen({
         setOrders(activeOrders);
       } catch (error) {
         console.error("Error fetching orders:", error);
-        toast.error("Ошибка при загрузке заказов");
-      } finally {
+        toast.error("Coordinates unavailable");
+    } finally {
         if (!silent) setIsLoading(false);
       }
     },
@@ -835,18 +835,20 @@ export const DriverOrderCard: React.FC<{
   };
 
   const openNavigator = async () => {
-    const lat = order.status === 'heading_to_client' ? order.delivery_lat : order.pickup_lat;
-    const lon = order.status === 'heading_to_client' ? order.delivery_lon : order.pickup_lon;
-
-    if (order.status === 'driver_assigned' || order.status === 'driver_accepted') {
-        await updateStatus('heading_to_pickup');
-    }
+    const isClientRoute = order.status === 'heading_to_client' || order.status === 'delivered';
+    const lat = isClientRoute ? order.delivery_lat : order.pickup_lat;
+    const lon = isClientRoute ? order.delivery_lon : order.pickup_lon;
 
     if (lat && lon) {
       window.location.href = `geo:${lat},${lon}?q=${lat},${lon}`;
     } else {
-      toast.error("Координаты отсутствуют");
+      toast.error("Coordinates unavailable");
     }
+  };
+
+  const updateStatusAndOpenNavigator = async (step: string) => {
+    await updateStatus(step);
+    openNavigator();
   };
 
   if (isHistory) {
@@ -1054,24 +1056,46 @@ export const DriverOrderCard: React.FC<{
         {/* Action Buttons */}
         {onRefresh && (
           <div className="mt-4 flex flex-col gap-3">
-            {(order.status === "driver_assigned" || order.status === "driver_accepted") && (
+            {order.status === "driver_assigned" && (
               <>
                 <button
                   disabled={isUpdating}
-                  onClick={openNavigator}
+                  onClick={() => updateStatus("driver_accepted")}
                   className="w-full h-14 bg-sky-500 active:bg-sky-600 text-white text-lg font-bold rounded-xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                   {isUpdating ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
-                    "Выехать на карьер"
+                    "Принять"
                   )}
                 </button>
                 <button
                   onClick={() => setIsCancelModalOpen(true)}
                   className="w-full py-4 text-red-500 font-medium text-base active:bg-red-50 rounded-xl transition-colors"
                 >
-                  Отказаться от выполнения
+                  {"Отказаться от выполнения"}
+                </button>
+              </>
+            )}
+
+            {order.status === "driver_accepted" && (
+              <>
+                <button
+                  disabled={isUpdating}
+                  onClick={() => updateStatusAndOpenNavigator("heading_to_pickup")}
+                  className="w-full h-14 bg-sky-500 active:bg-sky-600 text-white text-lg font-bold rounded-xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                >
+                  {isUpdating ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    "Выехать"
+                  )}
+                </button>
+                <button
+                  onClick={() => setIsCancelModalOpen(true)}
+                  className="w-full py-4 text-red-500 font-medium text-base active:bg-red-50 rounded-xl transition-colors"
+                >
+                  {"Отказаться от выполнения"}
                 </button>
               </>
             )}
@@ -1082,7 +1106,7 @@ export const DriverOrderCard: React.FC<{
                   onClick={openNavigator}
                   className="w-full h-14 bg-gradient-to-r from-emerald-700 to-emerald-500 active:from-emerald-800 active:to-emerald-600 text-white text-lg font-bold rounded-xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2"
                 >
-                  Открыть навигатор
+                  {"Открыть навигатор"}
                 </button>
                 <button
                   disabled={isUpdating}
@@ -1099,35 +1123,31 @@ export const DriverOrderCard: React.FC<{
             )}
 
             {order.status === "arrived_at_pickup" && (
-              <>
-                <button
-                  disabled={isUpdating}
-                  onClick={() => updateStatus("loading")}
-                  className="w-full h-14 bg-sky-500 active:bg-sky-600 text-white text-lg font-bold rounded-xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
-                >
-                  {isUpdating ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    "Начать погрузку"
-                  )}
-                </button>
-              </>
+              <button
+                disabled={isUpdating}
+                onClick={() => updateStatus("loading")}
+                className="w-full h-14 bg-sky-500 active:bg-sky-600 text-white text-lg font-bold rounded-xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                {isUpdating ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  "Загрузка"
+                )}
+              </button>
             )}
 
             {order.status === "loading" && (
-              <>
-                <button
-                  disabled={isUpdating}
-                  onClick={() => updateStatus("heading_to_client")}
-                  className="w-full h-14 bg-sky-500 active:bg-sky-600 text-white text-lg font-bold rounded-xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
-                >
-                  {isUpdating ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    "Загрузился, еду к клиенту"
-                  )}
-                </button>
-              </>
+              <button
+                disabled={isUpdating}
+                onClick={() => updateStatusAndOpenNavigator("heading_to_client")}
+                className="w-full h-14 bg-sky-500 active:bg-sky-600 text-white text-lg font-bold rounded-xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                {isUpdating ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  "Еду к клиенту"
+                )}
+              </button>
             )}
 
             {order.status === "heading_to_client" && (
@@ -1136,20 +1156,34 @@ export const DriverOrderCard: React.FC<{
                   onClick={openNavigator}
                   className="w-full h-14 bg-gradient-to-r from-emerald-700 to-emerald-500 active:from-emerald-800 active:to-emerald-600 text-white text-lg font-bold rounded-xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2"
                 >
-                  Открыть навигатор
+                  {"Открыть навигатор"}
                 </button>
                 <button
                   disabled={isUpdating}
-                  onClick={() => updateStatus("completed")}
+                  onClick={() => updateStatus("delivered")}
                   className="w-full h-14 bg-sky-500 active:bg-sky-600 text-white text-lg font-bold rounded-xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                   {isUpdating ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
-                    "Завершить заказ"
+                    "Доставил"
                   )}
                 </button>
               </>
+            )}
+
+            {order.status === "delivered" && (
+              <button
+                disabled={isUpdating}
+                onClick={() => updateStatus("completed")}
+                className="w-full h-14 bg-sky-500 active:bg-sky-600 text-white text-lg font-bold rounded-xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                {isUpdating ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  "Завершить"
+                )}
+              </button>
             )}
           </div>
         )}

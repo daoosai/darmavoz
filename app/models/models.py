@@ -52,6 +52,7 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String(255))
     role_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("roles.id"))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    fcm_token: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
 
     role: Mapped["Role"] = relationship("Role", back_populates="users")
     driver_profile: Mapped[Optional["Driver"]] = relationship(
@@ -400,6 +401,9 @@ class Order(Base):
     items: Mapped[List["OrderItem"]] = relationship(
         "OrderItem", back_populates="order", cascade="all, delete-orphan"
     )
+    order_events: Mapped[List["OrderEvent"]] = relationship(
+        "OrderEvent", back_populates="order", cascade="all, delete-orphan"
+    )
     events: Mapped[List["EventLog"]] = relationship("EventLog", back_populates="order")
     offers: Mapped[List["OrderOffer"]] = relationship(
         "OrderOffer",
@@ -448,6 +452,19 @@ class OrderItem(Base):
 
     order: Mapped["Order"] = relationship("Order", back_populates="items")
     material: Mapped["Material"] = relationship("Material")
+
+
+class OrderEvent(Base):
+    __tablename__ = "order_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orders.id"), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(50), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    order: Mapped["Order"] = relationship("Order", back_populates="order_events")
 
 
 class EventLog(Base):

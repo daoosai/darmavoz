@@ -262,7 +262,7 @@ async def decline_driver_offer(
 @router.get("/orders/assigned/current", response_model=DriverAssignedOrderOut)
 async def get_current_assigned_order(
     db: AsyncSession = Depends(get_db),
-    current_driver: Driver = Depends(get_current_approved_driver),
+    current_driver: Driver = Depends(get_current_driver),
 ) -> DriverAssignedOrderOut:
     order = await get_current_assigned_order_for_driver(db, current_driver.id)
     if order is None:
@@ -278,7 +278,7 @@ async def get_current_assigned_order(
 @router.get("/orders", response_model=list[OrderOut])
 async def get_driver_orders(
     db: AsyncSession = Depends(get_db),
-    current_driver: Driver = Depends(get_current_approved_driver),
+    current_driver: Driver = Depends(get_current_driver),
 ) -> list[Order]:
     return await list_orders_for_driver(db, current_driver.id)
 

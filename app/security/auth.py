@@ -17,6 +17,11 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 optional_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
+DISPATCH_ALLOWED_MODERATION_STATUSES = {
+    ModerationStatus.approved.value,
+    ModerationStatus.incomplete.value,
+}
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
@@ -137,12 +142,12 @@ async def get_current_approved_driver(current_driver: Driver = Depends(get_curre
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Driver profile is inactive",
         )
-    if current_driver.moderation_status != ModerationStatus.approved.value:
+    if current_driver.moderation_status not in DISPATCH_ALLOWED_MODERATION_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Driver moderation is not approved",
         )
-    if vehicle is not None and vehicle.moderation_status != ModerationStatus.approved.value:
+    if vehicle is not None and vehicle.moderation_status not in DISPATCH_ALLOWED_MODERATION_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Vehicle moderation is not approved",

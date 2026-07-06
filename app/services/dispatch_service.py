@@ -1153,16 +1153,36 @@ async def get_matching_drivers(
 
     fallback_result = await session.execute(fallback_stmt)
     fallback = list(fallback_result.scalars().all())
+    if fallback:
+        logger.info(
+            'dispatch_candidates_selected',
+            extra={
+                'order_id': str(order.id),
+                'stage': 'fallback',
+                'count': len(fallback),
+                'driver_ids': [str(driver.id) for driver in fallback],
+            },
+        )
+        return fallback
+
+    rescue_stmt = _matching_drivers_base_query(order).order_by(
+        Driver.dispatch_priority.desc(),
+        Driver.last_offer_at.asc().nullsfirst(),
+        Driver.id.asc(),
+    )
+    rescue_result = await session.execute(rescue_stmt)
+    rescue = list(rescue_result.scalars().all())
     logger.info(
         'dispatch_candidates_selected',
         extra={
             'order_id': str(order.id),
-            'stage': 'fallback',
-            'count': len(fallback),
-            'driver_ids': [str(driver.id) for driver in fallback],
+            'stage': 'rescue',
+            'count': len(rescue),
+            'driver_ids': [str(driver.id) for driver in rescue],
+            'note': 'fallback without attempted/rejected/penalty filters',
         },
     )
-    return fallback
+    return rescue
 
 
 async def create_offer_for_driver(session: AsyncSession, order: Order, driver: Driver) -> OrderOffer:

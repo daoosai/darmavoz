@@ -838,12 +838,12 @@ export const DriverOrderCard: React.FC<{
     const isToClient = type === 'client';
     const lat = isToClient ? order.delivery_lat : order.pickup_lat;
     const lon = isToClient ? order.delivery_lon : order.pickup_lon;
-    const label = isToClient ? '??????' : '??????';
+    const label = isToClient ? 'Клиент' : 'Карьер';
 
     if (lat && lon) {
       window.location.href = `geo:${lat},${lon}?q=${lat},${lon}(${encodeURIComponent(label)})`;
     } else {
-      toast.error("?????????? ???????????");
+      toast.error("Координаты отсутствуют");
     }
   };
 
@@ -1063,7 +1063,7 @@ export const DriverOrderCard: React.FC<{
                   {isUpdating ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
-                    "??????? ?? ??????"
+                    "Выехать на карьер"
                   )}
                 </button>
                 <button
@@ -1076,7 +1076,7 @@ export const DriverOrderCard: React.FC<{
                   onClick={() => setIsCancelModalOpen(true)}
                   className="w-full py-4 text-red-500 font-medium text-base active:bg-red-50 rounded-xl transition-colors"
                 >
-                  ?????????? ?? ??????????
+                  Отказаться от выполнения
                 </button>
               </>
             )}

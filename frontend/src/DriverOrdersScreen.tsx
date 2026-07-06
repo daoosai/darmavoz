@@ -834,18 +834,21 @@ export const DriverOrderCard: React.FC<{
     }
   };
 
-  const openNavigator = async () => {
-    const lat = order.status === 'heading_to_client' ? order.delivery_lat : order.pickup_lat;
-    const lon = order.status === 'heading_to_client' ? order.delivery_lon : order.pickup_lon;
-
+  const openNavigator = async (type: 'quarry' | 'client') => {
     if (order.status === 'driver_assigned' || order.status === 'driver_accepted') {
         await updateStatus('heading_to_pickup');
     }
 
+    const lat = type === 'quarry' ? order.pickup_lat : order.delivery_lat;
+    const lon = type === 'quarry' ? order.pickup_lon : order.delivery_lon;
+    const address = type === 'quarry' ? order.pickup_address : order.delivery_address;
+
     if (lat && lon) {
-      window.location.href = `geo:${lat},${lon}?q=${lat},${lon}`;
+      window.location.href = `https://2gis.ru/routeSearch/rsType/car/to/${lon},${lat}`;
+    } else if (address) {
+      window.location.href = `https://2gis.ru/routeSearch/rsType/car/to/${encodeURIComponent(address)}`;
     } else {
-      toast.error("Координаты отсутствуют");
+      toast.error("Нет данных для построения маршрута");
     }
   };
 
@@ -1058,7 +1061,7 @@ export const DriverOrderCard: React.FC<{
               <>
                 <button
                   disabled={isUpdating}
-                  onClick={openNavigator}
+                  onClick={() => openNavigator('quarry')}
                   className="w-full h-14 bg-sky-500 active:bg-sky-600 text-white text-lg font-bold rounded-xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                   {isUpdating ? (
@@ -1079,7 +1082,7 @@ export const DriverOrderCard: React.FC<{
             {order.status === "heading_to_pickup" && (
               <>
                 <button
-                  onClick={openNavigator}
+                  onClick={() => openNavigator('quarry')}
                   className="w-full h-14 bg-gradient-to-r from-emerald-700 to-emerald-500 active:from-emerald-800 active:to-emerald-600 text-white text-lg font-bold rounded-xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2"
                 >
                   Открыть навигатор
@@ -1102,22 +1105,6 @@ export const DriverOrderCard: React.FC<{
               <>
                 <button
                   disabled={isUpdating}
-                  onClick={() => updateStatus("loading")}
-                  className="w-full h-14 bg-sky-500 active:bg-sky-600 text-white text-lg font-bold rounded-xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
-                >
-                  {isUpdating ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    "Начать погрузку"
-                  )}
-                </button>
-              </>
-            )}
-
-            {order.status === "loading" && (
-              <>
-                <button
-                  disabled={isUpdating}
                   onClick={() => updateStatus("heading_to_client")}
                   className="w-full h-14 bg-sky-500 active:bg-sky-600 text-white text-lg font-bold rounded-xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                 >
@@ -1133,7 +1120,7 @@ export const DriverOrderCard: React.FC<{
             {order.status === "heading_to_client" && (
               <>
                 <button
-                  onClick={openNavigator}
+                  onClick={() => openNavigator('client')}
                   className="w-full h-14 bg-gradient-to-r from-emerald-700 to-emerald-500 active:from-emerald-800 active:to-emerald-600 text-white text-lg font-bold rounded-xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2"
                 >
                   Открыть навигатор

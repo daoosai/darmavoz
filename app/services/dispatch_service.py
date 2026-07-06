@@ -90,6 +90,7 @@ DRIVER_ORDER_STATUS_TRANSITIONS: dict[str, set[str]] = {
     },
     OrderStatus.arrived_at_pickup.value: {
         OrderStatus.loading.value,
+        OrderStatus.heading_to_client.value,
     },
     OrderStatus.loading.value: {
         OrderStatus.heading_to_client.value,

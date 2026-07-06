@@ -52,6 +52,13 @@ def _send_push(token: str, title: str, body: str, data: dict[str, str] | None = 
                 aps=messaging.Aps(sound="default"),
             ),
         ),
+        webpush=messaging.WebpushConfig(
+            headers={"Urgency": "high"},
+            notification=messaging.WebpushNotification(
+                title=title,
+                body=body,
+            ),
+        ),
     )
     return messaging.send(message, app=app)
 

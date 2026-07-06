@@ -421,7 +421,7 @@ export default function CartScreen({
                         </div>
 
                         <div className="flex justify-between text-[16px] font-bold text-slate-900 mt-1 pl-1 pr-1">
-                          <span>Итого к оплате:</span>
+                          <span>К оплате:</span>
                           <span className="text-[#2DB0E6] text-[18px]">
                             {estimatedTotalAmount.toLocaleString("ru-RU")} ₽
                           </span>

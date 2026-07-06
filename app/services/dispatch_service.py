@@ -81,6 +81,7 @@ FULL_ORDER_EDIT_STATUSES = {
 DRIVER_ORDER_STATUS_TRANSITIONS: dict[str, set[str]] = {
     OrderStatus.driver_assigned.value: {
         OrderStatus.driver_accepted.value,
+        OrderStatus.heading_to_pickup.value,
     },
     OrderStatus.driver_accepted.value: {
         OrderStatus.heading_to_pickup.value,
@@ -1434,18 +1435,28 @@ async def restart_dispatch_for_order(session: AsyncSession, order_id: UUID) -> O
         current_offer.responded_at = now
         current_offer.decision_reason = "Dispatch restarted by logist"
 
+    await session.execute(
+        update(OrderOffer)
+        .where(
+            OrderOffer.order_id == order.id,
+            OrderOffer.status == OrderOfferStatus.pending.value,
+        )
+        .values(
+            status=OrderOfferStatus.cancelled.value,
+            responded_at=now,
+            decision_reason="Dispatch restarted by logist",
+        )
+    )
+
     order.driver_id = None
     order.assigned_at = None
     order.current_offer_id = None
     order.status = OrderStatus.searching_driver.value
     order.dispatch_started_at = now
     await add_event(session, order.id, "dispatch_started", "Dispatch restarted by logist")
-
-    order = await advance_dispatch_for_order(session, order.id, exclude_attempted_drivers=False)
     await session.commit()
+
     await enqueue_order_for_dispatch_safe(order.id)
-    if order.status == OrderStatus.offered_to_driver.value:
-        schedule_new_order_push(order, order.current_offer.driver_id if order.current_offer is not None else None)
     return await get_order_by_id(session, order.id)
 
 

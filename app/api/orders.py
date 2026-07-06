@@ -15,6 +15,7 @@ from app.services.dispatch_service import (
     delete_order_by_id,
     get_order_by_id,
     list_recent_orders,
+    restart_dispatch_for_order,
 )
 
 router = APIRouter()
@@ -70,6 +71,16 @@ async def assign_order(
         order_id=order_id,
         driver_id=payload.driver_id,
     )
+
+
+@router.post("/{order_id}/restart-dispatch", response_model=OrderOut)
+async def restart_dispatch(
+    order_id: UUID,
+    current_user: User = Depends(get_current_logist_user),
+    db: AsyncSession = Depends(get_db),
+) -> Order:
+    del current_user
+    return await restart_dispatch_for_order(db, order_id)
 
 
 @router.post("/checkout", response_model=OrderOut, status_code=status.HTTP_201_CREATED)

@@ -835,22 +835,25 @@ export const DriverOrderCard: React.FC<{
   };
 
   const openNavigator = async (type: 'quarry' | 'client') => {
-    if (order.status === 'driver_assigned' || order.status === 'driver_accepted') {
-        await updateStatus('heading_to_pickup');
+    const lat = type === 'client' ? order.delivery_lat : order.pickup_lat;
+    const lon = type === 'client' ? order.delivery_lon : order.pickup_lon;
+    const label = type === 'client' ? '??????' : '??????';
+
+    if (type === 'quarry' && order.status === 'driver_assigned') {
+      await updateStatus('heading_to_pickup');
     }
 
-    const lat = type === 'quarry' ? order.pickup_lat : order.delivery_lat;
-    const lon = type === 'quarry' ? order.pickup_lon : order.delivery_lon;
-    const address = type === 'quarry' ? order.pickup_address : order.delivery_address;
+    if (type === 'client' && order.status === 'arrived_at_pickup') {
+      await updateStatus('heading_to_client');
+    }
 
     if (lat && lon) {
-      window.location.href = `https://2gis.ru/routeSearch/rsType/car/to/${lon},${lat}`;
-    } else if (address) {
-      window.location.href = `https://2gis.ru/routeSearch/rsType/car/to/${encodeURIComponent(address)}`;
+      window.location.href = `geo:${lat},${lon}?q=${lat},${lon}(${encodeURIComponent(label)})`;
     } else {
-      toast.error("Нет данных для построения маршрута");
+      toast.error("?????????? ???????????");
     }
   };
+
 
   if (isHistory) {
     return (

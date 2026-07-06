@@ -838,11 +838,12 @@ export const DriverOrderCard: React.FC<{
     const isToClient = type === 'client';
     const lat = isToClient ? order.delivery_lat : order.pickup_lat;
     const lon = isToClient ? order.delivery_lon : order.pickup_lon;
+    const label = isToClient ? '??????' : '??????';
 
     if (lat && lon) {
-      window.location.href = `geo:${lat},${lon}?q=${lat},${lon}`;
+      window.location.href = `geo:${lat},${lon}?q=${lat},${lon}(${encodeURIComponent(label)})`;
     } else {
-      toast.error("?????????? ???????????");
+      toast.error("?????????? ????????????");
     }
   };
 
@@ -1069,7 +1070,7 @@ export const DriverOrderCard: React.FC<{
                   onClick={() => openNavigator('quarry')}
                   className="w-full h-14 bg-gradient-to-r from-emerald-700 to-emerald-500 active:from-emerald-800 active:to-emerald-600 text-white text-lg font-bold rounded-xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2"
                 >
-                  ??????? ?????????
+                  ??????? ??????????
                 </button>
                 <button
                   onClick={() => setIsCancelModalOpen(true)}

@@ -971,7 +971,7 @@ async def delete_order_by_id(session: AsyncSession, order_id: UUID) -> None:
 
 def _matching_drivers_base_query(order: Order) -> Select[tuple[Driver]]:
     requested_volume = get_order_requested_volume(order)
-    stmt = (
+    return (
         select(Driver)
         .join(Driver.vehicle)
         .options(selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option))
@@ -983,9 +983,6 @@ def _matching_drivers_base_query(order: Order) -> Select[tuple[Driver]]:
         .where(Vehicle.moderation_status.in_(DISPATCH_ALLOWED_MODERATION_STATUSES))
         .where(build_vehicle_volume_match_clause(requested_volume))
     )
-    if order.delivery_option_id is not None:
-        stmt = stmt.where(Vehicle.delivery_option_id == order.delivery_option_id)
-    return stmt
 
 
 def _current_cycle_offer_driver_ids(
@@ -1001,6 +998,92 @@ def _current_cycle_offer_driver_ids(
     return stmt.scalar_subquery()
 
 
+async def _log_dispatch_candidates(
+    session: AsyncSession,
+    order: Order,
+    *,
+    excluded_driver_ids: set[UUID],
+    exclude_attempted_drivers: bool,
+) -> None:
+    requested_volume = get_order_requested_volume(order)
+    result = await session.execute(
+        select(Driver)
+        .options(selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option))
+        .where(Driver.vehicle_id.is_not(None))
+        .order_by(Driver.dispatch_priority.desc(), Driver.id.asc())
+    )
+    drivers = list(result.scalars().all())
+    attempted_ids: set[UUID] = set()
+    rejected_ids: set[UUID] = set()
+    if order.dispatch_started_at is not None:
+        attempted_rows = await session.execute(
+            select(OrderOffer.driver_id, OrderOffer.status)
+            .where(OrderOffer.order_id == order.id, OrderOffer.offered_at >= order.dispatch_started_at)
+        )
+        for driver_id, offer_status in attempted_rows.all():
+            attempted_ids.add(driver_id)
+            if offer_status in {OrderOfferStatus.declined.value, OrderOfferStatus.expired.value}:
+                rejected_ids.add(driver_id)
+
+    candidate_logs: list[dict[str, object]] = []
+    for driver in drivers:
+        vehicle = driver.vehicle
+        reasons: list[str] = []
+        if driver.status != DriverStatus.available.value:
+            reasons.append(f'status={driver.status}')
+        if driver.moderation_status not in DISPATCH_ALLOWED_MODERATION_STATUSES:
+            reasons.append(f'driver_moderation={driver.moderation_status}')
+        if not driver.is_auto_dispatch_enabled:
+            reasons.append('auto_dispatch_disabled')
+        if vehicle is None:
+            reasons.append('vehicle_missing')
+        else:
+            if not vehicle.is_active:
+                reasons.append('vehicle_inactive')
+            if vehicle.moderation_status not in DISPATCH_ALLOWED_MODERATION_STATUSES:
+                reasons.append(f'vehicle_moderation={vehicle.moderation_status}')
+            if requested_volume is not None and requested_volume > 0:
+                cubature_min = vehicle.cubature_min
+                cubature_max = vehicle.cubature_max
+                body_volume = vehicle.body_volume_m3
+                if cubature_min is not None and requested_volume < cubature_min:
+                    reasons.append(f'volume_lt_min:{requested_volume}<{cubature_min}')
+                if cubature_max is not None and requested_volume > cubature_max:
+                    reasons.append(f'volume_gt_max:{requested_volume}>{cubature_max}')
+                if body_volume is not None and requested_volume > body_volume:
+                    reasons.append(f'volume_gt_body:{requested_volume}>{body_volume}')
+        if driver.id in rejected_ids:
+            reasons.append('already_rejected_or_expired')
+        if exclude_attempted_drivers and driver.id in attempted_ids:
+            reasons.append('already_attempted')
+        if driver.id in excluded_driver_ids:
+            reasons.append('explicitly_excluded')
+        if driver.temporary_penalty_until and driver.temporary_penalty_until > utcnow():
+            reasons.append(f'penalty_until={driver.temporary_penalty_until.isoformat()}')
+
+        candidate_logs.append(
+            {
+                'driver_id': str(driver.id),
+                'driver_name': driver.name,
+                'status': driver.status,
+                'priority': driver.dispatch_priority,
+                'vehicle_id': str(driver.vehicle_id) if driver.vehicle_id else None,
+                'delivery_option_id': str(vehicle.delivery_option_id) if vehicle and vehicle.delivery_option_id else None,
+                'reasons': reasons or ['eligible'],
+            }
+        )
+
+    logger.info(
+        'dispatch_candidate_scan',
+        extra={
+            'order_id': str(order.id),
+            'requested_volume': requested_volume,
+            'drivers_total': len(candidate_logs),
+            'drivers_snapshot': candidate_logs,
+        },
+    )
+
+
 async def get_matching_drivers(
     session: AsyncSession,
     order: Order,
@@ -1011,6 +1094,12 @@ async def get_matching_drivers(
 ) -> list[Driver]:
     now = utcnow()
     excluded_driver_ids = excluded_driver_ids or set()
+    await _log_dispatch_candidates(
+        session,
+        order,
+        excluded_driver_ids=excluded_driver_ids,
+        exclude_attempted_drivers=exclude_attempted_drivers,
+    )
     attempted_driver_ids = _current_cycle_offer_driver_ids(order)
     rejected_driver_ids = _current_cycle_offer_driver_ids(
         order,
@@ -1051,10 +1140,28 @@ async def get_matching_drivers(
     preferred_result = await session.execute(preferred_stmt)
     preferred = list(preferred_result.scalars().all())
     if preferred:
+        logger.info(
+            'dispatch_candidates_selected',
+            extra={
+                'order_id': str(order.id),
+                'stage': 'preferred',
+                'count': len(preferred),
+                'driver_ids': [str(driver.id) for driver in preferred],
+            },
+        )
         return preferred
 
     fallback_result = await session.execute(fallback_stmt)
     fallback = list(fallback_result.scalars().all())
+    logger.info(
+        'dispatch_candidates_selected',
+        extra={
+            'order_id': str(order.id),
+            'stage': 'fallback',
+            'count': len(fallback),
+            'driver_ids': [str(driver.id) for driver in fallback],
+        },
+    )
     return fallback
 
 

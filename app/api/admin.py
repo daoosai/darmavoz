@@ -49,7 +49,7 @@ from app.schemas.driver import (
     VehicleModerationDecisionOut,
     VehicleOut,
 )
-from app.schemas.order import OrderDeleteOut, OrderOut
+from app.schemas.order import OrderDeleteOut, OrderOut, OrderUpdate
 from app.security.auth import (
     get_current_admin_user,
     get_current_logist_user,
@@ -57,7 +57,7 @@ from app.security.auth import (
     get_password_hash,
 )
 from app.utils.phones import normalize_phone
-from app.services.dispatch_service import delete_order_by_id, list_recent_orders
+from app.services.dispatch_service import delete_order_by_id, list_recent_orders, update_order_by_logist
 from app.services.vehicle_moderation import (
     REQUIRED_VEHICLE_MEDIA_SLOTS,
     vehicle_has_required_photos,
@@ -149,12 +149,25 @@ async def get_manager_area(current_user: User = Depends(get_current_manager_user
 async def list_admin_panel_orders(
     driver_id: UUID | None = None,
     date: date_type | None = None,
-    show_deleted: bool = False,
+    is_deleted: bool = False,
+    show_deleted: bool | None = None,
     current_user: User = Depends(get_current_logist_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[Order]:
     del current_user
-    return await list_recent_orders(db, driver_id=driver_id, created_on=date, show_deleted=show_deleted)
+    deleted_filter = show_deleted if show_deleted is not None else is_deleted
+    return await list_recent_orders(db, driver_id=driver_id, created_on=date, is_deleted=deleted_filter)
+
+
+@router.patch("/orders/{order_id}", response_model=OrderOut)
+async def update_admin_order(
+    order_id: UUID,
+    payload: OrderUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_logist_user),
+) -> Order:
+    del current_user
+    return await update_order_by_logist(db, order_id=order_id, payload=payload)
 
 
 @router.delete("/orders/{order_id}", response_model=OrderDeleteOut)
@@ -1185,9 +1198,12 @@ async def delete_admin_driver(
         order.assigned_at = None
         if order.status in {
             OrderStatus.driver_assigned.value,
-            OrderStatus.heading_to_quarry.value,
+            OrderStatus.driver_accepted.value,
+            OrderStatus.heading_to_pickup.value,
+            OrderStatus.arrived_at_pickup.value,
+            OrderStatus.loading.value,
             OrderStatus.heading_to_client.value,
-            OrderStatus.in_progress.value,
+            OrderStatus.delivered.value,
         }:
             order.status = OrderStatus.created.value
 

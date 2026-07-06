@@ -77,6 +77,23 @@ class ClientProfileUpdate(BaseModel):
         return str(value).strip() or None
 
 
+class ClientFcmTokenIn(BaseModel):
+    token: str = Field(min_length=1, max_length=1024)
+
+    @field_validator("token")
+    @classmethod
+    def validate_token(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Token must not be empty")
+        return normalized
+
+
+class ClientFcmTokenOut(BaseModel):
+    ok: bool
+    token: str | None = None
+
+
 class ClientAddressBase(BaseModel):
     full_address: str = Field(min_length=1, max_length=500)
     comment: str | None = None

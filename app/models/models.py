@@ -69,6 +69,7 @@ class Client(Base):
     name: Mapped[str] = mapped_column(String(255))
     email: Mapped[Optional[str]] = mapped_column(String(255), unique=True, index=True, nullable=True)
     phone: Mapped[str] = mapped_column(String(20), unique=True, index=True, nullable=False)
+    fcm_token: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     external_source: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     external_user_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
@@ -315,9 +316,13 @@ class OrderStatus(str, Enum):
     searching_driver = "searching_driver"
     offered_to_driver = "offered_to_driver"
     driver_assigned = "driver_assigned"
-    heading_to_quarry = "heading_to_quarry"
+    driver_accepted = "driver_accepted"
+    heading_to_pickup = "heading_to_pickup"
+    arrived_at_pickup = "arrived_at_pickup"
+    loading = "loading"
     heading_to_client = "heading_to_client"
-    in_progress = "in_progress"
+    delivered = "delivered"
+    timeout = "timeout"
     completed = "completed"
     cancelled = "cancelled"
     no_driver_found = "no_driver_found"

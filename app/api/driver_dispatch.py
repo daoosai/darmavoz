@@ -25,13 +25,12 @@ from app.schemas.order import DriverAssignedOrderOut, DriverOrderStatusUpdate, D
 from app.security.auth import get_current_approved_driver, get_current_driver
 from app.services.dispatch_service import (
     accept_offer,
-    add_event,
     decline_offer,
     get_current_assigned_order_for_driver,
     get_current_incoming_offer_for_driver,
-    get_order_by_id,
     list_orders_for_driver,
     mask_phone,
+    set_driver_order_status,
 )
 from app.services.email_service import send_email
 from app.services.vehicle_moderation import (
@@ -106,88 +105,6 @@ def _has_driver_critical_changes(driver: Driver, payload: DriverProfileUpdate) -
         (payload.name is not None and payload.name != driver.name)
         or (payload.phone is not None and payload.phone != driver.phone)
     )
-
-
-DRIVER_ACTIVE_ORDER_STATUSES = {
-    OrderStatus.driver_assigned.value,
-    OrderStatus.heading_to_quarry.value,
-    OrderStatus.heading_to_client.value,
-    OrderStatus.in_progress.value,
-}
-
-DRIVER_ORDER_STATUS_TRANSITIONS: dict[str, set[str]] = {
-    OrderStatus.driver_assigned.value: {
-        OrderStatus.heading_to_quarry.value,
-        OrderStatus.heading_to_client.value,
-        OrderStatus.in_progress.value,
-        OrderStatus.completed.value,
-    },
-    OrderStatus.heading_to_quarry.value: {
-        OrderStatus.heading_to_client.value,
-        OrderStatus.in_progress.value,
-        OrderStatus.completed.value,
-    },
-    OrderStatus.heading_to_client.value: {
-        OrderStatus.in_progress.value,
-        OrderStatus.completed.value,
-    },
-    OrderStatus.in_progress.value: {
-        OrderStatus.heading_to_client.value,
-        OrderStatus.completed.value,
-    },
-}
-
-
-def _driver_order_status_event(target_status: str, driver_id: UUID) -> tuple[str, str]:
-    event_map = {
-        OrderStatus.heading_to_quarry.value: (
-            "driver_heading_to_quarry",
-            f"Driver {driver_id} is heading to quarry",
-        ),
-        OrderStatus.heading_to_client.value: (
-            "driver_heading_to_client",
-            f"Driver {driver_id} is heading to client",
-        ),
-        OrderStatus.in_progress.value: (
-            "driver_in_progress",
-            f"Driver {driver_id} updated order to in_progress",
-        ),
-        OrderStatus.completed.value: (
-            "driver_completed_order",
-            f"Driver {driver_id} completed the order",
-        ),
-    }
-    return event_map[target_status]
-
-
-async def _set_driver_order_status(
-    *,
-    order: Order,
-    target_status: str,
-    db: AsyncSession,
-    current_driver: Driver,
-) -> Order:
-    if order.driver_id != current_driver.id:
-        raise HTTPException(status_code=403, detail="Order does not belong to this driver")
-
-    if order.status == target_status:
-        return await get_order_by_id(db, order.id)
-
-    allowed_statuses = DRIVER_ORDER_STATUS_TRANSITIONS.get(order.status, set())
-    if target_status not in allowed_statuses:
-        raise HTTPException(status_code=409, detail="Order status transition is not allowed")
-
-    order.status = target_status
-    if target_status == OrderStatus.completed.value:
-        order.current_offer_id = None
-        current_driver.status = DriverStatus.available.value
-    else:
-        current_driver.status = DriverStatus.busy.value
-
-    event_type, event_description = _driver_order_status_event(target_status, current_driver.id)
-    await add_event(db, order.id, event_type, event_description)
-    await db.commit()
-    return await get_order_by_id(db, order.id)
 
 
 def _has_vehicle_critical_changes(vehicle: Vehicle, payload: DriverVehicleUpdate) -> bool:
@@ -373,12 +290,11 @@ async def update_driver_order_status(
     db: AsyncSession = Depends(get_db),
     current_driver: Driver = Depends(get_current_approved_driver),
 ) -> Order:
-    order = await get_order_by_id(db, order_id)
-    return await _set_driver_order_status(
-        order=order,
+    return await set_driver_order_status(
+        db,
+        order_id=order_id,
+        driver_id=current_driver.id,
         target_status=payload.status,
-        db=db,
-        current_driver=current_driver,
     )
 
 
@@ -388,12 +304,11 @@ async def start_driver_order(
     db: AsyncSession = Depends(get_db),
     current_driver: Driver = Depends(get_current_approved_driver),
 ) -> Order:
-    order = await get_order_by_id(db, order_id)
-    return await _set_driver_order_status(
-        order=order,
-        target_status=OrderStatus.heading_to_quarry.value,
-        db=db,
-        current_driver=current_driver,
+    return await set_driver_order_status(
+        db,
+        order_id=order_id,
+        driver_id=current_driver.id,
+        target_status=OrderStatus.heading_to_pickup.value,
     )
 
 
@@ -403,12 +318,11 @@ async def complete_driver_order(
     db: AsyncSession = Depends(get_db),
     current_driver: Driver = Depends(get_current_approved_driver),
 ) -> Order:
-    order = await get_order_by_id(db, order_id)
-    return await _set_driver_order_status(
-        order=order,
+    return await set_driver_order_status(
+        db,
+        order_id=order_id,
+        driver_id=current_driver.id,
         target_status=OrderStatus.completed.value,
-        db=db,
-        current_driver=current_driver,
     )
 
 

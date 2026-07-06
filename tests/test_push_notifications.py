@@ -91,14 +91,63 @@ async def test_driver_can_save_and_clear_fcm_token(client, session_factory):
 
 
 @pytest.mark.asyncio
-async def test_manual_assign_sends_push(client, session_factory, monkeypatch):
-    sent_messages: list[tuple[str, str, str]] = []
+async def test_client_can_save_and_clear_fcm_token(client, session_factory):
+    async with session_factory() as session:
+        client_row = Client(name="FCM Client", phone="+79990030111")
+        session.add(client_row)
+        await session.commit()
+        client_id = client_row.id
 
-    async def fake_send_push_to_driver(driver_id, title, body):
-        sent_messages.append((str(driver_id), title, body))
-        return True
+    token = create_access_token(
+        data={
+            "sub": "+79990030111",
+            "role": "client",
+            "client_id": str(client_id),
+        }
+    )
+    headers = {"Authorization": f"Bearer {token}"}
 
-    monkeypatch.setattr("app.api.orders.send_push_to_driver", fake_send_push_to_driver)
+    save_response = await client.post(
+        "/api/v1/clients/me/fcm-token",
+        headers=headers,
+        json={"token": "client-token-123"},
+    )
+    assert save_response.status_code == 200
+    assert save_response.json() == {"ok": True, "token": "client-token-123"}
+
+    async with session_factory() as session:
+        updated_client = await session.scalar(select(Client).where(Client.id == client_id))
+        assert updated_client is not None
+        assert updated_client.fcm_token == "client-token-123"
+
+    delete_response = await client.delete("/api/v1/clients/me/fcm-token", headers=headers)
+    assert delete_response.status_code == 200
+    assert delete_response.json() == {"ok": True, "token": None}
+
+    async with session_factory() as session:
+        updated_client = await session.scalar(select(Client).where(Client.id == client_id))
+        assert updated_client is not None
+        assert updated_client.fcm_token is None
+
+
+@pytest.mark.asyncio
+async def test_manual_assign_schedules_client_and_driver_notifications(client, session_factory, monkeypatch):
+    sent_notifications: list[tuple[str, str, str]] = []
+
+    def fake_schedule_driver_new_order(order, driver_id):
+        sent_notifications.append(("driver", str(driver_id), order.status))
+
+    def fake_schedule_client_assigned(order):
+        sent_notifications.append(("client", str(order.client_id), order.status))
+
+    monkeypatch.setattr(
+        "app.services.dispatch_service.schedule_driver_new_order_notification",
+        fake_schedule_driver_new_order,
+    )
+    monkeypatch.setattr(
+        "app.services.dispatch_service.schedule_client_driver_assigned_notification",
+        fake_schedule_client_assigned,
+    )
 
     async with session_factory() as session:
         admin_role = await ensure_role(session, "admin")
@@ -107,10 +156,10 @@ async def test_manual_assign_sends_push(client, session_factory, monkeypatch):
         driver_user = await create_user(session, username="+79990030102", role=driver_role)
         from app.models.models import Category
 
-        category = Category(name="Сыпучие", slug="bulk-test-push", sort_order=0, is_active=True)
+        category = Category(name="Bulk", slug="bulk-test-push", sort_order=0, is_active=True)
         delivery_option = DeliveryOption(
             capacity_m3=10.0,
-            title="Самосвал 10 м3",
+            title="Truck 10m3",
             description="",
             base_price=5000.0,
             is_active=True,
@@ -120,19 +169,19 @@ async def test_manual_assign_sends_push(client, session_factory, monkeypatch):
         await session.flush()
         material = Material(
             category_id=category.id,
-            name="Щебень",
+            name="Gravel",
             description="",
             price=1000.0,
-            unit="м3",
+            unit="m3",
             min_volume=1.0,
             is_active=True,
             sort_order=0,
         )
         vehicle = Vehicle(
             title="Push Truck",
-            brand="КамАЗ",
-            plate_number="А123АА72",
-            vehicle_type="Самосвал",
+            brand="KamAZ",
+            plate_number="A123AA72",
+            vehicle_type="Dump truck",
             cubature_max=10.0,
             delivery_option_id=delivery_option.id,
             is_active=True,
@@ -157,8 +206,8 @@ async def test_manual_assign_sends_push(client, session_factory, monkeypatch):
         order = Order(
             client_id=client_row.id,
             delivery_option_id=delivery_option.id,
-            address="Тестовый адрес",
-            delivery_address="Тестовый адрес",
+            address="Test address",
+            delivery_address="Test address",
             total_amount=10000.0,
             status=OrderStatus.created.value,
             source="dispatcher",
@@ -180,6 +229,7 @@ async def test_manual_assign_sends_push(client, session_factory, monkeypatch):
         await session.commit()
         order_id = order.id
         driver_id = driver.id
+        client_id = client_row.id
 
     response = await client.post(
         f"/api/v1/orders/{order_id}/assign",
@@ -187,32 +237,34 @@ async def test_manual_assign_sends_push(client, session_factory, monkeypatch):
         json={"driver_id": str(driver_id)},
     )
     assert response.status_code == 200
-    assert sent_messages == [
-        (str(driver_id), "Новый заказ!", "Вас назначили на новый заказ. Проверьте приложение.")
+    assert sent_notifications == [
+        ("client", str(client_id), OrderStatus.driver_assigned.value),
+        ("driver", str(driver_id), OrderStatus.driver_assigned.value),
     ]
 
 
 @pytest.mark.asyncio
-async def test_auto_dispatch_schedules_push(session_factory, monkeypatch):
+async def test_auto_dispatch_schedules_driver_notification(session_factory, monkeypatch):
     sent_driver_ids: list[str] = []
 
-    async def fake_send_push_to_driver(driver_id, title, body):
+    def fake_schedule_driver_new_order(order, driver_id):
         sent_driver_ids.append(str(driver_id))
-        assert title == "Новый заказ!"
-        assert body == "Вас назначили на новый заказ. Проверьте приложение."
-        return True
+        assert order.status == OrderStatus.offered_to_driver.value
 
-    monkeypatch.setattr("app.services.dispatch_service.send_push_to_driver", fake_send_push_to_driver)
+    monkeypatch.setattr(
+        "app.services.dispatch_service.schedule_driver_new_order_notification",
+        fake_schedule_driver_new_order,
+    )
 
     async with session_factory() as session:
         driver_role = await ensure_role(session, "driver")
         driver_user = await create_user(session, username="+79990030103", role=driver_role)
         from app.models.models import Category
 
-        category = Category(name="Песок", slug="sand-push-test", sort_order=0, is_active=True)
+        category = Category(name="Sand", slug="sand-push-test", sort_order=0, is_active=True)
         delivery_option = DeliveryOption(
             capacity_m3=20.0,
-            title="Самосвал 20 м3",
+            title="Truck 20m3",
             description="",
             base_price=7000.0,
             is_active=True,
@@ -222,10 +274,10 @@ async def test_auto_dispatch_schedules_push(session_factory, monkeypatch):
         await session.flush()
         material = Material(
             category_id=category.id,
-            name="Песок",
+            name="Sand",
             description="",
             price=500.0,
-            unit="м3",
+            unit="m3",
             min_volume=1.0,
             is_active=True,
             sort_order=0,
@@ -233,7 +285,7 @@ async def test_auto_dispatch_schedules_push(session_factory, monkeypatch):
         vehicle = Vehicle(
             title="Dispatch Truck",
             brand="MAN",
-            plate_number="В456ВВ72",
+            plate_number="B456BB72",
             delivery_option_id=delivery_option.id,
             is_active=True,
             moderation_status=ModerationStatus.approved.value,
@@ -256,8 +308,8 @@ async def test_auto_dispatch_schedules_push(session_factory, monkeypatch):
         order = Order(
             client_id=client_row.id,
             delivery_option_id=delivery_option.id,
-            address="Авто адрес",
-            delivery_address="Авто адрес",
+            address="Auto address",
+            delivery_address="Auto address",
             total_amount=10000.0,
             status=OrderStatus.searching_driver.value,
             source="dispatcher",

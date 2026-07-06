@@ -294,6 +294,94 @@ class DriverCancelOrderRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
 
+class OrderUpdate(BaseModel):
+    client_name: str | None = Field(default=None, max_length=255, validation_alias=AliasChoices("client_name", "clientName"))
+    client_phone: str | None = Field(
+        default=None,
+        min_length=11,
+        max_length=20,
+        validation_alias=AliasChoices("client_phone", "clientPhone"),
+    )
+    notes: str | None = Field(default=None, max_length=2000)
+    delivery_address: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=500,
+        validation_alias=AliasChoices("delivery_address", "deliveryAddress", "address"),
+    )
+    delivery_lat: float | None = Field(default=None, validation_alias=AliasChoices("delivery_lat", "deliveryLat"))
+    delivery_lon: float | None = Field(default=None, validation_alias=AliasChoices("delivery_lon", "deliveryLon"))
+    material_id: UUID | None = Field(default=None, validation_alias=AliasChoices("material_id", "materialId"))
+    delivery_option_id: UUID | None = Field(
+        default=None,
+        validation_alias=AliasChoices("delivery_option_id", "deliveryOptionId", "vehicle_type_id", "vehicleTypeId"),
+    )
+    quarry_id: UUID | None = Field(default=None, validation_alias=AliasChoices("quarry_id", "quarryId"))
+    estimated_total_amount: float | None = Field(
+        default=None,
+        gt=0,
+        validation_alias=AliasChoices("estimated_total_amount", "estimatedTotalAmount"),
+    )
+
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        populate_by_name=True,
+        extra="forbid",
+    )
+
+    @field_validator("client_name", "client_phone", "notes", "delivery_address", mode="before")
+    @classmethod
+    def normalize_strings(cls, value):
+        if value is None:
+            return None
+        if isinstance(value, str):
+            value = value.strip()
+            return value or None
+        return value
+
+    @field_validator("delivery_lat", "delivery_lon", "estimated_total_amount", mode="before")
+    @classmethod
+    def normalize_numbers(cls, value):
+        if value is None:
+            return None
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                return None
+        return value
+
+    @field_validator("delivery_lat")
+    @classmethod
+    def validate_delivery_lat(cls, value: float | None):
+        if value is None:
+            return value
+        if value < -90 or value > 90:
+            raise ValueError("Latitude must be between -90 and 90")
+        return value
+
+    @field_validator("delivery_lon")
+    @classmethod
+    def validate_delivery_lon(cls, value: float | None):
+        if value is None:
+            return value
+        if value < -180 or value > 180:
+            raise ValueError("Longitude must be between -180 and 180")
+        return value
+
+    @field_validator("estimated_total_amount")
+    @classmethod
+    def validate_estimated_total_amount(cls, value: float | None):
+        if value is None:
+            return value
+        return round(value, 2)
+
+    @model_validator(mode="after")
+    def validate_coordinates_pair(self):
+        if (self.delivery_lat is None) != (self.delivery_lon is None):
+            raise ValueError("delivery_lat and delivery_lon must be provided together")
+        return self
+
+
 class ManualAssignRequest(BaseModel):
     driver_id: UUID
 
@@ -326,6 +414,8 @@ class DispatchHistoryOut(BaseModel):
 class OrderOut(BaseModel):
     id: UUID
     client_id: UUID
+    client_name: str | None = None
+    client_phone: str | None = None
     driver_id: UUID | None = None
     delivery_option_id: UUID | None = None
     quarry_id: UUID | None = None
@@ -370,16 +460,30 @@ class DriverOrderOut(OrderOut):
     quarry_name: str | None = None
 
 
-DriverOrderStatusValue = Literal[
-    "heading_to_quarry",
-    "heading_to_client",
-    "in_progress",
-    "completed",
-]
-
-
 class DriverOrderStatusUpdate(BaseModel):
-    status: DriverOrderStatusValue
+    status: str
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: str) -> str:
+        normalized = value.strip()
+        legacy_aliases = {
+            "heading_to_quarry": "heading_to_pickup",
+            "in_progress": "loading",
+        }
+        normalized = legacy_aliases.get(normalized, normalized)
+        allowed_statuses = {
+            "driver_accepted",
+            "heading_to_pickup",
+            "arrived_at_pickup",
+            "loading",
+            "heading_to_client",
+            "delivered",
+            "completed",
+        }
+        if normalized not in allowed_statuses:
+            raise ValueError("Unsupported driver order status")
+        return normalized
 
     model_config = ConfigDict(extra="forbid")
 

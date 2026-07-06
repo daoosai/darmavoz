@@ -6,7 +6,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
 from app.models.models import Client, Order, User
-from app.schemas.client import ClientCreate, ClientProfileResponse, ClientProfileUpdate, ClientResponse
+from app.schemas.client import (
+    ClientCreate,
+    ClientFcmTokenIn,
+    ClientFcmTokenOut,
+    ClientProfileResponse,
+    ClientProfileUpdate,
+    ClientResponse,
+)
 from app.schemas.order import OrderOut
 from app.security.auth import get_current_client, get_current_logist_user
 from app.services.dispatch_service import list_orders_for_client
@@ -86,6 +93,27 @@ async def update_my_profile(
     await db.commit()
     await db.refresh(current_client)
     return build_client_profile_response(current_client)
+
+
+@router.post("/me/fcm-token", response_model=ClientFcmTokenOut)
+async def save_my_fcm_token(
+    payload: ClientFcmTokenIn,
+    current_client: Client = Depends(get_current_client),
+    db: AsyncSession = Depends(get_db),
+) -> ClientFcmTokenOut:
+    current_client.fcm_token = payload.token.strip()
+    await db.commit()
+    return ClientFcmTokenOut(ok=True, token=current_client.fcm_token)
+
+
+@router.delete("/me/fcm-token", response_model=ClientFcmTokenOut)
+async def delete_my_fcm_token(
+    current_client: Client = Depends(get_current_client),
+    db: AsyncSession = Depends(get_db),
+) -> ClientFcmTokenOut:
+    current_client.fcm_token = None
+    await db.commit()
+    return ClientFcmTokenOut(ok=True, token=None)
 
 
 @router.get("/me/orders", response_model=list[OrderOut])

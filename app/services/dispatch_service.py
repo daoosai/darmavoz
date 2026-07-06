@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID
@@ -29,14 +28,86 @@ from app.models.models import (
     Vehicle,
 )
 from app.schemas.order import DispatchHistoryAttemptOut, DispatchHistoryOut, LogistOrderCreate
+from app.services.notifications import (
+    schedule_client_driver_assigned_notification,
+    schedule_client_heading_to_client_notification,
+    schedule_client_order_completed_notification,
+    schedule_client_order_created_notification,
+    schedule_driver_new_order_notification,
+    schedule_logist_driver_cancelled_notification,
+    schedule_logist_no_driver_found_notification,
+    schedule_logist_timeout_notification,
+)
 from app.services.order_pricing import calculate_client_order_pricing, resolve_min_delivery_price
-from app.services.push_service import send_push_to_driver
 from app.services.redis_client import enqueue_dispatch_order
+from app.utils.phones import normalize_phone
 
 GUEST_CLIENT_PHONE = "00000000000"
 GUEST_CLIENT_NAME = "Гость (Демо)"
 MANUAL_ASSIGN_APPROVAL_ERROR = "Невозможно назначить заказ: профиль водителя или автомобиль не прошли модерацию"
 logger = logging.getLogger(__name__)
+
+ACTIVE_ASSIGNED_ORDER_STATUSES = {
+    OrderStatus.driver_assigned.value,
+    OrderStatus.driver_accepted.value,
+    OrderStatus.heading_to_pickup.value,
+    OrderStatus.arrived_at_pickup.value,
+    OrderStatus.loading.value,
+    OrderStatus.heading_to_client.value,
+    OrderStatus.delivered.value,
+}
+
+FULL_ORDER_EDIT_STATUSES = {
+    OrderStatus.created.value,
+    OrderStatus.searching_driver.value,
+    OrderStatus.no_driver_found.value,
+    "timeout",
+}
+
+DRIVER_ORDER_STATUS_TRANSITIONS: dict[str, set[str]] = {
+    OrderStatus.driver_assigned.value: {
+        OrderStatus.driver_accepted.value,
+        OrderStatus.heading_to_pickup.value,
+        OrderStatus.arrived_at_pickup.value,
+        OrderStatus.loading.value,
+        OrderStatus.heading_to_client.value,
+        OrderStatus.delivered.value,
+        OrderStatus.completed.value,
+    },
+    OrderStatus.driver_accepted.value: {
+        OrderStatus.heading_to_pickup.value,
+        OrderStatus.arrived_at_pickup.value,
+        OrderStatus.loading.value,
+        OrderStatus.heading_to_client.value,
+        OrderStatus.delivered.value,
+        OrderStatus.completed.value,
+    },
+    OrderStatus.heading_to_pickup.value: {
+        OrderStatus.arrived_at_pickup.value,
+        OrderStatus.loading.value,
+        OrderStatus.heading_to_client.value,
+        OrderStatus.delivered.value,
+        OrderStatus.completed.value,
+    },
+    OrderStatus.arrived_at_pickup.value: {
+        OrderStatus.loading.value,
+        OrderStatus.heading_to_client.value,
+        OrderStatus.delivered.value,
+        OrderStatus.completed.value,
+    },
+    OrderStatus.loading.value: {
+        OrderStatus.heading_to_client.value,
+        OrderStatus.delivered.value,
+        OrderStatus.completed.value,
+    },
+    OrderStatus.heading_to_client.value: {
+        OrderStatus.delivered.value,
+        OrderStatus.completed.value,
+    },
+    OrderStatus.delivered.value: {
+        OrderStatus.completed.value,
+    },
+}
 
 
 def active_order_clause() -> object:
@@ -162,11 +233,7 @@ def ensure_driver_vehicle_matches_order_volume(order: Order, driver: Driver) -> 
 def schedule_new_order_push(order: Order, driver_id: UUID | None) -> None:
     if driver_id is None:
         return
-    title, body = build_offer_push_message(order)
-    asyncio.create_task(
-        send_push_to_driver(driver_id, title, body),
-        name=f"dispatch-push-{driver_id}",
-    )
+    schedule_driver_new_order_notification(order, driver_id)
 
 
 async def enqueue_order_for_dispatch_safe(order_id: UUID) -> None:
@@ -448,6 +515,7 @@ async def create_checkout_order(
     )
 
     await session.commit()
+    schedule_client_order_created_notification(order)
     await enqueue_order_for_dispatch_safe(order.id)
     return await get_order_by_id(session, order.id)
 
@@ -567,6 +635,7 @@ async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate)
         route_calculated_at=route_calculated_at,
     )
     await session.commit()
+    schedule_client_order_created_notification(order)
     if payload.auto_dispatch:
         await enqueue_order_for_dispatch_safe(order.id)
     return await get_order_by_id(session, order.id)
@@ -647,7 +716,10 @@ async def assign_order_to_driver_manually(session: AsyncSession, *, order_id: UU
 
     await add_event(session, order.id, "driver_assigned_manual", f"Driver {driver_id} assigned manually")
     await session.commit()
-    return await get_order_by_id(session, order.id)
+    refreshed_order = await get_order_by_id(session, order.id)
+    schedule_client_driver_assigned_notification(refreshed_order)
+    schedule_driver_new_order_notification(refreshed_order, driver.id)
+    return refreshed_order
 
 
 def hydrate_order_route_fields(order: Order | None) -> Order | None:
@@ -705,12 +777,10 @@ async def list_recent_orders(
     *,
     driver_id: UUID | None = None,
     created_on: date | None = None,
-    show_deleted: bool = False,
+    is_deleted: bool = False,
 ) -> list[Order]:
     stmt = select(Order).options(*order_load_options())
-
-    if not show_deleted:
-        stmt = stmt.where(active_order_clause())
+    stmt = stmt.where(Order.is_deleted.is_(is_deleted))
 
     if driver_id is not None:
         stmt = stmt.where(Order.driver_id == driver_id)
@@ -722,6 +792,138 @@ async def list_recent_orders(
 
     result = await session.execute(stmt.order_by(Order.created_at.desc()).limit(limit))
     return hydrate_orders_route_fields(list(result.scalars().unique().all()))
+
+
+async def update_order_by_logist(
+    session: AsyncSession,
+    *,
+    order_id: UUID,
+    payload,
+) -> Order:
+    order = await get_order_by_id(session, order_id)
+    provided_fields = set(payload.model_fields_set)
+    protected_fields = {
+        "delivery_address",
+        "delivery_lat",
+        "delivery_lon",
+        "material_id",
+        "delivery_option_id",
+        "quarry_id",
+        "estimated_total_amount",
+    }
+    if provided_fields & protected_fields and order.status not in FULL_ORDER_EDIT_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Address, material, vehicle type, quarry and price can be changed only for "
+                "created/searching_driver/no_driver_found/timeout orders"
+            ),
+        )
+
+    client = order.client
+    if client is None:
+        client = await session.get(Client, order.client_id)
+    if client is None:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    current_item = order.items[0] if order.items else None
+    if current_item is None:
+        raise HTTPException(status_code=409, detail="Order items are missing")
+
+    if "client_phone" in provided_fields and payload.client_phone is not None:
+        normalized_phone = normalize_phone(payload.client_phone)
+        if normalized_phone != client.phone:
+            target_client = await session.scalar(select(Client).where(Client.phone == normalized_phone))
+            if target_client is None:
+                target_client = Client(
+                    name=(payload.client_name or client.name or normalized_phone),
+                    phone=normalized_phone,
+                )
+                session.add(target_client)
+                await session.flush()
+            elif "client_name" in provided_fields and payload.client_name:
+                target_client.name = payload.client_name
+                await session.flush()
+
+            order.client_id = target_client.id
+            order.client = target_client
+            client = target_client
+
+    if "client_name" in provided_fields and payload.client_name is not None:
+        client.name = payload.client_name
+
+    if "notes" in provided_fields:
+        order.notes = payload.notes
+
+    if "delivery_address" in provided_fields and payload.delivery_address is not None:
+        order.delivery_address = payload.delivery_address
+        order.address = payload.delivery_address
+
+    if "delivery_lat" in provided_fields and payload.delivery_lat is not None:
+        order.delivery_lat = payload.delivery_lat
+
+    if "delivery_lon" in provided_fields and payload.delivery_lon is not None:
+        order.delivery_lon = payload.delivery_lon
+
+    if {"delivery_lat", "delivery_lon"} & provided_fields:
+        order.route_calculated_at = utcnow()
+
+    if "quarry_id" in provided_fields and payload.quarry_id is not None:
+        quarry = await session.get(Quarry, payload.quarry_id)
+        if quarry is None or not quarry.is_active:
+            raise HTTPException(status_code=404, detail="Quarry not found")
+        order.quarry_id = quarry.id
+        order.quarry = quarry
+        order.pickup_address = quarry.address or quarry.name
+        order.pickup_lat = quarry.lat
+        order.pickup_lon = quarry.lon
+
+    next_material = current_item.material
+    if next_material is None:
+        next_material = await session.get(Material, current_item.material_id)
+    if next_material is None:
+        raise HTTPException(status_code=404, detail="Material not found")
+
+    if "material_id" in provided_fields and payload.material_id is not None:
+        next_material = await session.get(Material, payload.material_id)
+        if next_material is None or not next_material.is_active:
+            raise HTTPException(status_code=404, detail="Material not found")
+
+    next_delivery_option = order.delivery_option
+    if next_delivery_option is None and order.delivery_option_id is not None:
+        next_delivery_option = await session.get(DeliveryOption, order.delivery_option_id)
+    if next_delivery_option is None:
+        raise HTTPException(status_code=404, detail="Delivery option not found")
+
+    if "delivery_option_id" in provided_fields and payload.delivery_option_id is not None:
+        next_delivery_option = await session.get(DeliveryOption, payload.delivery_option_id)
+        if next_delivery_option is None or not next_delivery_option.is_active:
+            raise HTTPException(status_code=404, detail="Delivery option not found")
+
+    if provided_fields & {"material_id", "delivery_option_id"}:
+        quantity = max(current_item.quantity or 1, 1)
+        volume = next_delivery_option.capacity_m3 * quantity
+        unit_price = next_material.price
+        amount = volume * unit_price if unit_price is not None else None
+
+        order.delivery_option_id = next_delivery_option.id
+        order.delivery_option = next_delivery_option
+        current_item.material_id = next_material.id
+        current_item.material = next_material
+        current_item.volume = volume
+        current_item.price = unit_price
+        current_item.amount = amount
+        order.total_amount = round(amount or 0.0, 2)
+
+    if "estimated_total_amount" in provided_fields and payload.estimated_total_amount is not None:
+        order.delivery_cost = max(
+            round(payload.estimated_total_amount - (order.total_amount or 0.0), 2),
+            0.0,
+        )
+
+    await add_event(session, order.id, "order_updated_by_logist", "Order updated by logist")
+    await session.commit()
+    return await get_order_by_id(session, order.id)
 
 
 async def list_orders_for_client(session: AsyncSession, client_id: UUID) -> list[Order]:
@@ -871,6 +1073,7 @@ async def mark_no_driver_found(session: AsyncSession, order: Order) -> Order:
     order.status = OrderStatus.no_driver_found.value
     order.current_offer_id = None
     await add_event(session, order.id, "no_driver_found", "No suitable drivers found")
+    schedule_logist_no_driver_found_notification(order)
     return order
 
 
@@ -883,14 +1086,11 @@ async def advance_dispatch_for_order(
     excluded_driver_ids: set[UUID] | None = None,
 ) -> Order:
     order = await get_order_by_id(session, order_id)
-    if order.driver_id is not None or order.status in {
-        OrderStatus.driver_assigned.value,
-        OrderStatus.heading_to_quarry.value,
-        OrderStatus.heading_to_client.value,
-        OrderStatus.in_progress.value,
+    terminal_or_active_statuses = ACTIVE_ASSIGNED_ORDER_STATUSES | {
         OrderStatus.completed.value,
         OrderStatus.cancelled.value,
-    }:
+    }
+    if order.driver_id is not None or order.status in terminal_or_active_statuses:
         return order
 
     pending_offer = order.current_offer
@@ -933,6 +1133,7 @@ async def expire_offer(session: AsyncSession, offer: OrderOffer) -> Order:
     order.current_offer_id = None
     order.status = OrderStatus.searching_driver.value
     await add_event(session, order.id, "driver_offer_expired", f"Driver {offer.driver_id} did not respond")
+    schedule_logist_timeout_notification(order, offer.driver_id)
     return await advance_dispatch_for_order(
         session,
         order.id,
@@ -1002,7 +1203,9 @@ async def accept_offer(session: AsyncSession, *, offer_id: UUID, driver_id: UUID
 
     await add_event(session, order.id, "driver_assigned", f"Driver {driver_id} accepted the order")
     await session.commit()
-    return await get_order_by_id(session, order.id)
+    refreshed_order = await get_order_by_id(session, order.id)
+    schedule_client_driver_assigned_notification(refreshed_order)
+    return refreshed_order
 
 
 async def decline_offer(session: AsyncSession, *, offer_id: UUID, driver_id: UUID, reason: str | None) -> Order:
@@ -1115,17 +1318,91 @@ async def cancel_driver_assigned_order(
         f"Driver {driver_id} cancelled the order. Reason: {reason}",
     )
     await session.commit()
+    schedule_logist_driver_cancelled_notification(order, driver_id, reason)
     await enqueue_order_for_dispatch_safe(order.id)
     return await get_order_by_id(session, order.id)
 
 
+def _driver_order_status_event(target_status: str, driver_id: UUID) -> tuple[str, str]:
+    event_map = {
+        OrderStatus.driver_accepted.value: (
+            "driver_accepted_order",
+            f"Driver {driver_id} accepted assigned order",
+        ),
+        OrderStatus.heading_to_pickup.value: (
+            "driver_heading_to_pickup",
+            f"Driver {driver_id} is heading to pickup",
+        ),
+        OrderStatus.arrived_at_pickup.value: (
+            "driver_arrived_at_pickup",
+            f"Driver {driver_id} arrived at pickup",
+        ),
+        OrderStatus.loading.value: (
+            "driver_loading",
+            f"Driver {driver_id} started loading",
+        ),
+        OrderStatus.heading_to_client.value: (
+            "driver_heading_to_client",
+            f"Driver {driver_id} is heading to client",
+        ),
+        OrderStatus.delivered.value: (
+            "driver_delivered_order",
+            f"Driver {driver_id} delivered the order",
+        ),
+        OrderStatus.completed.value: (
+            "driver_completed_order",
+            f"Driver {driver_id} completed the order",
+        ),
+    }
+    return event_map[target_status]
+
+
+async def set_driver_order_status(
+    session: AsyncSession,
+    *,
+    order_id: UUID,
+    driver_id: UUID,
+    target_status: str,
+) -> Order:
+    order = await get_order_by_id(session, order_id)
+    if order.driver_id != driver_id:
+        raise HTTPException(status_code=403, detail="Order does not belong to this driver")
+
+    if order.status == target_status:
+        return order
+
+    allowed_statuses = DRIVER_ORDER_STATUS_TRANSITIONS.get(order.status, set())
+    if target_status not in allowed_statuses:
+        raise HTTPException(status_code=409, detail="Order status transition is not allowed")
+
+    driver = order.driver
+    if driver is None:
+        driver = await session.get(Driver, driver_id)
+    if driver is None:
+        raise HTTPException(status_code=404, detail="Driver not found")
+
+    order.status = target_status
+    if target_status == OrderStatus.completed.value:
+        order.current_offer_id = None
+        driver.status = DriverStatus.available.value
+    else:
+        driver.status = DriverStatus.busy.value
+
+    event_type, event_description = _driver_order_status_event(target_status, driver_id)
+    await add_event(session, order.id, event_type, event_description)
+    await session.commit()
+
+    refreshed_order = await get_order_by_id(session, order.id)
+    if target_status == OrderStatus.heading_to_client.value:
+        schedule_client_heading_to_client_notification(refreshed_order)
+    if target_status == OrderStatus.completed.value:
+        schedule_client_order_completed_notification(refreshed_order)
+    return refreshed_order
+
+
 async def restart_dispatch_for_order(session: AsyncSession, order_id: UUID) -> Order:
     order = await get_order_by_id(session, order_id)
-    if order.status in {
-        OrderStatus.driver_assigned.value,
-        OrderStatus.heading_to_quarry.value,
-        OrderStatus.heading_to_client.value,
-        OrderStatus.in_progress.value,
+    if order.status in ACTIVE_ASSIGNED_ORDER_STATUSES | {
         OrderStatus.completed.value,
         OrderStatus.cancelled.value,
     }:
@@ -1179,12 +1456,7 @@ async def get_current_assigned_order_for_driver(session: AsyncSession, driver_id
         select(Order)
         .options(*order_load_options())
         .where(Order.driver_id == driver_id)
-        .where(Order.status.in_([
-            OrderStatus.driver_assigned.value,
-            OrderStatus.heading_to_quarry.value,
-            OrderStatus.heading_to_client.value,
-            OrderStatus.in_progress.value,
-        ]))
+        .where(Order.status.in_(sorted(ACTIVE_ASSIGNED_ORDER_STATUSES)))
         .order_by(Order.assigned_at.desc().nullslast(), Order.created_at.desc())
         .limit(1)
     )

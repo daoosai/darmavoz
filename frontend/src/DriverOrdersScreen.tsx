@@ -1070,7 +1070,7 @@ export const DriverOrderCard: React.FC<{
                   onClick={() => openNavigator('quarry')}
                   className="w-full h-14 bg-gradient-to-r from-emerald-700 to-emerald-500 active:from-emerald-800 active:to-emerald-600 text-white text-lg font-bold rounded-xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2"
                 >
-                  ??????? ?????????
+                  Открыть навигатор
                 </button>
                 <button
                   onClick={() => setIsCancelModalOpen(true)}

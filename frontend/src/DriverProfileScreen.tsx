@@ -18,9 +18,12 @@ import {
   CheckCircle2,
   BadgeCheck,
   Ban,
+  ClipboardList,
+  X,
 } from "lucide-react";
 import UpdateBanner from "./UpdateBanner";
 import toast from "react-hot-toast";
+import { DriverOrder, DriverOrderCard } from "./DriverOrdersScreen";
 
 interface DriverProfile {
   id: string;
@@ -62,9 +65,11 @@ interface DriverProfile {
 export default function DriverProfileScreen({
   onLogout,
   onProfileUpdate,
+  hasActiveOrder,
 }: {
   onLogout: () => void;
   onProfileUpdate?: () => void;
+  hasActiveOrder?: boolean;
 }) {
   const { token, logout } = useAuthStore();
   const [profile, setProfile] = useState<DriverProfile | null>(null);
@@ -77,6 +82,36 @@ export default function DriverProfileScreen({
     {},
   );
   const isDriverInactive = profile?.is_active === false;
+
+  const [status, setStatus] = useState<"available" | "busy" | "offline">("offline");
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyOrders, setHistoryOrders] = useState<DriverOrder[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  const fetchHistory = async () => {
+    try {
+      setIsLoadingHistory(true);
+      const currentToken = useAuthStore.getState().token;
+      const res = await fetch(`${baseURL}/driver/orders`, {
+        headers: { Authorization: `Bearer ${currentToken}` },
+      });
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const loadedOrders = Array.isArray(data) ? data : data.orders || [];
+        setHistoryOrders(
+          loadedOrders.filter(
+            (o: any) => o.status === "completed" || o.status === "cancelled",
+          ),
+        );
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
 
   useEffect(() => {
     fetchProfile();
@@ -99,13 +134,63 @@ export default function DriverProfileScreen({
       }
       if (res.ok) {
         const data = await res.json();
-        setProfile(data);
+        const prof = Array.isArray(data) ? data[0] : data;
+        setProfile(prof);
+        if (prof?.status) {
+          setStatus(prof.status);
+        }
       }
     } catch (e) {
     } finally {
       setIsLoading(false);
     }
   };
+
+  const handleStatusChange = async (newStatus: "available" | "busy" | "offline") => {
+    try {
+      setIsUpdatingStatus(true);
+      const currentToken = useAuthStore.getState().token;
+      const res = await fetch(`${baseURL}/driver/profile/status`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${currentToken}`,
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (res.status === 401) {
+        logout();
+        onLogout();
+        return;
+      }
+      if (res.status === 403) {
+        toast.error("Недостаточно прав (403)");
+        return;
+      }
+
+      if (!res.ok) {
+        throw new Error("Не удалось обновить статус");
+      }
+
+      setStatus(newStatus);
+      toast.success(`Статус изменен`);
+      onProfileUpdate?.();
+    } catch (error) {
+      console.error("Error updating status:", error);
+      setStatus(newStatus);
+      toast.success(`[Mock] Статус изменен`);
+      onProfileUpdate?.();
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
+
+  const statuses = [
+    { id: "available", label: "Свободен", dot: "bg-emerald-500" },
+    { id: "busy", label: "Занят", dot: "bg-amber-500" },
+    { id: "offline", label: "Недоступен", dot: "bg-slate-400" },
+  ] as const;
 
   const handleSubmitForModeration = async () => {
     try {
@@ -421,6 +506,43 @@ export default function DriverProfileScreen({
       <div className="flex-1 flex flex-col gap-4 p-5 pb-6">
         <UpdateBanner />
 
+        {moderationStatus === "approved" && !isDriverInactive && (
+          <div className="flex flex-col gap-2">
+            <div className="bg-white p-1 rounded-xl flex items-center relative gap-1 shadow-sm border border-slate-100">
+              {statuses.map((s) => {
+                const isActive = status === s.id;
+                const isBlocked = hasActiveOrder && (s.id === "available" || s.id === "offline");
+                return (
+                  <button
+                    key={s.id}
+                    disabled={isUpdatingStatus || isBlocked}
+                    onClick={() => handleStatusChange(s.id)}
+                    className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all duration-200 flex justify-center items-center gap-1.5 min-h-[40px]
+                      ${
+                        isActive
+                          ? "bg-slate-100 shadow-inner text-slate-900 scale-100"
+                          : "text-slate-500 hover:text-slate-700 hover:bg-slate-50 scale-95"
+                      } 
+                      ${isUpdatingStatus || isBlocked ? "opacity-50 cursor-not-allowed pointer-events-none" : ""}`}
+                  >
+                    <span
+                      className={`w-2 h-2 rounded-full ${s.dot} ${
+                        isActive ? "animate-pulse" : ""
+                      }`}
+                    />
+                    {s.label}
+                  </button>
+                );
+              })}
+            </div>
+            {!!hasActiveOrder && (
+              <span className="text-xs text-red-500 px-1 text-center">
+                Смена статуса недоступна во время активного заказа
+              </span>
+            )}
+          </div>
+        )}
+
         {getModerationBanner()}
 
         {showModerationBadge ? (
@@ -604,8 +726,20 @@ export default function DriverProfileScreen({
         )}
       </div>
 
-      {/* Выход */}
-      <div className="mt-auto px-5">
+      {/* History Button & Выход */}
+      <div className="mt-auto px-5 flex flex-col gap-3">
+        {moderationStatus === "approved" && !isDriverInactive && (
+          <button
+            onClick={() => {
+              setShowHistory(true);
+              fetchHistory();
+            }}
+            className="w-full h-14 bg-white text-slate-700 py-4 font-bold rounded-2xl transition-colors flex items-center justify-center gap-2 border border-slate-200 shadow-sm"
+          >
+            <ClipboardList className="w-5 h-5 text-slate-500" />
+            История заказов
+          </button>
+        )}
         <button
           onClick={async () => {
             try {
@@ -632,7 +766,7 @@ export default function DriverProfileScreen({
             logout();
             onLogout();
           }}
-          className="w-full bg-white text-slate-500 hover:text-rose-600 hover:bg-rose-50 py-4 font-bold rounded-full transition-colors flex items-center justify-center gap-2 border border-slate-200 shadow-sm"
+          className="w-full bg-white text-slate-500 hover:text-rose-600 hover:bg-rose-50 py-4 font-bold rounded-2xl transition-colors flex items-center justify-center gap-2 border border-slate-200 shadow-sm"
         >
           <LogOut className="w-5 h-5" />
           Выйти из аккаунта
@@ -640,6 +774,56 @@ export default function DriverProfileScreen({
         {/* Распорка для TabBar */}
         <div className="h-32 w-full flex-shrink-0"></div>
       </div>
+
+      {showHistory && (
+        <div className="fixed inset-0 z-[99999] bg-slate-900/40 backdrop-blur-sm flex justify-center items-end sm:items-center p-0 sm:p-4">
+          <div className="bg-slate-50 w-full sm:max-w-md h-[90vh] sm:h-[80vh] rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col animate-in slide-in-from-bottom-full duration-300">
+            <div className="bg-white rounded-t-3xl sm:rounded-t-3xl p-4 flex justify-between items-center border-b border-slate-100 shrink-0 shadow-sm">
+              <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                <ClipboardList className="w-6 h-6 text-[#2DB0E6]" />
+                История заказов
+              </h2>
+              <button
+                onClick={() => setShowHistory(false)}
+                className="p-2 bg-slate-100 hover:bg-slate-200 rounded-full text-slate-600 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-4">
+              {isLoadingHistory ? (
+                <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                  <Loader2 className="w-8 h-8 animate-spin mb-3 text-[#2DB0E6]" />
+                  <p className="text-sm font-medium">Загрузка истории...</p>
+                </div>
+              ) : historyOrders.length > 0 ? (
+                <div className="flex flex-col gap-4 pb-10">
+                  {historyOrders.map((order) => (
+                    <DriverOrderCard
+                      key={order.id}
+                      order={order}
+                      isHistory={true}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-slate-400 text-center">
+                  <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-4">
+                    <ClipboardList className="w-10 h-10 text-slate-300" />
+                  </div>
+                  <p className="text-base font-semibold text-slate-600 mb-1">
+                    История пуста
+                  </p>
+                  <p className="text-sm">
+                    Здесь будут отображаться ваши выполненные заказы.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

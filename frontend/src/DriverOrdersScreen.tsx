@@ -834,21 +834,13 @@ export const DriverOrderCard: React.FC<{
     }
   };
 
-  const openNavigator = async (type: 'quarry' | 'client') => {
-    const lat = type === 'client' ? order.delivery_lat : order.pickup_lat;
-    const lon = type === 'client' ? order.delivery_lon : order.pickup_lon;
-    const label = type === 'client' ? '??????' : '??????';
-
-    if (type === 'quarry' && order.status === 'driver_assigned') {
-      await updateStatus('heading_to_pickup');
-    }
-
-    if (type === 'client' && order.status === 'arrived_at_pickup') {
-      await updateStatus('heading_to_client');
-    }
+  const openNavigator = (type: 'quarry' | 'client') => {
+    const isToClient = type === 'client';
+    const lat = isToClient ? order.delivery_lat : order.pickup_lat;
+    const lon = isToClient ? order.delivery_lon : order.pickup_lon;
 
     if (lat && lon) {
-      window.location.href = `geo:${lat},${lon}?q=${lat},${lon}(${encodeURIComponent(label)})`;
+      window.location.href = `geo:${lat},${lon}?q=${lat},${lon}`;
     } else {
       toast.error("?????????? ???????????");
     }
@@ -1064,20 +1056,26 @@ export const DriverOrderCard: React.FC<{
               <>
                 <button
                   disabled={isUpdating}
-                  onClick={() => openNavigator('quarry')}
+                  onClick={() => updateStatus("heading_to_pickup")}
                   className="w-full h-14 bg-sky-500 active:bg-sky-600 text-white text-lg font-bold rounded-xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                   {isUpdating ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
-                    "Выехать на карьер"
+                    "??????? ?? ??????"
                   )}
+                </button>
+                <button
+                  onClick={() => openNavigator('quarry')}
+                  className="w-full h-14 bg-gradient-to-r from-emerald-700 to-emerald-500 active:from-emerald-800 active:to-emerald-600 text-white text-lg font-bold rounded-xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2"
+                >
+                  ??????? ?????????
                 </button>
                 <button
                   onClick={() => setIsCancelModalOpen(true)}
                   className="w-full py-4 text-red-500 font-medium text-base active:bg-red-50 rounded-xl transition-colors"
                 >
-                  Отказаться от выполнения
+                  ?????????? ?? ??????????
                 </button>
               </>
             )}

@@ -98,6 +98,7 @@ DRIVER_ORDER_STATUS_TRANSITIONS: dict[str, set[str]] = {
     },
     OrderStatus.heading_to_client.value: {
         OrderStatus.delivered.value,
+        OrderStatus.completed.value,
     },
     OrderStatus.delivered.value: {
         OrderStatus.completed.value,

@@ -63,6 +63,9 @@ const formatFastApiDetail = (detail: any, fallback: string) => {
   return fallback;
 };
 
+const normalizeComparableString = (value: string | null | undefined) =>
+  (value ?? "").trim();
+
 export default function LogistEditOrderModal({
   isOpen,
   onClose,
@@ -77,7 +80,8 @@ export default function LogistEditOrderModal({
   const [calculationResult, setCalculationResult] =
     useState<DeliveryCalculationResult | null>(null);
   const [calcError, setCalcError] = useState<string | null>(null);
-  const [manualTotal, setManualTotal] = useState<number | string>("");
+  const [materialTotal, setMaterialTotal] = useState<number | string>("");
+  const [deliveryTotal, setDeliveryTotal] = useState<number | string>("");
   const [newOrder, setNewOrder] = useState({
     client_name: "",
     client_phone: "",
@@ -124,7 +128,8 @@ export default function LogistEditOrderModal({
         delivery_lon: order.delivery_lon || null,
         notes: order.notes || "",
       });
-      setManualTotal(order.estimated_total_amount || order.total_amount || "");
+      setMaterialTotal(order.total_amount || "");
+      setDeliveryTotal(order.delivery_cost || "");
       if (order.estimated_total_amount || order.total_amount) {
         setCalculationResult({
           quarry_id: order.quarry_id || "",
@@ -141,7 +146,8 @@ export default function LogistEditOrderModal({
       setSuggestions([]);
       setIsCalculating(false);
       setIsCreating(false);
-      setManualTotal("");
+      setMaterialTotal("");
+      setDeliveryTotal("");
       setNewOrder({
         client_name: "",
         client_phone: "",
@@ -192,7 +198,8 @@ export default function LogistEditOrderModal({
           delivery_cost: order.delivery_cost || 0,
           estimated_total_amount: order.estimated_total_amount || order.total_amount || 0
         });
-        setManualTotal(order.estimated_total_amount || order.total_amount || "");
+        setMaterialTotal(order.total_amount || "");
+        setDeliveryTotal(order.delivery_cost || "");
       }
       setIsCalculating(false);
       return;
@@ -244,7 +251,8 @@ export default function LogistEditOrderModal({
             delivery_cost: deliveryCost,
             estimated_total_amount: nextEstimatedTotal,
           });
-          setManualTotal(nextEstimatedTotal);
+          setMaterialTotal(materialCost);
+          setDeliveryTotal(deliveryCost);
         }
       } catch (error: any) {
         if (!cancelled) {
@@ -378,30 +386,99 @@ export default function LogistEditOrderModal({
 
     const cleanPhone = "+" + digitsOnly;
     const normalizedClientName = newOrder.client_name.trim() || cleanPhone;
-    const parsedManualTotal = Number(manualTotal);
+    const parsedMaterialTotal = Number(materialTotal);
+    const parsedDeliveryTotal = Number(deliveryTotal);
 
-    if (!Number.isFinite(parsedManualTotal) || parsedManualTotal <= 0) {
-      toast.error("Укажите корректную итоговую сумму");
+    if (!Number.isFinite(parsedMaterialTotal) || parsedMaterialTotal <= 0) {
+      toast.error("Укажите корректную стоимость материала");
+      return;
+    }
+
+    if (!Number.isFinite(parsedDeliveryTotal) || parsedDeliveryTotal < 0) {
+      toast.error("Укажите корректную стоимость доставки");
       return;
     }
 
     try {
       setIsCreating(true);
 
-      const payload = {
-        client_name: normalizedClientName,
-        client_phone: cleanPhone,
-        notes: newOrder.notes,
-        delivery_address: newOrder.delivery_address,
-        delivery_lat: calculationResult?.delivery_lat ?? newOrder.delivery_lat ?? order.delivery_lat,
-        delivery_lon: calculationResult?.delivery_lon ?? newOrder.delivery_lon ?? order.delivery_lon,
-        material_id: newOrder.material_id,
-        delivery_option_id: newOrder.delivery_option_id,
-        quarry_id: calculationResult?.quarry_id || order.quarry_id,
-        estimated_total_amount: parsedManualTotal,
-      };
+      const nextDeliveryLat =
+        calculationResult?.delivery_lat ??
+        newOrder.delivery_lat ??
+        order.delivery_lat ??
+        null;
+      const nextDeliveryLon =
+        calculationResult?.delivery_lon ??
+        newOrder.delivery_lon ??
+        order.delivery_lon ??
+        null;
+      const nextQuarryId = calculationResult?.quarry_id || order.quarry_id || null;
+      const currentMaterialId =
+        order.material_id ||
+        order.items?.[0]?.material_id ||
+        order.items?.[0]?.material?.id ||
+        "";
+      const currentDeliveryOptionId =
+        order.vehicle_type_id || order.delivery_option_id || order.delivery_option?.id || "";
+      const currentClientName = order.client_name || order.client?.name || "";
+      const currentClientPhone = order.client_phone || order.client?.phone || "";
+      const currentNotes = order.notes || "";
+      const currentDeliveryAddress = order.delivery_address || order.address || "";
+      const currentMaterialTotal = Number(order.total_amount ?? 0);
+      const currentDeliveryTotal = Number(order.delivery_cost ?? 0);
 
-      const res = await fetch(`${baseURL}/admin/orders/${order.id}`, {
+      const payload: Record<string, unknown> = {};
+
+      if (
+        normalizeComparableString(normalizedClientName) !==
+        normalizeComparableString(currentClientName)
+      ) {
+        payload.client_name = normalizedClientName;
+      }
+      if (cleanPhone !== currentClientPhone) {
+        payload.client_phone = cleanPhone;
+      }
+      if (
+        normalizeComparableString(newOrder.notes) !==
+        normalizeComparableString(currentNotes)
+      ) {
+        payload.notes = newOrder.notes.trim() || null;
+      }
+      if (
+        normalizeComparableString(newOrder.delivery_address) !==
+        normalizeComparableString(currentDeliveryAddress)
+      ) {
+        payload.delivery_address = newOrder.delivery_address;
+      }
+      if (nextDeliveryLat !== (order.delivery_lat ?? null)) {
+        payload.delivery_lat = nextDeliveryLat;
+      }
+      if (nextDeliveryLon !== (order.delivery_lon ?? null)) {
+        payload.delivery_lon = nextDeliveryLon;
+      }
+      if (newOrder.material_id !== currentMaterialId) {
+        payload.material_id = newOrder.material_id;
+      }
+      if (newOrder.delivery_option_id !== currentDeliveryOptionId) {
+        payload.delivery_option_id = newOrder.delivery_option_id;
+      }
+      if (nextQuarryId !== (order.quarry_id || null)) {
+        payload.quarry_id = nextQuarryId;
+      }
+      if (parsedMaterialTotal !== currentMaterialTotal) {
+        payload.total_amount = parsedMaterialTotal;
+      }
+      if (parsedDeliveryTotal !== currentDeliveryTotal) {
+        payload.delivery_cost = parsedDeliveryTotal;
+      }
+
+      if (Object.keys(payload).length === 0) {
+        toast("\u0418\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u0439 \u043d\u0435\u0442");
+        onClose();
+        return;
+      }
+
+      const res = await fetch(`${baseURL}/logist/orders/${order.id}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -439,7 +516,11 @@ export default function LogistEditOrderModal({
     !newOrder.delivery_option_id ||
     !newOrder.delivery_address;
 
-  const calcMaterialCost = calculationResult ? Math.max(0, calculationResult.estimated_total_amount - calculationResult.delivery_cost) : 0;
+  const parsedMaterialTotal = Number(materialTotal);
+  const parsedDeliveryTotal = Number(deliveryTotal);
+  const computedEstimatedTotal =
+    (Number.isFinite(parsedMaterialTotal) ? parsedMaterialTotal : 0) +
+    (Number.isFinite(parsedDeliveryTotal) ? parsedDeliveryTotal : 0);
   const formattedDistance = calculationResult
     ? `${Number(calculationResult.mileage_km).toLocaleString("ru-RU", {
         minimumFractionDigits: 0,
@@ -633,7 +714,7 @@ export default function LogistEditOrderModal({
                   <span className="text-slate-500">{"Стоимость материала:"}</span>
                   <div className="text-right">
                     <span className="font-medium text-slate-900 block">
-                      {Number(calcMaterialCost).toLocaleString("ru-RU")} {"\u20BD"}
+                      {Number.isFinite(parsedMaterialTotal) ? parsedMaterialTotal.toLocaleString("ru-RU") : "0"} {"\u20BD"}
                     </span>
                     {materialPriceLabel && capacityLabel && (
                       <span className="text-xs text-slate-400 block mt-0.5">
@@ -645,22 +726,44 @@ export default function LogistEditOrderModal({
                 <div className="flex justify-between gap-4">
                   <span className="text-slate-500">Стоимость доставки:</span>
                   <span className="font-medium text-slate-900">
-                    {Number(calculationResult.delivery_cost).toLocaleString("ru-RU")} ₽
+                    {Number.isFinite(parsedDeliveryTotal) ? parsedDeliveryTotal.toLocaleString("ru-RU") : "0"} {"\u20BD"}
                   </span>
                 </div>
-                <div className="pt-3 border-t border-slate-200 flex flex-col gap-2">
-                  <label className="text-sm font-bold text-slate-900" htmlFor="manual-total">
-                    Итого к оплате (руб)
-                  </label>
-                  <input
-                    id="manual-total"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={manualTotal}
-                    onChange={(e) => setManualTotal(e.target.value)}
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] text-sm font-semibold text-slate-900"
-                  />
+                <div className="pt-3 border-t border-slate-200 flex flex-col gap-3">
+                  <div>
+                    <label className="text-sm font-bold text-slate-900" htmlFor="material-total">
+                      {"\u0421\u0442\u043e\u0438\u043c\u043e\u0441\u0442\u044c \u043c\u0430\u0442\u0435\u0440\u0438\u0430\u043b\u0430 (\u0440\u0443\u0431)"}
+                    </label>
+                    <input
+                      id="material-total"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={materialTotal}
+                      onChange={(e) => setMaterialTotal(e.target.value)}
+                      className="mt-2 w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] text-sm font-semibold text-slate-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-bold text-slate-900" htmlFor="delivery-total">
+                      {"\u0421\u0442\u043e\u0438\u043c\u043e\u0441\u0442\u044c \u0434\u043e\u0441\u0442\u0430\u0432\u043a\u0438 (\u0440\u0443\u0431)"}
+                    </label>
+                    <input
+                      id="delivery-total"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={deliveryTotal}
+                      onChange={(e) => setDeliveryTotal(e.target.value)}
+                      className="mt-2 w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] text-sm font-semibold text-slate-900"
+                    />
+                  </div>
+                  <div className="flex justify-between items-center rounded-xl bg-white px-4 py-3 border border-slate-200">
+                    <span className="text-sm font-bold text-slate-900">{"\u0418\u0442\u043e\u0433\u043e \u043a \u043e\u043f\u043b\u0430\u0442\u0435"}</span>
+                    <span className="text-base font-black text-slate-900">
+                      {computedEstimatedTotal.toLocaleString("ru-RU")} {"\u20BD"}
+                    </span>
+                  </div>
                 </div>
               </>
             ) : (

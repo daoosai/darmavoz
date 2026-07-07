@@ -823,13 +823,12 @@ async def update_order_by_logist(
         "material_id",
         "delivery_option_id",
         "quarry_id",
-        "estimated_total_amount",
     }
     if provided_fields & protected_fields and order.status not in FULL_ORDER_EDIT_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                "Address, material, vehicle type, quarry and price can be changed only for "
+                "Address, material, vehicle type and quarry can be changed only for "
                 "created/searching_driver/no_driver_found/timeout orders"
             ),
         )
@@ -929,11 +928,14 @@ async def update_order_by_logist(
         current_item.amount = amount
         order.total_amount = round(amount or 0.0, 2)
 
-    if "estimated_total_amount" in provided_fields and payload.estimated_total_amount is not None:
-        order.delivery_cost = max(
-            round(payload.estimated_total_amount - (order.total_amount or 0.0), 2),
-            0.0,
-        )
+    if "total_amount" in provided_fields and payload.total_amount is not None:
+        order.total_amount = round(payload.total_amount, 2)
+        current_item.amount = order.total_amount
+        if current_item.volume and current_item.volume > 0:
+            current_item.price = round(order.total_amount / current_item.volume, 2)
+
+    if "delivery_cost" in provided_fields and payload.delivery_cost is not None:
+        order.delivery_cost = round(payload.delivery_cost, 2)
 
     await add_event(session, order.id, "order_updated_by_logist", "Order updated by logist", order_status=order.status)
     await session.commit()

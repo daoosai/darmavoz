@@ -336,7 +336,8 @@ async def test_logist_can_patch_created_order_with_protected_fields(client, sess
             "material_id": str(material_new_id),
             "vehicle_type_id": str(option_new_id),
             "quarry_id": str(quarry_id),
-            "estimated_total_amount": 70000.0,
+            "total_amount": 60000.0,
+            "delivery_cost": 10000.0,
         },
     )
 

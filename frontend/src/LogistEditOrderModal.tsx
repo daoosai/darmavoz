@@ -63,6 +63,9 @@ const formatFastApiDetail = (detail: any, fallback: string) => {
   return fallback;
 };
 
+const normalizeComparableString = (value: string | null | undefined) =>
+  (value ?? "").trim();
+
 export default function LogistEditOrderModal({
   isOpen,
   onClose,
@@ -388,20 +391,81 @@ export default function LogistEditOrderModal({
     try {
       setIsCreating(true);
 
-      const payload = {
-        client_name: normalizedClientName,
-        client_phone: cleanPhone,
-        notes: newOrder.notes,
-        delivery_address: newOrder.delivery_address,
-        delivery_lat: calculationResult?.delivery_lat ?? newOrder.delivery_lat ?? order.delivery_lat,
-        delivery_lon: calculationResult?.delivery_lon ?? newOrder.delivery_lon ?? order.delivery_lon,
-        material_id: newOrder.material_id,
-        delivery_option_id: newOrder.delivery_option_id,
-        quarry_id: calculationResult?.quarry_id || order.quarry_id,
-        estimated_total_amount: parsedManualTotal,
-      };
+      const nextDeliveryLat =
+        calculationResult?.delivery_lat ??
+        newOrder.delivery_lat ??
+        order.delivery_lat ??
+        null;
+      const nextDeliveryLon =
+        calculationResult?.delivery_lon ??
+        newOrder.delivery_lon ??
+        order.delivery_lon ??
+        null;
+      const nextQuarryId = calculationResult?.quarry_id || order.quarry_id || null;
+      const currentMaterialId =
+        order.material_id ||
+        order.items?.[0]?.material_id ||
+        order.items?.[0]?.material?.id ||
+        "";
+      const currentDeliveryOptionId =
+        order.vehicle_type_id || order.delivery_option_id || order.delivery_option?.id || "";
+      const currentClientName = order.client_name || order.client?.name || "";
+      const currentClientPhone = order.client_phone || order.client?.phone || "";
+      const currentNotes = order.notes || "";
+      const currentDeliveryAddress = order.delivery_address || order.address || "";
+      const currentEstimatedTotal = Number(
+        order.estimated_total_amount ?? order.total_amount ?? 0,
+      );
 
-      const res = await fetch(`${baseURL}/admin/orders/${order.id}`, {
+      const payload: Record<string, unknown> = {};
+
+      if (
+        normalizeComparableString(normalizedClientName) !==
+        normalizeComparableString(currentClientName)
+      ) {
+        payload.client_name = normalizedClientName;
+      }
+      if (cleanPhone !== currentClientPhone) {
+        payload.client_phone = cleanPhone;
+      }
+      if (
+        normalizeComparableString(newOrder.notes) !==
+        normalizeComparableString(currentNotes)
+      ) {
+        payload.notes = newOrder.notes.trim() || null;
+      }
+      if (
+        normalizeComparableString(newOrder.delivery_address) !==
+        normalizeComparableString(currentDeliveryAddress)
+      ) {
+        payload.delivery_address = newOrder.delivery_address;
+      }
+      if (nextDeliveryLat !== (order.delivery_lat ?? null)) {
+        payload.delivery_lat = nextDeliveryLat;
+      }
+      if (nextDeliveryLon !== (order.delivery_lon ?? null)) {
+        payload.delivery_lon = nextDeliveryLon;
+      }
+      if (newOrder.material_id !== currentMaterialId) {
+        payload.material_id = newOrder.material_id;
+      }
+      if (newOrder.delivery_option_id !== currentDeliveryOptionId) {
+        payload.delivery_option_id = newOrder.delivery_option_id;
+      }
+      if (nextQuarryId !== (order.quarry_id || null)) {
+        payload.quarry_id = nextQuarryId;
+      }
+      if (parsedManualTotal !== currentEstimatedTotal) {
+        payload.estimated_total_amount = parsedManualTotal;
+      }
+
+      if (Object.keys(payload).length === 0) {
+        toast("\u0418\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u0439 \u043d\u0435\u0442");
+        onClose();
+        return;
+      }
+
+      const res = await fetch(`${baseURL}/logist/orders/${order.id}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",

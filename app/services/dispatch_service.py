@@ -823,13 +823,12 @@ async def update_order_by_logist(
         "material_id",
         "delivery_option_id",
         "quarry_id",
-        "estimated_total_amount",
     }
     if provided_fields & protected_fields and order.status not in FULL_ORDER_EDIT_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                "Address, material, vehicle type, quarry and price can be changed only for "
+                "Address, material, vehicle type and quarry can be changed only for "
                 "created/searching_driver/no_driver_found/timeout orders"
             ),
         )

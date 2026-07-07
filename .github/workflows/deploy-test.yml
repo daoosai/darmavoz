@@ -1,0 +1,45 @@
+name: Deploy Test Environment
+
+on:
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+
+jobs:
+  deploy-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup SSH key
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/github_actions_key
+          chmod 600 ~/.ssh/github_actions_key
+          ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Deploy staging on server
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/github_actions_key "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" <<'EOF'
+          set -euo pipefail
+          cd /opt/darmavoz_test
+          git fetch origin develop
+          git checkout develop
+          git pull --ff-only origin develop
+
+          docker rm -f darmavoz_test_frontend_build >/dev/null 2>&1 || true
+          docker create --name darmavoz_test_frontend_build -w /app node:20-alpine sh -lc 'if [ -f package-lock.json ]; then npm ci; else npm install; fi && npm run build'
+          tar -C frontend -cf - . | docker cp - darmavoz_test_frontend_build:/app
+          docker start -a darmavoz_test_frontend_build
+
+          mkdir -p /opt/daoos-kit/sites/darmavoz_test/frontend /opt/daoos-kit/sites/darmavoz_test/static
+          docker cp darmavoz_test_frontend_build:/app/dist/. /opt/daoos-kit/sites/darmavoz_test/frontend/
+          docker rm -f darmavoz_test_frontend_build
+          cp -a static/. /opt/daoos-kit/sites/darmavoz_test/static/
+
+          docker compose -f docker-compose.test.yml up -d db_test redis_test minio_test backend_test --build
+          docker exec backend_test alembic upgrade head
+          EOF

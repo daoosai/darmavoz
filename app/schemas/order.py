@@ -309,10 +309,15 @@ class OrderUpdate(BaseModel):
         validation_alias=AliasChoices("delivery_option_id", "deliveryOptionId", "vehicle_type_id", "vehicleTypeId"),
     )
     quarry_id: UUID | None = Field(default=None, validation_alias=AliasChoices("quarry_id", "quarryId"))
-    estimated_total_amount: float | None = Field(
+    total_amount: float | None = Field(
         default=None,
         gt=0,
-        validation_alias=AliasChoices("estimated_total_amount", "estimatedTotalAmount"),
+        validation_alias=AliasChoices("total_amount", "totalAmount", "material_cost", "materialCost"),
+    )
+    delivery_cost: float | None = Field(
+        default=None,
+        ge=0,
+        validation_alias=AliasChoices("delivery_cost", "deliveryCost"),
     )
 
     model_config = ConfigDict(
@@ -331,7 +336,7 @@ class OrderUpdate(BaseModel):
             return value or None
         return value
 
-    @field_validator("delivery_lat", "delivery_lon", "estimated_total_amount", mode="before")
+    @field_validator("delivery_lat", "delivery_lon", "total_amount", "delivery_cost", mode="before")
     @classmethod
     def normalize_numbers(cls, value):
         if value is None:
@@ -360,9 +365,9 @@ class OrderUpdate(BaseModel):
             raise ValueError("Longitude must be between -180 and 180")
         return value
 
-    @field_validator("estimated_total_amount")
+    @field_validator("total_amount", "delivery_cost")
     @classmethod
-    def validate_estimated_total_amount(cls, value: float | None):
+    def validate_money_amounts(cls, value: float | None):
         if value is None:
             return value
         return round(value, 2)

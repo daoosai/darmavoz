@@ -30,6 +30,12 @@ jobs:
           git checkout develop
           git pull --ff-only origin develop
 
+          WEB_VERSION=$(python3 -c "from pathlib import Path; vals={}; [vals.setdefault(*(line.split('=',1))) for line in Path('.env').read_text(encoding='utf-8').splitlines() if line.strip() and not line.startswith('#') and '=' in line]; print(vals.get('WEB_VERSION','2.4.3'))")
+          cat > frontend/.env.production <<EOV
+          VITE_APP_VERSION=${WEB_VERSION}
+          VITE_API_BASE_URL=https://darmavoz.159.194.236.11.nip.io/api/v1
+          EOV
+
           docker rm -f darmavoz_test_frontend_build >/dev/null 2>&1 || true
           docker create --name darmavoz_test_frontend_build -w /app node:20-alpine sh -lc 'if [ -f package-lock.json ]; then npm ci; else npm install; fi && npm run build'
           tar -C frontend -cf - . | docker cp - darmavoz_test_frontend_build:/app

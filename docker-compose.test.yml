@@ -48,7 +48,9 @@ services:
     volumes:
       - minio_data_test:/data
     networks:
-      - daoos_kit_default
+      daoos_kit_default:
+        aliases:
+          - minio-test
 
   backend_test:
     build: .
@@ -56,6 +58,10 @@ services:
     restart: always
     env_file:
       - .env
+    environment:
+      S3_ENDPOINT: http://minio-test:9000
+      S3_PUBLIC_BASE_URL: https://darmavoz.159.194.236.11.nip.io
+      S3_PRESIGN_ENDPOINT: https://darmavoz.159.194.236.11.nip.io
     depends_on:
       db_test:
         condition: service_healthy

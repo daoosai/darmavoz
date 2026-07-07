@@ -77,6 +77,7 @@ export default function LogistEditOrderModal({
   const [calculationResult, setCalculationResult] =
     useState<DeliveryCalculationResult | null>(null);
   const [calcError, setCalcError] = useState<string | null>(null);
+  const [manualTotal, setManualTotal] = useState<number | string>("");
   const [newOrder, setNewOrder] = useState({
     client_name: "",
     client_phone: "",
@@ -123,6 +124,7 @@ export default function LogistEditOrderModal({
         delivery_lon: order.delivery_lon || null,
         notes: order.notes || "",
       });
+      setManualTotal(order.estimated_total_amount || order.total_amount || "");
       if (order.estimated_total_amount || order.total_amount) {
         setCalculationResult({
           quarry_id: order.quarry_id || "",
@@ -139,6 +141,7 @@ export default function LogistEditOrderModal({
       setSuggestions([]);
       setIsCalculating(false);
       setIsCreating(false);
+      setManualTotal("");
       setNewOrder({
         client_name: "",
         client_phone: "",
@@ -189,6 +192,7 @@ export default function LogistEditOrderModal({
           delivery_cost: order.delivery_cost || 0,
           estimated_total_amount: order.estimated_total_amount || order.total_amount || 0
         });
+        setManualTotal(order.estimated_total_amount || order.total_amount || "");
       }
       setIsCalculating(false);
       return;
@@ -231,14 +235,16 @@ export default function LogistEditOrderModal({
             computedMaterialCost ||
             Number(data.material_cost ?? data.total_amount ?? 0);
           const deliveryCost = Number(data.delivery_cost ?? 0);
+          const nextEstimatedTotal = materialCost + deliveryCost;
           setCalculationResult({
             quarry_id: data.quarry_id,
             quarry_name: data.quarry_name,
             mileage_km: Number(data.mileage_km ?? data.distance ?? 0),
             material_cost: materialCost,
             delivery_cost: deliveryCost,
-            estimated_total_amount: materialCost + deliveryCost,
+            estimated_total_amount: nextEstimatedTotal,
           });
+          setManualTotal(nextEstimatedTotal);
         }
       } catch (error: any) {
         if (!cancelled) {
@@ -372,6 +378,12 @@ export default function LogistEditOrderModal({
 
     const cleanPhone = "+" + digitsOnly;
     const normalizedClientName = newOrder.client_name.trim() || cleanPhone;
+    const parsedManualTotal = Number(manualTotal);
+
+    if (!Number.isFinite(parsedManualTotal) || parsedManualTotal <= 0) {
+      toast.error("Укажите корректную итоговую сумму");
+      return;
+    }
 
     try {
       setIsCreating(true);
@@ -386,7 +398,7 @@ export default function LogistEditOrderModal({
         material_id: newOrder.material_id,
         delivery_option_id: newOrder.delivery_option_id,
         quarry_id: calculationResult?.quarry_id || order.quarry_id,
-        estimated_total_amount: calculationResult?.estimated_total_amount ?? order.estimated_total_amount ?? order.total_amount
+        estimated_total_amount: parsedManualTotal,
       };
 
       const res = await fetch(`${baseURL}/admin/orders/${order.id}`, {
@@ -636,11 +648,19 @@ export default function LogistEditOrderModal({
                     {Number(calculationResult.delivery_cost).toLocaleString("ru-RU")} ₽
                   </span>
                 </div>
-                <div className="pt-3 border-t border-slate-200 flex justify-between gap-4 text-base">
-                  <span className="font-bold text-slate-900">Итого к оплате:</span>
-                  <span className="font-bold text-slate-900">
-                    {Number(calculationResult.estimated_total_amount).toLocaleString("ru-RU")} ₽
-                  </span>
+                <div className="pt-3 border-t border-slate-200 flex flex-col gap-2">
+                  <label className="text-sm font-bold text-slate-900" htmlFor="manual-total">
+                    Итого к оплате (руб)
+                  </label>
+                  <input
+                    id="manual-total"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={manualTotal}
+                    onChange={(e) => setManualTotal(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] text-sm font-semibold text-slate-900"
+                  />
                 </div>
               </>
             ) : (

@@ -759,9 +759,9 @@ export default function LogistEditOrderModal({
                     />
                   </div>
                   <div className="flex justify-between items-center rounded-xl bg-white px-4 py-3 border border-slate-200">
-                    <span className="text-sm font-bold text-slate-900">????? ? ??????</span>
+                    <span className="text-sm font-bold text-slate-900">{"\u0418\u0442\u043e\u0433\u043e \u043a \u043e\u043f\u043b\u0430\u0442\u0435"}</span>
                     <span className="text-base font-black text-slate-900">
-                      {computedEstimatedTotal.toLocaleString("ru-RU")} ?
+                      {computedEstimatedTotal.toLocaleString("ru-RU")} {"\u20BD"}
                     </span>
                   </div>
                 </div>

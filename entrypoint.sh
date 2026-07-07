@@ -23,7 +23,7 @@ done
 echo "Database is up!"
 
 echo "Running migrations..."
-alembic upgrade head
+alembic upgrade heads
 
 echo "Starting application..."
 exec uvicorn main:app --host 0.0.0.0 --port 8000

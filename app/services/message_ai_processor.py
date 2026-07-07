@@ -7,16 +7,7 @@ from sqlalchemy.orm import selectinload
 
 from app.db.database import AsyncSessionLocal
 from app.integrations.openai.client import OpenAIClient
-from app.models.models import (
-    Client,
-    Dialogue,
-    Message,
-    MessageAiAnalysis,
-    Order,
-    OrderStatus,
-    Material,
-    OrderItem,
-)
+from app.models.models import Client, Dialogue, Message, MessageAiAnalysis, Order, OrderStatus
 from app.schemas.ai import MessageAnalysisResult
 
 logger = logging.getLogger(__name__)
@@ -125,23 +116,12 @@ class MessageAIProcessorService:
         session: AsyncSession,
         message_id: uuid.UUID,
     ) -> Message | None:
-        stmt = (
-            select(Message)
-            .options(
-                selectinload(Message.dialogue),
-            )
-            .where(Message.id == message_id)
-        )
+        stmt = select(Message).options(selectinload(Message.dialogue)).where(Message.id == message_id)
         result = await session.execute(stmt)
         return result.scalar_one_or_none()
 
     async def _build_dialogue_context(self, session: AsyncSession, dialogue_id: uuid.UUID) -> str:
-        stmt = (
-            select(Message)
-            .where(Message.dialogue_id == dialogue_id)
-            .order_by(Message.created_at.desc())
-            .limit(5)
-        )
+        stmt = select(Message).where(Message.dialogue_id == dialogue_id).order_by(Message.created_at.desc()).limit(5)
         result = await session.execute(stmt)
         messages = list(result.scalars().all())
         messages.reverse()
@@ -208,48 +188,12 @@ class MessageAIProcessorService:
                 client_id=dialogue.client_id,
                 status=OrderStatus.draft.value,
                 source_dialogue_id=dialogue.id,
+                total_amount=0.0,
             )
             session.add(order)
             await session.flush()
 
         extracted = analysis_result.order_fields
-        
-        if extracted.material and extracted.volume is not None:
-            stmt = select(Material).where(Material.name.ilike(f"%{extracted.material}%")).limit(1)
-            result = await session.execute(stmt)
-            material = result.scalar_one_or_none()
-            
-            if material:
-                # Check if an order item already exists for this material
-                stmt_item = select(OrderItem).where(
-                    OrderItem.order_id == order.id,
-                    OrderItem.material_id == material.id
-                )
-                item_result = await session.execute(stmt_item)
-                order_item = item_result.scalar_one_or_none()
-                
-                if order_item:
-                    order_item.volume = extracted.volume
-                    if material.price:
-                        order_item.amount = extracted.volume * material.price
-                else:
-                    new_item = OrderItem(
-                        order_id=order.id,
-                        material_id=material.id,
-                        volume=extracted.volume,
-                        price=material.price,
-                        amount=(extracted.volume * material.price) if material.price else None
-                    )
-                    session.add(new_item)
-                
-                await session.flush()
-                
-                # Recalculate total_amount
-                stmt_total = select(OrderItem).where(OrderItem.order_id == order.id)
-                total_result = await session.execute(stmt_total)
-                items = total_result.scalars().all()
-                order.total_amount = sum((item.amount or 0.0) for item in items)
-                
         if extracted.address:
             order.address = extracted.address
         order.notes = self._build_order_notes(analysis_result)
@@ -273,6 +217,10 @@ class MessageAIProcessorService:
 
         if summary:
             parts.append(f"Summary: {summary}")
+        if extracted.material:
+            parts.append(f"Material: {extracted.material.strip()}")
+        if extracted.volume is not None:
+            parts.append(f"Volume: {extracted.volume}")
         if extracted.datetime_str:
             parts.append(f"Date: {extracted.datetime_str.strip()}")
         if extracted.notes:

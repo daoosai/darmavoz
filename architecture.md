@@ -1,442 +1,236 @@
-# Архитектура бэкенда "Дармавоз" (Core API)
+# Архитектура Darmavoz
 
-**Статус на 2026-05-12:** Спринт 9 завершен. Мобильный клиент (Flutter) интегрирован с бэкендом (FastAPI). Настроена маршрутизация (go_router), разделение контуров и система автообновлений. Ветка feature/epic-mobile-catalog.
+Документ фиксирует текущее рабочее состояние backend и web-клиента на ноде `дармавоз` в каталоге `/opt/darmavoz`.
 
-Этот документ фиксирует фактическое состояние backend-проекта на ноде `дармавоз` в каталоге `/opt/darmavoz`.
+## 1. Состав системы
 
-## 1. Назначение текущего backend
+Проект состоит из четырех основных частей:
 
-Текущая серверная часть закрывает backend-контур MVP до конца Sprint 9:
+- FastAPI backend
+- PostgreSQL / Redis
+- React SPA
+- MinIO + Caddy-инфраструктура
 
-- прием входящих сообщений из Авито;
-- сохранение каналов, диалогов, сообщений и интеграционных событий;
-- JWT-авторизацию и базовую ролевую модель;
-- AI-классификацию входящих сообщений;
-- извлечение параметров заказа из свободного текста;
-- создание и обновление черновиков заказов;
-- demo UI для ручной проверки цепочки `webhook -> AI -> draft order`.
+В текущем контуре дополнительно активно используются:
 
-Что пока не реализовано в текущем backend:
+- логистский контур заказов и автопарка
+- driver onboarding и модерация профилей/машин
+- dispatch worker для автоматического подбора водителя
 
-- автоматическая отправка уточняющих вопросов клиенту;
-- интерфейс логиста для подтверждения карточки заказа;
-- распределение по водителям, таймеры, MAX-интеграция.
-
-## 2. Структура проекта
+## 2. Структура репозитория
 
 ```text
 /opt/darmavoz
-├── alembic/                  # Миграции базы данных
+├── alembic/
 ├── app/
-│   ├── api/                  # FastAPI роутеры
-│   ├── core/                 # Конфигурация приложения
-│   ├── db/                   # Сессии БД и seed
-│   ├── integrations/         # Avito и LLM-клиенты
-│   ├── models/               # SQLAlchemy ORM модели
-│   ├── schemas/              # Pydantic схемы
-│   ├── security/             # JWT и пароли
-│   └── services/             # Бизнес-логика AI-обработки
-├── static/                   # Demo UI
-├── tests/                    # Unit и integration tests
-├── .env                      # Локальная конфигурация
-├── README.md                 # Операционная документация
-├── architecture.md           # Этот документ
-├── docker-compose.yml        # Production compose
-├── docker-compose.local.yml  # Локальная разработка
-├── Dockerfile
-├── entrypoint.sh
-├── main.py
-└── requirements.txt
+│   ├── api/
+│   │   ├── admin.py
+│   │   ├── auth.py
+│   │   ├── catalog.py
+│   │   ├── clients.py
+│   │   ├── drivers.py
+│   │   ├── media.py
+│   │   ├── orders.py
+│   │   └── webhooks.py
+│   ├── core/
+│   ├── db/
+│   ├── integrations/
+│   ├── models/
+│   ├── schemas/
+│   ├── security/
+│   └── services/
+├── frontend/          # исходники React SPA
+├── react_web/         # собранный frontend для раздачи на домене
+├── scripts/
+├── tests/
+├── docker-compose.local.yml
+├── docker-compose.yml
+├── darmavoz.caddy
+└── main.py
 ```
 
-## 3. Инфраструктура и деплой
+## 3. Runtime topology
 
-### Runtime
+### Local
 
-- Python 3.11
-- FastAPI
-- PostgreSQL
-- Redis
-- Docker Compose
+`docker-compose.local.yml` поднимает локальный backend-контур:
 
-### Production deployment
+- `db`
+- `redis`
+- `backend`
 
-Текущая production-инсталляция работает на ноде `дармавоз` через `docker compose`.
+### Production
 
-Проверенные внешние точки:
+`docker-compose.yml` поднимает:
 
-- `https://darmavoz.ru/`
-- `https://darmavoz.ru/health`
-- `https://darmavoz.ru/docs`
-- `https://darmavoz.ru/demo`
+- `backend`
+- `minio`
 
-`/health` дополнительно возвращает флаг:
+Особенности production:
 
-- `llm_configured: true|false`
+- backend подключен к внешней сети `daoos_kit_default`
+- наружу backend не публикуется, используется `expose: 8000`
+- домен обслуживается внешним Caddy
+- собранный frontend отдается как статический сайт
 
-Он показывает, настроен ли `LLM_API_KEY` в окружении контейнера.
+## 4. HTTP-маршрутизация
 
-## 4. API-поверхность
+На домене `darmavoz.ru` используются два типа трафика:
 
-### Системные endpoints
+- API-запросы к FastAPI
+- статическая раздача React SPA
+
+Репозиторный конфиг `darmavoz.caddy` описывает:
+
+- `/s3/*` -> proxy в MinIO
+- `/static/*` -> файловая раздача
+- `/assets/*` -> статические frontend assets
+- `/app*` -> SPA entrypoint из `/opt/darmavoz/react_web`
+- остальной backend traffic -> `darmavoz_backend:8000`
+
+На live-контуре Caddy внутри DAOOS Kit использует bind-mount `/opt/darmavoz -> /srv/darmavoz`, поэтому внутри контейнера корень frontend выглядит как `/srv/darmavoz/react_web`.
+
+## 5. Backend
+
+Точка входа: `main.py`
+
+Подключенные роутеры:
+
+- `/api/v1/auth`
+- `/api/v1/admin`
+- `/api/v1/catalog`
+- `/api/v1/clients`
+- `/api/v1/drivers`
+- `/api/v1/logist`
+- `/api/v1/driver`
+- `/api/v1/media`
+- `/api/v1/orders`
+- `/api/v1/system`
+- `/api/v1/webhooks`
+
+Сервисные endpoints:
 
 - `GET /`
 - `GET /ping`
 - `GET /health`
-- `GET /docs`
-- `GET /redoc`
-- `GET /openapi.json`
-- `GET /demo`
 
-### Основные API-модули
-
-- `/api/v1/auth`
-- `/api/v1/admin`
-- `/api/v1/clients`
-- `/api/v1/drivers`
-- `/api/v1/orders`
-- `/api/v1/webhooks`
-- `/api/v1/catalog`
-- `/api/v1/cart`
-
-### Реально используемые в Sprint 6 endpoints
-
-**Каталог и Корзина:**
-- `GET /api/v1/catalog/categories/`
-- `GET /api/v1/catalog/materials/`
-- `GET /api/v1/catalog/materials/{id}`
-- `GET /api/v1/cart/`
-- `POST /api/v1/cart/items`
-- `PATCH /api/v1/cart/items/{id}`
-- `DELETE /api/v1/cart/items/{id}`
-
-**Админка:**
-- `GET /api/v1/admin/materials/`
-- `POST /api/v1/admin/materials/`
-- `PATCH /api/v1/admin/materials/{id}`
-
-**Авторизация и Webhooks:**
-- `POST /api/v1/auth/login`
-- `POST /api/v1/webhooks/avito`
-- `GET /api/v1/orders/`
+## 6. Каталог, логистика и водительский контур
 
-## 5. Модель данных
-
-Все ключевые таблицы используют `UUID`.
+Каталог и логистический контур опираются на следующие сущности:
 
-### roles
+- `categories`
+- `materials`
+- `delivery_options`
+- `orders`
+- `order_items`
+- `drivers`
+- `vehicles`
+- `order_offers`
+- `media_files`
 
-- `id`
-- `name`
-- `description`
+Backend отдает:
 
-Значения seed:
+- категории материалов
+- материалы
+- варианты доставки `5/10/17/20/25/30 м3`
+- checkout заказа
 
-- `admin`
-- `logist`
-- `manager`
+`app/api/catalog.py` прикладывает к материалам активные варианты доставки и связанные media-файлы.
 
-### users
-
-- `id`
-- `username`
-- `hashed_password`
-- `role_id`
-- `is_active`
+`app/api/orders.py` создает заказ через `POST /api/v1/orders/checkout`, включая:
 
-### clients
+- выбранный материал
+- `delivery_option_id`
+- адрес
+- комментарий
+- гостевой сценарий без обязательной авторизации клиента
 
-- `id`
-- `name`
-- `phone`
-- `external_source`
-- `external_user_id`
+`app/api/logist_orders.py` и `app/services/dispatch_service.py` покрывают:
 
-Ограничение:
+- создание заказа логистом
+- просмотр заказов логистом
+- ручное назначение водителя
+- перезапуск диспетчеризации
+- историю попыток назначения
 
-- уникальная пара `external_source + external_user_id`
+`app/api/drivers.py` отдает список автопарка для логиста через `GET /api/v1/drivers/`.
 
-### drivers
+Для списка водителей используется схема `DriverFleetResponse`, в которой дополнительно отдаются:
 
-- `id`
-- `name`
-- `phone`
-- `status`
+- `vehicle_main_url`
+- `vehicle_left_url`
+- `vehicle_type`
+- `vehicle_cubature_min`
+- `vehicle_cubature_max`
+- `vehicle_tonnage_min`
+- `vehicle_tonnage_max`
 
-### orders
+`vehicle_main_url` и `vehicle_left_url` формируются как presigned GET URL через `app/services/storage.py` по данным `media_files` для `slot_key=vehicle_main|vehicle_left`.
 
-- `id`
-- `client_id`
-- `driver_id`
-- `material`
-- `volume`
-- `address`
-- `status`
-- `source`
-- `notes`
-- `source_dialogue_id`
-- `created_at`
+## 7. Медиа и S3
 
-Фактические статусы, присутствующие в модели:
+Файлы изображений обслуживаются через MinIO.
 
-- `draft`
-- `pending`
-- `assigned`
-- `completed`
-- `cancelled`
+Основные компоненты:
 
-### events
+- конфигурация: `app/core/config.py`
+- storage service: `app/services/storage.py`
+- API: `app/api/media.py`
+- ORM-модель: `MediaFile`
+- таблица БД: `media_files`
 
-- `id`
-- `order_id`
-- `event_type`
-- `description`
-- `created_at`
-
-### order_offers
-
-- `id`
-- `order_id`
-- `driver_id`
-- `price`
-- `status`
-- `created_at`
-
-### integration_events
-
-- `id`
-- `source`
-- `external_event_id`
-- `payload`
-- `status`
-- `error_message`
-- `created_at`
-
-Ограничение:
-
-- уникальная пара `source + external_event_id`
-
-### channels
-
-- `id`
-- `name`
-- `external_account_id`
-- `is_active`
-
-Ограничение:
-
-- уникальная пара `name + external_account_id`
-
-### dialogues
-
-- `id`
-- `channel_id`
-- `external_dialog_id`
-- `client_id`
-- `order_id`
-- `status`
-- `last_message_at`
-- `created_at`
-
-Ограничение:
-
-- уникальная пара `channel_id + external_dialog_id`
-
-### messages
-
-- `id`
-- `dialogue_id`
-- `external_message_id`
-- `direction`
-- `message_type`
-- `text`
-- `raw_payload`
-- `created_at`
-
-Ограничение:
-
-- уникальная пара `dialogue_id + external_message_id`
-
-### message_ai_analyses
-
-Таблица Sprint 4.
-
-- `id`
-- `message_id`
-- `dialogue_id`
-- `classification`
-- `raw_llm_response`
-- `normalized_json`
-- `confidence`
-- `missing_fields`
-- `status`
-- `error_message`
-- `created_at`
-
-Типовые статусы анализа:
-
-- `processed`
-- `failed`
-- `needs_review`
-
-## 6. Интеграции
-
-### 6.1. Avito webhook
-
-Точка входа:
-
-- `POST /api/v1/webhooks/avito`
-
-Поддерживаемые способы авторизации webhook:
-
-- заголовок `X-Webhook-Secret`;
-- query-параметр `token`;
-- allowlist IP через `AVITO_WEBHOOK_ALLOWED_IPS`.
-
-Фактическая логика:
-
-1. Вебхук валидируется.
-2. Сырое событие сохраняется в `integration_events`.
-3. Канал, клиент, диалог и сообщение создаются или переиспользуются.
-4. Для нового входящего сообщения запускается background AI-обработка.
-
-Идемпотентность обеспечивается на двух уровнях:
-
-- событие: `source + external_event_id`;
-- сообщение: `dialogue_id + external_message_id`.
-
-### 6.2. LLM / ProxyAPI
-
-В текущем прод-контуре LLM работает через ProxyAPI как совместимый транспорт OpenAI SDK.
-
-Конфигурационные переменные:
-
-- `LLM_API_KEY`
-- `LLM_BASE_URL`
-- `LLM_MODEL`
-- `LLM_TIMEOUT_SECONDS`
-- `LLM_MAX_RETRIES`
-- `LLM_TEMPERATURE`
-
-Текущие defaults:
-
-- `LLM_BASE_URL=https://api.proxyapi.ru/openai/v1`
-- `LLM_MODEL=gpt-4o-mini`
-- `LLM_TEMPERATURE=0.0`
-
-## 7. Логика Sprint 4
-
-### 7.1. Классификация сообщения
-
-Поддерживаемые классы:
-
-- `new_order`
-- `order_update`
-- `question`
-- `irrelevant`
-
-### 7.2. Нормализованный AI-ответ
-
-LLM обязана вернуть валидируемую JSON-структуру, содержащую:
-
-- `classification`
-- `is_order_related`
-- `client_message_summary`
-- `order_fields`
-- `missing_fields`
-- `needs_clarification`
-- `should_create_order_draft`
-- `confidence`
-
-Извлекаемые поля заказа:
+Поддерживаются сущности:
 
 - `material`
-- `volume`
-- `address`
-- `datetime_str`
-- `client_name`
-- `client_phone`
-- `notes`
+- `delivery_option`
+- `order`
+- `vehicle`
 
-### 7.3. Создание черновика заказа
+## 8. Frontend
 
-Если `should_create_order_draft=true`, backend:
+Frontend реализован как React SPA.
 
-1. ищет существующий `dialogue.order_id`;
-2. если заказ draft, обновляет его;
-3. если заказа нет, создает новый `orders.status='draft'`;
-4. связывает заказ с диалогом;
-5. сохраняет summary и доп. детали в `orders.notes`.
+Ключевые части:
 
-### 7.4. Защита от порчи не-draft заказов
+- `frontend/src/LogistDashboardScreen.tsx` - вкладки логиста, заказы и автопарк
+- `frontend/src/AdminDashboardScreen.tsx` - админка и модерация
+- `frontend/src/DriverProfileScreen.tsx` - профиль и машина водителя
+- `frontend/src/DriverOrdersScreen.tsx` - экран водителя
+- `frontend/src/store.ts` - Zustand store авторизации и клиентской корзины
+- `frontend/src/utils.ts` - `baseURL` и helper-функции
 
-Если к диалогу уже привязан заказ не в статусе `draft`, AI не перезаписывает его.
+Текущий пользовательский путь:
 
-В этом случае:
+1. Выбор категории
+2. Выбор материала
+3. Выбор кубатуры машины
+4. Добавление в корзину
+5. Ввод адреса
+6. Checkout
+7. Сохранение истории в `localStorage`
 
-- анализ сохраняется;
-- `message_ai_analyses.status = needs_review`;
-- `error_message = "Cannot update non-draft order"`.
+Отдельно для логиста:
 
-## 8. Логика работы Каталога (Sprint 6)
+1. Просмотр списка заказов
+2. Просмотр вкладки "Автопарк"
+3. Получение списка водителей из `GET /api/v1/drivers/`
+4. Использование `vehicle_main_url` для превью машины
+5. Ручное назначение водителя на заказ
 
-### 8.1. Скрытие неактивных материалов
-Материалы имеют флаг `is_active` (boolean). 
-- Если `is_active=false`, материал не возвращается в публичном списке `GET /api/v1/catalog/materials/`. Таким образом он пропадает из витрины клиентского приложения.
-- При этом он остается доступным при запросе по конкретному ID `GET /api/v1/catalog/materials/{id}`, а также возвращается в `GET /api/v1/admin/materials/`.
-**Почему так сделано:** Это необходимо для сохранения ссылочной целостности (referential integrity) в уже существующих заказах и корзинах. Если материал был заказан, а затем скрыт менеджером (например, временно нет в наличии), старые заказы и элементы корзины продолжат корректно отображать информацию о материале, не вызывая ошибок `404 Not Found`.
+## 9. CI/CD
 
-## 9. Demo UI
+GitHub Actions workflow: `.github/workflows/deploy.yml`
 
-`/demo` добавлен как ручной интерфейс проверки Sprint 4.
+Пайплайн:
 
-Он позволяет:
+1. checkout репозитория
+2. `npm ci` в `frontend/`
+3. `npm run build`
+4. upload `frontend/dist/` на сервер по SSH
 
-- авторизоваться через `POST /api/v1/auth/login`;
-- отправить тестовый webhook Авито;
-- увидеть последние 10 заказов;
-- проверить, как AI породил или не породил черновик.
+## 10. Ограничения текущего состояния
 
-Demo UI не является полноценным интерфейсом логиста. Это инструмент проверки контура Sprint 3 + 4.
-
-## 9. Тестовое покрытие
-
-В проекте есть автоматические тесты для:
-
-- webhook-auth и идемпотентности Авито;
-- AI-классификации и draft order logic;
-- protection от изменения non-draft заказов;
-- demo orders endpoint и demo page.
-
-На момент актуализации документации на ноде проходил полный набор:
-
-- `pytest -q` -> `31 passed`
-
-## 10. Известные ограничения
-
-- `needs_clarification` пока только сохраняется в результате AI-анализа и не инициирует отправку вопроса клиенту.
-- Нет отдельного UI логиста для подтверждения и ручного редактирования карточки заказа.
-- `GET /api/v1/orders/` сейчас используется как demo endpoint последних 10 заказов, а не как полноценный реестр заказов.
-- В production сейчас развернута ветка `feature/demo-ui`; это допустимо для стенда, но для формального релиза лучше фиксировать release-ветку или `main`.
-
-## 11. Рекомендуемый порядок ручной проверки
-
-1. Проверить `https://darmavoz.ru/health`.
-2. Открыть `https://darmavoz.ru/docs`.
-3. Авторизоваться в `https://darmavoz.ru/demo`.
-4. Отправить тестовое inbound-сообщение через demo webhook simulator.
-5. Убедиться, что в `/api/v1/orders/` появился или обновился draft order.
-6. Проверить, что при нерелевантном сообщении новый заказ не создается.
-
-## 12. Вывод
-
-Текущее состояние backend соответствует завершенному Sprint 6:
-
-- Авито-интеграция работает;
-- AI-анализ включен;
-- JSON-валидация ответа LLM есть;
-- draft order creation реализован;
-- внешний production URL отвечает;
-- Реализован каталог товаров и корзина;
-- Добавлена админ-панель для управления товарами с защитой от XSS;
-- В мобильном приложении реализована защита от ошибок инициализации сессии (Race Condition).
+- часть документации по ранним спринтам и legacy demo-маршрутам еще остается в репозитории
+- `GET /api/v1/drivers/` смонтирован вне `/api/v1/logist`, что важно учитывать фронтенду и документации
+- список автопарка использует presigned URL, поэтому превью зависят от корректной S3-конфигурации
+- история заказов на клиентском контуре частично остается гостевой, через `localStorage`

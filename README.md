@@ -1,229 +1,152 @@
-# Darmavoz Backend
+# Darmavoz
 
-Backend проекта `Дармавоз.рф` на FastAPI. Текущее фактическое состояние на ноде `дармавоз` закрывает Sprint 4: Авито webhook, AI-классификация сообщений, извлечение параметров заказа, создание черновиков заказов и demo UI для ручной проверки.
+Актуальная рабочая копия проекта находится в `/opt/darmavoz`.
 
-## Что реализовано сейчас
+## Что есть сейчас
 
-- FastAPI backend с OpenAPI-документацией;
-- PostgreSQL + Redis;
-- Alembic миграции;
-- JWT-авторизация;
-- seed ролей `admin`, `logist`, `manager` и администратора из `.env`;
-- интеграция с Авито webhook;
-- сохранение `integration_events`, `channels`, `dialogues`, `messages`;
-- AI-обработка входящих сообщений через ProxyAPI/OpenAI SDK;
-- создание и обновление draft orders;
-- demo UI на `/demo`.
+- `backend` на FastAPI
+- PostgreSQL + Redis
+- каталог материалов и вариантов доставки `5/10/17/20/25/30 м3`
+- оформление заказа через `POST /api/v1/orders/checkout`
+- S3/MinIO для медиа и таблица `media_files`
+- роли `admin` / `logist` / `manager` / `driver`
+- автодиспетчеризация и ручное назначение водителя логистом
+- профиль водителя и модерация машины/водителя
+- логистский список автопарка с presigned preview URL фотографий машины
+- React SPA в `frontend/`
+- собранный web-клиент в `react_web/`
+- Caddy-маршрутизация домена `darmavoz.ru`
 
-## Актуальные URL
+## Структура
 
-Production:
-
-- `https://darmavoz.ru/`
-- `https://darmavoz.ru/health`
-- `https://darmavoz.ru/docs`
-- `https://darmavoz.ru/redoc`
-- `https://darmavoz.ru/openapi.json`
-- `https://darmavoz.ru/demo`
-
-Локально внутри контейнера:
-
-- `http://127.0.0.1:8000/`
-- `http://127.0.0.1:8000/health`
-- `http://127.0.0.1:8000/docs`
-
-## Переменные окружения
-
-Обязательная база:
-
-```env
-DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/darmavoz
-REDIS_URL=redis://redis:6379/0
-SECRET_KEY=change-me
-ALGORITHM=HS256
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=admin
-AVITO_WEBHOOK_SECRET=change-me
-AVITO_WEBHOOK_HEADER_NAME=X-Webhook-Secret
-AVITO_WEBHOOK_URL_TOKEN=
-AVITO_WEBHOOK_ALLOWED_IPS=
+```text
+/opt/darmavoz
+├── alembic/
+├── app/
+│   ├── api/
+│   ├── core/
+│   ├── db/
+│   ├── integrations/
+│   ├── models/
+│   ├── schemas/
+│   ├── security/
+│   └── services/
+├── frontend/          # исходники React SPA
+├── react_web/         # собранный web-клиент для отдачи Caddy
+├── scripts/
+├── tests/
+├── architecture.md
+├── darmavoz.caddy
+├── docker-compose.local.yml
+├── docker-compose.yml
+├── full_task.md
+├── main.py
+└── README.md
 ```
-
-Авито:
-
-```env
-AVITO_CLIENT_ID=
-AVITO_CLIENT_SECRET=
-AVITO_ACCOUNT_ID=
-AVITO_BASE_URL=https://api.avito.ru
-```
-
-LLM / Sprint 4:
-
-```env
-LLM_API_KEY=your-proxyapi-key
-LLM_BASE_URL=https://api.proxyapi.ru/openai/v1
-LLM_MODEL=gpt-4o-mini
-LLM_TIMEOUT_SECONDS=30
-LLM_MAX_RETRIES=3
-LLM_TEMPERATURE=0.0
-```
-
-Полный пример есть в `.env.example`.
 
 ## Запуск
 
-### Локальная разработка
-
-Полный стек backend + db + redis:
+### Local backend
 
 ```bash
 docker compose -f docker-compose.local.yml up -d --build
 ```
 
-### Production на ноде
+### Production services
 
 ```bash
 docker compose up -d --build
 ```
 
-### Полезные команды
+`docker-compose.yml` поднимает:
 
-Проверка контейнеров:
+- `backend`
+- `minio`
 
-```bash
-docker compose ps
-```
+Внешний HTTP(S) терминируется Caddy из DAOOS Kit.
 
-Текущая миграция:
+## Frontend
 
-```bash
-docker compose exec -T backend alembic current
-```
+Исходники React-клиента лежат в `frontend/`.
 
-Полный тестовый прогон:
+Основные команды:
 
 ```bash
-docker compose exec -T backend pytest -q
+cd frontend
+npm ci
+npm run build
 ```
 
-## Основные API-маршруты
+Результат сборки публикуется в `frontend/dist/`, а на прод-ноде раздается из `/opt/darmavoz/react_web`.
 
-- `POST /api/v1/auth/login`
-- `POST /api/v1/webhooks/avito`
-- `GET /api/v1/orders/`
+## Публичные URL
+
+- `https://darmavoz.ru/app` - web-клиент
+- `https://darmavoz.ru/api/v1/catalog/categories/`
+- `https://darmavoz.ru/api/v1/catalog/materials/`
+- `https://darmavoz.ru/api/v1/catalog/delivery-options/`
+- `https://darmavoz.ru/api/v1/orders/checkout`
+- `https://darmavoz.ru/health`
+- `https://darmavoz.ru/docs`
+
+## Ключевые backend endpoints
+
+- `GET /ping`
 - `GET /health`
-- `GET /docs`
-- `GET /demo`
+- `POST /api/v1/auth/login`
+- `GET /api/v1/catalog/categories/`
+- `GET /api/v1/catalog/materials/`
+- `GET /api/v1/catalog/delivery-options/`
+- `POST /api/v1/orders/checkout`
+- `GET /api/v1/drivers/`
+- `GET /api/v1/logist/orders`
+- `POST /api/v1/logist/orders`
+- `GET /api/v1/driver/profile`
+- `PATCH /api/v1/driver/profile`
+- `PATCH /api/v1/driver/vehicle`
+- `POST /api/v1/driver/vehicle/submit`
+- `GET /api/v1/admin/moderation/pending`
+- `POST /api/v1/media/presign-upload`
+- `POST /api/v1/media/confirm`
+- `POST /api/v1/webhooks/avito`
 
-## Как устроен Sprint 4
+## Логистский автопарк
 
-### Поток обработки
+Список водителей для вкладки "Автопарк" отдается через `GET /api/v1/drivers/` для ролей `logist` и `admin`.
 
-1. Авито присылает webhook в `POST /api/v1/webhooks/avito`.
-2. Backend валидирует webhook.
-3. Событие сохраняется в `integration_events`.
-4. Создаются или переиспользуются `channel`, `client`, `dialogue`, `message`.
-5. Для нового сообщения запускается background AI-processing.
-6. AI возвращает структурированный JSON.
-7. Если сообщение связано с заказом, backend создает или обновляет `draft` заказ.
+Ключевые поля ответа:
 
-### Классификация сообщений
+- `vehicle_main_url` - presigned GET URL главного фото машины
+- `vehicle_left_url` - presigned GET URL бокового фото машины
+- `vehicle_type`
+- `vehicle_cubature_min`
+- `vehicle_cubature_max`
+- `vehicle_tonnage_min`
+- `vehicle_tonnage_max`
 
-Поддерживаемые классы:
+Фронтенд для основного превью должен использовать `vehicle_main_url`.
 
-- `new_order`
-- `order_update`
-- `question`
-- `irrelevant`
+## Медиа и S3
 
-### Извлекаемые поля
+- S3-совместимое хранилище: MinIO
+- backend-сервис: `app/services/storage.py`
+- API медиа: `app/api/media.py`
+- метаданные файлов: таблица `media_files`
 
-- `material`
-- `volume`
-- `address`
-- `datetime_str`
-- `client_name`
-- `client_phone`
-- `notes`
-
-### Важное ограничение
-
-Если у диалога уже есть заказ не в статусе `draft`, AI не перезаписывает его. Анализ сохраняется со статусом `needs_review`.
-
-## Как проверить Sprint 4 вручную
-
-### Вариант 1. Внешняя проверка через production
-
-1. Откройте `https://darmavoz.ru/health` и убедитесь, что сервис отвечает `200`.
-2. Проверьте `llm_configured=true`.
-3. Откройте `https://darmavoz.ru/docs`.
-4. Откройте `https://darmavoz.ru/demo`.
-5. Авторизуйтесь логином и паролем администратора.
-6. Укажите `Webhook Secret`.
-7. Отправьте тестовое сообщение клиента.
-8. Обновите список заказов и проверьте появление draft order.
-
-Примеры сообщений:
-
-- заказ: `Нужен песок 10 кубов на завтра, Тюмень, улица Ленина 10`
-- уточнение: `Измените объем на 12 кубов`
-- вопрос: `Сколько стоит доставка?`
-- нерелевантное: `Спасибо`
-
-### Вариант 2. Автотесты
+## Быстрая проверка
 
 ```bash
-docker compose exec -T backend pytest -q
+cd /opt/darmavoz
+./scripts/smoke_check.sh
 ```
 
-На момент актуализации документации тесты проходили:
+Smoke-проверка покрывает базовое здоровье backend, login и основные API старших спринтов.
 
-```text
-31 passed
+Точечная проверка автопарка после backend-правок:
+
+```bash
+cd /opt/darmavoz
+docker run --rm --entrypoint python --network daoos_kit_default \
+  --env-file /opt/darmavoz/.env -v /opt/darmavoz:/app -w /app \
+  darmavoz-backend -m pytest tests/test_logist_drivers_api.py -q
 ```
-
-## Что проверяют тесты
-
-- `tests/test_avito_webhook.py`
-  - auth webhook;
-  - token auth;
-  - IP allowlist;
-  - идемпотентность событий;
-  - идемпотентность сообщений;
-  - постановку background AI-задачи.
-
-- `tests/test_ai_processor.py`
-  - инициализацию OpenAI client через `LLM_BASE_URL`;
-  - создание draft order;
-  - обновление draft order;
-  - отсутствие draft для `question` и `irrelevant`;
-  - сохранение `failed` статуса при ошибке LLM;
-  - защиту non-draft order от AI-перезаписи.
-
-- `tests/test_demo_orders.py`
-  - auth guard для `/api/v1/orders/`;
-  - выдачу последних 10 заказов;
-  - доступность `/demo`.
-
-## Текущее состояние документации
-
-- `README.md` — быстрый операционный вход и чек-листы;
-- `architecture.md` — фактическая архитектура и модель данных;
-- `full_task.md` — исходное ТЗ в истории проекта, не является рабочим runtime-документом.
-
-## Известные ограничения текущего backend
-
-- `needs_clarification` пока только сохраняется в AI-анализе и не приводит к автоматической отправке вопроса клиенту.
-- Полноценного web-интерфейса логиста пока нет; вместо него есть demo UI.
-- `/api/v1/orders/` пока играет роль demo-реестра последних заказов, а не полного production-реестра.
-- Исторически в БД может встречаться `message_ai_analyses.status='failed'`, если в момент проверки не был настроен `LLM_API_KEY`.
-
-## Смежные файлы
-
-- `architecture.md`
-- `.env.example`
-- `main.py`
-- `app/services/message_ai_processor.py`
-- `app/integrations/openai/client.py`
-- `app/api/webhooks.py`

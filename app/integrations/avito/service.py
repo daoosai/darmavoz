@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -11,6 +12,12 @@ from app.integrations.avito.schemas import AvitoWebhookPayload
 from app.models.models import Channel, Client, Dialogue, IntegrationEvent, Message
 
 logger = logging.getLogger(__name__)
+
+
+def build_avito_placeholder_phone(user_id: str) -> str:
+    digest = hashlib.sha256(f"avito:{user_id}".encode()).hexdigest()
+    suffix = int(digest[:15], 16) % 10**10
+    return f"+1{suffix:010d}"
 
 
 class AvitoWebhookService:
@@ -190,7 +197,7 @@ class AvitoWebhookService:
             insert(Client)
             .values(
                 name=f"Avito User {user_id}",
-                phone=None,
+                phone=build_avito_placeholder_phone(user_id),
                 external_source=self.SOURCE,
                 external_user_id=user_id,
             )

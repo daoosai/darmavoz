@@ -1,15 +1,30 @@
-import uuid
-from typing import Optional
+from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-# =====================================================================================
-# Category Schemas
-# =====================================================================================
+class MediaFileOut(BaseModel):
+    id: UUID
+    entity_type: str
+    entity_id: UUID
+    bucket: str
+    object_key: str
+    public_url: str
+    content_type: str
+    file_name: str
+    file_size: int
+    sort_order: int | None = None
+    slot_key: str | None = None
+    is_primary: bool
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
 
 class CategoryOut(BaseModel):
-    id: uuid.UUID
+    id: UUID
     name: str
     slug: str
     sort_order: int
@@ -18,62 +33,122 @@ class CategoryOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-# =====================================================================================
-# Material Schemas
-# =====================================================================================
-
 class MaterialCreate(BaseModel):
     name: str
-    description: Optional[str] = None
-    price: Optional[float] = None
+    description: str | None = None
+    price: float | None = None
     unit: str
     min_volume: float = 1.0
-    image_url: Optional[str] = None
-    category_id: uuid.UUID
+    image_url: str | None = None
+    category_id: UUID
     is_active: bool = True
+    sort_order: int = 0
+
 
 class MaterialUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    price: Optional[float] = None
-    unit: Optional[str] = None
-    min_volume: Optional[float] = None
-    image_url: Optional[str] = None
-    category_id: Optional[uuid.UUID] = None
-    is_active: Optional[bool] = None
+    name: str | None = None
+    description: str | None = None
+    price: float | None = None
+    unit: str | None = None
+    min_volume: float | None = None
+    image_url: str | None = None
+    category_id: UUID | None = None
+    is_active: bool | None = None
+    sort_order: int | None = None
 
-class MaterialOut(BaseModel):
-    id: uuid.UUID
-    name: str
-    description: Optional[str]
-    price: Optional[float]
-    unit: str
-    min_volume: float
-    image_url: Optional[str]
-    category_id: uuid.UUID
-    is_active: bool = True
+
+class DeliveryOptionOut(BaseModel):
+    id: UUID
+    capacity_m3: float
+    title: str
+    description: str | None = None
+    base_price: float | None = None
+    delivery_rate_per_km: float | None = None
+    min_delivery_price: float = 5000.0
+    is_active: bool
+    sort_order: int
+    image_url: str | None = None
+    primary_image_url: str | None = None
+    media_files: list[MediaFileOut] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
 
 
-# =====================================================================================
-# Cart Schemas
-# =====================================================================================
+class MaterialOut(BaseModel):
+    id: UUID
+    name: str
+    description: str | None = None
+    price: float | None = None
+    unit: str
+    min_volume: float
+    image_url: str | None = None
+    category_id: UUID
+    is_active: bool = True
+    sort_order: int = 0
+    primary_image_url: str | None = None
+    media_files: list[MediaFileOut] = Field(default_factory=list)
+    delivery_options: list[DeliveryOptionOut] = Field(default_factory=list)
+
+    model_config = ConfigDict(from_attributes=True)
+
 
 class CartItemCreate(BaseModel):
-    material_id: uuid.UUID
+    material_id: UUID
     volume: float
 
 
 class CartItemUpdate(BaseModel):
     volume: float
 
+
 class CartItemOut(BaseModel):
-    id: uuid.UUID
-    material_id: uuid.UUID
+    id: UUID
+    material_id: UUID
     volume: float
-    unit_price: Optional[float]
-    amount: Optional[float]
+    unit_price: float | None = None
+    amount: float | None = None
     material: MaterialOut
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class DeliveryOptionCreate(BaseModel):
+    capacity_m3: float
+    title: str
+    description: str | None = None
+    base_price: float | None = None
+    delivery_rate_per_km: float | None = None
+    min_delivery_price: float = 5000.0
+    is_active: bool = True
+    sort_order: int = 0
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def accept_name_alias(cls, data):
+        if isinstance(data, dict) and "title" not in data and "name" in data:
+            data = dict(data)
+            data["title"] = data["name"]
+        return data
+
+
+class DeliveryOptionUpdate(BaseModel):
+    capacity_m3: float | None = None
+    title: str | None = None
+    description: str | None = None
+    base_price: float | None = None
+    delivery_rate_per_km: float | None = None
+    min_delivery_price: float | None = None
+    is_active: bool | None = None
+    sort_order: int | None = None
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def accept_name_alias(cls, data):
+        if isinstance(data, dict) and "title" not in data and "name" in data:
+            data = dict(data)
+            data["title"] = data["name"]
+        return data

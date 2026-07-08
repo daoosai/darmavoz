@@ -1010,17 +1010,19 @@ def _matching_drivers_base_query(order: Order) -> Select[tuple[Driver]]:
     )
 
 
-def _current_cycle_offer_driver_ids(
+async def _current_cycle_offer_driver_ids(
+    session: AsyncSession,
     order: Order,
     *,
     statuses: tuple[str, ...] | None = None,
-):
+) -> set[UUID]:
     stmt = select(OrderOffer.driver_id).where(OrderOffer.order_id == order.id)
     if order.dispatch_started_at is not None:
         stmt = stmt.where(OrderOffer.offered_at >= order.dispatch_started_at)
     if statuses:
         stmt = stmt.where(OrderOffer.status.in_(statuses))
-    return stmt.scalar_subquery()
+    rows = await session.scalars(stmt)
+    return {driver_id for driver_id in rows.all() if driver_id is not None}
 
 
 async def _log_dispatch_candidates(
@@ -1125,8 +1127,9 @@ async def get_matching_drivers(
         excluded_driver_ids=excluded_driver_ids,
         exclude_attempted_drivers=exclude_attempted_drivers,
     )
-    attempted_driver_ids = _current_cycle_offer_driver_ids(order)
-    rejected_driver_ids = _current_cycle_offer_driver_ids(
+    attempted_driver_ids = await _current_cycle_offer_driver_ids(session, order)
+    rejected_driver_ids = await _current_cycle_offer_driver_ids(
+        session,
         order,
         statuses=(OrderOfferStatus.declined.value, OrderOfferStatus.expired.value),
     )
@@ -1139,10 +1142,11 @@ async def get_matching_drivers(
     )
     fallback_stmt = _matching_drivers_base_query(order)
 
-    preferred_stmt = preferred_stmt.where(Driver.id.not_in(rejected_driver_ids))
-    fallback_stmt = fallback_stmt.where(Driver.id.not_in(rejected_driver_ids))
+    if rejected_driver_ids:
+        preferred_stmt = preferred_stmt.where(Driver.id.not_in(rejected_driver_ids))
+        fallback_stmt = fallback_stmt.where(Driver.id.not_in(rejected_driver_ids))
 
-    if exclude_attempted_drivers:
+    if exclude_attempted_drivers and attempted_driver_ids:
         preferred_stmt = preferred_stmt.where(Driver.id.not_in(attempted_driver_ids))
         fallback_stmt = fallback_stmt.where(Driver.id.not_in(attempted_driver_ids))
 
@@ -1190,24 +1194,17 @@ async def get_matching_drivers(
         )
         return fallback
 
-    rescue_stmt = _matching_drivers_base_query(order).order_by(
-        Driver.dispatch_priority.desc(),
-        Driver.last_offer_at.asc().nullsfirst(),
-        Driver.id.asc(),
-    )
-    rescue_result = await session.execute(rescue_stmt)
-    rescue = list(rescue_result.scalars().all())
     logger.info(
         'dispatch_candidates_selected',
         extra={
             'order_id': str(order.id),
-            'stage': 'rescue',
-            'count': len(rescue),
-            'driver_ids': [str(driver.id) for driver in rescue],
-            'note': 'fallback without attempted/rejected/penalty filters',
+            'stage': 'none',
+            'count': 0,
+            'driver_ids': [],
+            'note': 'no eligible drivers after attempted/rejected/penalty filters',
         },
     )
-    return rescue
+    return []
 
 
 async def create_offer_for_driver(session: AsyncSession, order: Order, driver: Driver) -> OrderOffer:
@@ -1462,7 +1459,7 @@ async def cancel_driver_assigned_order(
             driver_id=driver_id,
             price=order.total_amount,
             sequence_no=next_sequence_no + 1,
-            status=OrderOfferStatus.cancelled.value,
+            status=OrderOfferStatus.declined.value,
             offered_at=order.assigned_at or order.dispatch_started_at or order.created_at or now,
             expires_at=now,
             responded_at=now,
@@ -1472,7 +1469,7 @@ async def cancel_driver_assigned_order(
         session.add(current_offer)
         await session.flush()
     else:
-        current_offer.status = OrderOfferStatus.cancelled.value
+        current_offer.status = OrderOfferStatus.declined.value
         current_offer.responded_at = now
         current_offer.decision_reason = reason
 

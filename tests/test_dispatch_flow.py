@@ -390,7 +390,7 @@ async def test_driver_can_cancel_assigned_order_and_return_it_to_dispatch(client
 
         refreshed_offer = await session.scalar(select(OrderOffer).where(OrderOffer.order_id == order.id))
         assert refreshed_offer is not None
-        assert refreshed_offer.status == OrderOfferStatus.cancelled.value
+        assert refreshed_offer.status == OrderOfferStatus.declined.value
         assert refreshed_offer.decision_reason == "????????? ??????"
 
         cancel_event = await session.scalar(
@@ -401,6 +401,156 @@ async def test_driver_can_cancel_assigned_order_and_return_it_to_dispatch(client
         )
         assert cancel_event is not None
         assert "????????? ??????" in (cancel_event.description or "")
+
+
+@pytest.mark.asyncio
+async def test_driver_cancelled_order_is_not_reoffered_to_same_driver(client, session_factory, monkeypatch):
+    fake_redis = FakeRedis()
+
+    async def fake_enqueue(order_id):
+        return None
+
+    monkeypatch.setattr("app.services.dispatch_service.enqueue_order_for_dispatch_safe", fake_enqueue)
+
+    async with session_factory() as session:
+        driver_role = await ensure_role(session, "driver")
+
+        category = Category(name="Переоффер", slug="driver-cancel-no-reoffer", sort_order=0, is_active=True)
+        material = Material(
+            category=category,
+            name="Песок карьерный",
+            description="",
+            price=2000.0,
+            unit="m3",
+            min_volume=5.0,
+            is_active=True,
+            sort_order=0,
+        )
+        delivery_option = DeliveryOption(
+            capacity_m3=10.0,
+            title="10 м3",
+            description="",
+            base_price=0.0,
+            is_active=True,
+            sort_order=0,
+        )
+        session.add_all([category, material, delivery_option])
+        await session.flush()
+
+        first_user = await create_driver_user(session, username="driver_cancel_no_reoffer_1", role=driver_role)
+        second_user = await create_driver_user(session, username="driver_cancel_no_reoffer_2", role=driver_role)
+
+        first_vehicle = Vehicle(
+            title="Самосвал cancel #1",
+            delivery_option_id=delivery_option.id,
+            is_active=True,
+            moderation_status=ModerationStatus.approved.value,
+        )
+        second_vehicle = Vehicle(
+            title="Самосвал cancel #2",
+            delivery_option_id=delivery_option.id,
+            is_active=True,
+            moderation_status=ModerationStatus.approved.value,
+        )
+        session.add_all([first_vehicle, second_vehicle])
+        await session.flush()
+
+        first_driver = Driver(
+            user_id=first_user.id,
+            vehicle_id=first_vehicle.id,
+            name="Отказавшийся водитель",
+            phone="+79000001881",
+            status=DriverStatus.busy.value,
+            dispatch_priority=200,
+            is_auto_dispatch_enabled=True,
+            is_active=True,
+            moderation_status=ModerationStatus.approved.value,
+        )
+        second_driver = Driver(
+            user_id=second_user.id,
+            vehicle_id=second_vehicle.id,
+            name="Следующий водитель",
+            phone="+79000001882",
+            status=DriverStatus.available.value,
+            dispatch_priority=100,
+            is_auto_dispatch_enabled=True,
+            is_active=True,
+            moderation_status=ModerationStatus.approved.value,
+        )
+        session.add_all([first_driver, second_driver])
+        await session.flush()
+
+        client_record = Client(name="Клиент переоффера", phone="+79990018888")
+        session.add(client_record)
+        await session.flush()
+
+        now = datetime.now(UTC)
+        order = Order(
+            client_id=client_record.id,
+            driver_id=first_driver.id,
+            delivery_option_id=delivery_option.id,
+            address="Томск, Новая 10",
+            delivery_address="Томск, Новая 10",
+            total_amount=20000.0,
+            status=OrderStatus.driver_assigned.value,
+            source="mobile",
+            created_by_source="client_app",
+            dispatch_started_at=now - timedelta(minutes=5),
+            assigned_at=now - timedelta(minutes=1),
+        )
+        session.add(order)
+        await session.flush()
+
+        session.add(
+            OrderItem(
+                order_id=order.id,
+                material_id=material.id,
+                quantity=1,
+                volume=10.0,
+                price=2000.0,
+                amount=20000.0,
+            )
+        )
+        accepted_offer = OrderOffer(
+            order_id=order.id,
+            driver_id=first_driver.id,
+            price=order.total_amount,
+            sequence_no=1,
+            status=OrderOfferStatus.accepted.value,
+            offered_at=now - timedelta(minutes=2),
+            expires_at=now + timedelta(minutes=1),
+            responded_at=now - timedelta(minutes=1),
+            decision_reason="accepted",
+        )
+        session.add(accepted_offer)
+        await session.flush()
+        order.current_offer_id = accepted_offer.id
+        await session.commit()
+        order_id = order.id
+
+    cancel_response = await client.patch(
+        f"/api/v1/orders/{order_id}/driver-cancel",
+        json={"reason": "Не могу выполнить"},
+        headers=auth_headers("driver_cancel_no_reoffer_1"),
+    )
+    assert cancel_response.status_code == 200
+
+    processed = await run_dispatch_tick(fake_redis, session_factory)
+    assert processed >= 1
+
+    first_driver_offer = await client.get(
+        "/api/v1/driver/orders/incoming/current",
+        headers=auth_headers("driver_cancel_no_reoffer_1"),
+    )
+    assert first_driver_offer.status_code == 200
+    assert first_driver_offer.json()["order_id"] is None
+
+    second_driver_offer = await client.get(
+        "/api/v1/driver/orders/incoming/current",
+        headers=auth_headers("driver_cancel_no_reoffer_2"),
+    )
+    assert second_driver_offer.status_code == 200
+    assert second_driver_offer.json()["order_id"] == str(order_id)
 
 
 @pytest.mark.asyncio

@@ -1404,15 +1404,7 @@ async def delete_material(
     if material is None:
         raise HTTPException(status_code=404, detail="Material not found")
 
-    linked_order_items_count = await db.scalar(
-        select(func.count(OrderItem.id)).where(OrderItem.material_id == material_id)
-    )
-    if linked_order_items_count:
-        raise HTTPException(
-            status_code=409,
-            detail="Material is linked to orders and cannot be deleted permanently",
-        )
-
+    await db.execute(delete(OrderItem).where(OrderItem.material_id == material_id))
     await db.execute(
         delete(MediaFile).where(
             MediaFile.entity_type == "material",

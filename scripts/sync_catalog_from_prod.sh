@@ -46,12 +46,20 @@ export_from_prod \
   "$TMP_DIR/quarries.csv"
 
 export_from_prod \
-  "select quarry_id, material_id from quarry_materials order by quarry_id, material_id" \
+  "select qm.quarry_id, c.slug, m.name from quarry_materials qm join materials m on m.id = qm.material_id join categories c on c.id = m.category_id order by qm.quarry_id, c.slug, m.name" \
   "$TMP_DIR/quarry_materials.csv"
+
+export_from_prod \
+  "select id, capacity_m3, title, description, base_price, delivery_rate_per_km, min_delivery_price, is_active, sort_order, image_url from delivery_options order by sort_order, capacity_m3, title" \
+  "$TMP_DIR/delivery_options.csv"
 
 export_from_prod \
   "select id, entity_type, entity_id, bucket, object_key, public_url, content_type, file_name, file_size, sort_order, slot_key, is_primary, created_at from media_files where entity_type = 'material' order by entity_id, sort_order, created_at" \
   "$TMP_DIR/material_media.csv"
+
+export_from_prod \
+  "select id, entity_type, entity_id, bucket, object_key, public_url, content_type, file_name, file_size, sort_order, slot_key, is_primary, created_at from media_files where entity_type = 'delivery_option' order by entity_id, sort_order, created_at" \
+  "$TMP_DIR/delivery_option_media.csv"
 
 export PGPASSWORD="$test_pass"
 psql -h 127.0.0.1 -p 5433 -U "$test_user" -d "$test_db" <<SQL
@@ -89,10 +97,40 @@ CREATE TEMP TABLE tmp_quarries (
 
 CREATE TEMP TABLE tmp_quarry_materials (
   quarry_id uuid,
-  material_id uuid
+  category_slug text,
+  material_name text
+);
+
+CREATE TEMP TABLE tmp_delivery_options (
+  id uuid,
+  capacity_m3 double precision,
+  title text,
+  description text,
+  base_price double precision,
+  delivery_rate_per_km double precision,
+  min_delivery_price double precision,
+  is_active boolean,
+  sort_order integer,
+  image_url text
 );
 
 CREATE TEMP TABLE tmp_material_media (
+  id uuid,
+  entity_type text,
+  entity_id uuid,
+  bucket text,
+  object_key text,
+  public_url text,
+  content_type text,
+  file_name text,
+  file_size integer,
+  sort_order integer,
+  slot_key text,
+  is_primary boolean,
+  created_at timestamptz
+);
+
+CREATE TEMP TABLE tmp_delivery_option_media (
   id uuid,
   entity_type text,
   entity_id uuid,
@@ -112,7 +150,9 @@ CREATE TEMP TABLE tmp_material_media (
 \copy tmp_materials FROM '$TMP_DIR/materials.csv' WITH (FORMAT csv)
 \copy tmp_quarries FROM '$TMP_DIR/quarries.csv' WITH (FORMAT csv)
 \copy tmp_quarry_materials FROM '$TMP_DIR/quarry_materials.csv' WITH (FORMAT csv)
+\copy tmp_delivery_options FROM '$TMP_DIR/delivery_options.csv' WITH (FORMAT csv)
 \copy tmp_material_media FROM '$TMP_DIR/material_media.csv' WITH (FORMAT csv)
+\copy tmp_delivery_option_media FROM '$TMP_DIR/delivery_option_media.csv' WITH (FORMAT csv)
 
 INSERT INTO categories AS c (id, name, slug, sort_order, is_active)
 SELECT id, name, slug, sort_order, is_active
@@ -140,17 +180,7 @@ WHERE existing.name = tm.name
 INSERT INTO materials AS m (
   id, category_id, name, description, price, unit, min_volume, image_url, is_active, sort_order
 )
-SELECT
-  tm.id,
-  c.id,
-  tm.name,
-  tm.description,
-  tm.price,
-  tm.unit,
-  tm.min_volume,
-  tm.image_url,
-  tm.is_active,
-  tm.sort_order
+SELECT tm.id, c.id, tm.name, tm.description, tm.price, tm.unit, tm.min_volume, tm.image_url, tm.is_active, tm.sort_order
 FROM tmp_materials tm
 JOIN tmp_categories tc ON tc.id = tm.category_id
 JOIN categories c ON c.slug = tc.slug
@@ -171,6 +201,22 @@ SET category_id = EXCLUDED.category_id,
     is_active = EXCLUDED.is_active,
     sort_order = EXCLUDED.sort_order;
 
+INSERT INTO delivery_options AS d (
+  id, capacity_m3, title, description, base_price, delivery_rate_per_km, min_delivery_price, is_active, sort_order, image_url
+)
+SELECT id, capacity_m3, title, description, base_price, delivery_rate_per_km, min_delivery_price, is_active, sort_order, image_url
+FROM tmp_delivery_options
+ON CONFLICT (id) DO UPDATE
+SET capacity_m3 = EXCLUDED.capacity_m3,
+    title = EXCLUDED.title,
+    description = EXCLUDED.description,
+    base_price = EXCLUDED.base_price,
+    delivery_rate_per_km = EXCLUDED.delivery_rate_per_km,
+    min_delivery_price = EXCLUDED.min_delivery_price,
+    is_active = EXCLUDED.is_active,
+    sort_order = EXCLUDED.sort_order,
+    image_url = EXCLUDED.image_url;
+
 INSERT INTO quarries AS q (id, name, address, lat, lon, is_active)
 SELECT id, name, address, lat, lon, is_active
 FROM tmp_quarries
@@ -187,8 +233,10 @@ WHERE qm.quarry_id = q.id
   AND q.id IN (SELECT id FROM tmp_quarries);
 
 INSERT INTO quarry_materials (quarry_id, material_id)
-SELECT quarry_id, material_id
-FROM tmp_quarry_materials
+SELECT DISTINCT tqm.quarry_id, m.id
+FROM tmp_quarry_materials tqm
+JOIN categories c ON c.slug = tqm.category_slug
+JOIN materials m ON m.category_id = c.id AND m.name = tqm.material_name
 ON CONFLICT DO NOTHING;
 
 DELETE FROM media_files mf
@@ -199,9 +247,32 @@ WHERE mf.entity_type = 'material'
 INSERT INTO media_files AS mf (
   id, entity_type, entity_id, bucket, object_key, public_url, content_type, file_name, file_size, sort_order, slot_key, is_primary, created_at
 )
-SELECT
-  id, entity_type, entity_id, bucket, object_key, public_url, content_type, file_name, file_size, sort_order, slot_key, is_primary, created_at
+SELECT id, entity_type, entity_id, bucket, object_key, public_url, content_type, file_name, file_size, sort_order, slot_key, is_primary, created_at
 FROM tmp_material_media
+ON CONFLICT (id) DO UPDATE
+SET entity_type = EXCLUDED.entity_type,
+    entity_id = EXCLUDED.entity_id,
+    bucket = EXCLUDED.bucket,
+    object_key = EXCLUDED.object_key,
+    public_url = EXCLUDED.public_url,
+    content_type = EXCLUDED.content_type,
+    file_name = EXCLUDED.file_name,
+    file_size = EXCLUDED.file_size,
+    sort_order = EXCLUDED.sort_order,
+    slot_key = EXCLUDED.slot_key,
+    is_primary = EXCLUDED.is_primary,
+    created_at = EXCLUDED.created_at;
+
+DELETE FROM media_files mf
+WHERE mf.entity_type = 'delivery_option'
+  AND mf.entity_id IN (SELECT id FROM tmp_delivery_options)
+  AND mf.id NOT IN (SELECT id FROM tmp_delivery_option_media);
+
+INSERT INTO media_files AS mf (
+  id, entity_type, entity_id, bucket, object_key, public_url, content_type, file_name, file_size, sort_order, slot_key, is_primary, created_at
+)
+SELECT id, entity_type, entity_id, bucket, object_key, public_url, content_type, file_name, file_size, sort_order, slot_key, is_primary, created_at
+FROM tmp_delivery_option_media
 ON CONFLICT (id) DO UPDATE
 SET entity_type = EXCLUDED.entity_type,
     entity_id = EXCLUDED.entity_id,
@@ -220,6 +291,16 @@ UPDATE materials
 SET is_active = FALSE
 WHERE is_active = TRUE
   AND id NOT IN (SELECT id FROM tmp_materials);
+
+UPDATE categories
+SET is_active = FALSE
+WHERE is_active = TRUE
+  AND slug NOT IN (SELECT slug FROM tmp_categories);
+
+UPDATE delivery_options
+SET is_active = FALSE
+WHERE is_active = TRUE
+  AND id NOT IN (SELECT id FROM tmp_delivery_options);
 
 UPDATE quarries
 SET is_active = FALSE

@@ -33,6 +33,7 @@ import LoginScreen from "./LoginScreen";
 import DriverOrdersScreen from "./DriverOrdersScreen";
 import LogistDashboardScreen from "./LogistDashboardScreen";
 import AdminDashboardScreen from "./AdminDashboardScreen";
+import AdminStatisticsScreen from "./AdminStatisticsScreen";
 import DriverRegistrationScreen from "./DriverRegistrationScreen";
 import { useAuthStore, useCartStore, useAddressStore } from "./store";
 import ClientAuthBottomSheet from "./ClientAuthBottomSheet";
@@ -44,6 +45,9 @@ import { usePushNotifications } from "./usePushNotifications";
 // Reuse Material type as MaterialProps by exporting it from MaterialDetailScreen or type matching
 export default function App() {
   usePushNotifications();
+  const [currentPath, setCurrentPath] = useState(
+    typeof window !== "undefined" ? window.location.pathname : "/",
+  );
   const { role, token } = useAuthStore();
   const [currentRoute, setCurrentRoute] = useState<
     | "welcome"
@@ -75,6 +79,13 @@ export default function App() {
   const [materials, setMaterials] = useState<MaterialProps[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAuthSheet, setShowAuthSheet] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handlePopState = () => setCurrentPath(window.location.pathname);
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -115,6 +126,89 @@ export default function App() {
   const cartItemsCount = useCartStore((state) => state.cartItems.length);
 
   const renderContent = () => {
+    if (currentPath === "/admin/orders") {
+      return role === "admin" ? (
+        <LogistDashboardScreen onLogout={() => setCurrentRoute("login")} />
+      ) : (
+        <LoginScreen
+          onLogin={(r) =>
+            setCurrentRoute(
+              r === "driver"
+                ? "driver"
+                : r === "logist"
+                  ? "logist"
+                  : r === "admin"
+                    ? "admin"
+                    : "main",
+            )
+          }
+          onBack={() => setCurrentRoute("welcome")}
+        />
+      );
+    }
+
+    if (currentPath === "/logist/orders") {
+      return role === "logist" ? (
+        <LogistDashboardScreen onLogout={() => setCurrentRoute("login")} />
+      ) : (
+        <LoginScreen
+          onLogin={(r) =>
+            setCurrentRoute(
+              r === "driver"
+                ? "driver"
+                : r === "logist"
+                  ? "logist"
+                  : r === "admin"
+                    ? "admin"
+                    : "main",
+            )
+          }
+          onBack={() => setCurrentRoute("welcome")}
+        />
+      );
+    }
+
+    if (currentPath === "/admin/statistics") {
+      return role === "admin" ? (
+        <AdminStatisticsScreen role="admin" />
+      ) : (
+        <LoginScreen
+          onLogin={(r) =>
+            setCurrentRoute(
+              r === "driver"
+                ? "driver"
+                : r === "logist"
+                  ? "logist"
+                  : r === "admin"
+                    ? "admin"
+                    : "main",
+            )
+          }
+          onBack={() => setCurrentRoute("welcome")}
+        />
+      );
+    }
+
+    if (currentPath === "/logist/statistics") {
+      return role === "logist" ? (
+        <AdminStatisticsScreen role="logist" />
+      ) : (
+        <LoginScreen
+          onLogin={(r) =>
+            setCurrentRoute(
+              r === "driver"
+                ? "driver"
+                : r === "logist"
+                  ? "logist"
+                  : r === "admin"
+                    ? "admin"
+                    : "main",
+            )
+          }
+          onBack={() => setCurrentRoute("welcome")}
+        />
+      );
+    }
     if (currentRoute === "welcome") {
       return (
         <WelcomeScreen

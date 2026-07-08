@@ -63,7 +63,7 @@ const getEstimatedTotalAmount = (
   Number(order.total_amount ?? 0) + getDeliveryCost(order);
 
 const formatCurrency = (value?: number | null) =>
-  `${Number(value ?? 0).toLocaleString("ru-RU")} ₽`;
+  `${Number(value ?? 0).toLocaleString("ru-RU")} в‚Ѕ`;
 
 type DriverStatus = "available" | "busy" | "offline";
 
@@ -249,7 +249,7 @@ export default function DriverOrdersScreen({
               ) {
                 const currentOrder: DriverOrder = {
                   id: orderId,
-                  address: detail.address || "Адрес не указан",
+                  address: detail.address || "РђРґСЂРµСЃ РЅРµ СѓРєР°Р·Р°РЅ",
                   items: detail.items || [],
                   delivery_option: detail.delivery_option,
                   created_at: detail.created_at || new Date().toISOString(),
@@ -298,7 +298,7 @@ export default function DriverOrdersScreen({
         if (!res.ok) {
           const errText = await res.text();
           console.error("Orders error text:", errText);
-          throw new Error("Не удалось загрузить заказы");
+          throw new Error("РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ Р·Р°РєР°Р·С‹");
         }
         const data = await res.json().catch(() => ({}));
         const loadedOrders = Array.isArray(data) ? data : data.orders || [];
@@ -308,7 +308,7 @@ export default function DriverOrdersScreen({
         setOrders(activeOrders);
       } catch (error) {
         console.error("Error fetching orders:", error);
-        toast.error("Ошибка при загрузке заказов");
+        toast.error("РћС€РёР±РєР° РїСЂРё Р·Р°РіСЂСѓР·РєРµ Р·Р°РєР°Р·РѕРІ");
       } finally {
         if (!silent) setIsLoading(false);
       }
@@ -388,21 +388,21 @@ export default function DriverOrdersScreen({
         return;
       }
       if (res.status === 403) {
-        toast.error("Нет доступа к действию");
+        toast.error("РќРµС‚ РґРѕСЃС‚СѓРїР° Рє РґРµР№СЃС‚РІРёСЋ");
         return;
       }
 
       if (res.ok) {
-        toast.success("Заказ принят!");
+        toast.success("Р—Р°РєР°Р· РїСЂРёРЅСЏС‚!");
         setCurrentOffer(null);
         checkIncomingOffer();
         fetchOrders();
       } else {
         const err = await res.json().catch(() => ({}));
-        throw new Error(extractApiErrorMessage(err, "Не удалось принять заказ"));
+        throw new Error(extractApiErrorMessage(err, "РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРёРЅСЏС‚СЊ Р·Р°РєР°Р·"));
       }
     } catch (error: any) {
-      toast.error(handleApiError(error, "Не удалось принять заказ"));
+      toast.error(handleApiError(error, "РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРёРЅСЏС‚СЊ Р·Р°РєР°Р·"));
     }
   };
 
@@ -428,23 +428,23 @@ export default function DriverOrdersScreen({
         return;
       }
       if (res.status === 403) {
-        toast.error("Нет доступа к действию");
+        toast.error("РќРµС‚ РґРѕСЃС‚СѓРїР° Рє РґРµР№СЃС‚РІРёСЋ");
         return;
       }
 
       if (res.ok) {
-        toast.success("Вы отказались от заказа");
+        toast.success("Р’С‹ РѕС‚РєР°Р·Р°Р»РёСЃСЊ РѕС‚ Р·Р°РєР°Р·Р°");
         setCurrentOffer(null);
         checkIncomingOffer();
         fetchOrders();
       } else {
         const err = await res.json().catch(() => ({}));
         throw new Error(
-          extractApiErrorMessage(err, "Не удалось отказаться от заказа"),
+          extractApiErrorMessage(err, "РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РєР°Р·Р°С‚СЊСЃСЏ РѕС‚ Р·Р°РєР°Р·Р°"),
         );
       }
     } catch (error: any) {
-      toast.error(handleApiError(error, "Не удалось отказаться от заказа"));
+      toast.error(handleApiError(error, "РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РєР°Р·Р°С‚СЊСЃСЏ РѕС‚ Р·Р°РєР°Р·Р°"));
     }
   };
 
@@ -458,15 +458,15 @@ export default function DriverOrdersScreen({
     offerOrder?.material_name ||
     offerOrder?.material?.name ||
     offerOrder?.items?.[0]?.material?.name ||
-    "Неизвестно";
+    "РќРµРёР·РІРµСЃС‚РЅРѕ";
   const capacity =
     offerOrder?.capacity_m3 ||
     offerOrder?.delivery_option?.capacity_m3 ||
     offerOrder?.volume_m3 ||
     "?";
-  const offerPickupAddress = offerOrder?.pickup_address || "Карьер уточняется";
+  const offerPickupAddress = offerOrder?.pickup_address || "РљР°СЂСЊРµСЂ СѓС‚РѕС‡РЅСЏРµС‚СЃСЏ";
   const offerDeliveryAddress =
-    offerOrder?.delivery_address || offerOrder?.address || "Адрес не указан";
+    offerOrder?.delivery_address || offerOrder?.address || "РђРґСЂРµСЃ РЅРµ СѓРєР°Р·Р°РЅ";
   const offerDeliveryCost = Number(offerOrder?.delivery_cost ?? 0);
   const offerEstimatedTotalAmount = getEstimatedTotalAmount(offerOrder || { total_amount: 0 });
 
@@ -477,10 +477,10 @@ export default function DriverOrdersScreen({
         <div className="flex justify-between items-center mb-3">
           <div>
             <h1 className="text-2xl font-black text-[#2DB0E6] tracking-tight">
-              Дармавоз
+              Р”Р°СЂРјР°РІРѕР·
             </h1>
             <p className="text-sm font-medium text-slate-500">
-              Панель водителя
+              РџР°РЅРµР»СЊ РІРѕРґРёС‚РµР»СЏ
             </p>
           </div>
           <button
@@ -497,13 +497,13 @@ export default function DriverOrdersScreen({
       {activeTab === "orders" ? (
         <div className="flex-1 overflow-visible p-5 h-auto">
           <h2 className="text-lg font-bold text-slate-800 mb-4">
-            Активные заказы
+            РђРєС‚РёРІРЅС‹Рµ Р·Р°РєР°Р·С‹
           </h2>
 
           {isProfileLoading ? (
             <div className="flex flex-col items-center justify-center p-10 text-slate-400 min-h-[50vh]">
               <Loader2 className="w-8 h-8 animate-spin mb-3 text-[#2DB0E6]" />
-              <p className="text-sm font-medium">Загрузка профиля...</p>
+              <p className="text-sm font-medium">Р—Р°РіСЂСѓР·РєР° РїСЂРѕС„РёР»СЏ...</p>
             </div>
           ) : !isDriverActive || moderationStatus === "rejected" ? (
             <div className="flex flex-col items-center justify-center p-10 text-red-600 text-center mt-10 min-h-[50vh] bg-red-50 rounded-3xl border border-red-200 shadow-sm">
@@ -511,10 +511,10 @@ export default function DriverOrdersScreen({
                 <Ban className="w-10 h-10 text-red-500" />
               </div>
               <p className="text-xl font-bold text-red-700 mb-2 leading-tight">
-                Профиль заблокирован
+                РџСЂРѕС„РёР»СЊ Р·Р°Р±Р»РѕРєРёСЂРѕРІР°РЅ
               </p>
               <p className="text-sm text-red-600">
-                Ваш профиль был отклонен или заблокирован администратором.
+                Р’Р°С€ РїСЂРѕС„РёР»СЊ Р±С‹Р» РѕС‚РєР»РѕРЅРµРЅ РёР»Рё Р·Р°Р±Р»РѕРєРёСЂРѕРІР°РЅ Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂРѕРј.
               </p>
             </div>
           ) : moderationStatus === "pending_moderation" ? (
@@ -523,11 +523,11 @@ export default function DriverOrdersScreen({
                 <Clock className="w-10 h-10 text-amber-400" />
               </div>
               <p className="text-xl font-bold text-amber-700 mb-2 leading-tight">
-                Профиль на проверке. Вы не можете принимать заказы.
+                РџСЂРѕС„РёР»СЊ РЅР° РїСЂРѕРІРµСЂРєРµ. Р’С‹ РЅРµ РјРѕР¶РµС‚Рµ РїСЂРёРЅРёРјР°С‚СЊ Р·Р°РєР°Р·С‹.
               </p>
               <p className="text-sm text-amber-600">
-                Диспетчер проверяет ваши данные. Обычно это занимает не больше
-                часа.
+                Р”РёСЃРїРµС‚С‡РµСЂ РїСЂРѕРІРµСЂСЏРµС‚ РІР°С€Рё РґР°РЅРЅС‹Рµ. РћР±С‹С‡РЅРѕ СЌС‚Рѕ Р·Р°РЅРёРјР°РµС‚ РЅРµ Р±РѕР»СЊС€Рµ
+                С‡Р°СЃР°.
               </p>
             </div>
           ) : moderationStatus !== "approved" ? (
@@ -536,24 +536,24 @@ export default function DriverOrdersScreen({
                 <AlertCircle className="w-10 h-10 text-slate-400" />
               </div>
               <p className="text-xl font-bold text-slate-700 mb-2">
-                Требуется действие
+                РўСЂРµР±СѓРµС‚СЃСЏ РґРµР№СЃС‚РІРёРµ
               </p>
               <p className="text-sm text-slate-500 mb-6">
-                Завершите регистрацию. Заполните данные об автомобиле и
-                загрузите 3 фотографии с разных сторон в разделе «Профиль»,
-                чтобы отправить заявку на модерацию.
+                Р—Р°РІРµСЂС€РёС‚Рµ СЂРµРіРёСЃС‚СЂР°С†РёСЋ. Р—Р°РїРѕР»РЅРёС‚Рµ РґР°РЅРЅС‹Рµ РѕР± Р°РІС‚РѕРјРѕР±РёР»Рµ Рё
+                Р·Р°РіСЂСѓР·РёС‚Рµ 3 С„РѕС‚РѕРіСЂР°С„РёРё СЃ СЂР°Р·РЅС‹С… СЃС‚РѕСЂРѕРЅ РІ СЂР°Р·РґРµР»Рµ В«РџСЂРѕС„РёР»СЊВ»,
+                С‡С‚РѕР±С‹ РѕС‚РїСЂР°РІРёС‚СЊ Р·Р°СЏРІРєСѓ РЅР° РјРѕРґРµСЂР°С†РёСЋ.
               </p>
               <button
                 onClick={() => setActiveTab("profile")}
                 className="bg-[#2DB0E6] text-white px-6 py-3 rounded-xl font-bold hover:bg-[#209BD6] transition-colors"
               >
-                Перейти в Профиль
+                РџРµСЂРµР№С‚Рё РІ РџСЂРѕС„РёР»СЊ
               </button>
             </div>
           ) : isLoading ? (
             <div className="flex flex-col items-center justify-center p-10 text-slate-400">
               <Loader2 className="w-8 h-8 animate-spin mb-3 text-[#2DB0E6]" />
-              <p className="text-sm font-medium">Загрузка заказов...</p>
+              <p className="text-sm font-medium">Р—Р°РіСЂСѓР·РєР° Р·Р°РєР°Р·РѕРІ...</p>
             </div>
           ) : orders.length > 0 ? (
             <PullToRefresh
@@ -585,10 +585,10 @@ export default function DriverOrdersScreen({
                   <PackageOpen className="w-10 h-10 text-slate-300" />
                 </div>
                 <p className="text-base font-semibold text-slate-600 mb-1">
-                  Нет активных заказов
+                  РќРµС‚ Р°РєС‚РёРІРЅС‹С… Р·Р°РєР°Р·РѕРІ
                 </p>
                 <p className="text-sm">
-                  Когда появится новая заявка, она отобразится здесь.
+                  РљРѕРіРґР° РїРѕСЏРІРёС‚СЃСЏ РЅРѕРІР°СЏ Р·Р°СЏРІРєР°, РѕРЅР° РѕС‚РѕР±СЂР°Р·РёС‚СЃСЏ Р·РґРµСЃСЊ.
                 </p>
               </div>
             </PullToRefresh>
@@ -618,7 +618,7 @@ export default function DriverOrdersScreen({
             >
               <ClipboardList className="w-6 h-6" />
             </div>
-            <span className="text-[10px] font-bold">Заказы</span>
+            <span className="text-[10px] font-bold">Р—Р°РєР°Р·С‹</span>
           </button>
 
           <button
@@ -634,7 +634,7 @@ export default function DriverOrdersScreen({
             >
               <UserIcon className="w-6 h-6" />
             </div>
-            <span className="text-[10px] font-bold">Профиль</span>
+            <span className="text-[10px] font-bold">РџСЂРѕС„РёР»СЊ</span>
           </button>
         </div>
       </div>
@@ -649,7 +649,7 @@ export default function DriverOrdersScreen({
                   <PackageOpen className="w-6 h-6 text-[#2DB0E6] animate-bounce" />
                 </div>
                 <h3 className="text-xl font-black text-slate-800 tracking-tight">
-                  Новый заказ!
+                  РќРѕРІС‹Р№ Р·Р°РєР°Р·!
                 </h3>
                 <div className="text-2xl font-black text-rose-500 tracking-tighter tabular-nums mt-1">
                   {Math.floor(timeLeft / 60)
@@ -662,7 +662,7 @@ export default function DriverOrdersScreen({
               <div className="flex flex-col gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100">
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">
-                    Карьер
+                    РљР°СЂСЊРµСЂ
                   </p>
                   <div className="flex items-start gap-1.5">
                     <Navigation className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
@@ -674,7 +674,7 @@ export default function DriverOrdersScreen({
 
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">
-                    Адрес доставки
+                    РђРґСЂРµСЃ РґРѕСЃС‚Р°РІРєРё
                   </p>
                   <div className="flex items-start gap-1.5">
                     <MapPin className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
@@ -687,7 +687,7 @@ export default function DriverOrdersScreen({
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">
-                      Материал
+                      РњР°С‚РµСЂРёР°Р»
                     </p>
                     <p className="text-sm font-bold text-slate-700">
                       {materialName}
@@ -695,29 +695,29 @@ export default function DriverOrdersScreen({
                   </div>
                   <div>
                     <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">
-                      Кубатура
+                      РљСѓР±Р°С‚СѓСЂР°
                     </p>
                     <p className="text-sm font-bold text-slate-700">
-                      {capacity} м³
+                      {capacity} РјВі
                     </p>
                   </div>
                 </div>
 
                 <div className="bg-white rounded-lg border border-slate-200 p-3 flex flex-col gap-2">
                   <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
-                    <span>Сумма заказа</span>
+                    <span>РЎСѓРјРјР° Р·Р°РєР°Р·Р°</span>
                     <span className="text-slate-800">
                       {formatCurrency(offerOrder?.total_amount)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
-                    <span>Доставка</span>
+                    <span>Р”РѕСЃС‚Р°РІРєР°</span>
                     <span className="text-slate-800">
                       {formatCurrency(offerDeliveryCost)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between border-t border-slate-100 pt-2 text-sm font-bold text-slate-700">
-                    <span>Итого</span>
+                    <span>РС‚РѕРіРѕ</span>
                     <span className="text-[#2DB0E6]">
                       {formatCurrency(offerEstimatedTotalAmount)}
                     </span>
@@ -728,7 +728,7 @@ export default function DriverOrdersScreen({
                   <div className="mt-0.5 bg-amber-50 p-2.5 rounded-lg border border-amber-100">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-amber-600 mb-0.5 flex items-center gap-1.5">
                       <MessageSquare className="w-3 h-3" />
-                      Комментарий
+                      РљРѕРјРјРµРЅС‚Р°СЂРёР№
                     </p>
                     <p className="text-xs font-medium text-amber-900 leading-snug line-clamp-2">
                       {currentOffer.order?.notes || currentOffer.notes}
@@ -745,7 +745,7 @@ export default function DriverOrdersScreen({
                 }
                 className="w-full bg-emerald-500 text-white font-bold text-lg h-12 rounded-xl hover:bg-emerald-600 active:scale-[0.98] transition-all shadow-sm shadow-emerald-500/20"
               >
-                ПРИНЯТЬ ЗАКАЗ
+                РџР РРќРЇРўР¬ Р—РђРљРђР—
               </button>
               <button
                 onClick={() =>
@@ -753,7 +753,7 @@ export default function DriverOrdersScreen({
                 }
                 className="w-full bg-rose-50 text-rose-600 font-bold text-base h-12 rounded-xl hover:bg-rose-100 active:scale-[0.98] transition-all"
               >
-                ОТКАЗАТЬСЯ
+                РћРўРљРђР—РђРўР¬РЎРЇ
               </button>
             </div>
           </div>
@@ -764,11 +764,11 @@ export default function DriverOrdersScreen({
 }
 
 const CANCEL_REASONS = [
-  "Сломалась машина",
-  "Не успеваю по времени",
-  "Прокол колеса / ДТП",
-  "Не устраивает маршрут",
-  "Другое",
+  "РЎР»РѕРјР°Р»Р°СЃСЊ РјР°С€РёРЅР°",
+  "РќРµ СѓСЃРїРµРІР°СЋ РїРѕ РІСЂРµРјРµРЅРё",
+  "РџСЂРѕРєРѕР» РєРѕР»РµСЃР° / Р”РўРџ",
+  "РќРµ СѓСЃС‚СЂР°РёРІР°РµС‚ РјР°СЂС€СЂСѓС‚",
+  "Р”СЂСѓРіРѕРµ",
 ];
 
 export const DriverOrderCard: React.FC<{
@@ -784,15 +784,15 @@ export const DriverOrderCard: React.FC<{
   const [isCancelling, setIsCancelling] = useState(false);
 
   const materialName =
-    order.material_name || order.items?.[0]?.material?.name || "Неизвестно";
+    order.material_name || order.items?.[0]?.material?.name || "РќРµРёР·РІРµСЃС‚РЅРѕ";
   const capacity =
     order.capacity_m3 || order.delivery_option?.capacity_m3 || "?";
   const deliveryCost = getDeliveryCost(order);
   const estimatedTotalAmount = getEstimatedTotalAmount(order);
   const materialCost = estimatedTotalAmount - deliveryCost;
   const clientPhone = order.client_phone || order.client?.phone;
-  const clientName = order.client_name || order.client?.name || order.client?.full_name || "Имя не указано";
-  const quarryName = order.quarry_name || order.quarry?.name || (order.pickup_address && !order.pickup_address.includes('57.') ? order.pickup_address : 'Точка погрузки');
+  const clientName = order.client_name || order.client?.name || order.client?.full_name || "РРјСЏ РЅРµ СѓРєР°Р·Р°РЅРѕ";
+  const quarryName = order.quarry_name || order.quarry?.name || (order.pickup_address && !order.pickup_address.includes('57.') ? order.pickup_address : 'РўРѕС‡РєР° РїРѕРіСЂСѓР·РєРё');
 
   const updateStatus = async (step: string) => {
     if (!onRefresh) return;
@@ -816,40 +816,42 @@ export const DriverOrderCard: React.FC<{
         return;
       }
       if (res.status === 403) {
-        toast.error("Недостаточно прав (403)");
+        toast.error("РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ (403)");
         return;
       }
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(
-          extractApiErrorMessage(err, "Не удалось обновить статус"),
+          extractApiErrorMessage(err, "РќРµ СѓРґР°Р»РѕСЃСЊ РѕР±РЅРѕРІРёС‚СЊ СЃС‚Р°С‚СѓСЃ"),
         );
       }
-      toast.success(step === "completed" ? "Заказ успешно завершен! Вы снова свободны." : "Статус обновлен");
+      toast.success(step === "completed" ? "Р—Р°РєР°Р· СѓСЃРїРµС€РЅРѕ Р·Р°РІРµСЂС€РµРЅ! Р’С‹ СЃРЅРѕРІР° СЃРІРѕР±РѕРґРЅС‹." : "РЎС‚Р°С‚СѓСЃ РѕР±РЅРѕРІР»РµРЅ");
       onRefresh();
     } catch (e: any) {
-      toast.error(handleApiError(e, "Ошибка при обновлении статуса"));
+      toast.error(handleApiError(e, "РћС€РёР±РєР° РїСЂРё РѕР±РЅРѕРІР»РµРЅРёРё СЃС‚Р°С‚СѓСЃР°"));
     } finally {
       setIsUpdating(false);
     }
   };
 
-  const openNavigator = async (type: 'quarry' | 'client') => {
-    if (order.status === 'driver_assigned' || order.status === 'driver_accepted') {
-        await updateStatus('heading_to_pickup');
+  const openNavigator = () => {
+    const isToClient = order.status === "heading_to_client";
+    const lat = isToClient ? order.delivery_lat : order.pickup_lat;
+    const lon = isToClient ? order.delivery_lon : order.pickup_lon;
+    const label = isToClient ? "\u041a\u043b\u0438\u0435\u043d\u0442" : "\u041a\u0430\u0440\u044c\u0435\u0440";
+
+    if (!lat || !lon) {
+      toast.error("\u041a\u043e\u043e\u0440\u0434\u0438\u043d\u0430\u0442\u044b \u043e\u0442\u0441\u0443\u0442\u0441\u0442\u0432\u0443\u044e\u0442");
+      return;
     }
 
-    const lat = type === 'quarry' ? order.pickup_lat : order.delivery_lat;
-    const lon = type === 'quarry' ? order.pickup_lon : order.delivery_lon;
-    const address = type === 'quarry' ? order.pickup_address : order.delivery_address;
-
-    if (lat && lon) {
-      window.location.href = `https://2gis.ru/routeSearch/rsType/car/to/${lon},${lat}`;
-    } else if (address) {
-      window.location.href = `https://2gis.ru/routeSearch/rsType/car/to/${encodeURIComponent(address)}`;
-    } else {
-      toast.error("Нет данных для построения маршрута");
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (isMobile) {
+      window.location.href = `geo:${lat},${lon}?q=${lat},${lon}(${encodeURIComponent(label)})`;
+      return;
     }
+
+    window.open(`https://2gis.ru/routeSearch/rsType/car/to/${lon},${lat}`, "_blank");
   };
 
   if (isHistory) {
@@ -878,7 +880,7 @@ export const DriverOrderCard: React.FC<{
         </div>
         <div>
           <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">
-            Адрес доставки
+            РђРґСЂРµСЃ РґРѕСЃС‚Р°РІРєРё
           </p>
           <p className="text-sm font-bold text-slate-800 leading-snug">
             {order.address}
@@ -886,7 +888,7 @@ export const DriverOrderCard: React.FC<{
         </div>
         <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-xl border border-slate-100 mt-1">
           <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">
-            Сумма заказа
+            РЎСѓРјРјР° Р·Р°РєР°Р·Р°
           </span>
           <span className="text-emerald-500 font-black text-base">
             {formatCurrency(order.total_amount)}
@@ -894,7 +896,7 @@ export const DriverOrderCard: React.FC<{
         </div>
         <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-xl border border-slate-100">
           <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">
-            Доставка
+            Р”РѕСЃС‚Р°РІРєР°
           </span>
           <span className="text-slate-800 font-black text-base">
             {formatCurrency(deliveryCost)}
@@ -902,7 +904,7 @@ export const DriverOrderCard: React.FC<{
         </div>
         <div className="flex justify-between items-center bg-blue-50 p-2.5 rounded-xl border border-blue-100">
           <span className="text-[11px] text-blue-500 font-bold uppercase tracking-wider">
-            Итого
+            РС‚РѕРіРѕ
           </span>
           <span className="text-[#2DB0E6] font-black text-base">
             {formatCurrency(estimatedTotalAmount)}
@@ -916,7 +918,7 @@ export const DriverOrderCard: React.FC<{
     if (!onRefresh) return;
 
     const finalReason =
-      selectedReason === "Другое" ? customReason : selectedReason;
+      selectedReason === "Р”СЂСѓРіРѕРµ" ? customReason : selectedReason;
     if (!finalReason.trim()) return;
 
     try {
@@ -935,20 +937,20 @@ export const DriverOrderCard: React.FC<{
         return;
       }
       if (res.status === 403) {
-        toast.error("Недостаточно прав (403)");
+        toast.error("РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ (403)");
         return;
       }
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(extractApiErrorMessage(err, "Не удалось отменить заказ"));
+        throw new Error(extractApiErrorMessage(err, "РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РјРµРЅРёС‚СЊ Р·Р°РєР°Р·"));
       }
-      toast.success("Заказ отменен");
+      toast.success("Р—Р°РєР°Р· РѕС‚РјРµРЅРµРЅ");
       setIsCancelModalOpen(false);
       setSelectedReason("");
       setCustomReason("");
       onRefresh(); // This clears the order state and loads the empty state
     } catch (e: any) {
-      toast.error(handleApiError(e, "Не удалось отменить заказ"));
+      toast.error(handleApiError(e, "РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РјРµРЅРёС‚СЊ Р·Р°РєР°Р·"));
     } finally {
       setIsCancelling(false);
     }
@@ -984,7 +986,7 @@ export const DriverOrderCard: React.FC<{
             </div>
             <div>
               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">
-                Откуда (Карьер)
+                РћС‚РєСѓРґР° (РљР°СЂСЊРµСЂ)
               </p>
               <div className="font-semibold text-gray-900">
                 {quarryName}
@@ -998,7 +1000,7 @@ export const DriverOrderCard: React.FC<{
             </div>
             <div>
               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">
-                Куда (Клиент)
+                РљСѓРґР° (РљР»РёРµРЅС‚)
               </p>
               <p className="text-sm font-bold text-slate-900 leading-snug">
                 {order.delivery_address || order.address}
@@ -1010,19 +1012,19 @@ export const DriverOrderCard: React.FC<{
         {/* Material & Volume */}
         <div className="grid grid-cols-2 gap-4 bg-gray-50 p-3 rounded-xl mt-4">
           <div className="flex flex-col">
-            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">Материал</span>
+            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">РњР°С‚РµСЂРёР°Р»</span>
             <span className="text-sm font-bold text-slate-800">{materialName}</span>
           </div>
           <div className="flex flex-col">
-            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">Объем</span>
-            <span className="text-sm font-bold text-slate-800">{capacity} м³</span>
+            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">РћР±СЉРµРј</span>
+            <span className="text-sm font-bold text-slate-800">{capacity} РјВі</span>
           </div>
         </div>
 
         {/* Client Info */}
         <div className="flex justify-between items-center bg-gray-50 p-3 rounded-xl mt-2">
           <div className="flex flex-col">
-            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">Клиент</span>
+            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">РљР»РёРµРЅС‚</span>
             <div className="font-semibold text-gray-900">{clientName}</div>
           </div>
           {clientPhone && (
@@ -1036,7 +1038,7 @@ export const DriverOrderCard: React.FC<{
         {/* Notes */}
         {order.notes && order.notes.trim() !== "" && (
           <div className="bg-yellow-50 text-yellow-800 p-3 rounded-xl mt-2 text-sm font-medium">
-             <span className="font-bold uppercase tracking-wider text-[10px] block mb-1">Комментарий:</span>
+             <span className="font-bold uppercase tracking-wider text-[10px] block mb-1">РљРѕРјРјРµРЅС‚Р°СЂРёР№:</span>
              {order.notes}
           </div>
         )}
@@ -1044,13 +1046,13 @@ export const DriverOrderCard: React.FC<{
         {/* Total Amount */}
         <div className="flex flex-col items-end mt-4 pb-4 border-b border-gray-100 space-y-1">
           <span className="text-sm text-gray-500 font-medium">
-            Материал: {formatCurrency(materialCost)}
+            РњР°С‚РµСЂРёР°Р»: {formatCurrency(materialCost)}
           </span>
           <span className="text-sm text-gray-500 font-medium">
-            Доставка: {formatCurrency(deliveryCost)}
+            Р”РѕСЃС‚Р°РІРєР°: {formatCurrency(deliveryCost)}
           </span>
           <span className="text-2xl font-bold text-[#2DB0E6] mt-2">
-            Итого: {formatCurrency(estimatedTotalAmount)}
+            РС‚РѕРіРѕ: {formatCurrency(estimatedTotalAmount)}
           </span>
         </div>
 
@@ -1061,20 +1063,20 @@ export const DriverOrderCard: React.FC<{
               <>
                 <button
                   disabled={isUpdating}
-                  onClick={() => openNavigator('quarry')}
+                  onClick={() => updateStatus("heading_to_pickup")}
                   className="w-full h-14 bg-sky-500 active:bg-sky-600 text-white text-lg font-bold rounded-xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                   {isUpdating ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
-                    "Выехать на карьер"
+                    "Р’С‹РµС…Р°С‚СЊ РЅР° РєР°СЂСЊРµСЂ"
                   )}
                 </button>
                 <button
                   onClick={() => setIsCancelModalOpen(true)}
                   className="w-full py-4 text-red-500 font-medium text-base active:bg-red-50 rounded-xl transition-colors"
                 >
-                  Отказаться от выполнения
+                  РћС‚РєР°Р·Р°С‚СЊСЃСЏ РѕС‚ РІС‹РїРѕР»РЅРµРЅРёСЏ
                 </button>
               </>
             )}
@@ -1082,10 +1084,10 @@ export const DriverOrderCard: React.FC<{
             {order.status === "heading_to_pickup" && (
               <>
                 <button
-                  onClick={() => openNavigator('quarry')}
+                  onClick={() => updateStatus("heading_to_pickup")}
                   className="w-full h-14 bg-gradient-to-r from-emerald-700 to-emerald-500 active:from-emerald-800 active:to-emerald-600 text-white text-lg font-bold rounded-xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2"
                 >
-                  Открыть навигатор
+                  РћС‚РєСЂС‹С‚СЊ РЅР°РІРёРіР°С‚РѕСЂ
                 </button>
                 <button
                   disabled={isUpdating}
@@ -1095,7 +1097,7 @@ export const DriverOrderCard: React.FC<{
                   {isUpdating ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
-                    "Прибыл на карьер"
+                    "РџСЂРёР±С‹Р» РЅР° РєР°СЂСЊРµСЂ"
                   )}
                 </button>
               </>
@@ -1111,7 +1113,7 @@ export const DriverOrderCard: React.FC<{
                   {isUpdating ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
-                    "Загрузился, еду к клиенту"
+                    "Р—Р°РіСЂСѓР·РёР»СЃСЏ, РµРґСѓ Рє РєР»РёРµРЅС‚Сѓ"
                   )}
                 </button>
               </>
@@ -1120,10 +1122,10 @@ export const DriverOrderCard: React.FC<{
             {order.status === "heading_to_client" && (
               <>
                 <button
-                  onClick={() => openNavigator('client')}
+                  onClick={openNavigator}
                   className="w-full h-14 bg-gradient-to-r from-emerald-700 to-emerald-500 active:from-emerald-800 active:to-emerald-600 text-white text-lg font-bold rounded-xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2"
                 >
-                  Открыть навигатор
+                  РћС‚РєСЂС‹С‚СЊ РЅР°РІРёРіР°С‚РѕСЂ
                 </button>
                 <button
                   disabled={isUpdating}
@@ -1133,7 +1135,7 @@ export const DriverOrderCard: React.FC<{
                   {isUpdating ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
-                    "Завершить заказ"
+                    "Р—Р°РІРµСЂС€РёС‚СЊ Р·Р°РєР°Р·"
                   )}
                 </button>
               </>
@@ -1147,7 +1149,7 @@ export const DriverOrderCard: React.FC<{
         <div className="fixed inset-0 z-[99999] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl p-6 flex flex-col gap-4 animate-in zoom-in-95 duration-200">
             <h3 className="text-xl font-bold text-slate-800">
-              Укажите причину отказа
+              РЈРєР°Р¶РёС‚Рµ РїСЂРёС‡РёРЅСѓ РѕС‚РєР°Р·Р°
             </h3>
 
             <div className="flex flex-wrap gap-2">
@@ -1166,11 +1168,11 @@ export const DriverOrderCard: React.FC<{
               ))}
             </div>
 
-            {selectedReason === "Другое" && (
+            {selectedReason === "Р”СЂСѓРіРѕРµ" && (
               <textarea
                 value={customReason}
                 onChange={(e) => setCustomReason(e.target.value)}
-                placeholder="Опишите причину отказа..."
+                placeholder="РћРїРёС€РёС‚Рµ РїСЂРёС‡РёРЅСѓ РѕС‚РєР°Р·Р°..."
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 min-h-[100px] resize-none"
               />
             )}
@@ -1181,19 +1183,19 @@ export const DriverOrderCard: React.FC<{
                 disabled={
                   isCancelling ||
                   !selectedReason ||
-                  (selectedReason === "Другое" && !customReason.trim())
+                  (selectedReason === "Р”СЂСѓРіРѕРµ" && !customReason.trim())
                 }
                 className="w-full bg-rose-500 hover:bg-rose-600 text-white font-bold py-3.5 px-4 rounded-xl shadow-sm transition-all flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
               >
                 {isCancelling && <Loader2 className="w-4 h-4 animate-spin" />}
-                Подтвердить отказ
+                РџРѕРґС‚РІРµСЂРґРёС‚СЊ РѕС‚РєР°Р·
               </button>
               <button
                 onClick={() => setIsCancelModalOpen(false)}
                 disabled={isCancelling}
                 className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3.5 px-4 rounded-xl transition-all"
               >
-                Отмена
+                РћС‚РјРµРЅР°
               </button>
             </div>
           </div>

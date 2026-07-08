@@ -198,34 +198,34 @@ export const handleApiError = (
 };
 
 export const declineReasonMap: Record<string, string> = {
-  manual: "РћС‚РєР°Р· РІРѕРґРёС‚РµР»СЏ (РІСЂСѓС‡РЅСѓСЋ)",
-  timeout: "Р’СЂРµРјСЏ РёСЃС‚РµРєР»Рѕ (Р±РµР· РѕС‚РІРµС‚Р°)",
-  "Driver response timeout": "Р’СЂРµРјСЏ РѕР¶РёРґР°РЅРёСЏ РёСЃС‚РµРєР»Рѕ (РЅРµС‚ РѕС‚РІРµС‚Р°)",
-  offline: "Р’РѕРґРёС‚РµР»СЊ РЅРµ РІ СЃРµС‚Рё",
-  busy: "Р’РѕРґРёС‚РµР»СЊ Р·Р°РЅСЏС‚",
+  manual: "Отказ водителя (вручную)",
+  timeout: "Время истекло (без ответа)",
+  "Driver response timeout": "Время ожидания истекло (нет ответа)",
+  offline: "Водитель не в сети",
+  busy: "Водитель занят",
 };
 
 export const attemptStatusMap: Record<string, string> = {
-  assigned: "РќРђР—РќРђР§Р•Рќ",
-  accepted: "РџР РРќРЇРўРћ",
-  declined: "РћРўРљР›РћРќР•Рќ",
-  rejected: "РћРўРљР›РћРќР•Рќ",
-  expired: "РРЎРўР•Рљ РўРђР™РњРђРЈРў",
-  timeout: "РРЎРўР•Рљ РўРђР™РњРђРЈРў",
-  offered: "РџР Р•Р”Р›РћР–Р•РќРћ",
-  pending: "РћР–РР”РђРќРР•",
-  cancelled: "РћРўРњР•РќР•Рќ",
-  completed: "Р—РђР’Р•Р РЁР•Рќ",
+  assigned: "НАЗНАЧЕН",
+  accepted: "ПРИНЯТО",
+  declined: "ОТКЛОНЕН",
+  rejected: "ОТКЛОНЕН",
+  expired: "ИСТЕК ТАЙМАУТ",
+  timeout: "ИСТЕК ТАЙМАУТ",
+  offered: "ПРЕДЛОЖЕНО",
+  pending: "ОЖИДАНИЕ",
+  cancelled: "ОТМЕНЕН",
+  completed: "ЗАВЕРШЕН",
 };
 
 export const translateReason = (reason: string | undefined | null) => {
-  if (!reason) return 'РџСЂРёС‡РёРЅР° РЅРµ СѓРєР°Р·Р°РЅР°';
+  if (!reason) return 'Причина не указана';
   const r = reason.toLowerCase();
-  if (r.includes('manual assignment')) return 'РќР°Р·РЅР°С‡РµРЅРѕ Р»РѕРіРёСЃС‚РѕРј РІСЂСѓС‡РЅСѓСЋ';
-  if (r.includes('driver declined') || r.includes('rejected')) return 'РћС‚РєР°Р· РІРѕРґРёС‚РµР»СЏ';
-  if (r.includes('timeout') || r.includes('expired')) return 'Р’СЂРµРјСЏ РѕР¶РёРґР°РЅРёСЏ РёСЃС‚РµРєР»Рѕ';
-  if (r.includes('cancelled by client')) return 'РћС‚РјРµРЅРµРЅРѕ РєР»РёРµРЅС‚РѕРј';
-  if (r.includes('cancelled by logist')) return 'РћС‚РјРµРЅРµРЅРѕ Р»РѕРіРёСЃС‚РѕРј';
+  if (r.includes('manual assignment')) return 'Назначено логистом вручную';
+  if (r.includes('driver declined') || r.includes('rejected') || r === 'manual') return 'Отказ водителя';
+  if (r.includes('timeout') || r.includes('expired')) return 'Время ожидания истекло';
+  if (r.includes('cancelled by client')) return 'Отменено клиентом';
+  if (r.includes('cancelled by logist')) return 'Отменено логистом';
   return reason;
 };
 

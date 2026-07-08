@@ -4,7 +4,7 @@ import { createServer as createViteServer } from "vite";
 
 const API_BASE_URL =
   process.env.VITE_API_BASE_URL ||
-  "https://darmavoz.159.194.236.11.nip.io/api/v1";
+  "https://test.darmavoz.ru/api/v1";
 
 async function startServer() {
   const app = express();

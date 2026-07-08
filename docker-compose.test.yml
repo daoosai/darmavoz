@@ -60,8 +60,8 @@ services:
       - .env
     environment:
       S3_ENDPOINT: http://minio-test:9000
-      S3_PUBLIC_BASE_URL: https://darmavoz.159.194.236.11.nip.io
-      S3_PRESIGN_ENDPOINT: https://darmavoz.159.194.236.11.nip.io
+      S3_PUBLIC_BASE_URL: https://test.darmavoz.ru
+      S3_PRESIGN_ENDPOINT: https://test.darmavoz.ru/s3
     depends_on:
       db_test:
         condition: service_healthy

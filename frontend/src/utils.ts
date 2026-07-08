@@ -2,7 +2,7 @@
 
 export const baseURL =
   import.meta.env.VITE_API_BASE_URL ||
-  "https://darmavoz.159.194.236.11.nip.io/api/v1";
+  "https://test.darmavoz.ru/api/v1";
 
 export const APP_VERSION = import.meta.env.VITE_APP_VERSION || "2.4.4";
 

@@ -31,6 +31,7 @@ from app.models.models import (
     Role,
     User,
     Vehicle,
+    quarry_materials,
 )
 from app.schemas.client import ClientFcmTokenIn, ClientFcmTokenOut
 from app.schemas.catalog import (
@@ -1406,17 +1407,20 @@ async def delete_material(
     linked_order_items_count = await db.scalar(
         select(func.count(OrderItem.id)).where(OrderItem.material_id == material_id)
     )
-    linked_cart_items_count = await db.scalar(
-        select(func.count(CartItem.id)).where(CartItem.material_id == material_id)
-    )
-
-    if linked_order_items_count or linked_cart_items_count:
-        material.is_active = False
-        await db.commit()
-        return DeleteResult(
-            action="hidden",
-            detail="Material is linked to orders or cart items and was hidden instead of deleted",
+    if linked_order_items_count:
+        raise HTTPException(
+            status_code=409,
+            detail="Material is linked to orders and cannot be deleted permanently",
         )
+
+    await db.execute(
+        delete(MediaFile).where(
+            MediaFile.entity_type == "material",
+            MediaFile.entity_id == material_id,
+        )
+    )
+    await db.execute(delete(quarry_materials).where(quarry_materials.c.material_id == material_id))
+    await db.execute(delete(CartItem).where(CartItem.material_id == material_id))
 
     await db.delete(material)
     await db.commit()

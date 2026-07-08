@@ -1,11 +1,11 @@
-from datetime import date as date_type
+﻿from datetime import date as date_type
 from datetime import datetime, UTC
 import re
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 from pydantic import BaseModel, field_validator
-from sqlalchemy import exists, func, or_, select
+from sqlalchemy import delete, exists, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -17,15 +17,17 @@ from app.integrations.avito.management import AvitoManagementService
 from app.models.models import (
     CartItem,
     DeliveryOption,
+    Dialogue,
     Driver,
-    ModerationStatus,
     DriverStatus,
+    EventLog,
     MediaFile,
     Material,
+    ModerationStatus,
     Order,
-    OrderStatus,
     OrderItem,
     OrderOffer,
+    OrderStatus,
     Role,
     User,
     Vehicle,
@@ -76,6 +78,57 @@ def _error_detail(code: str, message: str) -> dict[str, str]:
 @router.get("/stats")
 async def get_admin_stats(current_admin: User = Depends(get_current_admin_user)):
     return {"status": "ok", "message": "Admin area", "role": current_admin.role.name}
+
+
+
+class AdminStatisticsOut(BaseModel):
+    total_orders: int
+    completed_orders: int
+    total_revenue: float
+    total_drivers: int
+    active_drivers: int
+
+
+
+@router.get("/statistics", response_model=AdminStatisticsOut)
+async def get_admin_statistics(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_logist_user),
+) -> AdminStatisticsOut:
+    del current_user
+
+    total_orders = await db.scalar(
+        select(func.count(Order.id)).where(Order.is_deleted.is_(False))
+    )
+    completed_orders = await db.scalar(
+        select(func.count(Order.id)).where(
+            Order.is_deleted.is_(False),
+            Order.status == OrderStatus.completed.value,
+        )
+    )
+    total_revenue = await db.scalar(
+        select(
+            func.coalesce(
+                func.sum(Order.total_amount + func.coalesce(Order.delivery_cost, 0.0)),
+                0.0,
+            )
+        ).where(Order.is_deleted.is_(False))
+    )
+    total_drivers = await db.scalar(select(func.count(Driver.id)))
+    active_drivers = await db.scalar(
+        select(func.count(Driver.id)).where(
+            Driver.is_active.is_(True),
+            Driver.status.in_([DriverStatus.available.value, DriverStatus.busy.value]),
+        )
+    )
+
+    return AdminStatisticsOut(
+        total_orders=int(total_orders or 0),
+        completed_orders=int(completed_orders or 0),
+        total_revenue=round(float(total_revenue or 0.0), 2),
+        total_drivers=int(total_drivers or 0),
+        active_drivers=int(active_drivers or 0),
+    )
 
 
 class AdminMeOut(BaseModel):
@@ -179,7 +232,37 @@ async def delete_admin_order(
 ) -> OrderDeleteOut:
     del current_user
     await delete_order_by_id(db, order_id)
-    return OrderDeleteOut(ok=True, message="Заказ перемещен в архив")
+    return OrderDeleteOut(ok=True, message="\u0417\u0430\u043a\u0430\u0437 \u043f\u0435\u0440\u0435\u043c\u0435\u0449\u0435\u043d \u0432 \u0430\u0440\u0445\u0438\u0432")
+
+
+
+@router.delete("/orders/{order_id}/hard", response_model=OrderDeleteOut)
+async def hard_delete_admin_order(
+    order_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
+) -> OrderDeleteOut:
+    del current_user
+
+    order = await db.get(Order, order_id)
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    order.current_offer_id = None
+    order.source_dialogue_id = None
+    await db.flush()
+
+    await db.execute(
+        update(Dialogue)
+        .where(Dialogue.order_id == order_id)
+        .values(order_id=None)
+    )
+    await db.execute(delete(EventLog).where(EventLog.order_id == order_id))
+    await db.execute(delete(OrderOffer).where(OrderOffer.order_id == order_id))
+
+    await db.delete(order)
+    await db.commit()
+    return OrderDeleteOut(ok=True, message="\u0417\u0430\u043a\u0430\u0437 \u0443\u0434\u0430\u043b\u0435\u043d \u043d\u0430\u0432\u0441\u0435\u0433\u0434\u0430")
 
 
 class WebhookRegistrationRequest(BaseModel):
@@ -1428,3 +1511,5 @@ async def delete_delivery_option(
     await db.delete(delivery_option)
     await db.commit()
     return DeleteResult(action="deleted", detail="Delivery option deleted")
+
+

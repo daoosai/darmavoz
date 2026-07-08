@@ -1,20 +1,27 @@
-import React, { useState, useEffect } from "react";
+﻿import React, { useState, useEffect } from "react";
 import toast from "react-hot-toast";
-import { LogOut } from "lucide-react";
+import { BarChart3, ClipboardList, LogOut } from "lucide-react";
+import { NotificationToggle } from "./components/shared/NotificationToggle";
 import { baseURL, handleApiError } from "./utils";
 import { useAuthStore } from "./store";
 
 interface AdminProfileScreenProps {
   onLogout: () => void;
+  notificationRole?: "admin" | "logist";
 }
 
 export default function AdminProfileScreen({
   onLogout,
+  notificationRole,
 }: AdminProfileScreenProps) {
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const token = useAuthStore((state) => state.token);
+  const authRole = useAuthStore((state) => state.role);
+  const effectiveNotificationRole =
+    notificationRole || (authRole === "logist" ? "logist" : "admin");
+  const routeBase = effectiveNotificationRole === "logist" ? "/logist" : "/admin";
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -104,6 +111,32 @@ export default function AdminProfileScreen({
         </div>
       </div>
 
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+        <div className="p-4 flex flex-col gap-3">
+          <a
+            href={`${routeBase}/orders`}
+            className="w-full h-14 bg-sky-500 active:bg-sky-600 text-white font-bold text-lg rounded-xl flex items-center justify-between px-6 shadow-sm"
+          >
+            <span className="flex items-center gap-3">
+              <ClipboardList className="w-5 h-5" />
+              {"\u0421\u043f\u0438\u0441\u043e\u043a \u0437\u0430\u043a\u0430\u0437\u043e\u0432"}
+            </span>
+            <span className="text-white/85 text-sm">{"\u041e\u0442\u043a\u0440\u044b\u0442\u044c"}</span>
+          </a>
+          <a
+            href={`${routeBase}/statistics`}
+            className="w-full h-14 bg-sky-500 active:bg-sky-600 text-white font-bold text-lg rounded-xl flex items-center justify-between px-6 shadow-sm"
+          >
+            <span className="flex items-center gap-3">
+              <BarChart3 className="w-5 h-5" />
+              {"\u0421\u0442\u0430\u0442\u0438\u0441\u0442\u0438\u043a\u0430"}
+            </span>
+            <span className="text-white/85 text-sm">{"\u041e\u0442\u043a\u0440\u044b\u0442\u044c"}</span>
+          </a>
+        </div>
+      </div>
+
+      <NotificationToggle role={effectiveNotificationRole} />
       <button
         onClick={onLogout}
         className="flex items-center justify-center gap-2 w-full bg-red-50 text-red-600 rounded-xl py-3.5 font-bold hover:bg-red-100 transition-colors mt-2"

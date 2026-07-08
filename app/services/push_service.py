@@ -178,7 +178,12 @@ async def send_push_to_logists(
         result = await session.execute(
             select(User)
             .join(Role, User.role_id == Role.id)
-            .where(Role.name.in_(LOGIST_ROLE_NAMES), User.is_active.is_(True))
+            .where(
+                Role.name.in_(LOGIST_ROLE_NAMES),
+                User.is_active.is_(True),
+                User.fcm_token.is_not(None),
+                User.fcm_token != "",
+            )
         )
         users = list(result.scalars().unique().all())
         sent_count = 0

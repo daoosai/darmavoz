@@ -42,7 +42,7 @@ from app.services.notifications import (
     schedule_client_order_created_notification,
     schedule_driver_new_order_notification,
     schedule_driver_order_changed_notification,
-    schedule_logist_driver_cancelled_notification,
+    schedule_logist_driver_rejected_notification,
     schedule_logist_no_driver_found_notification,
     schedule_logist_timeout_notification,
 )
@@ -54,6 +54,20 @@ GUEST_CLIENT_PHONE = "00000000000"
 GUEST_CLIENT_NAME = "Гость (Демо)"
 MANUAL_ASSIGN_APPROVAL_ERROR = "Невозможно назначить заказ: профиль водителя или автомобиль не прошли модерацию"
 logger = logging.getLogger(__name__)
+
+
+def _driver_order_notification_snapshot(order: Order, item: OrderItem) -> tuple[object, ...]:
+    return (
+        order.delivery_address,
+        order.delivery_lat,
+        order.delivery_lon,
+        round(order.total_amount, 2) if order.total_amount is not None else None,
+        round(order.delivery_cost, 2) if order.delivery_cost is not None else None,
+        order.quarry_id,
+        item.material_id,
+        order.delivery_option_id,
+    )
+
 
 DISPATCH_ALLOWED_MODERATION_STATUSES = {
     ModerationStatus.approved.value,
@@ -816,19 +830,16 @@ async def update_order_by_logist(
 ) -> Order:
     order = await get_order_by_id(session, order_id)
     provided_fields = set(payload.model_fields_set)
-    protected_fields = {
-        "delivery_address",
-        "delivery_lat",
-        "delivery_lon",
+    restricted_fields = {
         "material_id",
         "delivery_option_id",
         "quarry_id",
     }
-    if provided_fields & protected_fields and order.status not in FULL_ORDER_EDIT_STATUSES:
+    if provided_fields & restricted_fields and order.status not in FULL_ORDER_EDIT_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                "Address, material, vehicle type and quarry can be changed only for "
+                "Material, vehicle type and quarry can be changed only for "
                 "created/searching_driver/no_driver_found/timeout orders"
             ),
         )
@@ -842,6 +853,9 @@ async def update_order_by_logist(
     current_item = order.items[0] if order.items else None
     if current_item is None:
         raise HTTPException(status_code=409, detail="Order items are missing")
+
+    driver_notification_candidate = order.driver_id is not None and order.status in ACTIVE_ASSIGNED_ORDER_STATUSES
+    driver_notification_snapshot_before = _driver_order_notification_snapshot(order, current_item)
 
     if "client_phone" in provided_fields and payload.client_phone is not None:
         normalized_phone = normalize_phone(payload.client_phone)
@@ -937,10 +951,19 @@ async def update_order_by_logist(
     if "delivery_cost" in provided_fields and payload.delivery_cost is not None:
         order.delivery_cost = round(payload.delivery_cost, 2)
 
+    driver_notification_snapshot_after = _driver_order_notification_snapshot(order, current_item)
+    driver_visible_details_changed = (
+        driver_notification_candidate and driver_notification_snapshot_before != driver_notification_snapshot_after
+    )
+
     await add_event(session, order.id, "order_updated_by_logist", "Order updated by logist", order_status=order.status)
     await session.commit()
     refreshed_order = await get_order_by_id(session, order.id)
-    if refreshed_order.driver_id is not None and refreshed_order.status in ACTIVE_ASSIGNED_ORDER_STATUSES:
+    if (
+        driver_visible_details_changed
+        and refreshed_order.driver_id is not None
+        and refreshed_order.status in ACTIVE_ASSIGNED_ORDER_STATUSES
+    ):
         schedule_driver_order_changed_notification(refreshed_order, refreshed_order.driver_id)
     return refreshed_order
 
@@ -1385,6 +1408,7 @@ async def decline_offer(session: AsyncSession, *, offer_id: UUID, driver_id: UUI
     driver = offer.driver
     if driver is None:
         driver = await session.get(Driver, driver_id)
+    driver_name = driver.name if driver is not None and driver.name else None
     if driver is not None:
         driver.temporary_penalty_until = now + timedelta(seconds=settings.DISPATCH_DECLINE_PENALTY_SECONDS)
 
@@ -1402,9 +1426,14 @@ async def decline_offer(session: AsyncSession, *, offer_id: UUID, driver_id: UUI
         excluded_driver_ids={driver_id},
     )
     await session.commit()
-    if order.status == OrderStatus.offered_to_driver.value:
-        schedule_new_order_push(order, order.current_offer.driver_id if order.current_offer is not None else None)
-    return await get_order_by_id(session, order.id)
+    refreshed_order = await get_order_by_id(session, order.id)
+    schedule_logist_driver_rejected_notification(refreshed_order, driver_id, driver_name)
+    if refreshed_order.status == OrderStatus.offered_to_driver.value:
+        schedule_new_order_push(
+            refreshed_order,
+            refreshed_order.current_offer.driver_id if refreshed_order.current_offer is not None else None,
+        )
+    return refreshed_order
 
 
 async def cancel_driver_assigned_order(
@@ -1450,6 +1479,7 @@ async def cancel_driver_assigned_order(
     driver = order.driver
     if driver is None:
         driver = await session.get(Driver, driver_id)
+    driver_name = driver.name if driver is not None and driver.name else None
     if driver is not None:
         driver.status = DriverStatus.available.value
 
@@ -1468,7 +1498,7 @@ async def cancel_driver_assigned_order(
         order_status=order.status,
     )
     await session.commit()
-    schedule_logist_driver_cancelled_notification(order, driver_id, reason)
+    schedule_logist_driver_rejected_notification(order, driver_id, driver_name)
     await enqueue_order_for_dispatch_safe(order.id)
     return await get_order_by_id(session, order.id)
 

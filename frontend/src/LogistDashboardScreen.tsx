@@ -46,8 +46,6 @@ interface AdminOrder {
   delivery_option_id?: string;
   delivery_option?: { capacity_m3: number };
   total_amount: number;
-  delivery_cost?: number;
-  estimated_total_amount?: number;
   created_at: string;
   status: string;
   driver?: {
@@ -716,7 +714,7 @@ export default function LogistDashboardScreen({
                             Сумма
                           </span>
                           <span className="text-base font-black text-slate-800 tracking-tight">
-                            {(order.estimated_total_amount ?? order.total_amount).toLocaleString()} {"\u20BD"}
+                            {order.total_amount.toLocaleString()} ₽
                           </span>
                         </div>
 

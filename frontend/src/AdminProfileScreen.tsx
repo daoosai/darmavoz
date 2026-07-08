@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import toast from "react-hot-toast";
 import { LogOut } from "lucide-react";
+import { NotificationToggle } from "./components/shared/NotificationToggle";
 import { baseURL, handleApiError } from "./utils";
 import { useAuthStore } from "./store";
 
@@ -104,6 +105,7 @@ export default function AdminProfileScreen({
         </div>
       </div>
 
+      <NotificationToggle role="admin" />
       <button
         onClick={onLogout}
         className="flex items-center justify-center gap-2 w-full bg-red-50 text-red-600 rounded-xl py-3.5 font-bold hover:bg-red-100 transition-colors mt-2"

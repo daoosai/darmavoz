@@ -10,6 +10,7 @@ import {
   History,
   PhoneCall,
 } from "lucide-react";
+import { NotificationToggle } from "./components/shared/NotificationToggle";
 import { baseURL, APP_VERSION, handleApiError } from "./utils";
 import { useAuthStore } from "./store";
 import toast from "react-hot-toast";
@@ -197,6 +198,9 @@ export default function ClientProfileScreen({
             Позвонить диспетчеру
           </span>
         </button>
+      </div>
+      <div className="px-4">
+        <NotificationToggle role="client" />
       </div>
 
       <div className="flex-1"></div>

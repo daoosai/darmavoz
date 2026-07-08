@@ -834,19 +834,23 @@ export const DriverOrderCard: React.FC<{
     }
   };
 
-  const openNavigator = (type: 'quarry' | 'client') => {
-    const isToClient = type === 'client';
-    const lat = isToClient ? order.delivery_lat : order.pickup_lat;
-    const lon = isToClient ? order.delivery_lon : order.pickup_lon;
-    const label = isToClient ? 'Клиент' : 'Карьер';
+  const openNavigator = async (type: 'quarry' | 'client') => {
+    if (order.status === 'driver_assigned' || order.status === 'driver_accepted') {
+        await updateStatus('heading_to_pickup');
+    }
+
+    const lat = type === 'quarry' ? order.pickup_lat : order.delivery_lat;
+    const lon = type === 'quarry' ? order.pickup_lon : order.delivery_lon;
+    const address = type === 'quarry' ? order.pickup_address : order.delivery_address;
 
     if (lat && lon) {
-      window.location.href = `geo:${lat},${lon}?q=${lat},${lon}(${encodeURIComponent(label)})`;
+      window.location.href = `https://2gis.ru/routeSearch/rsType/car/to/${lon},${lat}`;
+    } else if (address) {
+      window.location.href = `https://2gis.ru/routeSearch/rsType/car/to/${encodeURIComponent(address)}`;
     } else {
-      toast.error("Координаты отсутствуют");
+      toast.error("Нет данных для построения маршрута");
     }
   };
-
 
   if (isHistory) {
     return (
@@ -1057,7 +1061,7 @@ export const DriverOrderCard: React.FC<{
               <>
                 <button
                   disabled={isUpdating}
-                  onClick={() => updateStatus("heading_to_pickup")}
+                  onClick={() => openNavigator('quarry')}
                   className="w-full h-14 bg-sky-500 active:bg-sky-600 text-white text-lg font-bold rounded-xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                   {isUpdating ? (
@@ -1065,12 +1069,6 @@ export const DriverOrderCard: React.FC<{
                   ) : (
                     "Выехать на карьер"
                   )}
-                </button>
-                <button
-                  onClick={() => openNavigator('quarry')}
-                  className="w-full h-14 bg-gradient-to-r from-emerald-700 to-emerald-500 active:from-emerald-800 active:to-emerald-600 text-white text-lg font-bold rounded-xl shadow-md transition-transform active:scale-[0.98] flex items-center justify-center gap-2"
-                >
-                  Открыть навигатор
                 </button>
                 <button
                   onClick={() => setIsCancelModalOpen(true)}

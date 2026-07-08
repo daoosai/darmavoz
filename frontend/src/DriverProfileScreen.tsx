@@ -21,6 +21,7 @@ import {
   ClipboardList,
   X,
 } from "lucide-react";
+import { NotificationToggle } from "./components/shared/NotificationToggle";
 import UpdateBanner from "./UpdateBanner";
 import toast from "react-hot-toast";
 import { DriverOrder, DriverOrderCard } from "./DriverOrdersScreen";
@@ -740,6 +741,7 @@ export default function DriverProfileScreen({
             История заказов
           </button>
         )}
+        <NotificationToggle role="driver" />
         <button
           onClick={async () => {
             try {

@@ -220,7 +220,7 @@ export const translateReason = (reason: string | undefined | null) => {
   if (!reason) return 'Причина не указана';
   const r = reason.toLowerCase();
   if (r.includes('manual assignment')) return 'Назначено логистом вручную';
-  if (r.includes('driver declined') || r.includes('rejected')) return 'Отказ водителя';
+  if (r.includes('driver declined') || r.includes('rejected') || r === 'manual') return 'Отказ водителя';
   if (r.includes('timeout') || r.includes('expired')) return 'Время ожидания истекло';
   if (r.includes('cancelled by client')) return 'Отменено клиентом';
   if (r.includes('cancelled by logist')) return 'Отменено логистом';

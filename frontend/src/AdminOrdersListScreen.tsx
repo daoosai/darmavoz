@@ -123,8 +123,9 @@ export default function AdminOrdersListScreen({
   );
 
   return (
-    <div className="flex flex-col min-h-screen bg-slate-50 w-full max-w-md mx-auto">
-      <div className="px-5 py-4 border-b border-slate-100 bg-white sticky top-0 z-10">
+    <div className="min-h-screen bg-slate-50 w-full">
+      <div className="w-full max-w-7xl mx-auto flex flex-col min-h-screen">
+        <div className="px-4 sm:px-6 lg:px-8 py-4 border-b border-slate-100 bg-white sticky top-0 z-10">
           <a
             href={routeBase}
             className="inline-flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-700 transition-colors"
@@ -132,24 +133,24 @@ export default function AdminOrdersListScreen({
             <ArrowLeft className="w-4 h-4" />
             {"\u041d\u0430\u0437\u0430\u0434"}
           </a>
-          <div className="mt-4 flex items-center justify-between gap-4">
+          <div className="mt-4 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
             <div>
-              <h1 className="text-xl font-black text-slate-900">
+              <h1 className="text-xl sm:text-2xl font-black text-slate-900">
                 {"\u0420\u0435\u0435\u0441\u0442\u0440 \u0437\u0430\u043a\u0430\u0437\u043e\u0432 \u0430\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440\u0430"}
               </h1>
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-slate-500 max-w-2xl">
                 {
                   "\u0412\u0441\u0435 \u0430\u043a\u0442\u0438\u0432\u043d\u044b\u0435 \u0437\u0430\u043f\u0438\u0441\u0438 \u0438\u0437 \u0431\u0430\u0437\u044b \u0441 \u0432\u043e\u0437\u043c\u043e\u0436\u043d\u043e\u0441\u0442\u044c\u044e hard delete."
                 }
               </p>
             </div>
-            <div className="hidden sm:flex h-12 px-4 rounded-2xl bg-slate-100 items-center text-sm font-bold text-slate-600">
+            <div className="inline-flex h-11 px-4 rounded-2xl bg-slate-100 items-center text-sm font-bold text-slate-600 w-fit">
               {"\u0412\u0441\u0435\u0433\u043e:"} {sortedOrders.length}
             </div>
           </div>
         </div>
 
-      <div className="p-5 flex-1">
+        <div className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-6">
           {isLoading ? (
             <div className="min-h-[320px] flex items-center justify-center text-slate-500 gap-3">
               <Loader2 className="w-5 h-5 animate-spin text-sky-500" />
@@ -162,7 +163,7 @@ export default function AdminOrdersListScreen({
               {"\u0410\u043a\u0442\u0438\u0432\u043d\u044b\u0445 \u0437\u0430\u043a\u0430\u0437\u043e\u0432 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u043e."}
             </div>
           ) : (
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-4 lg:gap-5 items-start">
               {sortedOrders.map((order) => {
                 const total = Number(
                   order.estimated_total_amount ??
@@ -178,14 +179,14 @@ export default function AdminOrdersListScreen({
                 return (
                   <div
                     key={order.id}
-                    className="rounded-3xl border border-slate-200 bg-white shadow-sm p-5 flex flex-col gap-4"
+                    className="rounded-3xl border border-slate-200 bg-white shadow-sm p-5 lg:p-6 flex flex-col gap-4 h-full"
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
                           {"\u0417\u0430\u043a\u0430\u0437"}
                         </p>
-                        <p className="text-lg font-black text-slate-900 mt-1">
+                        <p className="text-lg font-black text-slate-900 mt-1 break-all">
                           #{order.id.slice(0, 8)}
                         </p>
                       </div>
@@ -215,7 +216,7 @@ export default function AdminOrdersListScreen({
                           <User2 className="w-4 h-4" />
                           {"\u041a\u043b\u0438\u0435\u043d\u0442"}
                         </div>
-                        <p className="mt-2 text-sm font-bold text-slate-800">
+                        <p className="mt-2 text-sm font-bold text-slate-800 break-words">
                           {order.client_name || "\u041d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d"}
                         </p>
                       </div>
@@ -226,21 +227,21 @@ export default function AdminOrdersListScreen({
                         <MapPin className="w-4 h-4" />
                         {"\u0410\u0434\u0440\u0435\u0441"}
                       </div>
-                      <p className="mt-2 text-sm font-bold text-slate-800 leading-relaxed">
+                      <p className="mt-2 text-sm font-bold text-slate-800 leading-relaxed break-words">
                         {address}
                       </p>
                     </div>
 
-                    <div className="flex items-center justify-between rounded-2xl bg-sky-50 border border-sky-100 p-4">
+                    <div className="flex items-center justify-between rounded-2xl bg-sky-50 border border-sky-100 p-4 mt-auto">
                       <div>
                         <p className="text-xs font-bold uppercase tracking-[0.16em] text-sky-500">
                           {"\u0421\u0443\u043c\u043c\u0430"}
                         </p>
-                        <p className="mt-2 text-2xl font-black text-sky-700">
+                        <p className="mt-2 text-2xl lg:text-3xl font-black text-sky-700">
                           {total.toLocaleString("ru-RU")} {"\u20bd"}
                         </p>
                       </div>
-                      <div className="w-12 h-12 rounded-2xl bg-white text-sky-600 flex items-center justify-center shadow-sm">
+                      <div className="w-12 h-12 rounded-2xl bg-white text-sky-600 flex items-center justify-center shadow-sm shrink-0">
                         <Wallet className="w-6 h-6" />
                       </div>
                     </div>
@@ -264,5 +265,6 @@ export default function AdminOrdersListScreen({
           )}
         </div>
       </div>
+    </div>
   );
 }

@@ -160,9 +160,12 @@ async def _seed_catalog(session: AsyncSession) -> None:
 
     for option_data in DEFAULT_DELIVERY_OPTIONS:
         result = await session.execute(
-            select(DeliveryOption).where(DeliveryOption.capacity_m3 == option_data["capacity_m3"])
+            select(DeliveryOption)
+            .where(DeliveryOption.capacity_m3 == option_data["capacity_m3"])
+            .order_by(DeliveryOption.id.asc())
         )
-        delivery_option = result.scalar_one_or_none()
+        # Test data may create duplicate capacity rows; keep startup idempotent by reusing the first one.
+        delivery_option = result.scalars().first()
         if delivery_option is None:
             session.add(DeliveryOption(**option_data, is_active=True, base_price=None))
             continue

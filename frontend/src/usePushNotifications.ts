@@ -4,7 +4,38 @@ import { useAuthStore } from './store';
 import { baseURL } from './utils';
 import toast from 'react-hot-toast';
 import { Capacitor } from '@capacitor/core';
-import { messaging, getToken, onMessage } from './services/firebase';
+import {
+  FIREBASE_WEB_VAPID_KEY,
+  getToken,
+  messaging,
+  onMessage,
+} from './services/firebase';
+
+
+const getPushTokenEndpoint = (role: string | null | undefined): string | null => {
+  switch (role) {
+    case 'client':
+      return '/clients/me/fcm-token';
+    case 'driver':
+      return '/driver/fcm-token';
+    case 'logist':
+    case 'admin':
+      return '/logist/me/fcm-token';
+    default:
+      return null;
+  }
+};
+
+const saveFcmToken = async (endpoint: string, authToken: string, fcmToken: string) => {
+  await fetch(`${baseURL}${endpoint}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${authToken}`,
+    },
+    body: JSON.stringify({ token: fcmToken }),
+  });
+};
 
 export const usePushNotifications = () => {
   const { token, role } = useAuthStore();
@@ -13,15 +44,13 @@ export const usePushNotifications = () => {
     let isMounted = true;
     let webUnsubscribe: (() => void) | undefined;
 
+    const endpoint = getPushTokenEndpoint(role);
+
     const setupNativePushNotifications = async () => {
-      if (!token) return;
-      // We only register driver for Capacitor currently?
-      // Let's register client and driver since endpoints exist for both now.
+      if (!token || !endpoint) return;
 
       try {
-        // Request permissions
         let permStatus = await PushNotifications.checkPermissions();
-        
         if (permStatus.receive === 'prompt') {
           permStatus = await PushNotifications.requestPermissions();
         }
@@ -31,24 +60,12 @@ export const usePushNotifications = () => {
           return;
         }
 
-        // Register with Apple/Google to receive push via APNS/FCM
         await PushNotifications.register();
 
-        // On success, we should be able to receive notifications
         PushNotifications.addListener('registration', async (capacitorToken) => {
           if (!isMounted) return;
           try {
-            const endpoint = role === 'client' ? '/clients/me/fcm-token' : (role === 'driver' ? '/driver/fcm-token' : null);
-            if (!endpoint) return;
-
-            await fetch(`${baseURL}${endpoint}`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${token}`,
-              },
-              body: JSON.stringify({ token: capacitorToken.value }),
-            });
+            await saveFcmToken(endpoint, token, capacitorToken.value);
             console.log('FCM token sent to backend (Native)');
           } catch (error) {
             console.error('Failed to send FCM token to backend (Native)', error);
@@ -60,61 +77,54 @@ export const usePushNotifications = () => {
         });
 
         PushNotifications.addListener('pushNotificationReceived', (notification) => {
-          if (!isMounted) return;
-          // Show toast when notification is received while app is open
-          if (notification.title) {
-            toast.info(`🔔 ${notification.title}\n${notification.body || ''}`, {
-              duration: 5000,
-            });
-          }
+          if (!isMounted || !notification.title) return;
+          toast.info(`🔔 ${notification.title}
+${notification.body || ''}`, {
+            duration: 5000,
+          });
         });
 
-        PushNotifications.addListener(
-          'pushNotificationActionPerformed',
-          (notification) => {
-            console.log('Push action performed: ' + JSON.stringify(notification));
-          }
-        );
+        PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
+          console.log('Push action performed: ' + JSON.stringify(notification));
+        });
       } catch (error) {
         console.error('Push notification setup failed', error);
       }
     };
 
     const setupWebPushNotifications = async () => {
-       if (!token || !messaging) return;
-       const endpoint = role === 'client' ? '/clients/me/fcm-token' : (role === 'driver' ? '/driver/fcm-token' : null);
-       if (!endpoint) return;
+      if (!token || !endpoint || !messaging) return;
 
-       try {
-         const permission = await Notification.requestPermission();
-         if (permission === 'granted') {
-           const vapidKey = 'BMAlldh0o6OYBIQg0M5s8lP8jRBVMHPzzwR2VjPz_OnrKuUM9NxyR1asRVGBYQCcH7zYrF9Z2TEskxHunaWguVk';
-           const currentToken = await getToken(messaging, { vapidKey });
-           
-           if (currentToken) {
-             await fetch(`${baseURL}${endpoint}`, {
-               method: 'POST',
-               headers: {
-                 'Content-Type': 'application/json',
-                 Authorization: `Bearer ${token}`,
-               },
-               body: JSON.stringify({ token: currentToken }),
-             });
-             console.log('FCM token sent to backend (Web)');
-           }
-         }
+      try {
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+          console.warn('Web push notification permissions not granted');
+          return;
+        }
 
-         webUnsubscribe = onMessage(messaging, (payload) => {
-           if (!isMounted) return;
-           if (payload.notification) {
-             toast.info(`🔔 ${payload.notification.title}\n${payload.notification.body || ''}`, {
-               duration: 5000,
-             });
-           }
-         });
-       } catch (err) {
-         console.error('Web push notification setup failed', err);
-       }
+        const serviceWorkerRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+        const currentToken = await getToken(messaging, {
+          vapidKey: FIREBASE_WEB_VAPID_KEY,
+          serviceWorkerRegistration,
+        });
+
+        if (currentToken) {
+          await saveFcmToken(endpoint, token, currentToken);
+          console.log('FCM token sent to backend (Web)');
+        } else {
+          console.warn('FCM token is empty for web push');
+        }
+
+        webUnsubscribe = onMessage(messaging, (payload) => {
+          if (!isMounted || !payload.notification) return;
+          toast.info(`🔔 ${payload.notification.title}
+${payload.notification.body || ''}`, {
+            duration: 5000,
+          });
+        });
+      } catch (err) {
+        console.error('Web push notification setup failed', err);
+      }
     };
 
     if (token) {
@@ -129,9 +139,9 @@ export const usePushNotifications = () => {
       isMounted = false;
       if (Capacitor.isNativePlatform()) {
         try {
-            PushNotifications.removeAllListeners();
-        } catch (e) {
-            // ignore
+          PushNotifications.removeAllListeners();
+        } catch {
+          // ignore listener cleanup errors
         }
       }
       if (webUnsubscribe) {

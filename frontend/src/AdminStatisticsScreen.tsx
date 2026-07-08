@@ -178,6 +178,5 @@ export default function AdminStatisticsScreen({
           )}
         </div>
       </div>
-    </div>
   );
 }

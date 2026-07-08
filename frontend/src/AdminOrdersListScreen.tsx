@@ -264,6 +264,5 @@ export default function AdminOrdersListScreen({
           )}
         </div>
       </div>
-    </div>
   );
 }

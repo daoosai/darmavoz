@@ -7,15 +7,20 @@ import { useAuthStore } from "./store";
 
 interface AdminProfileScreenProps {
   onLogout: () => void;
+  notificationRole?: "admin" | "logist";
 }
 
 export default function AdminProfileScreen({
   onLogout,
+  notificationRole,
 }: AdminProfileScreenProps) {
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const token = useAuthStore((state) => state.token);
+  const authRole = useAuthStore((state) => state.role);
+  const effectiveNotificationRole =
+    notificationRole || (authRole === "logist" ? "logist" : "admin");
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -105,7 +110,7 @@ export default function AdminProfileScreen({
         </div>
       </div>
 
-      <NotificationToggle role="admin" />
+      <NotificationToggle role={effectiveNotificationRole} />
       <button
         onClick={onLogout}
         className="flex items-center justify-center gap-2 w-full bg-red-50 text-red-600 rounded-xl py-3.5 font-bold hover:bg-red-100 transition-colors mt-2"

@@ -1,42 +1,44 @@
-import { MaterialProps, DeliveryOption } from "./MaterialDetailScreen";
+﻿import { MaterialProps, DeliveryOption } from "./MaterialDetailScreen";
 
-export const baseURL = "https://darmavoz.ru/api/v1";
+export const baseURL =
+  import.meta.env.VITE_API_BASE_URL ||
+  "https://darmavoz.159.194.236.11.nip.io/api/v1";
 
-export const APP_VERSION = import.meta.env.VITE_APP_VERSION || "2.4.1";
+export const APP_VERSION = import.meta.env.VITE_APP_VERSION || "2.4.4";
 
 export const playNewOrderSound = () => {
   try {
     const audio = new Audio("/new_order.mp3");
     let playCount = 1;
-    const maxPlays = 4; // Количество повторений
+    const maxPlays = 4; // РљРѕР»РёС‡РµСЃС‚РІРѕ РїРѕРІС‚РѕСЂРµРЅРёР№
 
     const playSequence = () => {
       /*
       audio.play().catch((e) => {
         console.warn(
-          "Автовоспроизведение заблокировано браузером. Водитель должен тапнуть по экрану.",
+          "РђРІС‚РѕРІРѕСЃРїСЂРѕРёР·РІРµРґРµРЅРёРµ Р·Р°Р±Р»РѕРєРёСЂРѕРІР°РЅРѕ Р±СЂР°СѓР·РµСЂРѕРј. Р’РѕРґРёС‚РµР»СЊ РґРѕР»Р¶РµРЅ С‚Р°РїРЅСѓС‚СЊ РїРѕ СЌРєСЂР°РЅСѓ.",
           e,
         );
       });
       */
     };
 
-    // Слушаем событие завершения трека
+    // РЎР»СѓС€Р°РµРј СЃРѕР±С‹С‚РёРµ Р·Р°РІРµСЂС€РµРЅРёСЏ С‚СЂРµРєР°
     audio.addEventListener("ended", () => {
       /*
       if (playCount < maxPlays) {
         playCount++;
-        // Сбрасываем время в начало (на всякий случай) и запускаем снова
+        // РЎР±СЂР°СЃС‹РІР°РµРј РІСЂРµРјСЏ РІ РЅР°С‡Р°Р»Рѕ (РЅР° РІСЃСЏРєРёР№ СЃР»СѓС‡Р°Р№) Рё Р·Р°РїСѓСЃРєР°РµРј СЃРЅРѕРІР°
         audio.currentTime = 0;
         playSequence();
       }
       */
     });
 
-    // Первый запуск
+    // РџРµСЂРІС‹Р№ Р·Р°РїСѓСЃРє
     // playSequence();
   } catch (error) {
-    console.error("Ошибка инициализации звука:", error);
+    console.error("РћС€РёР±РєР° РёРЅРёС†РёР°Р»РёР·Р°С†РёРё Р·РІСѓРєР°:", error);
   }
 };
 
@@ -111,7 +113,7 @@ const formatValidationErrors = (detail: any[]): string | null => {
 
 export const extractApiErrorMessage = (
   source: any,
-  fallbackMessage: string = "Не удалось выполнить действие",
+  fallbackMessage: string = "РќРµ СѓРґР°Р»РѕСЃСЊ РІС‹РїРѕР»РЅРёС‚СЊ РґРµР№СЃС‚РІРёРµ",
 ): string => {
   if (!source) {
     return fallbackMessage;
@@ -155,14 +157,14 @@ export const extractApiErrorMessage = (
 
 export const handleApiError = (
   error: any,
-  fallbackMessage: string = "Не удалось выполнить действие",
+  fallbackMessage: string = "РќРµ СѓРґР°Р»РѕСЃСЊ РІС‹РїРѕР»РЅРёС‚СЊ РґРµР№СЃС‚РІРёРµ",
 ): string => {
   if (!error) return fallbackMessage;
 
   const msg = extractApiErrorMessage(error, fallbackMessage);
   const lowerMsg = msg.toLowerCase();
 
-  // 1. Ошибка сети (Failed to fetch / Network Error)
+  // 1. РћС€РёР±РєР° СЃРµС‚Рё (Failed to fetch / Network Error)
   if (
     (error instanceof TypeError && lowerMsg.includes("fetch")) ||
     msg === "Failed to fetch" ||
@@ -170,21 +172,21 @@ export const handleApiError = (
     lowerMsg.includes("failed to fetch") ||
     lowerMsg.includes("network error")
   ) {
-    return "Ошибка сети. Проверьте подключение к интернету.";
+    return "РћС€РёР±РєР° СЃРµС‚Рё. РџСЂРѕРІРµСЂСЊС‚Рµ РїРѕРґРєР»СЋС‡РµРЅРёРµ Рє РёРЅС‚РµСЂРЅРµС‚Сѓ.";
   }
 
-  // 2. Ошибка сервера (500+)
+  // 2. РћС€РёР±РєР° СЃРµСЂРІРµСЂР° (500+)
   if (error.response?.status >= 500 || error.status >= 500) {
-    return "Сервер временно недоступен. Мы уже чиним!";
+    return "РЎРµСЂРІРµСЂ РІСЂРµРјРµРЅРЅРѕ РЅРµРґРѕСЃС‚СѓРїРµРЅ. РњС‹ СѓР¶Рµ С‡РёРЅРёРј!";
   }
 
-  // 3. Таймаут
+  // 3. РўР°Р№РјР°СѓС‚
   if (
     error.code === "ECONNABORTED" ||
     lowerMsg.includes("timeout") ||
     error.name === "AbortError"
   ) {
-    return "Превышено время ожидания ответа от сервера.";
+    return "РџСЂРµРІС‹С€РµРЅРѕ РІСЂРµРјСЏ РѕР¶РёРґР°РЅРёСЏ РѕС‚РІРµС‚Р° РѕС‚ СЃРµСЂРІРµСЂР°.";
   }
 
   // Fallback, if there's random English text or message, return fallback Message
@@ -196,34 +198,34 @@ export const handleApiError = (
 };
 
 export const declineReasonMap: Record<string, string> = {
-  manual: "Отказ водителя (вручную)",
-  timeout: "Время истекло (без ответа)",
-  "Driver response timeout": "Время ожидания истекло (нет ответа)",
-  offline: "Водитель не в сети",
-  busy: "Водитель занят",
+  manual: "РћС‚РєР°Р· РІРѕРґРёС‚РµР»СЏ (РІСЂСѓС‡РЅСѓСЋ)",
+  timeout: "Р’СЂРµРјСЏ РёСЃС‚РµРєР»Рѕ (Р±РµР· РѕС‚РІРµС‚Р°)",
+  "Driver response timeout": "Р’СЂРµРјСЏ РѕР¶РёРґР°РЅРёСЏ РёСЃС‚РµРєР»Рѕ (РЅРµС‚ РѕС‚РІРµС‚Р°)",
+  offline: "Р’РѕРґРёС‚РµР»СЊ РЅРµ РІ СЃРµС‚Рё",
+  busy: "Р’РѕРґРёС‚РµР»СЊ Р·Р°РЅСЏС‚",
 };
 
 export const attemptStatusMap: Record<string, string> = {
-  assigned: "НАЗНАЧЕН",
-  accepted: "ПРИНЯТО",
-  declined: "ОТКЛОНЕН",
-  rejected: "ОТКЛОНЕН",
-  expired: "ИСТЕК ТАЙМАУТ",
-  timeout: "ИСТЕК ТАЙМАУТ",
-  offered: "ПРЕДЛОЖЕНО",
-  pending: "ОЖИДАНИЕ",
-  cancelled: "ОТМЕНЕН",
-  completed: "ЗАВЕРШЕН",
+  assigned: "РќРђР—РќРђР§Р•Рќ",
+  accepted: "РџР РРќРЇРўРћ",
+  declined: "РћРўРљР›РћРќР•Рќ",
+  rejected: "РћРўРљР›РћРќР•Рќ",
+  expired: "РРЎРўР•Рљ РўРђР™РњРђРЈРў",
+  timeout: "РРЎРўР•Рљ РўРђР™РњРђРЈРў",
+  offered: "РџР Р•Р”Р›РћР–Р•РќРћ",
+  pending: "РћР–РР”РђРќРР•",
+  cancelled: "РћРўРњР•РќР•Рќ",
+  completed: "Р—РђР’Р•Р РЁР•Рќ",
 };
 
 export const translateReason = (reason: string | undefined | null) => {
-  if (!reason) return 'Причина не указана';
+  if (!reason) return 'РџСЂРёС‡РёРЅР° РЅРµ СѓРєР°Р·Р°РЅР°';
   const r = reason.toLowerCase();
-  if (r.includes('manual assignment')) return 'Назначено логистом вручную';
-  if (r.includes('driver declined') || r.includes('rejected')) return 'Отказ водителя';
-  if (r.includes('timeout') || r.includes('expired')) return 'Время ожидания истекло';
-  if (r.includes('cancelled by client')) return 'Отменено клиентом';
-  if (r.includes('cancelled by logist')) return 'Отменено логистом';
+  if (r.includes('manual assignment')) return 'РќР°Р·РЅР°С‡РµРЅРѕ Р»РѕРіРёСЃС‚РѕРј РІСЂСѓС‡РЅСѓСЋ';
+  if (r.includes('driver declined') || r.includes('rejected')) return 'РћС‚РєР°Р· РІРѕРґРёС‚РµР»СЏ';
+  if (r.includes('timeout') || r.includes('expired')) return 'Р’СЂРµРјСЏ РѕР¶РёРґР°РЅРёСЏ РёСЃС‚РµРєР»Рѕ';
+  if (r.includes('cancelled by client')) return 'РћС‚РјРµРЅРµРЅРѕ РєР»РёРµРЅС‚РѕРј';
+  if (r.includes('cancelled by logist')) return 'РћС‚РјРµРЅРµРЅРѕ Р»РѕРіРёСЃС‚РѕРј';
   return reason;
 };
 
@@ -253,3 +255,4 @@ export const getImageUrl = (item: MaterialProps | DeliveryOption) => {
     "/placeholder.jpg"
   );
 };
+

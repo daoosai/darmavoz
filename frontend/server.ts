@@ -2,19 +2,19 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 
+const API_BASE_URL =
+  process.env.VITE_API_BASE_URL ||
+  "https://darmavoz.159.194.236.11.nip.io/api/v1";
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // Middleware to parse JSON
   app.use(express.json());
 
-  // API proxy routes
   app.get("/api/v1/catalog/categories/", async (req, res) => {
     try {
-      const response = await fetch(
-        "https://darmavoz.ru/api/v1/catalog/categories/",
-      );
+      const response = await fetch(`${API_BASE_URL}/catalog/categories/`);
       const data = await response.json();
       res.json(data);
     } catch (error) {
@@ -25,9 +25,7 @@ async function startServer() {
 
   app.get("/api/v1/catalog/materials", async (req, res) => {
     try {
-      const response = await fetch(
-        "https://darmavoz.ru/api/v1/catalog/materials/",
-      );
+      const response = await fetch(`${API_BASE_URL}/catalog/materials/`);
       const data = await response.json();
       res.json(data);
     } catch (error) {
@@ -38,9 +36,7 @@ async function startServer() {
 
   app.get("/api/v1/catalog/delivery-options", async (req, res) => {
     try {
-      const response = await fetch(
-        "https://darmavoz.ru/api/v1/catalog/delivery-options/",
-      );
+      const response = await fetch(`${API_BASE_URL}/catalog/delivery-options/`);
       const data = await response.json();
       res.json(data);
     } catch (error) {
@@ -51,10 +47,9 @@ async function startServer() {
 
   app.get("/api/v1/orders/", async (req, res) => {
     try {
-      const response = await fetch("https://darmavoz.ru/api/v1/orders/", {
+      const response = await fetch(`${API_BASE_URL}/orders/`, {
         headers: {
-          Authorization:
-            "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsImV4cCI6MTc4MDA1MDQyMX0.ZqbX-husqO2QHU4tE7_RzZFF0NGOtARDAY5-CNCZiuo",
+          Authorization: req.headers.authorization || "",
         },
       });
       if (!response.ok) {
@@ -72,20 +67,15 @@ async function startServer() {
 
   app.post("/api/v1/orders/checkout", async (req, res) => {
     try {
-      const response = await fetch(
-        "https://darmavoz.ru/api/v1/orders/checkout",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            session_key:
-              (req.headers["session_key"] as string) || "demo-session",
-            Authorization:
-              "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsImV4cCI6MTc4MDA1MDQyMX0.ZqbX-husqO2QHU4tE7_RzZFF0NGOtARDAY5-CNCZiuo",
-          },
-          body: JSON.stringify(req.body),
+      const response = await fetch(`${API_BASE_URL}/orders/checkout`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          session_key: (req.headers["session_key"] as string) || "demo-session",
+          Authorization: req.headers.authorization || "",
         },
-      );
+        body: JSON.stringify(req.body),
+      });
       if (!response.ok) {
         const err = await response.json().catch(() => ({}));
         res.status(response.status).json(err);
@@ -99,7 +89,6 @@ async function startServer() {
     }
   });
 
-  // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },

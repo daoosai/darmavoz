@@ -1,14 +1,32 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { baseURL } from '../../utils';
-import { messaging, getToken } from '../../services/firebase';
-import { useAuthStore } from '../../store';
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
+import { useAuthStore } from '../../store';
+import { baseURL } from '../../utils';
+import {
+  FIREBASE_WEB_VAPID_KEY,
+  getToken,
+  messaging,
+} from '../../services/firebase';
 
 interface NotificationToggleProps {
   role: 'client' | 'driver' | 'admin' | 'logist';
 }
+
+const getPushTokenEndpoint = (role: NotificationToggleProps['role']) => {
+  switch (role) {
+    case 'client':
+      return '/clients/me/fcm-token';
+    case 'driver':
+      return '/driver/fcm-token';
+    case 'admin':
+    case 'logist':
+      return '/logist/me/fcm-token';
+    default:
+      return null;
+  }
+};
 
 export const NotificationToggle: React.FC<NotificationToggleProps> = ({ role }) => {
   const [isPushEnabled, setIsPushEnabled] = useState(false);
@@ -17,15 +35,13 @@ export const NotificationToggle: React.FC<NotificationToggleProps> = ({ role }) 
 
   useEffect(() => {
     const checkStatus = async () => {
-      // Restore from localStorage
       const savedStatus = localStorage.getItem(`push_enabled_${role}`);
       if (savedStatus === 'true') {
-        // Double check permission
         if (Capacitor.isNativePlatform()) {
-           const perm = await PushNotifications.checkPermissions();
-           setIsPushEnabled(perm.receive === 'granted');
+          const perm = await PushNotifications.checkPermissions();
+          setIsPushEnabled(perm.receive === 'granted');
         } else {
-           setIsPushEnabled(Notification.permission === 'granted');
+          setIsPushEnabled(Notification.permission === 'granted');
         }
       }
     };
@@ -34,15 +50,16 @@ export const NotificationToggle: React.FC<NotificationToggleProps> = ({ role }) 
 
   const handleToggle = async () => {
     setIsLoading(true);
+    const endpoint = getPushTokenEndpoint(role);
+
+    if (!endpoint || !token) {
+      toast.error('Не удалось определить endpoint уведомлений');
+      setIsLoading(false);
+      return;
+    }
 
     if (isPushEnabled) {
-      // ВЫКЛЮЧИТЬ (OFF)
       try {
-        let endpoint = '';
-        if (role === 'client') endpoint = '/clients/me/fcm-token';
-        else if (role === 'driver') endpoint = '/driver/fcm-token';
-        else endpoint = '/admin/fcm-token';
-
         const res = await fetch(`${baseURL}${endpoint}`, {
           method: 'DELETE',
           headers: {
@@ -64,83 +81,69 @@ export const NotificationToggle: React.FC<NotificationToggleProps> = ({ role }) 
       } finally {
         setIsLoading(false);
       }
-    } else {
-      // ВКЛЮЧИТЬ (ON)
-      try {
-        let currentToken: string | null = null;
+      return;
+    }
 
-        if (Capacitor.isNativePlatform()) {
-          let permStatus = await PushNotifications.checkPermissions();
-          if (permStatus.receive === 'prompt') {
-            permStatus = await PushNotifications.requestPermissions();
-          }
-          if (permStatus.receive !== 'granted') {
-            toast.error('Разрешите уведомления в настройках телефона');
-            setIsLoading(false);
-            return;
-          }
+    try {
+      let currentToken: string | null = null;
 
-          // Native token registration is handled globally in usePushNotifications
-          // But we can manually dispatch it or rely on the hook if we just enable it
-          // Actually, we need to register here to get the token, 
-          // let's do a simple Web approach first if not native, but for native we rely on PushNotifications
-          await PushNotifications.register();
-          // The native listener will catch it, but we can't easily wait for it here 
-          // unless we wrap it in a Promise. Let's just set state and let usePushNotifications handle the backend.
-          // Wait, the prompt says "получи токен через getToken из Firebase". Let's do it for web.
-        } else {
-          const permission = await Notification.requestPermission();
-          if (permission !== 'granted') {
-            toast.error('Разрешите уведомления в настройках браузера/телефона');
-            setIsLoading(false);
-            return;
-          }
-
-          if (messaging) {
-            const vapidKey = 'BMAlldh0o6OYBIQg0M5s8lP8jRBVMHPzzwR2VjPz_OnrKuUM9NxyR1asRVGBYQCcH7zYrF9Z2TEskxHunaWguVk';
-            currentToken = await getToken(messaging, { vapidKey });
-          } else {
-            toast.error('Ошибка конфигурации Firebase');
-            setIsLoading(false);
-            return;
-          }
+      if (Capacitor.isNativePlatform()) {
+        let permStatus = await PushNotifications.checkPermissions();
+        if (permStatus.receive === 'prompt') {
+          permStatus = await PushNotifications.requestPermissions();
+        }
+        if (permStatus.receive !== 'granted') {
+          toast.error('Разрешите уведомления в настройках телефона');
+          setIsLoading(false);
+          return;
         }
 
-        if (currentToken) {
-          let endpoint = '';
-          if (role === 'client') endpoint = '/clients/me/fcm-token';
-          else if (role === 'driver') endpoint = '/driver/fcm-token';
-          else endpoint = '/admin/fcm-token';
-
-          const res = await fetch(`${baseURL}${endpoint}`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({ token: currentToken }),
-          });
-
-          if (res.ok) {
-            setIsPushEnabled(true);
-            localStorage.setItem(`push_enabled_${role}`, 'true');
-            toast.success('Уведомления включены');
-          } else {
-            toast.error('Не удалось включить уведомления');
-          }
-        } else {
-          if (Capacitor.isNativePlatform()) {
-             setIsPushEnabled(true);
-             localStorage.setItem(`push_enabled_${role}`, 'true');
-             toast.success('Уведомления включены');
-          }
+        await PushNotifications.register();
+      } else {
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+          toast.error('Разрешите уведомления в настройках браузера/телефона');
+          setIsLoading(false);
+          return;
         }
-      } catch (error) {
-        console.error('Error enabling push:', error);
-        toast.error('Ошибка при включении уведомлений');
-      } finally {
-        setIsLoading(false);
+
+        if (!messaging) {
+          toast.error('Ошибка конфигурации Firebase');
+          setIsLoading(false);
+          return;
+        }
+
+        const serviceWorkerRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+        currentToken = await getToken(messaging, {
+          vapidKey: FIREBASE_WEB_VAPID_KEY,
+          serviceWorkerRegistration,
+        });
       }
+
+      if (currentToken) {
+        const res = await fetch(`${baseURL}${endpoint}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ token: currentToken }),
+        });
+
+        if (!res.ok) {
+          toast.error('Не удалось включить уведомления');
+          return;
+        }
+      }
+
+      setIsPushEnabled(true);
+      localStorage.setItem(`push_enabled_${role}`, 'true');
+      toast.success('Уведомления включены');
+    } catch (error) {
+      console.error('Error enabling push:', error);
+      toast.error('Ошибка при включении уведомлений');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -157,7 +160,7 @@ export const NotificationToggle: React.FC<NotificationToggleProps> = ({ role }) 
           <p className="text-xs text-gray-500">Статусы заказов и важные алерты</p>
         </div>
       </div>
-      <button 
+      <button
         onClick={handleToggle}
         disabled={isLoading}
         className={`w-12 h-6 rounded-full p-1 transition-colors ${isPushEnabled ? 'bg-blue-500' : 'bg-gray-300'}`}

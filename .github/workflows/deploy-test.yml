@@ -11,6 +11,24 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend on runner
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build
+          tar -C dist -cf ../frontend-dist.tar .
+
       - name: Setup SSH key
         run: |
           set -euo pipefail
@@ -19,6 +37,11 @@ jobs:
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/github_actions_key
           chmod 600 ~/.ssh/github_actions_key
           ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Upload frontend bundle
+        run: |
+          set -euo pipefail
+          scp -i ~/.ssh/github_actions_key frontend-dist.tar "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/tmp/frontend-dist.tar"
 
       - name: Deploy staging on server
         run: |
@@ -30,25 +53,10 @@ jobs:
           git checkout develop
           git pull --ff-only origin develop
 
-          WEB_VERSION=$(python3 -c "from pathlib import Path; vals={}; [vals.setdefault(*(line.split('=',1))) for line in Path('.env').read_text(encoding='utf-8').splitlines() if line.strip() and not line.startswith('#') and '=' in line]; print(vals.get('WEB_VERSION','2.4.4'))")
-          cat > frontend/.env.production <<EOV
-          VITE_APP_VERSION=${WEB_VERSION}
-          VITE_API_BASE_URL=https://darmavoz.159.194.236.11.nip.io/api/v1
-          EOV
-
-          rm -rf frontend/node_modules frontend/dist
-          docker rm -f darmavoz_test_frontend_build >/dev/null 2>&1 || true
-          docker create --name darmavoz_test_frontend_build -w /app node:20-alpine sh -lc 'if [ -f package-lock.json ]; then npm ci; else npm install; fi && npm run build'
-          tar -C frontend \
-            --exclude=node_modules \
-            --exclude=dist \
-            --exclude=.git \
-            -cf - . | docker cp - darmavoz_test_frontend_build:/app
-          docker start -a darmavoz_test_frontend_build
-
           mkdir -p /opt/daoos-kit/sites/darmavoz_test/frontend /opt/daoos-kit/sites/darmavoz_test/static
-          docker cp darmavoz_test_frontend_build:/app/dist/. /opt/daoos-kit/sites/darmavoz_test/frontend/
-          docker rm -f darmavoz_test_frontend_build
+          rm -rf /opt/daoos-kit/sites/darmavoz_test/frontend/*
+          tar -xf /tmp/frontend-dist.tar -C /opt/daoos-kit/sites/darmavoz_test/frontend
+          rm -f /tmp/frontend-dist.tar
           cp -a static/. /opt/daoos-kit/sites/darmavoz_test/static/
 
           docker compose -f docker-compose.test.yml up -d db_test redis_test minio_test backend_test --build

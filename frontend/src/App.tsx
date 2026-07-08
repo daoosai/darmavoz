@@ -33,6 +33,7 @@ import LoginScreen from "./LoginScreen";
 import DriverOrdersScreen from "./DriverOrdersScreen";
 import LogistDashboardScreen from "./LogistDashboardScreen";
 import AdminDashboardScreen from "./AdminDashboardScreen";
+import AdminOrdersListScreen from "./AdminOrdersListScreen";
 import AdminStatisticsScreen from "./AdminStatisticsScreen";
 import DriverRegistrationScreen from "./DriverRegistrationScreen";
 import { useAuthStore, useCartStore, useAddressStore } from "./store";
@@ -128,7 +129,7 @@ export default function App() {
   const renderContent = () => {
     if (currentPath === "/admin/orders") {
       return role === "admin" ? (
-        <LogistDashboardScreen onLogout={() => setCurrentRoute("login")} />
+        <AdminOrdersListScreen role="admin" />
       ) : (
         <LoginScreen
           onLogin={(r) =>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+﻿import React, { useState, useEffect } from "react";
 import toast from "react-hot-toast";
 import { BarChart3, ClipboardList, LogOut } from "lucide-react";
 import { NotificationToggle } from "./components/shared/NotificationToggle";
@@ -115,23 +115,23 @@ export default function AdminProfileScreen({
         <div className="p-4 flex flex-col gap-3">
           <a
             href={`${routeBase}/orders`}
-            className="w-full bg-slate-900 text-white rounded-2xl px-4 py-4 font-bold flex items-center justify-between gap-3 hover:bg-slate-800 transition-colors"
+            className="w-full h-14 bg-sky-500 active:bg-sky-600 text-white font-bold text-lg rounded-xl flex items-center justify-between px-6 shadow-sm"
           >
             <span className="flex items-center gap-3">
               <ClipboardList className="w-5 h-5" />
               {"\u0421\u043f\u0438\u0441\u043e\u043a \u0437\u0430\u043a\u0430\u0437\u043e\u0432"}
             </span>
-            <span className="text-white/70">{"\u041e\u0442\u043a\u0440\u044b\u0442\u044c"}</span>
+            <span className="text-white/85 text-sm">{"\u041e\u0442\u043a\u0440\u044b\u0442\u044c"}</span>
           </a>
           <a
             href={`${routeBase}/statistics`}
-            className="w-full bg-[#2DB0E6] text-white rounded-2xl px-4 py-4 font-bold flex items-center justify-between gap-3 hover:bg-[#209BD6] transition-colors"
+            className="w-full h-14 bg-sky-500 active:bg-sky-600 text-white font-bold text-lg rounded-xl flex items-center justify-between px-6 shadow-sm"
           >
             <span className="flex items-center gap-3">
               <BarChart3 className="w-5 h-5" />
               {"\u0421\u0442\u0430\u0442\u0438\u0441\u0442\u0438\u043a\u0430"}
             </span>
-            <span className="text-white/80">{"\u041e\u0442\u043a\u0440\u044b\u0442\u044c"}</span>
+            <span className="text-white/85 text-sm">{"\u041e\u0442\u043a\u0440\u044b\u0442\u044c"}</span>
           </a>
         </div>
       </div>

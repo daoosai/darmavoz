@@ -144,12 +144,15 @@ async def _seed_catalog(session: AsyncSession) -> None:
 
         for material_data in MATERIALS.get(category.slug, []):
             result = await session.execute(
-                select(Material).where(
+                select(Material)
+                .where(
                     Material.category_id == category.id,
                     Material.name == material_data["name"],
                 )
+                .order_by(Material.is_active.desc(), Material.id.asc())
             )
-            material = result.scalar_one_or_none()
+            # Test syncs may leave inactive duplicates; keep startup idempotent by reusing the first row.
+            material = result.scalars().first()
             if material is None:
                 session.add(Material(category_id=category.id, is_active=True, **material_data))
                 continue

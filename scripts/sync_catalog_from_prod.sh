@@ -122,6 +122,21 @@ SET name = EXCLUDED.name,
     sort_order = EXCLUDED.sort_order,
     is_active = EXCLUDED.is_active;
 
+UPDATE materials existing
+SET category_id = c.id,
+    description = tm.description,
+    price = tm.price,
+    unit = tm.unit,
+    min_volume = tm.min_volume,
+    image_url = tm.image_url,
+    is_active = tm.is_active,
+    sort_order = tm.sort_order
+FROM tmp_materials tm
+JOIN tmp_categories tc ON tc.id = tm.category_id
+JOIN categories c ON c.slug = tc.slug
+WHERE existing.name = tm.name
+  AND existing.category_id = c.id;
+
 INSERT INTO materials AS m (
   id, category_id, name, description, price, unit, min_volume, image_url, is_active, sort_order
 )
@@ -139,6 +154,12 @@ SELECT
 FROM tmp_materials tm
 JOIN tmp_categories tc ON tc.id = tm.category_id
 JOIN categories c ON c.slug = tc.slug
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM materials existing
+  WHERE existing.name = tm.name
+    AND existing.category_id = c.id
+)
 ON CONFLICT (id) DO UPDATE
 SET category_id = EXCLUDED.category_id,
     name = EXCLUDED.name,

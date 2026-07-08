@@ -123,9 +123,8 @@ export default function AdminOrdersListScreen({
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 flex sm:items-center justify-center px-4 py-6">
-      <div className="w-full max-w-5xl bg-white min-h-[70vh] sm:min-h-0 sm:h-auto sm:rounded-[32px] sm:border-8 border-slate-900 shadow-2xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-100 bg-white sticky top-0 z-10">
+    <div className="flex flex-col min-h-screen bg-slate-50 w-full max-w-md mx-auto">
+      <div className="px-5 py-4 border-b border-slate-100 bg-white sticky top-0 z-10">
           <a
             href={routeBase}
             className="inline-flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-700 transition-colors"
@@ -150,7 +149,7 @@ export default function AdminOrdersListScreen({
           </div>
         </div>
 
-        <div className="p-5">
+      <div className="p-5 flex-1">
           {isLoading ? (
             <div className="min-h-[320px] flex items-center justify-center text-slate-500 gap-3">
               <Loader2 className="w-5 h-5 animate-spin text-sky-500" />
@@ -256,7 +255,7 @@ export default function AdminOrdersListScreen({
                       ) : (
                         <Trash2 className="w-4 h-4" />
                       )}
-                      {"\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u043d\u0430\u0432\u0441\u0435\u0433\u0434\u0430"}
+                      {"\u0423\u0434\u0430\u043b\u0438\u0442\u044c"}
                     </button>
                   </div>
                 );

@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.schemas.catalog import DeliveryOptionOut, MediaFileOut
+from app.services.storage import normalize_public_url
 
 
 def _validate_password(value: str | None) -> str | None:
@@ -205,6 +206,11 @@ class DriverFleetResponse(DriverResponse):
     vehicle_main_url: str | None = None
     vehicle_left_url: str | None = None
 
+    @field_validator("vehicle_main_url", "vehicle_left_url")
+    @classmethod
+    def normalize_fleet_vehicle_urls(cls, value: str | None) -> str | None:
+        return normalize_public_url(value)
+
 
 class DriverRegistrationResponse(BaseModel):
     access_token: str
@@ -294,6 +300,11 @@ class PendingModerationItemOut(BaseModel):
     vehicle_plate_url: str | None = None
     media_files: list[MediaFileOut] = Field(default_factory=list)
 
+    @field_validator("vehicle_main_url", "vehicle_left_url", "vehicle_plate_url")
+    @classmethod
+    def normalize_pending_vehicle_urls(cls, value: str | None) -> str | None:
+        return normalize_public_url(value)
+
 
 class VehicleModerationDecisionOut(BaseModel):
     ok: bool
@@ -318,6 +329,11 @@ class AdminCarOut(BaseModel):
     car_type: str | None = None
     photo_url: str | None = None
     driver: AdminCarDriverOut
+
+    @field_validator("photo_url")
+    @classmethod
+    def normalize_car_photo_url(cls, value: str | None) -> str | None:
+        return normalize_public_url(value)
 
 
 class AdminCarStatsOut(BaseModel):

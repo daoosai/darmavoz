@@ -60,6 +60,33 @@ def _join_url(base: str, path: str) -> str:
     return f"{base.rstrip('/')}/{path.lstrip('/')}"
 
 
+def normalize_public_url(public_url: str | None) -> str | None:
+    if not public_url:
+        return public_url
+
+    target_base_url = settings.s3_public_base_url.rstrip("/")
+    if not target_base_url:
+        return public_url
+
+    parsed_public_url = urlsplit(public_url)
+    if not parsed_public_url.netloc or "nip.io" not in parsed_public_url.netloc:
+        return public_url
+
+    parsed_target_base_url = urlsplit(target_base_url)
+    if not parsed_target_base_url.netloc:
+        return public_url
+
+    return urlunsplit(
+        (
+            parsed_target_base_url.scheme or parsed_public_url.scheme,
+            parsed_target_base_url.netloc,
+            parsed_public_url.path,
+            parsed_public_url.query,
+            parsed_public_url.fragment,
+        )
+    )
+
+
 class S3StorageService:
     def __init__(self) -> None:
         if not settings.S3_ENABLED:

@@ -26,6 +26,7 @@ import {
   Navigation,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { logoutCurrentSession } from "./pushAuth";
 
 export interface DriverOrder {
   id: string;
@@ -74,7 +75,7 @@ interface DriverOrdersScreenProps {
 export default function DriverOrdersScreen({
   onLogout,
 }: DriverOrdersScreenProps) {
-  const { logout, token } = useAuthStore();
+  const { token } = useAuthStore();
   const [status, setStatus] = useState<DriverStatus>("offline");
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [activeTab, setActiveTab] = useState<"orders" | "profile">("orders");
@@ -136,7 +137,7 @@ export default function DriverOrdersScreen({
         headers: { Authorization: `Bearer ${currentToken}` },
       });
       if (res.status === 401) {
-        useAuthStore.getState().logout();
+        await logoutCurrentSession();
         onLogout();
         return;
       }
@@ -176,7 +177,7 @@ export default function DriverOrdersScreen({
       });
 
       if (res.status === 401) {
-        useAuthStore.getState().logout();
+        await logoutCurrentSession();
         onLogout();
         return;
       }
@@ -221,7 +222,7 @@ export default function DriverOrdersScreen({
         );
 
         if (assignedRes.status === 401) {
-          useAuthStore.getState().logout();
+          await logoutCurrentSession();
           onLogout();
           return;
         }
@@ -285,7 +286,7 @@ export default function DriverOrdersScreen({
         });
 
         if (res.status === 401) {
-          useAuthStore.getState().logout();
+          await logoutCurrentSession();
           onLogout();
           return;
         }
@@ -383,7 +384,7 @@ export default function DriverOrdersScreen({
       );
 
       if (res.status === 401) {
-        useAuthStore.getState().logout();
+        await logoutCurrentSession();
         onLogout();
         return;
       }
@@ -423,7 +424,7 @@ export default function DriverOrdersScreen({
       );
 
       if (res.status === 401) {
-        useAuthStore.getState().logout();
+        await logoutCurrentSession();
         onLogout();
         return;
       }
@@ -448,8 +449,8 @@ export default function DriverOrdersScreen({
     }
   };
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logoutCurrentSession();
     onLogout();
   };
 
@@ -812,7 +813,7 @@ export const DriverOrderCard: React.FC<{
         },
       );
       if (res.status === 401) {
-        useAuthStore.getState().logout();
+        await logoutCurrentSession();
         return;
       }
       if (res.status === 403) {
@@ -941,7 +942,7 @@ export const DriverOrderCard: React.FC<{
         body: JSON.stringify({ reason: finalReason }),
       });
       if (res.status === 401) {
-        useAuthStore.getState().logout();
+        await logoutCurrentSession();
         return;
       }
       if (res.status === 403) {

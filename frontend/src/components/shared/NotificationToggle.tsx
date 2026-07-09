@@ -5,28 +5,16 @@ import { PushNotifications } from '@capacitor/push-notifications';
 import { useAuthStore } from '../../store';
 import { baseURL } from '../../utils';
 import {
+  deleteToken,
   FIREBASE_WEB_VAPID_KEY,
   getToken,
   messaging,
 } from '../../services/firebase';
+import { getPushTokenEndpoint } from '../../pushAuth';
 
 interface NotificationToggleProps {
   role: 'client' | 'driver' | 'admin' | 'logist';
 }
-
-const getPushTokenEndpoint = (role: NotificationToggleProps['role']) => {
-  switch (role) {
-    case 'client':
-      return '/clients/me/fcm-token';
-    case 'driver':
-      return '/driver/fcm-token';
-    case 'admin':
-    case 'logist':
-      return '/logist/me/fcm-token';
-    default:
-      return null;
-  }
-};
 
 export const NotificationToggle: React.FC<NotificationToggleProps> = ({ role }) => {
   const [isPushEnabled, setIsPushEnabled] = useState(false);
@@ -69,6 +57,13 @@ export const NotificationToggle: React.FC<NotificationToggleProps> = ({ role }) 
         });
 
         if (res.ok) {
+          if (!Capacitor.isNativePlatform() && messaging) {
+            try {
+              await deleteToken(messaging);
+            } catch {
+              // ignore local token cleanup errors
+            }
+          }
           setIsPushEnabled(false);
           localStorage.setItem(`push_enabled_${role}`, 'false');
           toast.success('Уведомления отключены');

@@ -33,6 +33,7 @@ from app.services.dispatch_service import (
     set_driver_order_status,
 )
 from app.services.email_service import send_email
+from app.services.fcm_tokens import detach_fcm_token_from_other_entities
 from app.services.vehicle_moderation import (
     REQUIRED_VEHICLE_MEDIA_SLOTS,
     set_incomplete_moderation,
@@ -529,7 +530,13 @@ async def save_driver_fcm_token(
     db: AsyncSession = Depends(get_db),
     current_driver: Driver = Depends(get_current_driver),
 ) -> DriverFcmTokenOut:
-    current_driver.fcm_token = payload.token.strip()
+    normalized_token = payload.token.strip()
+    await detach_fcm_token_from_other_entities(
+        db,
+        normalized_token,
+        keep_driver_id=current_driver.id,
+    )
+    current_driver.fcm_token = normalized_token
     await db.commit()
     return DriverFcmTokenOut(ok=True, token=current_driver.fcm_token)
 

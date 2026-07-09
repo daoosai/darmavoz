@@ -187,8 +187,14 @@ async def send_push_to_logists(
         )
         users = list(result.scalars().unique().all())
         sent_count = 0
+        seen_tokens: set[str] = set()
 
         for user in users:
+            token = (user.fcm_token or "").strip()
+            if not token or token in seen_tokens:
+                continue
+            seen_tokens.add(token)
+
             async def clear_token(current_user: User = user) -> None:
                 current_user.fcm_token = None
                 await session.flush()
@@ -196,7 +202,7 @@ async def send_push_to_logists(
             ok = await _send_push_with_token_cleanup(
                 entity_name="logist_user",
                 entity_id=user.id,
-                token=user.fcm_token,
+                token=token,
                 clear_token=clear_token,
                 title=title,
                 body=body,

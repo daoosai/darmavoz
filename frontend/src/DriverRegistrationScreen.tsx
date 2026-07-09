@@ -7,7 +7,8 @@ import {
   formatPhoneNumber,
   handleApiError,
 } from "./utils";
-import { useAuthStore, UserRole } from "./store";
+import { switchAuthenticatedSession } from "./pushAuth";
+import { UserRole } from "./store";
 
 interface DriverRegistrationScreenProps {
   onRegister: (role: UserRole) => void;
@@ -32,8 +33,6 @@ export default function DriverRegistrationScreen({
   const [vehicleType, setVehicleType] = useState("Самосвал");
 
   const [isLoading, setIsLoading] = useState(false);
-  const { login } = useAuthStore();
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (
@@ -121,7 +120,7 @@ export default function DriverRegistrationScreen({
       const data = await response.json();
 
       if (data.access_token) {
-        useAuthStore.getState().login(data.access_token, data.role || "driver");
+        await switchAuthenticatedSession(data.access_token, data.role || "driver");
         toast.success("Регистрация успешна!");
         onRegister(data.role || "driver");
       } else {

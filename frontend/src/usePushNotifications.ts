@@ -10,21 +10,7 @@ import {
   messaging,
   onMessage,
 } from './services/firebase';
-
-
-const getPushTokenEndpoint = (role: string | null | undefined): string | null => {
-  switch (role) {
-    case 'client':
-      return '/clients/me/fcm-token';
-    case 'driver':
-      return '/driver/fcm-token';
-    case 'logist':
-    case 'admin':
-      return '/logist/me/fcm-token';
-    default:
-      return null;
-  }
-};
+import { getPushTokenEndpoint, isPushEnabledForRole } from './pushAuth';
 
 const saveFcmToken = async (endpoint: string, authToken: string, fcmToken: string) => {
   await fetch(`${baseURL}${endpoint}`, {
@@ -45,9 +31,10 @@ export const usePushNotifications = () => {
     let webUnsubscribe: (() => void) | undefined;
 
     const endpoint = getPushTokenEndpoint(role);
+    const isPushEnabled = isPushEnabledForRole(role);
 
     const setupNativePushNotifications = async () => {
-      if (!token || !endpoint) return;
+      if (!token || !endpoint || !isPushEnabled) return;
 
       try {
         let permStatus = await PushNotifications.checkPermissions();
@@ -93,7 +80,7 @@ ${notification.body || ''}`, {
     };
 
     const setupWebPushNotifications = async () => {
-      if (!token || !endpoint || !messaging) return;
+      if (!token || !endpoint || !messaging || !isPushEnabled) return;
 
       try {
         const permission = await Notification.requestPermission();
@@ -117,6 +104,15 @@ ${notification.body || ''}`, {
 
         webUnsubscribe = onMessage(messaging, (payload) => {
           if (!isMounted || !payload.notification) return;
+          if (Notification.permission === 'granted') {
+            try {
+              new Notification(payload.notification.title || 'Новое уведомление', {
+                body: payload.notification.body || '',
+              });
+            } catch {
+              // ignore system notification errors in foreground
+            }
+          }
           toast.info(`🔔 ${payload.notification.title}
 ${payload.notification.body || ''}`, {
             duration: 5000,
@@ -127,7 +123,7 @@ ${payload.notification.body || ''}`, {
       }
     };
 
-    if (token) {
+    if (token && isPushEnabled) {
       if (Capacitor.isNativePlatform()) {
         setupNativePushNotifications();
       } else {

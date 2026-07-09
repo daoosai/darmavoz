@@ -11,6 +11,7 @@ import {
   PhoneCall,
 } from "lucide-react";
 import { NotificationToggle } from "./components/shared/NotificationToggle";
+import { logoutCurrentSession } from "./pushAuth";
 import { baseURL, APP_VERSION, handleApiError } from "./utils";
 import { useAuthStore } from "./store";
 import toast from "react-hot-toast";
@@ -28,7 +29,7 @@ interface ClientProfileScreenProps {
 export default function ClientProfileScreen({
   onOpenAddresses,
 }: ClientProfileScreenProps) {
-  const { token, logout } = useAuthStore();
+  const { token } = useAuthStore();
   const [client, setClient] = useState<ClientData | null>(null);
   const [stats, setStats] = useState({ active: 0, total: 0 });
   const [isLoading, setIsLoading] = useState(true);
@@ -208,7 +209,7 @@ export default function ClientProfileScreen({
       {/* Footer Area */}
       <div className="px-4 mt-8 mt-auto pt-6 flex flex-col items-center">
         <button
-          onClick={() => logout()}
+          onClick={async () => await logoutCurrentSession()}
           className="w-full bg-white border border-slate-200 text-slate-600 font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 active:bg-slate-50 transition-colors"
         >
           <LogOut className="w-5 h-5" />

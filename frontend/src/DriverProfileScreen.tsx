@@ -22,6 +22,7 @@ import {
   X,
 } from "lucide-react";
 import { NotificationToggle } from "./components/shared/NotificationToggle";
+import { logoutCurrentSession } from "./pushAuth";
 import UpdateBanner from "./UpdateBanner";
 import toast from "react-hot-toast";
 import { DriverOrder, DriverOrderCard } from "./DriverOrdersScreen";
@@ -72,7 +73,7 @@ export default function DriverProfileScreen({
   onProfileUpdate?: () => void;
   hasActiveOrder?: boolean;
 }) {
-  const { token, logout } = useAuthStore();
+  const { token } = useAuthStore();
   const [profile, setProfile] = useState<DriverProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -129,7 +130,7 @@ export default function DriverProfileScreen({
         },
       });
       if (res.status === 401 || res.status === 403) {
-        logout();
+        await logoutCurrentSession();
         onLogout();
         return;
       }
@@ -161,7 +162,7 @@ export default function DriverProfileScreen({
       });
 
       if (res.status === 401) {
-        logout();
+        await logoutCurrentSession();
         onLogout();
         return;
       }
@@ -747,14 +748,6 @@ export default function DriverProfileScreen({
             try {
               const currentToken = useAuthStore.getState().token;
 
-              // Remove FCM token
-              await fetch(`${baseURL}/driver/fcm-token`, {
-                method: "DELETE",
-                headers: {
-                  Authorization: `Bearer ${currentToken}`,
-                },
-              });
-
               // Set offline status
               await fetch(`${baseURL}/driver/profile/status`, {
                 method: "PATCH",
@@ -765,7 +758,7 @@ export default function DriverProfileScreen({
                 body: JSON.stringify({ status: "offline" }),
               });
             } catch (e) {}
-            logout();
+            await logoutCurrentSession();
             onLogout();
           }}
           className="w-full bg-white text-slate-500 hover:text-rose-600 hover:bg-rose-50 py-4 font-bold rounded-2xl transition-colors flex items-center justify-center gap-2 border border-slate-200 shadow-sm"

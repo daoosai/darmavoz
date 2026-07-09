@@ -51,6 +51,7 @@ jobs:
           cd /opt/darmavoz_test
           git fetch origin develop
           git checkout develop
+          git restore --source=HEAD --worktree --staged -- docker-compose.test.yml
           git pull --ff-only origin develop
 
           mkdir -p /opt/daoos-kit/sites/darmavoz_test/frontend /opt/daoos-kit/sites/darmavoz_test/static

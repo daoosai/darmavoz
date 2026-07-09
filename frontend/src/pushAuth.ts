@@ -2,6 +2,8 @@ import { deleteToken, messaging } from "./services/firebase";
 import { useAuthStore, UserRole } from "./store";
 import { baseURL } from "./utils";
 
+export const PUSH_SETTINGS_CHANGED_EVENT = "push-settings-changed";
+
 export const getPushTokenEndpoint = (
   role: UserRole | string | null | undefined,
 ): string | null => {
@@ -25,6 +27,20 @@ export const isPushEnabledForRole = (
     return false;
   }
   return window.localStorage.getItem(`push_enabled_${role}`) === "true";
+};
+
+export const emitPushSettingsChanged = (
+  role: UserRole | string | null | undefined,
+): void => {
+  if (typeof window === "undefined" || !role) {
+    return;
+  }
+
+  window.dispatchEvent(
+    new CustomEvent(PUSH_SETTINGS_CHANGED_EVENT, {
+      detail: { role, enabled: isPushEnabledForRole(role) },
+    }),
+  );
 };
 
 export const detachPushToken = async (

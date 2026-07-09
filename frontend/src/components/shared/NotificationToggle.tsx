@@ -11,7 +11,7 @@ import {
   getToken,
   messaging,
 } from '../../services/firebase';
-import { getPushTokenEndpoint } from '../../pushAuth';
+import { emitPushSettingsChanged, getPushTokenEndpoint } from '../../pushAuth';
 
 interface NotificationToggleProps {
   role: 'client' | 'driver' | 'admin' | 'logist';
@@ -67,6 +67,7 @@ export const NotificationToggle: React.FC<NotificationToggleProps> = ({ role }) 
           }
           setIsPushEnabled(false);
           localStorage.setItem(`push_enabled_${role}`, 'false');
+          emitPushSettingsChanged(role);
           toast.success('Уведомления отключены');
         } else {
           toast.error('Не удалось отключить уведомления');
@@ -134,6 +135,7 @@ export const NotificationToggle: React.FC<NotificationToggleProps> = ({ role }) 
 
       setIsPushEnabled(true);
       localStorage.setItem(`push_enabled_${role}`, 'true');
+      emitPushSettingsChanged(role);
       toast.success('Уведомления включены');
     } catch (error) {
       console.error('Error enabling push:', error);

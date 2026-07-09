@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { useAuthStore } from './store';
 import { baseURL } from './utils';
@@ -11,7 +11,11 @@ import {
   messaging,
   onMessage,
 } from './services/firebase';
-import { getPushTokenEndpoint, isPushEnabledForRole } from './pushAuth';
+import {
+  getPushTokenEndpoint,
+  isPushEnabledForRole,
+  PUSH_SETTINGS_CHANGED_EVENT,
+} from './pushAuth';
 
 const saveFcmToken = async (endpoint: string, authToken: string, fcmToken: string) => {
   await fetch(`${baseURL}${endpoint}`, {
@@ -26,13 +30,42 @@ const saveFcmToken = async (endpoint: string, authToken: string, fcmToken: strin
 
 export const usePushNotifications = () => {
   const { token, role } = useAuthStore();
+  const [isPushEnabled, setIsPushEnabled] = useState<boolean>(() =>
+    isPushEnabledForRole(useAuthStore.getState().role),
+  );
+
+  useEffect(() => {
+    setIsPushEnabled(isPushEnabledForRole(role));
+
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const syncPushState = () => {
+      setIsPushEnabled(isPushEnabledForRole(role));
+    };
+
+    const handlePushSettingsChanged = (event: Event) => {
+      const customEvent = event as CustomEvent<{ role?: string }>;
+      if (!customEvent.detail?.role || customEvent.detail.role === role) {
+        syncPushState();
+      }
+    };
+
+    window.addEventListener(PUSH_SETTINGS_CHANGED_EVENT, handlePushSettingsChanged as EventListener);
+    window.addEventListener('storage', syncPushState);
+
+    return () => {
+      window.removeEventListener(PUSH_SETTINGS_CHANGED_EVENT, handlePushSettingsChanged as EventListener);
+      window.removeEventListener('storage', syncPushState);
+    };
+  }, [role]);
 
   useEffect(() => {
     let isMounted = true;
     let webUnsubscribe: (() => void) | undefined;
 
     const endpoint = getPushTokenEndpoint(role);
-    const isPushEnabled = isPushEnabledForRole(role);
 
     const setupNativePushNotifications = async () => {
       if (!token || !endpoint || !isPushEnabled) return;
@@ -145,5 +178,5 @@ ${payload.notification.body || ''}`, {
         webUnsubscribe();
       }
     };
-  }, [token, role]);
+  }, [token, role, isPushEnabled]);
 };

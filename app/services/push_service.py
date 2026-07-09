@@ -17,6 +17,15 @@ logger = logging.getLogger(__name__)
 LOGIST_ROLE_NAMES = ("admin", "logist")
 
 
+def _token_debug_suffix(token: str | None) -> str | None:
+    if not token:
+        return None
+    normalized = token.strip()
+    if not normalized:
+        return None
+    return normalized[:24]
+
+
 def _get_firebase_credentials_path() -> Path | None:
     for candidate in settings.firebase_credentials_candidates:
         if candidate.exists():
@@ -95,11 +104,28 @@ async def _send_push_with_token_cleanup(
         logger.info("push_token_missing", extra={f"{entity_name}_id": str(entity_id)})
         return False
 
+    token_debug = _token_debug_suffix(token)
+    logger.info(
+        "push_send_attempt",
+        extra={
+            f"{entity_name}_id": str(entity_id),
+            "title": title,
+            "token_prefix": token_debug,
+            "push_data": data or {},
+        },
+    )
+
     try:
         message_id = await asyncio.to_thread(_send_push, token, title, body, data)
         logger.info(
             "push_sent",
-            extra={f"{entity_name}_id": str(entity_id), "message_id": message_id},
+            extra={
+                f"{entity_name}_id": str(entity_id),
+                "message_id": message_id,
+                "title": title,
+                "token_prefix": token_debug,
+                "push_data": data or {},
+            },
         )
         return True
     except Exception as exc:
@@ -107,11 +133,23 @@ async def _send_push_with_token_cleanup(
             await clear_token()
             logger.warning(
                 "push_token_invalidated",
-                extra={f"{entity_name}_id": str(entity_id)},
+                extra={
+                    f"{entity_name}_id": str(entity_id),
+                    "title": title,
+                    "token_prefix": token_debug,
+                },
             )
             return False
 
-        logger.exception("push_send_failed", extra={f"{entity_name}_id": str(entity_id)})
+        logger.exception(
+            "push_send_failed",
+            extra={
+                f"{entity_name}_id": str(entity_id),
+                "title": title,
+                "token_prefix": token_debug,
+                "push_data": data or {},
+            },
+        )
         return False
 
 

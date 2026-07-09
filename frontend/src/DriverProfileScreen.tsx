@@ -24,6 +24,7 @@ import {
 import UpdateBanner from "./UpdateBanner";
 import toast from "react-hot-toast";
 import { DriverOrder, DriverOrderCard } from "./DriverOrdersScreen";
+import { logoutCurrentSession } from "./pushAuth";
 
 interface DriverProfile {
   id: string;
@@ -763,7 +764,7 @@ export default function DriverProfileScreen({
                 body: JSON.stringify({ status: "offline" }),
               });
             } catch (e) {}
-            logout();
+            await logoutCurrentSession();
             onLogout();
           }}
           className="w-full bg-white text-slate-500 hover:text-rose-600 hover:bg-rose-50 py-4 font-bold rounded-2xl transition-colors flex items-center justify-center gap-2 border border-slate-200 shadow-sm"

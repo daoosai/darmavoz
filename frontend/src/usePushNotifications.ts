@@ -5,12 +5,12 @@ import { baseURL } from './utils';
 import toast from 'react-hot-toast';
 import { Capacitor } from '@capacitor/core';
 import {
+  ensureFirebaseMessagingServiceWorker,
   FIREBASE_WEB_VAPID_KEY,
   getToken,
   messaging,
   onMessage,
 } from './services/firebase';
-
 
 const getPushTokenEndpoint = (role: string | null | undefined): string | null => {
   switch (role) {
@@ -78,7 +78,7 @@ export const usePushNotifications = () => {
 
         PushNotifications.addListener('pushNotificationReceived', (notification) => {
           if (!isMounted || !notification.title) return;
-          toast.info(`🔔 ${notification.title}
+          toast.info(`рџ”” ${notification.title}
 ${notification.body || ''}`, {
             duration: 5000,
           });
@@ -102,7 +102,7 @@ ${notification.body || ''}`, {
           return;
         }
 
-        const serviceWorkerRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+        const serviceWorkerRegistration = await ensureFirebaseMessagingServiceWorker();
         const currentToken = await getToken(messaging, {
           vapidKey: FIREBASE_WEB_VAPID_KEY,
           serviceWorkerRegistration,
@@ -117,7 +117,16 @@ ${notification.body || ''}`, {
 
         webUnsubscribe = onMessage(messaging, (payload) => {
           if (!isMounted || !payload.notification) return;
-          toast.info(`🔔 ${payload.notification.title}
+          if (Notification.permission === 'granted') {
+            try {
+              new Notification(payload.notification.title || 'Новое уведомление', {
+                body: payload.notification.body || '',
+              });
+            } catch {
+              // ignore system notification errors in foreground
+            }
+          }
+          toast.info(`рџ”” ${payload.notification.title}
 ${payload.notification.body || ''}`, {
             duration: 5000,
           });

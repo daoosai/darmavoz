@@ -38,6 +38,7 @@ import AdminProfileScreen from "./AdminProfileScreen";
 import LogistCreateOrderModal from "./LogistCreateOrderModal";
 import LogistEditOrderModal from "./LogistEditOrderModal";
 import { OrdersFilterBar } from "./components/admin/OrdersFilterBar";
+import { logoutCurrentSession } from "./pushAuth";
 
 interface AdminOrder {
   id: string;
@@ -141,7 +142,7 @@ interface LogistDashboardScreenProps {
 export default function LogistDashboardScreen({
   onLogout,
 }: LogistDashboardScreenProps) {
-  const { logout, token } = useAuthStore();
+  const { token } = useAuthStore();
   const [activeTab, setActiveTab] = useState<"orders" | "drivers" | "profile">(
     "orders",
   );
@@ -439,8 +440,8 @@ export default function LogistDashboardScreen({
     }
   };
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logoutCurrentSession();
     onLogout();
   };
 

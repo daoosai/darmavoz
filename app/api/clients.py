@@ -17,6 +17,7 @@ from app.schemas.client import (
 from app.schemas.order import OrderOut
 from app.security.auth import get_current_client, get_current_logist_user
 from app.services.dispatch_service import list_orders_for_client
+from app.services.fcm_tokens import detach_fcm_token_from_other_entities
 
 router = APIRouter()
 
@@ -101,7 +102,13 @@ async def save_my_fcm_token(
     current_client: Client = Depends(get_current_client),
     db: AsyncSession = Depends(get_db),
 ) -> ClientFcmTokenOut:
-    current_client.fcm_token = payload.token.strip()
+    normalized_token = payload.token.strip()
+    await detach_fcm_token_from_other_entities(
+        db,
+        normalized_token,
+        keep_client_id=current_client.id,
+    )
+    current_client.fcm_token = normalized_token
     await db.commit()
     return ClientFcmTokenOut(ok=True, token=current_client.fcm_token)
 

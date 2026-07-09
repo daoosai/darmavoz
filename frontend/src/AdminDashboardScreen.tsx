@@ -32,6 +32,7 @@ import AdminProfileScreen from "./AdminProfileScreen";
 import AdminQuarriesScreen from "./AdminQuarriesScreen";
 import { DriverHistoryModal } from "./components/admin/DriverHistoryModal";
 import toast from "react-hot-toast";
+import { logoutCurrentSession } from "./pushAuth";
 
 interface AdminCategory {
   id: string;
@@ -143,7 +144,7 @@ interface AdminDashboardScreenProps {
 export default function AdminDashboardScreen({
   onLogout,
 }: AdminDashboardScreenProps) {
-  const { logout, token } = useAuthStore();
+  const { token } = useAuthStore();
   const [activeTab, setActiveTab] = useState<
     "materials" | "quarries" | "delivery" | "drivers" | "moderation" | "profile"
   >("materials");
@@ -296,8 +297,8 @@ export default function AdminDashboardScreen({
     );
   };
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logoutCurrentSession();
     onLogout();
   };
 

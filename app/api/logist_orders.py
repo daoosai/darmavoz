@@ -17,6 +17,7 @@ from app.schemas.order import (
     OrderUpdate,
 )
 from app.security.auth import get_current_logist_user
+from app.services.fcm_tokens import detach_fcm_token_from_other_entities
 from app.services.dispatch_service import (
     build_dispatch_history,
     build_order_status_history,
@@ -37,7 +38,13 @@ async def save_logist_fcm_token(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_logist_user),
 ) -> ClientFcmTokenOut:
-    current_user.fcm_token = payload.token.strip()
+    normalized_token = payload.token.strip()
+    await detach_fcm_token_from_other_entities(
+        db,
+        normalized_token,
+        keep_user_id=current_user.id,
+    )
+    current_user.fcm_token = normalized_token
     await db.commit()
     return ClientFcmTokenOut(ok=True, token=current_user.fcm_token)
 

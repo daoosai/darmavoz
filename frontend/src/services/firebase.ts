@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getMessaging, getToken, onMessage } from "firebase/messaging";
+import { deleteToken, getMessaging, getToken, onMessage } from "firebase/messaging";
 
 export const FIREBASE_WEB_CONFIG = {
   apiKey: "AIzaSyCUHWA1qeITirq6hAVJne9KD93XmTqN9AU",
@@ -18,4 +18,14 @@ const app = initializeApp(FIREBASE_WEB_CONFIG);
 export const messaging =
   typeof window !== "undefined" && "serviceWorker" in navigator ? getMessaging(app) : null;
 
-export { getToken, onMessage };
+export const ensureFirebaseMessagingServiceWorker = async (): Promise<ServiceWorkerRegistration> => {
+  const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+
+  if (registration.active) {
+    return registration;
+  }
+
+  return navigator.serviceWorker.ready;
+};
+
+export { deleteToken, getToken, onMessage };

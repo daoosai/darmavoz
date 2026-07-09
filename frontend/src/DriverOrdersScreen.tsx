@@ -26,6 +26,7 @@ import {
   Navigation,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { logoutCurrentSession } from "./pushAuth";
 
 export interface DriverOrder {
   id: string;
@@ -74,7 +75,7 @@ interface DriverOrdersScreenProps {
 export default function DriverOrdersScreen({
   onLogout,
 }: DriverOrdersScreenProps) {
-  const { logout, token } = useAuthStore();
+  const { token } = useAuthStore();
   const [status, setStatus] = useState<DriverStatus>("offline");
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [activeTab, setActiveTab] = useState<"orders" | "profile">("orders");
@@ -448,8 +449,8 @@ export default function DriverOrdersScreen({
     }
   };
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logoutCurrentSession();
     onLogout();
   };
 

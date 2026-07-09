@@ -10,7 +10,7 @@ jobs:
   build-android:
     runs-on: ubuntu-latest
     env:
-      RELEASE_VERSION: "2.4.4"
+      RELEASE_VERSION: "2.4.5"
       RELEASE_VERSION_CODE: "28"
       APK_REMOTE_PATH: /opt/darmavoz/static/darmavoz.apk
 

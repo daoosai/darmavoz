@@ -1,8 +1,9 @@
 import React, { useState } from "react";
-import { useAuthStore, UserRole } from "./store";
+import { UserRole } from "./store";
 import { ArrowLeft, Loader2, Eye, EyeOff } from "lucide-react";
 import toast from "react-hot-toast";
 import { baseURL, formatPhoneNumber } from "./utils";
+import { switchAuthenticatedSession } from "./pushAuth";
 
 interface LoginScreenProps {
   onLogin: (role: UserRole) => void;
@@ -14,8 +15,6 @@ export default function LoginScreen({ onLogin, onBack }: LoginScreenProps) {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const { login } = useAuthStore();
-
   const handleLoginChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let val = e.target.value;
     if (/^[\d+()\-\s]*$/.test(val) && val !== '') {
@@ -57,7 +56,11 @@ export default function LoginScreen({ onLogin, onBack }: LoginScreenProps) {
       const token = data.access_token;
       const role = data.role as typeof username extends string ? any : "driver" | "logist" | "admin"; // it can be "driver", "logist", etc.
       
-      login(token, data.role, data.driver_id);
+      await switchAuthenticatedSession({
+        token,
+        role: data.role,
+        driverId: data.driver_id,
+      });
       onLogin(data.role);
     } catch (error) {
       toast.error("Неверный логин или пароль");

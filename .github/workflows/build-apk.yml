@@ -3,7 +3,7 @@ name: Build Android APK
 on:
   push:
     branches:
-      - feature/sprint-12
+      - main
   workflow_dispatch:
 
 jobs:

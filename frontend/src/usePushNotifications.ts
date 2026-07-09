@@ -5,6 +5,7 @@ import { baseURL } from './utils';
 import toast from 'react-hot-toast';
 import { Capacitor } from '@capacitor/core';
 import {
+  ensureFirebaseMessagingServiceWorker,
   FIREBASE_WEB_VAPID_KEY,
   getToken,
   messaging,
@@ -89,7 +90,7 @@ ${notification.body || ''}`, {
           return;
         }
 
-        const serviceWorkerRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+        const serviceWorkerRegistration = await ensureFirebaseMessagingServiceWorker();
         const currentToken = await getToken(messaging, {
           vapidKey: FIREBASE_WEB_VAPID_KEY,
           serviceWorkerRegistration,

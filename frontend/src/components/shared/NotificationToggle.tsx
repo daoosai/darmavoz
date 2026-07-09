@@ -5,6 +5,7 @@ import { PushNotifications } from '@capacitor/push-notifications';
 import { useAuthStore } from '../../store';
 import { baseURL } from '../../utils';
 import {
+  ensureFirebaseMessagingServiceWorker,
   deleteToken,
   FIREBASE_WEB_VAPID_KEY,
   getToken,
@@ -108,7 +109,7 @@ export const NotificationToggle: React.FC<NotificationToggleProps> = ({ role }) 
           return;
         }
 
-        const serviceWorkerRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+        const serviceWorkerRegistration = await ensureFirebaseMessagingServiceWorker();
         currentToken = await getToken(messaging, {
           vapidKey: FIREBASE_WEB_VAPID_KEY,
           serviceWorkerRegistration,

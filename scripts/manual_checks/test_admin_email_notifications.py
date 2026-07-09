@@ -93,7 +93,7 @@ async def test_driver_submit_adds_admin_email_background_task(client, session_fa
         driver_user = await create_user(session, username="+79990022233", role=driver_role)
         delivery_option = DeliveryOption(
             capacity_m3=15.0,
-            title="Самосвал 15 м3",
+            title="РЎР°РјРѕСЃРІР°Р» 15 Рј3",
             description="",
             base_price=5000.0,
             is_active=True,
@@ -103,8 +103,8 @@ async def test_driver_submit_adds_admin_email_background_task(client, session_fa
         await session.flush()
         vehicle = Vehicle(
             title="Ready for moderation",
-            brand="КамАЗ",
-            plate_number="А111АА72",
+            brand="РљР°РјРђР—",
+            plate_number="Рђ111РђРђ72",
             body_volume_m3=15.0,
             delivery_option_id=delivery_option.id,
             is_active=True,
@@ -113,7 +113,7 @@ async def test_driver_submit_adds_admin_email_background_task(client, session_fa
         session.add(vehicle)
         await session.flush()
         driver = Driver(
-            name="Иван Иванов",
+            name="РРІР°РЅ РРІР°РЅРѕРІ",
             phone="+79990022233",
             user_id=driver_user.id,
             vehicle_id=vehicle.id,
@@ -167,4 +167,4 @@ async def test_driver_submit_adds_admin_email_background_task(client, session_fa
 
     assert response.status_code == 200
     assert response.json()["moderation_status"] == ModerationStatus.pending_moderation.value
-    assert {"to_email": "notify@example.com", "driver_label": "Иван Иванов"} in sent_messages
+    assert {"to_email": "notify@example.com", "driver_label": "РРІР°РЅ РРІР°РЅРѕРІ"} in sent_messages

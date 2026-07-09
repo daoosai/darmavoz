@@ -6,13 +6,13 @@ import httpx
 
 
 def load_env_value(*names: str) -> str | None:
-    env_path = Path('.env')
+    env_path = Path(".env")
     if env_path.exists():
-        for raw_line in env_path.read_text(encoding='utf-8').splitlines():
+        for raw_line in env_path.read_text(encoding="utf-8").splitlines():
             line = raw_line.strip()
-            if not line or line.startswith('#') or '=' not in line:
+            if not line or line.startswith("#") or "=" not in line:
                 continue
-            key, value = line.split('=', 1)
+            key, value = line.split("=", 1)
             key = key.strip()
             if key in names:
                 value = value.strip()
@@ -27,22 +27,22 @@ def load_env_value(*names: str) -> str | None:
     return None
 
 
-api_key = load_env_value('SMS_RU_API_ID', 'SMSRU_API_KEY')
+api_key = load_env_value("SMS_RU_API_ID", "SMSRU_API_KEY")
 if not api_key:
-    raise SystemExit('SMS.ru API key not found in .env')
+    raise SystemExit("SMS.ru API key not found in .env")
 
-phone = os.getenv('SMS_DEBUG_PHONE', '79990000001')
-url = 'https://sms.ru/sms/send'
+phone = os.getenv("SMS_DEBUG_PHONE", "79990000001")
+url = "https://sms.ru/sms/send"
 params = {
-    'api_id': api_key,
-    'to': phone,
-    'msg': '???????? ??? 1234',
-    'json': 1,
+    "api_id": api_key,
+    "to": phone,
+    "msg": "???????? ??? 1234",
+    "json": 1,
 }
 
 try:
     response = httpx.get(url, params=params, timeout=20.0)
     print(response.text)
 except Exception as exc:
-    print(f'REQUEST_FAILED: {exc}', file=sys.stderr)
+    print(f"REQUEST_FAILED: {exc}", file=sys.stderr)
     raise

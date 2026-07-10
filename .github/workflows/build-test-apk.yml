@@ -68,7 +68,7 @@ jobs:
           set -euo pipefail
           chmod +x gradlew
           ./gradlew assembleDebug
-          mv app/build/outputs/apk/debug/app-debug.apk ../../../darmavoz-test.apk
+          mv app/build/outputs/apk/debug/app-debug.apk ${{ github.workspace }}/darmavoz-test.apk
 
       - name: Copy APK to server
         uses: appleboy/scp-action@v0.1.7

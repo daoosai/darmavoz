@@ -32,7 +32,10 @@ jobs:
 
       - name: Install frontend dependencies
         working-directory: frontend
-        run: npm install
+        run: |
+          set -euo pipefail
+          npm install
+          npm install @capacitor/android
 
       - name: Prepare test environment
         working-directory: frontend

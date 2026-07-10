@@ -66,6 +66,16 @@ jobs:
           npx capacitor-assets generate --android
           npx cap sync android
 
+      - name: Apply test Android branding
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          sed -i 's/applicationId "com\.darmavoz\.app"/applicationId "com.darmavoz.app.test"/' android/app/build.gradle
+          sed -i 's#<string name="app_name">.*</string>#<string name="app_name">Тест Дармавоз</string>#' android/app/src/main/res/values/strings.xml
+          sed -i 's#<string name="title_activity_main">.*</string>#<string name="title_activity_main">Тест Дармавоз</string>#' android/app/src/main/res/values/strings.xml
+          sed -i 's#<string name="package_name">com\.darmavoz\.app</string>#<string name="package_name">com.darmavoz.app.test</string>#' android/app/src/main/res/values/strings.xml
+          sed -i 's#<string name="custom_url_scheme">com\.darmavoz\.app</string>#<string name="custom_url_scheme">com.darmavoz.app.test</string>#' android/app/src/main/res/values/strings.xml
+
       - name: Setup Firebase for Test APK
         working-directory: frontend
         env:

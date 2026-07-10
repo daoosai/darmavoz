@@ -340,13 +340,22 @@ async def build_order(
     mileage_km: float | None = None,
     delivery_rate_per_km_snapshot: float | None = None,
     delivery_cost: float | None = None,
+    total_amount: float | None = None,
     calculation_source: str | None = None,
     route_calculated_at: datetime | None = None,
     quarry_id: UUID | None = None,
 ) -> Order:
     volume = delivery_option.capacity_m3 * quantity
     unit_price = material.price
-    amount = volume * unit_price if unit_price is not None else None
+    calculated_amount = volume * unit_price if unit_price is not None else None
+    resolved_total_amount = (
+        round(total_amount, 2)
+        if total_amount is not None
+        else round(calculated_amount or 0.0, 2)
+    )
+    resolved_item_price = unit_price
+    if total_amount is not None and volume > 0:
+        resolved_item_price = round(resolved_total_amount / volume, 2)
     now = utcnow()
     delivery_address_value = delivery_address or address
     order = Order(
@@ -369,7 +378,7 @@ async def build_order(
         source=source,
         created_by_source=created_by_source,
         status=OrderStatus.searching_driver.value if auto_dispatch else OrderStatus.created.value,
-        total_amount=amount or 0.0,
+        total_amount=resolved_total_amount,
         dispatch_started_at=now if auto_dispatch else None,
     )
     session.add(order)
@@ -381,8 +390,8 @@ async def build_order(
             material_id=material.id,
             quantity=quantity,
             volume=volume,
-            price=unit_price,
-            amount=amount,
+            price=resolved_item_price,
+            amount=resolved_total_amount,
         )
     )
     await session.flush()
@@ -593,6 +602,7 @@ async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate)
     resolved_quarry_id = payload.quarry_id
     resolved_mileage_km = round(payload.mileage_km, 2) if payload.mileage_km is not None else None
     resolved_delivery_cost = 0.0
+    resolved_total_amount = round(payload.total_amount, 2) if payload.total_amount is not None else None
     resolved_calculation_source: str | None = None
 
     if payload.calculation_source == "manual":
@@ -634,6 +644,9 @@ async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate)
         resolved_calculation_source = payload.calculation_source
         route_calculated_at = utcnow()
 
+    if payload.delivery_cost is not None:
+        resolved_delivery_cost = round(payload.delivery_cost, 2)
+
     order = await build_order(
         session,
         client=client,
@@ -655,6 +668,7 @@ async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate)
         mileage_km=resolved_mileage_km,
         delivery_rate_per_km_snapshot=delivery_rate_snapshot,
         delivery_cost=resolved_delivery_cost,
+        total_amount=resolved_total_amount,
         calculation_source=resolved_calculation_source,
         route_calculated_at=route_calculated_at,
     )

@@ -39,22 +39,21 @@ jobs:
           npm install
           npm install -D @capacitor/android
 
-      - name: Setup Firebase for Test APK
-        working-directory: frontend
-        env:
-          GOOGLE_SERVICES_JSON_TEST: ${{ secrets.GOOGLE_SERVICES_JSON_TEST }}
-        run: echo "$GOOGLE_SERVICES_JSON_TEST" > android/app/google-services.json
-
-      - name: Prepare test environment
+      - name: Prepare test environment (Vite & Capacitor)
         working-directory: frontend
         run: |
           set -euo pipefail
-          cat > .env <<EOF
+          # Создаем .env.production, чтобы Vite гарантированно подхватил тестовые ссылки!
+          cat > .env.production <<EOF
           VITE_API_BASE_URL=https://test.darmavoz.ru/api/v1
           VITE_API_URL=https://test.darmavoz.ru/api/v1
           VITE_S3_URL=https://test.darmavoz.ru/s3
           VITE_APP_VERSION=${RELEASE_VERSION}
           EOF
+          
+          # Меняем App ID прямо в конфиге Capacitor ДО синхронизации
+          sed -i 's/com\.darmavoz\.app/com.darmavoz.app.test/g' capacitor.config.ts || true
+          sed -i 's/com\.darmavoz\.app/com.darmavoz.app.test/g' capacitor.config.json || true
 
       - name: Build frontend
         working-directory: frontend
@@ -64,15 +63,12 @@ jobs:
         working-directory: frontend
         run: npx cap sync android
 
-      - name: Apply test Android branding
+      - name: Setup Firebase for Test APK
         working-directory: frontend
-        run: |
-          set -euo pipefail
-          sed -i 's/applicationId "com\.darmavoz\.app"/applicationId "com.darmavoz.app.test"/' android/app/build.gradle
-          sed -i 's#<string name="app_name">.*</string>#<string name="app_name">Darmavoz TEST</string>#' android/app/src/main/res/values/strings.xml
-          sed -i 's#<string name="title_activity_main">.*</string>#<string name="title_activity_main">Darmavoz TEST</string>#' android/app/src/main/res/values/strings.xml
-          sed -i 's#<string name="package_name">com\.darmavoz\.app</string>#<string name="package_name">com.darmavoz.app.test</string>#' android/app/src/main/res/values/strings.xml
-          sed -i 's#<string name="custom_url_scheme">com\.darmavoz\.app</string>#<string name="custom_url_scheme">com.darmavoz.app.test</string>#' android/app/src/main/res/values/strings.xml
+        env:
+          GOOGLE_SERVICES_JSON_TEST: ${{ secrets.GOOGLE_SERVICES_JSON_TEST }}
+        # Кладем JSON только ПОСЛЕ sync, когда папка android/app уже гарантированно готова
+        run: echo "$GOOGLE_SERVICES_JSON_TEST" > android/app/google-services.json
 
       - name: Build debug APK
         working-directory: frontend/android

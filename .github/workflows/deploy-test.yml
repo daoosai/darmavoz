@@ -71,6 +71,10 @@ jobs:
           rm -f /tmp/frontend-dist.tar
           cp -a "${DEPLOY_DIR}/static/." /opt/daoos-kit/sites/darmavoz_test/static/
 
-          docker compose -f "${DEPLOY_DIR}/docker-compose.test.yml" up -d db_test redis_test minio_test backend_test --build
+          # УБИВАЕМ "ПРИЗРАЧНЫЕ" КОНТЕЙНЕРЫ ПЕРЕД ЗАПУСКОМ (ФИКС КОНФЛИКТА)
+          docker rm -f minio_test db_test redis_test backend_test || true
+
+          # ПОДНИМАЕМ ЗАНОВО
+          docker compose -f "${DEPLOY_DIR}/docker-compose.test.yml" up -d db_test redis_test minio_test backend_test --build --force-recreate
           docker exec backend_test alembic upgrade head
           EOF

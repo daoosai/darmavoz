@@ -37,7 +37,7 @@ jobs:
         run: |
           set -euo pipefail
           npm install
-          npm install -D @capacitor/android
+          npm install -D @capacitor/android @capacitor/assets
 
       - name: Prepare test environment (Vite & Capacitor)
         working-directory: frontend
@@ -59,9 +59,12 @@ jobs:
         working-directory: frontend
         run: npm run build
 
-      - name: Sync Android project
+      - name: Generate Android assets and sync project
         working-directory: frontend
-        run: npx cap sync android
+        run: |
+          set -euo pipefail
+          npx capacitor-assets generate --android
+          npx cap sync android
 
       - name: Setup Firebase for Test APK
         working-directory: frontend

@@ -58,7 +58,14 @@ jobs:
           git worktree prune || true
           if git worktree list | grep -q "${DEPLOY_DIR}"; then
             git -C "${DEPLOY_DIR}" fetch origin develop
-            git -C "${DEPLOY_DIR}" checkout --detach origin/develop
+            if [ -n "$(git -C "${DEPLOY_DIR}" status --porcelain)" ]; then
+              git worktree remove --force "${DEPLOY_DIR}" || true
+              rm -rf "${DEPLOY_DIR}"
+              git worktree prune || true
+              git worktree add --detach "${DEPLOY_DIR}" origin/develop
+            else
+              git -C "${DEPLOY_DIR}" checkout --detach origin/develop
+            fi
           else
             rm -rf "${DEPLOY_DIR}"
             git worktree add --detach "${DEPLOY_DIR}" origin/develop

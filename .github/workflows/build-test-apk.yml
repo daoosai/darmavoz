@@ -77,12 +77,6 @@ jobs:
           test -f "${APK_LOCAL_PATH}"
           echo "APK_LOCAL_PATH=${APK_LOCAL_PATH}" >> "${GITHUB_ENV}"
 
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: darmavoz-test-debug-apk
-          path: ${{ env.APK_LOCAL_PATH }}
-
       - name: Setup SSH key
         run: |
           set -euo pipefail

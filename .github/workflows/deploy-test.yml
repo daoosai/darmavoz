@@ -54,11 +54,14 @@ jobs:
           cd "${SOURCE_DIR}"
           git fetch origin develop
 
-          if [ ! -d "${DEPLOY_DIR}/.git" ]; then
-            git worktree add --detach "${DEPLOY_DIR}" origin/develop
-          else
+          # САМОИСЦЕЛЕНИЕ GIT WORKTREE (Убиваем зомби-папки)
+          git worktree prune || true
+          if git worktree list | grep -q "${DEPLOY_DIR}"; then
             git -C "${DEPLOY_DIR}" fetch origin develop
             git -C "${DEPLOY_DIR}" checkout --detach origin/develop
+          else
+            rm -rf "${DEPLOY_DIR}"
+            git worktree add --detach "${DEPLOY_DIR}" origin/develop
           fi
 
           if [ -f "${SOURCE_DIR}/.env" ]; then
@@ -71,7 +74,7 @@ jobs:
           rm -f /tmp/frontend-dist.tar
           cp -a "${DEPLOY_DIR}/static/." /opt/daoos-kit/sites/darmavoz_test/static/
 
-          # УБИВАЕМ "ПРИЗРАЧНЫЕ" КОНТЕЙНЕРЫ ПЕРЕД ЗАПУСКОМ (ФИКС КОНФЛИКТА)
+          # УБИВАЕМ ЗАВИСШИЕ КОНТЕЙНЕРЫ
           docker rm -f minio_test db_test redis_test backend_test || true
 
           # ПОДНИМАЕМ ЗАНОВО

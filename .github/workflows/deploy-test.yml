@@ -48,12 +48,20 @@ jobs:
       - name: Upload frontend bundle
         run: |
           set -euo pipefail
-          scp frontend-dist.tar "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/tmp/frontend-dist.tar"
+          ssh_opts=(
+            -o BatchMode=yes
+            -o ConnectTimeout=30
+            -o ServerAliveInterval=15
+            -o ServerAliveCountMax=4
+          )
+          cat frontend-dist.tar | ssh "${ssh_opts[@]}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+            "cat > /tmp/frontend-dist.tar"
 
       - name: Deploy staging on server
         run: |
           set -euo pipefail
-          ssh "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" <<'EOF'
+          ssh -o BatchMode=yes -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" <<'EOF'
           set -euo pipefail
           SOURCE_DIR=/opt/darmavoz_test
           DEPLOY_DIR=/opt/darmavoz_test_deploy

@@ -9,6 +9,8 @@ jobs:
   build-test-apk:
     runs-on: ubuntu-latest
     env:
+      RELEASE_VERSION: "2.4.5"
+      RELEASE_VERSION_CODE: "245"
       APK_REMOTE_DIR: /opt/darmavoz_test/backend/static
       APK_REMOTE_NAME: darmavoz-test.apk
 
@@ -35,14 +37,24 @@ jobs:
         run: |
           set -euo pipefail
           npm install
-          npm install @capacitor/android
+          npm install -D @capacitor/android
+
+      - name: Setup Firebase for Test APK
+        working-directory: frontend
+        env:
+          GOOGLE_SERVICES_JSON_TEST: ${{ secrets.GOOGLE_SERVICES_JSON_TEST }}
+        run: echo "$GOOGLE_SERVICES_JSON_TEST" > android/app/google-services.json
 
       - name: Prepare test environment
         working-directory: frontend
         run: |
           set -euo pipefail
-          printf '%s\n' 'VITE_API_URL=https://test.darmavoz.ru/api/v1' > .env
-          printf '%s' '${{ secrets.TEST_GOOGLE_SERVICES_JSON }}' > android/app/google-services.json
+          cat > .env <<EOF
+          VITE_API_BASE_URL=https://test.darmavoz.ru/api/v1
+          VITE_API_URL=https://test.darmavoz.ru/api/v1
+          VITE_S3_URL=https://test.darmavoz.ru/s3
+          VITE_APP_VERSION=${RELEASE_VERSION}
+          EOF
 
       - name: Build frontend
         working-directory: frontend
@@ -67,6 +79,8 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x gradlew
+          export DARMAVOZ_VERSION_NAME="${RELEASE_VERSION}"
+          export DARMAVOZ_VERSION_CODE="${RELEASE_VERSION_CODE}"
           ./gradlew assembleDebug
           mv app/build/outputs/apk/debug/app-debug.apk ${{ github.workspace }}/darmavoz-test.apk
 

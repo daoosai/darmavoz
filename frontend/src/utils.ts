@@ -2,9 +2,10 @@
 
 export const baseURL =
   import.meta.env.VITE_API_BASE_URL ||
+  import.meta.env.VITE_API_URL ||
   "https://test.darmavoz.ru/api/v1";
 
-export const APP_VERSION = import.meta.env.VITE_APP_VERSION || "2.4.4";
+export const APP_VERSION = import.meta.env.VITE_APP_VERSION || "2.4.5";
 
 export const playNewOrderSound = () => {
   try {

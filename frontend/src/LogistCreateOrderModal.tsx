@@ -73,6 +73,8 @@ export default function LogistCreateOrderModal({
   const [calculationResult, setCalculationResult] =
     useState<DeliveryCalculationResult | null>(null);
   const [calcError, setCalcError] = useState<string | null>(null);
+  const [materialTotal, setMaterialTotal] = useState<number | string>("");
+  const [deliveryTotal, setDeliveryTotal] = useState<number | string>("");
   const [newOrder, setNewOrder] = useState({
     client_name: "",
     client_phone: "",
@@ -114,6 +116,8 @@ export default function LogistCreateOrderModal({
       setSuggestions([]);
       setIsCalculating(false);
       setIsCreating(false);
+      setMaterialTotal("");
+      setDeliveryTotal("");
       setNewOrder({
         client_name: "",
         client_phone: "",
@@ -148,6 +152,8 @@ export default function LogistCreateOrderModal({
       setCalculationResult(null);
       setCalcError(null);
       setIsCalculating(false);
+      setMaterialTotal("");
+      setDeliveryTotal("");
       return;
     }
 
@@ -196,10 +202,14 @@ export default function LogistCreateOrderModal({
             delivery_cost: deliveryCost,
             estimated_total_amount: materialCost + deliveryCost,
           });
+          setMaterialTotal(materialCost);
+          setDeliveryTotal(deliveryCost);
         }
       } catch (error: any) {
         if (!cancelled) {
           setCalculationResult(null);
+          setMaterialTotal("");
+          setDeliveryTotal("");
           if (error.message === "404_NO_QUARRY") {
             setCalcError("❌ Нет доступного карьера с выбранным материалом.");
           } else if (error.message === "409_NO_RATE") {
@@ -332,6 +342,18 @@ export default function LogistCreateOrderModal({
 
     const cleanPhone = "+" + digitsOnly;
     const normalizedClientName = newOrder.client_name.trim() || cleanPhone;
+    const parsedMaterialTotal = Number(materialTotal);
+    const parsedDeliveryTotal = Number(deliveryTotal);
+
+    if (!Number.isFinite(parsedMaterialTotal) || parsedMaterialTotal <= 0) {
+      toast.error("Укажите корректную стоимость материала");
+      return;
+    }
+
+    if (!Number.isFinite(parsedDeliveryTotal) || parsedDeliveryTotal < 0) {
+      toast.error("Укажите корректную стоимость доставки");
+      return;
+    }
 
     try {
       setIsCreating(true);
@@ -346,7 +368,9 @@ export default function LogistCreateOrderModal({
         delivery_lat: newOrder.delivery_lat,
         delivery_lon: newOrder.delivery_lon,
         mileage_km: calculationResult.mileage_km,
-        estimated_total_amount: calculationResult.estimated_total_amount,
+        estimated_total_amount: parsedMaterialTotal + parsedDeliveryTotal,
+        total_amount: parsedMaterialTotal,
+        delivery_cost: parsedDeliveryTotal,
         calculation_source: "yandex_auto",
         notes: newOrder.notes,
         quantity: 1,
@@ -405,6 +429,12 @@ export default function LogistCreateOrderModal({
   const capacityLabel = selectedDeliveryOption
     ? `${Number(selectedDeliveryOption.capacity_m3 ?? 0).toLocaleString("ru-RU")} м3`
     : null;
+
+  const parsedMaterialTotal = Number(materialTotal);
+  const parsedDeliveryTotal = Number(deliveryTotal);
+  const computedEstimatedTotal =
+    (Number.isFinite(parsedMaterialTotal) ? parsedMaterialTotal : 0) +
+    (Number.isFinite(parsedDeliveryTotal) ? parsedDeliveryTotal : 0);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -570,6 +600,42 @@ export default function LogistCreateOrderModal({
               </div>
             ) : calculationResult ? (
               <>
+                <div className="rounded-xl bg-white px-4 py-3 border border-slate-200 flex flex-col gap-3">
+                  <div>
+                    <label className="text-sm font-bold text-slate-900" htmlFor="material-total">
+                      {"\u0421\u0442\u043e\u0438\u043c\u043e\u0441\u0442\u044c \u043c\u0430\u0442\u0435\u0440\u0438\u0430\u043b\u0430 (\u0440\u0443\u0431)"}
+                    </label>
+                    <input
+                      id="material-total"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={materialTotal}
+                      onChange={(e) => setMaterialTotal(e.target.value)}
+                      className="mt-2 w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] text-sm font-semibold text-slate-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-bold text-slate-900" htmlFor="delivery-total">
+                      {"\u0421\u0442\u043e\u0438\u043c\u043e\u0441\u0442\u044c \u0434\u043e\u0441\u0442\u0430\u0432\u043a\u0438 (\u0440\u0443\u0431)"}
+                    </label>
+                    <input
+                      id="delivery-total"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={deliveryTotal}
+                      onChange={(e) => setDeliveryTotal(e.target.value)}
+                      className="mt-2 w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] text-sm font-semibold text-slate-900"
+                    />
+                  </div>
+                  <div className="flex justify-between items-center rounded-xl bg-slate-50 px-4 py-3 border border-slate-200">
+                    <span className="text-sm font-bold text-slate-900">{"\u0418\u0442\u043e\u0433\u043e \u043a \u043e\u043f\u043b\u0430\u0442\u0435"}</span>
+                    <span className="text-base font-black text-slate-900">
+                      {computedEstimatedTotal.toLocaleString("ru-RU")} {"\u20BD"}
+                    </span>
+                  </div>
+                </div>
                 <div className="flex justify-between gap-4">
                   <span className="text-slate-500">Ближайший карьер:</span>
                   <span className="font-medium text-right text-slate-900">

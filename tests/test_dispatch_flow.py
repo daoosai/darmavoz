@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
 import pytest
 from sqlalchemy import select
@@ -64,6 +65,72 @@ async def create_driver_user(session, *, username: str, role: Role) -> User:
 def auth_headers(username: str) -> dict[str, str]:
     token = create_access_token(data={"sub": username})
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.mark.asyncio
+async def test_logist_can_create_order_with_manual_prices(client, session_factory):
+    async with session_factory() as session:
+        logist_role = await ensure_role(session, "logist")
+        await create_driver_user(session, username="manual_price_logist", role=logist_role)
+
+        category = Category(name="Ручная цена", slug="manual-price", sort_order=0, is_active=True)
+        material = Material(
+            category=category,
+            name="Песок ручной",
+            description="",
+            price=2500.0,
+            unit="m3",
+            min_volume=5.0,
+            is_active=True,
+            sort_order=0,
+        )
+        delivery_option = DeliveryOption(
+            capacity_m3=10.0,
+            title="10 м3",
+            description="",
+            base_price=0.0,
+            is_active=True,
+            sort_order=0,
+        )
+        session.add_all([category, material, delivery_option])
+        await session.commit()
+        await session.refresh(material)
+        await session.refresh(delivery_option)
+
+    response = await client.post(
+        "/api/v1/logist/orders",
+        json={
+            "client_name": "Ручной клиент",
+            "client_phone": "+79990005566",
+            "material_id": str(material.id),
+            "delivery_option_id": str(delivery_option.id),
+            "address": "Томск, Ручная 1",
+            "pickup_address": "Карьер ручной",
+            "mileage_km": 12.5,
+            "total_amount": 27500,
+            "delivery_cost": 4300,
+            "estimated_total_amount": 31800,
+            "calculation_source": "manual",
+            "auto_dispatch": False,
+        },
+        headers=auth_headers("manual_price_logist"),
+    )
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["total_amount"] == 27500
+    assert payload["delivery_cost"] == 4300
+    assert payload["estimated_total_amount"] == 31800
+
+    async with session_factory() as session:
+        order = await session.scalar(select(Order).where(Order.id == UUID(payload["id"])))
+        assert order is not None
+        assert order.total_amount == 27500
+        assert order.delivery_cost == 4300
+
+        item = await session.scalar(select(OrderItem).where(OrderItem.order_id == order.id))
+        assert item is not None
+        assert item.amount == 27500
+        assert item.price == 2750
 
 
 @pytest.mark.asyncio

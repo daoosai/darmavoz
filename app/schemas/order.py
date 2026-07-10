@@ -180,6 +180,16 @@ class LogistOrderCreate(BaseModel):
         default=None,
         validation_alias=AliasChoices("estimated_total_amount", "estimatedTotalAmount"),
     )
+    total_amount: float | None = Field(
+        default=None,
+        gt=0,
+        validation_alias=AliasChoices("total_amount", "totalAmount", "material_cost", "materialCost"),
+    )
+    delivery_cost: float | None = Field(
+        default=None,
+        ge=0,
+        validation_alias=AliasChoices("delivery_cost", "deliveryCost"),
+    )
     calculation_source: CalculationSource = "yandex_auto"
     notes: str | None = Field(default=None, max_length=2000)
     source: str | None = "dispatcher"
@@ -216,6 +226,8 @@ class LogistOrderCreate(BaseModel):
         "delivery_lon",
         "mileage_km",
         "estimated_total_amount",
+        "total_amount",
+        "delivery_cost",
         mode="before",
     )
     @classmethod
@@ -260,6 +272,13 @@ class LogistOrderCreate(BaseModel):
             return value
         if value <= 0:
             raise ValueError("estimated_total_amount must be greater than 0")
+        return round(value, 2)
+
+    @field_validator("total_amount", "delivery_cost")
+    @classmethod
+    def round_money_amounts(cls, value: float | None):
+        if value is None:
+            return value
         return round(value, 2)
 
     @model_validator(mode="after")

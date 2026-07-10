@@ -98,9 +98,11 @@ class S3StorageService:
         self.prefix = settings.S3_PREFIX.strip("/")
         self.public_base_url = settings.s3_public_base_url
         self._external_upload_base_url = (settings.S3_PRESIGN_ENDPOINT or settings.s3_public_base_url or "").rstrip("/")
+        # Public asset URLs and presigned upload URLs may need different
+        # external bases when S3 is published behind a proxy prefix.
         self._external_public_base_url = (
-            settings.S3_PRESIGN_ENDPOINT
-            or settings.s3_public_base_url
+            settings.s3_public_base_url
+            or settings.S3_PRESIGN_ENDPOINT
             or settings.S3_ENDPOINT
             or ""
         ).rstrip("/")

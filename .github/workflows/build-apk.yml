@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RELEASE_VERSION: "2.4.5"
-      RELEASE_VERSION_CODE: "28"
+      RELEASE_VERSION_CODE: "245"
       APK_REMOTE_PATH: /opt/darmavoz/static/darmavoz.apk
 
     steps:
@@ -21,7 +21,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -86,12 +86,6 @@ jobs:
           test -n "${APK_LOCAL_PATH}"
           test -f "${APK_LOCAL_PATH}"
           echo "APK_LOCAL_PATH=${APK_LOCAL_PATH}" >> "${GITHUB_ENV}"
-
-      - name: Upload APK to GitHub Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: darmavoz-debug-apk
-          path: ${{ env.APK_LOCAL_PATH }}
 
       - name: Setup SSH key
         run: |

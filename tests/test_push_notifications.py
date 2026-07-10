@@ -23,7 +23,7 @@ from app.models.models import (
 )
 from app.security.auth import get_password_hash
 from app.security.jwt import create_access_token
-from app.services.dispatch_service import expire_offer, process_dispatch_for_order
+from app.services.dispatch_service import expire_offer, get_orders_needing_dispatch, process_dispatch_for_order
 
 
 def auth_headers(username: str) -> dict[str, str]:
@@ -842,6 +842,97 @@ async def test_dispatch_without_candidates_schedules_logist_no_driver_found_noti
         )
         await session.commit()
         order_id = order.id
+
+    async with session_factory() as session:
+        await process_dispatch_for_order(session, order_id)
+        await session.commit()
+
+    assert sent_notifications == [(str(order_id), OrderStatus.no_driver_found.value)]
+
+
+@pytest.mark.asyncio
+async def test_no_driver_found_order_is_not_reprocessed_by_dispatch_worker(
+    session_factory,
+    monkeypatch,
+):
+    sent_notifications: list[tuple[str, str]] = []
+
+    def fake_schedule_logist_no_driver_found(order):
+        sent_notifications.append((str(order.id), order.status))
+
+    monkeypatch.setattr(
+        "app.services.dispatch_service.schedule_logist_no_driver_found_notification",
+        fake_schedule_logist_no_driver_found,
+    )
+
+    async def fake_get_matching_drivers(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr(
+        "app.services.dispatch_service.get_matching_drivers",
+        fake_get_matching_drivers,
+    )
+
+    async with session_factory() as session:
+        from app.models.models import Category
+
+        category = Category(name="No Driver Worker", slug="no-driver-worker-push-test", sort_order=0, is_active=True)
+        delivery_option = DeliveryOption(
+            capacity_m3=20.0,
+            title="Truck 20m3 no driver worker",
+            description="",
+            base_price=7000.0,
+            is_active=True,
+            sort_order=0,
+        )
+        session.add_all([category, delivery_option])
+        await session.flush()
+        material = Material(
+            category_id=category.id,
+            name="No driver worker sand",
+            description="",
+            price=500.0,
+            unit="m3",
+            min_volume=1.0,
+            is_active=True,
+            sort_order=0,
+        )
+        client_row = Client(name="No Driver Worker Client", phone="+79990039993")
+        session.add_all([material, client_row])
+        await session.flush()
+        order = Order(
+            client_id=client_row.id,
+            delivery_option_id=delivery_option.id,
+            address="No driver worker address",
+            delivery_address="No driver worker address",
+            total_amount=10000.0,
+            status=OrderStatus.searching_driver.value,
+            source="dispatcher",
+            created_by_source="dispatcher",
+            dispatch_started_at=datetime.now(UTC),
+        )
+        session.add(order)
+        await session.flush()
+        session.add(
+            OrderItem(
+                order_id=order.id,
+                material_id=material.id,
+                quantity=1,
+                volume=20.0,
+                price=500.0,
+                amount=10000.0,
+            )
+        )
+        await session.commit()
+        order_id = order.id
+
+    async with session_factory() as session:
+        await process_dispatch_for_order(session, order_id)
+        await session.commit()
+
+    async with session_factory() as session:
+        queued_ids = await get_orders_needing_dispatch(session)
+        assert order_id not in queued_ids
 
     async with session_factory() as session:
         await process_dispatch_for_order(session, order_id)

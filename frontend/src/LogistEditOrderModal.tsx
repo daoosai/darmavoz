@@ -66,6 +66,8 @@ const formatFastApiDetail = (detail: any, fallback: string) => {
 const normalizeComparableString = (value: string | null | undefined) =>
   (value ?? "").trim();
 
+const ORDER_EDIT_LOCKED_STATUS = "heading_to_client";
+
 export default function LogistEditOrderModal({
   isOpen,
   onClose,
@@ -96,6 +98,8 @@ export default function LogistEditOrderModal({
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const deliveryInputRef = useRef<HTMLInputElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const isOrderEditLocked =
+    (order?.status ?? "").toLowerCase() === ORDER_EDIT_LOCKED_STATUS;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent | TouchEvent) => {
@@ -373,6 +377,10 @@ export default function LogistEditOrderModal({
 
   const handleUpdateOrder = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isOrderEditLocked) {
+      onClose();
+      return;
+    }
     const digitsOnly = newOrder.client_phone.replace(/\D/g, "");
     if (
       digitsOnly.length < 11 ||
@@ -552,6 +560,11 @@ export default function LogistEditOrderModal({
           onSubmit={handleUpdateOrder}
           className="p-6 overflow-y-auto flex flex-col gap-4"
         >
+          {isOrderEditLocked && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+              В статусе «Еду к клиенту» редактирование заказа заблокировано.
+            </div>
+          )}
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">
               Телефон клиента <span className="text-red-500">*</span>
@@ -783,7 +796,12 @@ export default function LogistEditOrderModal({
             </button>
             <button
               type="submit"
-              disabled={isCreating || isCalculating || isFormIncomplete}
+              disabled={
+                isOrderEditLocked ||
+                isCreating ||
+                isCalculating ||
+                isFormIncomplete
+              }
               className="px-5 py-2.5 rounded-xl font-bold bg-[#2DB0E6] text-white hover:bg-[#259ac9] transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[120px]"
             >
               {isCreating ? (

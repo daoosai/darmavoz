@@ -21,10 +21,11 @@ import {
   ClipboardList,
   X,
 } from "lucide-react";
+import { NotificationToggle } from "./components/shared/NotificationToggle";
+import { logoutCurrentSession } from "./pushAuth";
 import UpdateBanner from "./UpdateBanner";
 import toast from "react-hot-toast";
 import { DriverOrder, DriverOrderCard } from "./DriverOrdersScreen";
-import { logoutCurrentSession } from "./pushAuth";
 
 interface DriverProfile {
   id: string;
@@ -72,7 +73,7 @@ export default function DriverProfileScreen({
   onProfileUpdate?: () => void;
   hasActiveOrder?: boolean;
 }) {
-  const { token, logout } = useAuthStore();
+  const { token } = useAuthStore();
   const [profile, setProfile] = useState<DriverProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -129,7 +130,7 @@ export default function DriverProfileScreen({
         },
       });
       if (res.status === 401 || res.status === 403) {
-        logout();
+        await logoutCurrentSession();
         onLogout();
         return;
       }
@@ -161,7 +162,7 @@ export default function DriverProfileScreen({
       });
 
       if (res.status === 401) {
-        logout();
+        await logoutCurrentSession();
         onLogout();
         return;
       }
@@ -741,18 +742,11 @@ export default function DriverProfileScreen({
             История заказов
           </button>
         )}
+        <NotificationToggle role="driver" />
         <button
           onClick={async () => {
             try {
               const currentToken = useAuthStore.getState().token;
-
-              // Remove FCM token
-              await fetch(`${baseURL}/driver/fcm-token`, {
-                method: "DELETE",
-                headers: {
-                  Authorization: `Bearer ${currentToken}`,
-                },
-              });
 
               // Set offline status
               await fetch(`${baseURL}/driver/profile/status`, {

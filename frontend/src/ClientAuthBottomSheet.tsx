@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import { X, ChevronLeft, Loader2 } from "lucide-react";
 import { baseURL } from "./utils";
+import { switchAuthenticatedSession } from "./pushAuth";
 import toast from "react-hot-toast";
 import { AnimatePresence, motion } from "motion/react";
-import { switchAuthenticatedSession } from "./pushAuth";
 
 interface Props {
   isOpen: boolean;
@@ -127,10 +127,7 @@ export default function ClientAuthBottomSheet({ isOpen, onClose }: Props) {
       });
       if (res.ok) {
         const data = await res.json();
-        await switchAuthenticatedSession({
-          token: data.access_token,
-          role: "client",
-        });
+        await switchAuthenticatedSession(data.access_token, "client");
         toast.success("Вход выполнен");
         onClose();
         // Since we emit CustomEvent inside login, or we can just fetch Profile here
@@ -317,4 +314,3 @@ export default function ClientAuthBottomSheet({ isOpen, onClose }: Props) {
     </AnimatePresence>
   );
 }
-

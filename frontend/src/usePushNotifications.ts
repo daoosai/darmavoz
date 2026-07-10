@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { useAuthStore } from './store';
 import { baseURL } from './utils';
@@ -11,20 +11,11 @@ import {
   messaging,
   onMessage,
 } from './services/firebase';
-
-const getPushTokenEndpoint = (role: string | null | undefined): string | null => {
-  switch (role) {
-    case 'client':
-      return '/clients/me/fcm-token';
-    case 'driver':
-      return '/driver/fcm-token';
-    case 'logist':
-    case 'admin':
-      return '/logist/me/fcm-token';
-    default:
-      return null;
-  }
-};
+import {
+  getPushTokenEndpoint,
+  isPushEnabledForRole,
+  PUSH_SETTINGS_CHANGED_EVENT,
+} from './pushAuth';
 
 const saveFcmToken = async (endpoint: string, authToken: string, fcmToken: string) => {
   await fetch(`${baseURL}${endpoint}`, {
@@ -39,6 +30,36 @@ const saveFcmToken = async (endpoint: string, authToken: string, fcmToken: strin
 
 export const usePushNotifications = () => {
   const { token, role } = useAuthStore();
+  const [isPushEnabled, setIsPushEnabled] = useState<boolean>(() =>
+    isPushEnabledForRole(useAuthStore.getState().role),
+  );
+
+  useEffect(() => {
+    setIsPushEnabled(isPushEnabledForRole(role));
+
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const syncPushState = () => {
+      setIsPushEnabled(isPushEnabledForRole(role));
+    };
+
+    const handlePushSettingsChanged = (event: Event) => {
+      const customEvent = event as CustomEvent<{ role?: string }>;
+      if (!customEvent.detail?.role || customEvent.detail.role === role) {
+        syncPushState();
+      }
+    };
+
+    window.addEventListener(PUSH_SETTINGS_CHANGED_EVENT, handlePushSettingsChanged as EventListener);
+    window.addEventListener('storage', syncPushState);
+
+    return () => {
+      window.removeEventListener(PUSH_SETTINGS_CHANGED_EVENT, handlePushSettingsChanged as EventListener);
+      window.removeEventListener('storage', syncPushState);
+    };
+  }, [role]);
 
   useEffect(() => {
     let isMounted = true;
@@ -47,7 +68,7 @@ export const usePushNotifications = () => {
     const endpoint = getPushTokenEndpoint(role);
 
     const setupNativePushNotifications = async () => {
-      if (!token || !endpoint) return;
+      if (!token || !endpoint || !isPushEnabled) return;
 
       try {
         let permStatus = await PushNotifications.checkPermissions();
@@ -78,7 +99,7 @@ export const usePushNotifications = () => {
 
         PushNotifications.addListener('pushNotificationReceived', (notification) => {
           if (!isMounted || !notification.title) return;
-          toast.info(`рџ”” ${notification.title}
+          toast.info(`🔔 ${notification.title}
 ${notification.body || ''}`, {
             duration: 5000,
           });
@@ -93,7 +114,7 @@ ${notification.body || ''}`, {
     };
 
     const setupWebPushNotifications = async () => {
-      if (!token || !endpoint || !messaging) return;
+      if (!token || !endpoint || !messaging || !isPushEnabled) return;
 
       try {
         const permission = await Notification.requestPermission();
@@ -126,7 +147,7 @@ ${notification.body || ''}`, {
               // ignore system notification errors in foreground
             }
           }
-          toast.info(`рџ”” ${payload.notification.title}
+          toast.info(`🔔 ${payload.notification.title}
 ${payload.notification.body || ''}`, {
             duration: 5000,
           });
@@ -136,7 +157,7 @@ ${payload.notification.body || ''}`, {
       }
     };
 
-    if (token) {
+    if (token && isPushEnabled) {
       if (Capacitor.isNativePlatform()) {
         setupNativePushNotifications();
       } else {
@@ -157,5 +178,5 @@ ${payload.notification.body || ''}`, {
         webUnsubscribe();
       }
     };
-  }, [token, role]);
+  }, [token, role, isPushEnabled]);
 };

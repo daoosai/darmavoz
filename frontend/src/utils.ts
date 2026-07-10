@@ -1,6 +1,9 @@
 import { MaterialProps, DeliveryOption } from "./MaterialDetailScreen";
 
-export const baseURL = "https://darmavoz.ru/api/v1";
+export const baseURL =
+  import.meta.env.VITE_API_BASE_URL ||
+  import.meta.env.VITE_API_URL ||
+  "/api/v1";
 
 export const APP_VERSION = import.meta.env.VITE_APP_VERSION || "2.4.5";
 

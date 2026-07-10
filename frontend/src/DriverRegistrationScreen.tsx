@@ -7,8 +7,8 @@ import {
   formatPhoneNumber,
   handleApiError,
 } from "./utils";
-import { UserRole } from "./store";
 import { switchAuthenticatedSession } from "./pushAuth";
+import { UserRole } from "./store";
 
 interface DriverRegistrationScreenProps {
   onRegister: (role: UserRole) => void;
@@ -120,10 +120,7 @@ export default function DriverRegistrationScreen({
       const data = await response.json();
 
       if (data.access_token) {
-        await switchAuthenticatedSession({
-          token: data.access_token,
-          role: data.role || "driver",
-        });
+        await switchAuthenticatedSession(data.access_token, data.role || "driver");
         toast.success("Регистрация успешна!");
         onRegister(data.role || "driver");
       } else {

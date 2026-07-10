@@ -34,6 +34,7 @@ import {
 import toast from "react-hot-toast";
 import UpdateBanner from "./UpdateBanner";
 const TERMINAL_STATUSES = ['completed', 'canceled', 'cancelled', 'driver_cancel'];
+const ORDER_EDIT_LOCKED_STATUS = "heading_to_client";
 import AdminProfileScreen from "./AdminProfileScreen";
 import LogistCreateOrderModal from "./LogistCreateOrderModal";
 import LogistEditOrderModal from "./LogistEditOrderModal";
@@ -98,6 +99,9 @@ const manualAssignableStatuses = new Set([
   "offered_to_driver",
   "no_driver_found",
 ]);
+
+const isOrderEditLocked = (status?: string | null) =>
+  (status ?? "").toLowerCase() === ORDER_EDIT_LOCKED_STATUS;
 
 const driverStatusLabelMap: Record<string, string> = {
   available: "Свободен",
@@ -553,7 +557,7 @@ export default function LogistDashboardScreen({
                   <div className="flex bg-slate-100 p-1 rounded-lg self-start grid grid-cols-3 gap-1 w-full max-w-md">
                     <button
                       onClick={() => setOrderStatusTab("active")}
-                      className={`px-3 py-1.5 text-sm font-bold rounded-md transition-colors ${
+                      className={`w-full min-h-[44px] px-3 py-1.5 text-center text-sm font-bold rounded-md transition-colors flex items-center justify-center leading-tight ${
                         orderStatusTab === "active"
                           ? "bg-white text-slate-800 shadow-sm"
                           : "text-slate-500 hover:text-slate-700"
@@ -563,7 +567,7 @@ export default function LogistDashboardScreen({
                     </button>
                     <button
                       onClick={() => setOrderStatusTab("completed")}
-                      className={`px-3 py-1.5 text-sm font-bold rounded-md transition-colors ${
+                      className={`w-full min-h-[44px] px-3 py-1.5 text-center text-sm font-bold rounded-md transition-colors flex items-center justify-center leading-tight ${
                         orderStatusTab === "completed"
                           ? "bg-white text-slate-800 shadow-sm"
                           : "text-slate-500 hover:text-slate-700"
@@ -573,7 +577,7 @@ export default function LogistDashboardScreen({
                     </button>
                     <button
                       onClick={() => setOrderStatusTab("archived")}
-                      className={`px-3 py-1.5 text-sm font-bold rounded-md transition-colors ${
+                      className={`w-full min-h-[44px] px-3 py-1.5 text-center text-sm font-bold rounded-md transition-colors flex items-center justify-center leading-tight ${
                         orderStatusTab === "archived"
                           ? "bg-white text-slate-800 shadow-sm"
                           : "text-slate-500 hover:text-slate-700"
@@ -662,8 +666,19 @@ export default function LogistDashboardScreen({
                               <>
                                 {!TERMINAL_STATUSES.includes(order.status?.toLowerCase() || '') && (
                                   <button
-                                    onClick={() => setEditingOrder(order)}
-                                    className="p-1.5 text-slate-400 hover:text-[#2DB0E6] hover:bg-[#2DB0E6]/10 rounded-lg transition-colors border border-transparent hover:border-[#2DB0E6]/20"
+                                    type="button"
+                                    onClick={() => {
+                                      if (isOrderEditLocked(order.status)) {
+                                        return;
+                                      }
+                                      setEditingOrder(order);
+                                    }}
+                                    disabled={isOrderEditLocked(order.status)}
+                                    className={`p-1.5 rounded-lg transition-colors border ${
+                                      isOrderEditLocked(order.status)
+                                        ? "text-slate-300 border-transparent cursor-not-allowed"
+                                        : "text-slate-400 hover:text-[#2DB0E6] hover:bg-[#2DB0E6]/10 border-transparent hover:border-[#2DB0E6]/20"
+                                    }`}
                                     title="Редактировать заказ"
                                   >
                                     <Edit2 className="w-4 h-4" />

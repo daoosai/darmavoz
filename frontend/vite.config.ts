@@ -4,6 +4,11 @@ import path from 'path';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
+const devProxyTarget =
+  process.env.VITE_DEV_PROXY_TARGET ||
+  process.env.APP_BASE_URL ||
+  'http://localhost:8000';
+
 export default defineConfig(() => {
   return {
     plugins: [
@@ -43,7 +48,7 @@ export default defineConfig(() => {
     server: {
       proxy: {
         '/api/v1': {
-          target: 'https://darmavoz.ru',
+          target: devProxyTarget,
           changeOrigin: true
         }
       },

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+﻿import React, { useState, useEffect, useRef } from "react";
 import PullToRefresh from "react-simple-pull-to-refresh";
 import { useAuthStore } from "./store";
 import { getOrderStatusText } from "./utils/statusMapper";
@@ -137,7 +137,7 @@ export default function DriverOrdersScreen({
         headers: { Authorization: `Bearer ${currentToken}` },
       });
       if (res.status === 401) {
-        useAuthStore.getState().logout();
+        await logoutCurrentSession();
         onLogout();
         return;
       }
@@ -177,7 +177,7 @@ export default function DriverOrdersScreen({
       });
 
       if (res.status === 401) {
-        useAuthStore.getState().logout();
+        await logoutCurrentSession();
         onLogout();
         return;
       }
@@ -222,7 +222,7 @@ export default function DriverOrdersScreen({
         );
 
         if (assignedRes.status === 401) {
-          useAuthStore.getState().logout();
+          await logoutCurrentSession();
           onLogout();
           return;
         }
@@ -286,7 +286,7 @@ export default function DriverOrdersScreen({
         });
 
         if (res.status === 401) {
-          useAuthStore.getState().logout();
+          await logoutCurrentSession();
           onLogout();
           return;
         }
@@ -384,7 +384,7 @@ export default function DriverOrdersScreen({
       );
 
       if (res.status === 401) {
-        useAuthStore.getState().logout();
+        await logoutCurrentSession();
         onLogout();
         return;
       }
@@ -424,7 +424,7 @@ export default function DriverOrdersScreen({
       );
 
       if (res.status === 401) {
-        useAuthStore.getState().logout();
+        await logoutCurrentSession();
         onLogout();
         return;
       }
@@ -813,7 +813,7 @@ export const DriverOrderCard: React.FC<{
         },
       );
       if (res.status === 401) {
-        useAuthStore.getState().logout();
+        await logoutCurrentSession();
         return;
       }
       if (res.status === 403) {
@@ -942,7 +942,7 @@ export const DriverOrderCard: React.FC<{
         body: JSON.stringify({ reason: finalReason }),
       });
       if (res.status === 401) {
-        useAuthStore.getState().logout();
+        await logoutCurrentSession();
         return;
       }
       if (res.status === 403) {
@@ -1219,3 +1219,4 @@ export const DriverOrderCard: React.FC<{
     </>
   );
 };
+

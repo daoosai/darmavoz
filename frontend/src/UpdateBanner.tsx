@@ -2,6 +2,14 @@ import React, { useState, useEffect } from "react";
 import { baseURL, APP_VERSION } from "./utils";
 import { RefreshCw } from "lucide-react";
 
+const getDefaultDownloadUrl = () => {
+  try {
+    return new URL("/static/darmavoz.apk", baseURL).toString();
+  } catch {
+    return "/static/darmavoz.apk";
+  }
+};
+
 export default function UpdateBanner() {
   const [updateInfo, setUpdateInfo] = useState<{ show: boolean, downloadUrl: string, version: string } | null>(null);
 
@@ -14,7 +22,7 @@ export default function UpdateBanner() {
           if (data.android_version && data.android_version !== APP_VERSION) {
             setUpdateInfo({
               show: true,
-              downloadUrl: data.download_url || "https://darmavoz.ru/static/darmavoz.apk",
+              downloadUrl: data.download_url || getDefaultDownloadUrl(),
               version: data.android_version,
             });
           }

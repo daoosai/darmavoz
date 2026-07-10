@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     S3_PRESIGN_ENDPOINT: str | None = None
     S3_PRESIGN_TTL_SECONDS: int = 900
     S3_PREFIX: str = "prod"
+    CORS_ORIGINS: str = "http://localhost,https://localhost,capacitor://localhost,https://darmavoz.ru"
     MEDIA_MAX_FILE_SIZE_BYTES: int = 10485760
     DISPATCH_POLL_INTERVAL_SECONDS: int = 5
     DISPATCH_OFFER_TIMEOUT_SECONDS: int = 120
@@ -53,7 +54,7 @@ class Settings(BaseSettings):
     ANDROID_VERSION: str = "2.4.5"
     IOS_VERSION: str = "2.4.5"
     WEB_VERSION: str = "2.4.5"
-    APK_DOWNLOAD_URL: str = "https://darmavoz.ru/static/darmavoz.apk"
+    APK_DOWNLOAD_URL: str = ""
     APK_FORCE_UPDATE: bool = False
     SMTP_HOST: str | None = None
     SMTP_PORT: int = 465
@@ -74,6 +75,14 @@ class Settings(BaseSettings):
             for item in self.AVITO_WEBHOOK_ALLOWED_IPS.split(",")
             if item.strip()
         }
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [
+            item.strip()
+            for item in self.CORS_ORIGINS.split(",")
+            if item.strip()
+        ]
 
     @property
     def s3_public_base_url(self) -> str:

@@ -1725,7 +1725,6 @@ async def get_orders_needing_dispatch(session: AsyncSession, limit: int = 50) ->
             or_(
                 Order.status == OrderStatus.created.value,
                 Order.status == OrderStatus.searching_driver.value,
-                Order.status == OrderStatus.no_driver_found.value,
                 (
                     Order.status == OrderStatus.offered_to_driver.value
                 )

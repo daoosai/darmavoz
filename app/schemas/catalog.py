@@ -2,7 +2,9 @@ from uuid import UUID
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from app.services.storage import normalize_public_url
 
 
 class MediaFileOut(BaseModel):
@@ -21,6 +23,12 @@ class MediaFileOut(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("public_url")
+    @classmethod
+    def normalize_media_public_url(cls, value: str) -> str:
+        normalized = normalize_public_url(value)
+        return normalized or value
 
 
 class CategoryOut(BaseModel):
@@ -73,6 +81,11 @@ class DeliveryOptionOut(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+    @field_validator("image_url", "primary_image_url")
+    @classmethod
+    def normalize_delivery_image_urls(cls, value: str | None) -> str | None:
+        return normalize_public_url(value)
+
 
 class MaterialOut(BaseModel):
     id: UUID
@@ -90,6 +103,11 @@ class MaterialOut(BaseModel):
     delivery_options: list[DeliveryOptionOut] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("image_url", "primary_image_url")
+    @classmethod
+    def normalize_material_image_urls(cls, value: str | None) -> str | None:
+        return normalize_public_url(value)
 
 
 class CartItemCreate(BaseModel):

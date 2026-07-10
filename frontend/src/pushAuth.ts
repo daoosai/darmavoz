@@ -2,6 +2,8 @@ import { deleteToken, messaging } from "./services/firebase";
 import { useAuthStore, UserRole } from "./store";
 import { baseURL } from "./utils";
 
+export const PUSH_SETTINGS_CHANGED_EVENT = "push-settings-changed";
+
 export const getPushTokenEndpoint = (
   role: UserRole | string | null | undefined,
 ): string | null => {
@@ -16,6 +18,29 @@ export const getPushTokenEndpoint = (
     default:
       return null;
   }
+};
+
+export const isPushEnabledForRole = (
+  role: UserRole | string | null | undefined,
+): boolean => {
+  if (!role || typeof window === "undefined") {
+    return false;
+  }
+  return window.localStorage.getItem(`push_enabled_${role}`) === "true";
+};
+
+export const emitPushSettingsChanged = (
+  role: UserRole | string | null | undefined,
+): void => {
+  if (typeof window === "undefined" || !role) {
+    return;
+  }
+
+  window.dispatchEvent(
+    new CustomEvent(PUSH_SETTINGS_CHANGED_EVENT, {
+      detail: { role, enabled: isPushEnabledForRole(role) },
+    }),
+  );
 };
 
 export const detachPushToken = async (
@@ -58,15 +83,11 @@ export const logoutCurrentSession = async (): Promise<void> => {
   logout();
 };
 
-export const switchAuthenticatedSession = async ({
-  token,
-  role,
-  driverId,
-}: {
-  token: string;
-  role: UserRole;
-  driverId?: string;
-}): Promise<void> => {
+export const switchAuthenticatedSession = async (
+  token: string,
+  role: UserRole,
+  driverId?: string,
+): Promise<void> => {
   const currentSession = useAuthStore.getState();
   if (currentSession.token && currentSession.role) {
     await detachPushToken(currentSession.role, currentSession.token);

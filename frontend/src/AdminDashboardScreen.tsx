@@ -665,16 +665,12 @@ export default function AdminDashboardScreen({
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!res.ok) throw new Error("Ошибка удаления");
-        const data = await res.json();
-        if (data.action === "hidden") {
-          toast.success("Элемент скрыт (так как имеет связанные заказы)");
-        } else {
-          toast.success("Успешно удалено");
-        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.detail || "Ошибка удаления");
+        toast.success("Товар удален из базы");
         fetchMaterials(true);
-      } catch (err) {
-        toast.error("Ошибка удаления");
+      } catch (err: any) {
+        toast.error(err.message || "Ошибка удаления");
       }
     } else if (type === "delivery") {
       try {

@@ -5,28 +5,17 @@ import { PushNotifications } from '@capacitor/push-notifications';
 import { useAuthStore } from '../../store';
 import { baseURL } from '../../utils';
 import {
+  ensureFirebaseMessagingServiceWorker,
+  deleteToken,
   FIREBASE_WEB_VAPID_KEY,
   getToken,
   messaging,
 } from '../../services/firebase';
+import { emitPushSettingsChanged, getPushTokenEndpoint } from '../../pushAuth';
 
 interface NotificationToggleProps {
   role: 'client' | 'driver' | 'admin' | 'logist';
 }
-
-const getPushTokenEndpoint = (role: NotificationToggleProps['role']) => {
-  switch (role) {
-    case 'client':
-      return '/clients/me/fcm-token';
-    case 'driver':
-      return '/driver/fcm-token';
-    case 'admin':
-    case 'logist':
-      return '/logist/me/fcm-token';
-    default:
-      return null;
-  }
-};
 
 export const NotificationToggle: React.FC<NotificationToggleProps> = ({ role }) => {
   const [isPushEnabled, setIsPushEnabled] = useState(false);
@@ -69,8 +58,16 @@ export const NotificationToggle: React.FC<NotificationToggleProps> = ({ role }) 
         });
 
         if (res.ok) {
+          if (!Capacitor.isNativePlatform() && messaging) {
+            try {
+              await deleteToken(messaging);
+            } catch {
+              // ignore local token cleanup errors
+            }
+          }
           setIsPushEnabled(false);
           localStorage.setItem(`push_enabled_${role}`, 'false');
+          emitPushSettingsChanged(role);
           toast.success('Уведомления отключены');
         } else {
           toast.error('Не удалось отключить уведомления');
@@ -113,7 +110,7 @@ export const NotificationToggle: React.FC<NotificationToggleProps> = ({ role }) 
           return;
         }
 
-        const serviceWorkerRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+        const serviceWorkerRegistration = await ensureFirebaseMessagingServiceWorker();
         currentToken = await getToken(messaging, {
           vapidKey: FIREBASE_WEB_VAPID_KEY,
           serviceWorkerRegistration,
@@ -138,6 +135,7 @@ export const NotificationToggle: React.FC<NotificationToggleProps> = ({ role }) 
 
       setIsPushEnabled(true);
       localStorage.setItem(`push_enabled_${role}`, 'true');
+      emitPushSettingsChanged(role);
       toast.success('Уведомления включены');
     } catch (error) {
       console.error('Error enabling push:', error);

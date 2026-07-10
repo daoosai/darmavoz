@@ -29,24 +29,31 @@ jobs:
           npm run build
           tar -C dist -cf ../frontend-dist.tar .
 
-      - name: Setup SSH key
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Configure SSH
         run: |
           set -euo pipefail
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/github_actions_key
-          chmod 600 ~/.ssh/github_actions_key
-          ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<'EOF'
+          Host *
+            StrictHostKeyChecking accept-new
+          EOF
+          chmod 600 ~/.ssh/config
 
       - name: Upload frontend bundle
         run: |
           set -euo pipefail
-          scp -i ~/.ssh/github_actions_key frontend-dist.tar "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/tmp/frontend-dist.tar"
+          scp frontend-dist.tar "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/tmp/frontend-dist.tar"
 
       - name: Deploy staging on server
         run: |
           set -euo pipefail
-          ssh -i ~/.ssh/github_actions_key "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" <<'EOF'
+          ssh "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" <<'EOF'
           set -euo pipefail
           SOURCE_DIR=/opt/darmavoz_test
           DEPLOY_DIR=/opt/darmavoz_test_deploy

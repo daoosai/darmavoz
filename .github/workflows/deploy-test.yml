@@ -48,18 +48,29 @@ jobs:
           set -euo pipefail
           ssh -i ~/.ssh/github_actions_key "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" <<'EOF'
           set -euo pipefail
-          cd /opt/darmavoz_test
+          SOURCE_DIR=/opt/darmavoz_test
+          DEPLOY_DIR=/opt/darmavoz_test_deploy
+
+          cd "${SOURCE_DIR}"
           git fetch origin develop
-          git checkout develop
-          git restore --source=HEAD --worktree --staged -- docker-compose.test.yml
-          git pull --ff-only origin develop
+
+          if [ ! -d "${DEPLOY_DIR}/.git" ]; then
+            git worktree add --detach "${DEPLOY_DIR}" origin/develop
+          else
+            git -C "${DEPLOY_DIR}" fetch origin develop
+            git -C "${DEPLOY_DIR}" checkout --detach origin/develop
+          fi
+
+          if [ -f "${SOURCE_DIR}/.env" ]; then
+            ln -sfn "${SOURCE_DIR}/.env" "${DEPLOY_DIR}/.env"
+          fi
 
           mkdir -p /opt/daoos-kit/sites/darmavoz_test/frontend /opt/daoos-kit/sites/darmavoz_test/static
           rm -rf /opt/daoos-kit/sites/darmavoz_test/frontend/*
           tar -xf /tmp/frontend-dist.tar -C /opt/daoos-kit/sites/darmavoz_test/frontend
           rm -f /tmp/frontend-dist.tar
-          cp -a static/. /opt/daoos-kit/sites/darmavoz_test/static/
+          cp -a "${DEPLOY_DIR}/static/." /opt/daoos-kit/sites/darmavoz_test/static/
 
-          docker compose -f docker-compose.test.yml up -d db_test redis_test minio_test backend_test --build
+          docker compose -f "${DEPLOY_DIR}/docker-compose.test.yml" up -d db_test redis_test minio_test backend_test --build
           docker exec backend_test alembic upgrade head
           EOF

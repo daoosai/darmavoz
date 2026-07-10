@@ -78,7 +78,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             mkdir -p /opt/darmavoz_test/backend/static
-            mkdir -p /srv/sites/darmavoz_test/static
+            mkdir -p /opt/daoos-kit/sites/darmavoz_test/static
 
       - name: Copy APK to server
         uses: appleboy/scp-action@v0.1.7
@@ -96,4 +96,4 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cp /opt/darmavoz_test/backend/static/darmavoz-test.apk /srv/sites/darmavoz_test/static/darmavoz-test.apk
+            cp /opt/darmavoz_test/backend/static/darmavoz-test.apk /opt/daoos-kit/sites/darmavoz_test/static/darmavoz-test.apk

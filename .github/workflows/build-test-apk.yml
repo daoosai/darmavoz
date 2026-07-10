@@ -1,0 +1,97 @@
+name: Build Test Android APK
+
+on:
+  push:
+    branches:
+      - develop
+
+jobs:
+  build-test-apk:
+    runs-on: ubuntu-latest
+    env:
+      APK_REMOTE_DIR: /opt/darmavoz_test/backend/static
+      APK_REMOTE_NAME: darmavoz-test.apk
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install
+
+      - name: Prepare test environment
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          printf '%s\n' 'VITE_API_URL=https://test.darmavoz.ru/api/v1' > .env
+          printf '%s' '${{ secrets.TEST_GOOGLE_SERVICES_JSON }}' > android/app/google-services.json
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Sync Android project
+        working-directory: frontend
+        run: npx cap sync android
+
+      - name: Apply test Android branding
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          sed -i 's/applicationId "com\.darmavoz\.app"/applicationId "com.darmavoz.app.test"/' android/app/build.gradle
+          sed -i 's#<string name="app_name">.*</string>#<string name="app_name">Darmavoz TEST</string>#' android/app/src/main/res/values/strings.xml
+          sed -i 's#<string name="title_activity_main">.*</string>#<string name="title_activity_main">Darmavoz TEST</string>#' android/app/src/main/res/values/strings.xml
+          sed -i 's#<string name="package_name">com\.darmavoz\.app</string>#<string name="package_name">com.darmavoz.app.test</string>#' android/app/src/main/res/values/strings.xml
+          sed -i 's#<string name="custom_url_scheme">com\.darmavoz\.app</string>#<string name="custom_url_scheme">com.darmavoz.app.test</string>#' android/app/src/main/res/values/strings.xml
+
+      - name: Build debug APK
+        working-directory: frontend/android
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Resolve APK path
+        run: |
+          set -euo pipefail
+          APK_LOCAL_PATH="$(find frontend/android/app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' | sort | head -n1)"
+          test -n "${APK_LOCAL_PATH}"
+          test -f "${APK_LOCAL_PATH}"
+          echo "APK_LOCAL_PATH=${APK_LOCAL_PATH}" >> "${GITHUB_ENV}"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: darmavoz-test-debug-apk
+          path: ${{ env.APK_LOCAL_PATH }}
+
+      - name: Setup SSH key
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' '${{ secrets.SSH_KEY }}' > ~/.ssh/github_actions_key
+          chmod 600 ~/.ssh/github_actions_key
+          ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Deploy APK to test server
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/github_actions_key "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" "mkdir -p '${APK_REMOTE_DIR}'"
+          scp -i ~/.ssh/github_actions_key "${APK_LOCAL_PATH}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${APK_REMOTE_DIR}/${APK_REMOTE_NAME}.tmp"
+          ssh -i ~/.ssh/github_actions_key "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" "mv '${APK_REMOTE_DIR}/${APK_REMOTE_NAME}.tmp' '${APK_REMOTE_DIR}/${APK_REMOTE_NAME}'"

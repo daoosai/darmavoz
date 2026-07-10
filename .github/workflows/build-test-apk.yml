@@ -70,6 +70,16 @@ jobs:
           ./gradlew assembleDebug
           mv app/build/outputs/apk/debug/app-debug.apk ${{ github.workspace }}/darmavoz-test.apk
 
+      - name: Prepare remote APK directories
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            mkdir -p /opt/darmavoz_test/backend/static
+            mkdir -p /srv/sites/darmavoz_test/static
+
       - name: Copy APK to server
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -78,3 +88,12 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: "darmavoz-test.apk"
           target: "/opt/darmavoz_test/backend/static/"
+
+      - name: Publish APK to test static
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cp /opt/darmavoz_test/backend/static/darmavoz-test.apk /srv/sites/darmavoz_test/static/darmavoz-test.apk

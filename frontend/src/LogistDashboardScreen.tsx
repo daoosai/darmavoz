@@ -557,7 +557,7 @@ export default function LogistDashboardScreen({
                   <div className="flex bg-slate-100 p-1 rounded-lg self-start grid grid-cols-3 gap-1 w-full max-w-md">
                     <button
                       onClick={() => setOrderStatusTab("active")}
-                      className={`px-3 py-1.5 text-sm font-bold rounded-md transition-colors ${
+                      className={`w-full min-h-[44px] px-3 py-1.5 text-center text-sm font-bold rounded-md transition-colors flex items-center justify-center leading-tight ${
                         orderStatusTab === "active"
                           ? "bg-white text-slate-800 shadow-sm"
                           : "text-slate-500 hover:text-slate-700"
@@ -567,7 +567,7 @@ export default function LogistDashboardScreen({
                     </button>
                     <button
                       onClick={() => setOrderStatusTab("completed")}
-                      className={`px-3 py-1.5 text-sm font-bold rounded-md transition-colors ${
+                      className={`w-full min-h-[44px] px-3 py-1.5 text-center text-sm font-bold rounded-md transition-colors flex items-center justify-center leading-tight ${
                         orderStatusTab === "completed"
                           ? "bg-white text-slate-800 shadow-sm"
                           : "text-slate-500 hover:text-slate-700"
@@ -577,7 +577,7 @@ export default function LogistDashboardScreen({
                     </button>
                     <button
                       onClick={() => setOrderStatusTab("archived")}
-                      className={`px-3 py-1.5 text-sm font-bold rounded-md transition-colors ${
+                      className={`w-full min-h-[44px] px-3 py-1.5 text-center text-sm font-bold rounded-md transition-colors flex items-center justify-center leading-tight ${
                         orderStatusTab === "archived"
                           ? "bg-white text-slate-800 shadow-sm"
                           : "text-slate-500 hover:text-slate-700"

@@ -33,7 +33,6 @@ async def seed_data() -> None:
         await ensure_optional_user(session, settings.LOGIST_USERNAME, settings.LOGIST_PASSWORD, "logist")
         await ensure_optional_user(session, settings.MANAGER_USERNAME, settings.MANAGER_PASSWORD, "manager")
         await seed_catalog(session)
-        await ensure_test_dispatch_drivers(session)
 
 
 async def ensure_optional_user(session, username: str | None, password: str | None, role_name: str) -> None:

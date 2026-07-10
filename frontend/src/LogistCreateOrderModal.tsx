@@ -648,31 +648,6 @@ export default function LogistCreateOrderModal({
                     {formattedDistance}
                   </span>
                 </div>
-                <div className="flex justify-between gap-4">
-                  <span className="text-slate-500">{"Стоимость материала:"}</span>
-                  <div className="text-right">
-                    <span className="font-medium text-slate-900 block">
-                      {Number(calculationResult.material_cost).toLocaleString("ru-RU")} {"\u20BD"}
-                    </span>
-                    {materialPriceLabel && capacityLabel && (
-                      <span className="text-xs text-slate-400 block mt-0.5">
-                        {materialPriceLabel} x {capacityLabel}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <span className="text-slate-500">Стоимость доставки:</span>
-                  <span className="font-medium text-slate-900">
-                    {Number(calculationResult.delivery_cost).toLocaleString("ru-RU")} ₽
-                  </span>
-                </div>
-                <div className="pt-3 border-t border-slate-200 flex justify-between gap-4 text-base">
-                  <span className="font-bold text-slate-900">Итого к оплате:</span>
-                  <span className="font-bold text-slate-900">
-                    {Number(calculationResult.estimated_total_amount).toLocaleString("ru-RU")} ₽
-                  </span>
-                </div>
               </>
             ) : (
               <p className="text-slate-500 leading-relaxed">

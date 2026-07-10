@@ -77,18 +77,21 @@ jobs:
           test -f "${APK_LOCAL_PATH}"
           echo "APK_LOCAL_PATH=${APK_LOCAL_PATH}" >> "${GITHUB_ENV}"
 
-      - name: Setup SSH key
-        run: |
-          set -euo pipefail
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          printf '%s\n' '${{ secrets.SSH_KEY }}' > ~/.ssh/github_actions_key
-          chmod 600 ~/.ssh/github_actions_key
-          ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+      - name: Copy APK to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "frontend/android/app/build/outputs/apk/debug/app-debug.apk"
+          target: "/opt/darmavoz_test/backend/static/"
+          strip_components: 6
 
-      - name: Deploy APK to test server
-        run: |
-          set -euo pipefail
-          ssh -i ~/.ssh/github_actions_key "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" "mkdir -p '${APK_REMOTE_DIR}'"
-          scp -i ~/.ssh/github_actions_key "${APK_LOCAL_PATH}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${APK_REMOTE_DIR}/${APK_REMOTE_NAME}.tmp"
-          ssh -i ~/.ssh/github_actions_key "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" "mv '${APK_REMOTE_DIR}/${APK_REMOTE_NAME}.tmp' '${APK_REMOTE_DIR}/${APK_REMOTE_NAME}'"
+      - name: Rename APK on server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            mv /opt/darmavoz_test/backend/static/app-debug.apk /opt/darmavoz_test/backend/static/darmavoz-test.apk

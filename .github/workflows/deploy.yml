@@ -75,7 +75,7 @@ jobs:
           tar -xf /tmp/frontend-prod.tar -C /opt/daoos-kit/sites/darmavoz/frontend
           rm -f /tmp/frontend-prod.tar
           cp -a "${DEPLOY_DIR}/static/." /opt/daoos-kit/sites/darmavoz/static/
-
+          docker rm -f darmavoz_backend || true
           docker compose -f "${DEPLOY_DIR}/docker-compose.yml" up -d --build --force-recreate backend
           sleep 5
           docker compose -f "${DEPLOY_DIR}/docker-compose.yml" exec -T backend alembic upgrade head 

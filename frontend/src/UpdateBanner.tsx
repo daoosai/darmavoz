@@ -14,7 +14,7 @@ export default function UpdateBanner() {
           if (data.android_version && data.android_version !== APP_VERSION) {
             setUpdateInfo({
               show: true,
-              downloadUrl: data.download_url || "https://darmavoz.ru/static/darmavoz.apk",
+              downloadUrl: data.download_url || new URL("/static/darmavoz.apk", window.location.origin).toString(),
               version: data.android_version,
             });
           }

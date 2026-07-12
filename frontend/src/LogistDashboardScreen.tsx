@@ -65,6 +65,11 @@ interface AdminOrder {
   notes?: string;
 }
 
+const mergeOrderIntoList = (orders: AdminOrder[], nextOrder: AdminOrder) => [
+  nextOrder,
+  ...orders.filter((order) => order.id !== nextOrder.id),
+];
+
 interface AdminDriver {
   id: string;
   name: string;
@@ -125,10 +130,14 @@ const isDriverCompatibleWithOrder = (
   // Извлекаем новые поля
   const min =
     (driver as any).vehicle_cubature_min ?? driver.vehicle.cubature_min;
+  const fallbackVolume =
+    driver.vehicle.delivery_option?.capacity_m3 ?? min ?? 0;
   const max =
-    (driver as any).vehicle_cubature_max ?? driver.vehicle.cubature_max;
+    (driver as any).vehicle_cubature_max ??
+    driver.vehicle.cubature_max ??
+    fallbackVolume;
 
-  // Если у водителя нет этих полей (старая тестовая запись) - отбраковываем
+  // Если у водителя нет ни диапазона, ни тарифной кубатуры - отбраковываем
   if (min == null || max == null) {
     return false;
   }
@@ -259,7 +268,7 @@ export default function LogistDashboardScreen({
     }
     try {
       if (!silent) setIsLoading(true);
-      const url = new URL(`${baseURL}/orders/admin`);
+      const url = new URL(`${baseURL}/logist/orders`);
       if (orderDateFilter) {
         url.searchParams.append("date", orderDateFilter);
       }
@@ -1161,7 +1170,12 @@ export default function LogistDashboardScreen({
         token={token}
         materials={materials}
         deliveryOptions={deliveryOptions}
-        onOrderCreated={() => fetchOrders(true)}
+        onOrderCreated={async (createdOrder) => {
+          if (createdOrder?.id) {
+            setOrders((prev) => mergeOrderIntoList(prev, createdOrder));
+          }
+          await fetchOrders(true);
+        }}
       />
 
       {manualAssignOrder && (

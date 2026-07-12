@@ -10,7 +10,7 @@ interface CreateOrderModalProps {
   token: string | null;
   materials: any[];
   deliveryOptions: any[];
-  onOrderCreated: () => void;
+  onOrderCreated: (createdOrder?: any) => void | Promise<void>;
 }
 
 interface DeliveryCalculationResult {
@@ -30,6 +30,7 @@ interface AvailableDriver {
   vehicle?: {
     title?: string;
     plate_number?: string;
+    body_volume_m3?: number;
     cubature_min?: number;
     cubature_max?: number;
     delivery_option_id?: string;
@@ -50,6 +51,22 @@ const getDriverDeliveryOptionId = (driver: AvailableDriver) =>
 
 const getDriverVehicleVolume = (driver: AvailableDriver) =>
   driver.vehicle?.cubature_max || driver.vehicle?.delivery_option?.capacity_m3 || 0;
+
+const getDriverVehicleVolumeRange = (driver: AvailableDriver) => {
+  const fallbackVolume =
+    driver.vehicle?.body_volume_m3 ||
+    driver.vehicle?.delivery_option?.capacity_m3 ||
+    0;
+  const minVolume = Number(driver.vehicle?.cubature_min || fallbackVolume || 0);
+  const maxVolume = Number(
+    driver.vehicle?.cubature_max || fallbackVolume || minVolume || 0,
+  );
+
+  return {
+    minVolume,
+    maxVolume,
+  };
+};
 
 const getDriverVehicleLabel = (driver: AvailableDriver) => {
   const title = driver.vehicle?.title?.trim();
@@ -260,11 +277,14 @@ export default function LogistCreateOrderModal({
   const doesDriverMatchSelectedMachine = (driver: AvailableDriver) => {
     const driverDeliveryOptionId = getDriverDeliveryOptionId(driver);
     const driverMachineVolume = Number(getDriverVehicleVolume(driver) || 0);
+    const { minVolume, maxVolume } = getDriverVehicleVolumeRange(driver);
     const isExactMatch = driverDeliveryOptionId === machineId;
     const isVolumeMatch =
       selectedMachineVolume > 0 &&
-      driverMachineVolume > 0 &&
-      driverMachineVolume >= selectedMachineVolume;
+      minVolume > 0 &&
+      maxVolume > 0 &&
+      selectedMachineVolume >= minVolume &&
+      selectedMachineVolume <= maxVolume;
     const matches = isExactMatch || isVolumeMatch;
 
     console.log("[LogistCreateOrderModal] driver filter", {
@@ -277,6 +297,8 @@ export default function LogistCreateOrderModal({
       hasVehicle: Boolean(driver.vehicle),
       driverDeliveryOptionId,
       driverMachineVolume,
+      minVolume,
+      maxVolume,
       isExactMatch,
       isVolumeMatch,
       matches,
@@ -551,7 +573,7 @@ export default function LogistCreateOrderModal({
       }
 
       toast.success("Заказ создан");
-      onOrderCreated();
+      await onOrderCreated(responseData);
       onClose();
     } catch (err: any) {
       toast.error(err?.message || "Ошибка при создании заказа");

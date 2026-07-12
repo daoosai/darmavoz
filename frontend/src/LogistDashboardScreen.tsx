@@ -236,7 +236,7 @@ export default function LogistDashboardScreen({
   
 
   return () => clearInterval(intervalId);
-  }, [orderDateFilter, orderStatusTab]);
+  }, [orderDateFilter, orderStatusTab, token]);
 
   useEffect(() => {
     if (activeTab === "drivers" && drivers.length === 0) {
@@ -1171,6 +1171,10 @@ export default function LogistDashboardScreen({
         materials={materials}
         deliveryOptions={deliveryOptions}
         onOrderCreated={async (createdOrder) => {
+          setActiveTab("orders");
+          setOrderStatusTab("active");
+          setOrderDateFilter("");
+          setIsLoading(false);
           if (createdOrder?.id) {
             setOrders((prev) => mergeOrderIntoList(prev, createdOrder));
           }

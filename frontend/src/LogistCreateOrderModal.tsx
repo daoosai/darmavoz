@@ -29,7 +29,9 @@ interface AvailableDriver {
   vehicle?: {
     title?: string;
     plate_number?: string;
+    delivery_option_id?: string;
     delivery_option?: {
+      id?: string;
       capacity_m3?: number;
     };
   } | null;
@@ -39,6 +41,15 @@ const calculateMaterialCost = (material: any, deliveryOption: any) =>
   Math.round(
     Number(material?.price ?? 0) * Number(deliveryOption?.capacity_m3 ?? 0),
   );
+
+const getDriverDeliveryOptionId = (driver: AvailableDriver) =>
+  driver.vehicle?.delivery_option_id || driver.vehicle?.delivery_option?.id || "";
+
+const getDriverVehicleLabel = (driver: AvailableDriver) => {
+  const title = driver.vehicle?.title?.trim();
+  const plate = driver.vehicle?.plate_number?.trim();
+  return [title, plate].filter(Boolean).join(" • ") || "Машина не указана";
+};
 
 const formatFastApiDetail = (detail: any, fallback: string) => {
   if (Array.isArray(detail)) {
@@ -191,11 +202,44 @@ export default function LogistCreateOrderModal({
     };
   }, [isOpen, token]);
 
+  useEffect(() => {
+    if (!newOrder.delivery_option_id) {
+      if (newOrder.driver_id) {
+        setNewOrder((prev) => ({ ...prev, driver_id: "" }));
+      }
+      return;
+    }
+
+    if (!newOrder.driver_id) {
+      return;
+    }
+
+    const hasSelectedDriver = availableDrivers.some(
+      (driver) =>
+        driver.id === newOrder.driver_id &&
+        getDriverDeliveryOptionId(driver) === newOrder.delivery_option_id,
+    );
+
+    if (!hasSelectedDriver) {
+      setNewOrder((prev) => ({ ...prev, driver_id: "" }));
+    }
+  }, [
+    availableDrivers,
+    newOrder.delivery_option_id,
+    newOrder.driver_id,
+  ]);
+
   const selectedMaterial =
     materials.find((item) => item.id === newOrder.material_id) || null;
   const selectedDeliveryOption =
     deliveryOptions.find((item) => item.id === newOrder.delivery_option_id) ||
     null;
+  const filteredAvailableDrivers = newOrder.delivery_option_id
+    ? availableDrivers.filter(
+        (driver) =>
+          getDriverDeliveryOptionId(driver) === newOrder.delivery_option_id,
+      )
+    : [];
   const computedMaterialCost = calculateMaterialCost(
     selectedMaterial,
     selectedDeliveryOption,
@@ -601,30 +645,95 @@ export default function LogistCreateOrderModal({
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">
               Назначить водителя (Опционально)
             </label>
-            <select
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] text-sm bg-white"
-              value={newOrder.driver_id}
-              onChange={(e) =>
-                setNewOrder((prev) => ({
-                  ...prev,
-                  driver_id: e.target.value,
-                }))
-              }
-              disabled={isLoadingDrivers}
-            >
-              <option value="">
-                {isLoadingDrivers ? "Загрузка водителей..." : "Не назначать"}
-              </option>
-              {availableDrivers.map((driver) => (
-                <option key={driver.id} value={driver.id}>
-                  {driver.name}
-                  {driver.vehicle?.title ? ` • ${driver.vehicle.title}` : ""}
-                  {driver.vehicle?.delivery_option?.capacity_m3
-                    ? ` • ${driver.vehicle.delivery_option.capacity_m3} м3`
-                    : ""}
-                </option>
-              ))}
-            </select>
+            {!newOrder.delivery_option_id ? (
+              <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-500 text-center">
+                Сначала выберите машину, чтобы увидеть подходящих свободных водителей
+              </div>
+            ) : isLoadingDrivers ? (
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-500 text-center">
+                Загрузка свободных водителей...
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+                <div className="max-h-64 overflow-y-auto">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setNewOrder((prev) => ({
+                        ...prev,
+                        driver_id: "",
+                      }))
+                    }
+                    className={`w-full p-4 border-b border-slate-100 text-left transition-colors ${
+                      !newOrder.driver_id
+                        ? "border-blue-500 bg-blue-50"
+                        : "hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="radio"
+                        readOnly
+                        checked={!newOrder.driver_id}
+                        className="mt-1 h-4 w-4 text-[#2DB0E6]"
+                      />
+                      <div className="min-w-0">
+                        <div className="text-sm font-bold text-slate-900">
+                          Не назначать (Автопоиск)
+                        </div>
+                        <div className="mt-1 text-xs text-slate-500">
+                          Заказ уйдет в обычный автопоиск подходящего водителя
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+
+                  {filteredAvailableDrivers.map((driver) => {
+                    const isSelected = newOrder.driver_id === driver.id;
+                    return (
+                      <button
+                        key={driver.id}
+                        type="button"
+                        onClick={() =>
+                          setNewOrder((prev) => ({
+                            ...prev,
+                            driver_id: driver.id,
+                          }))
+                        }
+                        className={`w-full p-4 border-b border-slate-100 last:border-b-0 text-left transition-colors ${
+                          isSelected
+                            ? "border-blue-500 bg-blue-50"
+                            : "hover:bg-slate-50"
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <input
+                            type="radio"
+                            readOnly
+                            checked={isSelected}
+                            className="mt-1 h-4 w-4 text-[#2DB0E6]"
+                          />
+                          <div className="min-w-0">
+                            <div className="text-sm font-bold text-slate-900">
+                              {driver.name}
+                            </div>
+                            <div className="mt-1 text-xs text-slate-500">
+                              {getDriverVehicleLabel(driver)}
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {filteredAvailableDrivers.length === 0 && (
+                  <div className="p-4 text-sm text-slate-500 text-center border-t border-slate-100">
+                    Нет свободных водителей для этого типа машины
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="relative" ref={wrapperRef}>

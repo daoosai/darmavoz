@@ -1092,7 +1092,7 @@ async def approve_driver(
         comment=comment,
         admin_user_id=current_admin.id,
     )
-    if driver.vehicle is not None and driver.vehicle.moderation_status != ModerationStatus.suspended.value:
+    if driver.vehicle is not None:
         _set_vehicle_moderation(
             driver.vehicle,
             ModerationStatus.approved.value,
@@ -1183,7 +1183,7 @@ async def approve_vehicle(
         admin_user_id=current_admin.id,
     )
     linked_driver = await db.scalar(select(Driver).where(Driver.vehicle_id == vehicle.id))
-    if linked_driver is not None and linked_driver.moderation_status != ModerationStatus.suspended.value:
+    if linked_driver is not None:
         _set_driver_moderation(
             linked_driver,
             ModerationStatus.approved.value,
@@ -1243,12 +1243,20 @@ async def suspend_vehicle(
     current_admin: User = Depends(get_current_admin_user),
 ):
     vehicle = await _load_vehicle_or_404(db, vehicle_id)
+    linked_driver = await db.scalar(select(Driver).where(Driver.vehicle_id == vehicle.id))
     _set_vehicle_moderation(
         vehicle,
         ModerationStatus.suspended.value,
         comment=payload.comment if payload else None,
         admin_user_id=current_admin.id,
     )
+    if linked_driver is not None:
+        _set_driver_moderation(
+            linked_driver,
+            ModerationStatus.suspended.value,
+            comment=payload.comment if payload else None,
+            admin_user_id=current_admin.id,
+        )
     await db.commit()
     return {"ok": True, "moderation_status": vehicle.moderation_status}
 

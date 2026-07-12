@@ -159,8 +159,16 @@ export default function LogistCreateOrderModal({
     }
   }, [isOpen]);
 
+  const machineId = newOrder.delivery_option_id;
+
   useEffect(() => {
     if (!isOpen || !token) {
+      return;
+    }
+
+    if (!machineId) {
+      setAvailableDrivers([]);
+      setIsLoadingDrivers(false);
       return;
     }
 
@@ -169,11 +177,14 @@ export default function LogistCreateOrderModal({
     const fetchAvailableDrivers = async () => {
       try {
         setIsLoadingDrivers(true);
-        const response = await fetch(`${baseURL}/drivers/?status=available`, {
+        const response = await fetch(
+          `${baseURL}/drivers/?status=available&delivery_option_id=${encodeURIComponent(machineId)}`,
+          {
           headers: {
             Authorization: `Bearer ${token}`,
           },
-        });
+          },
+        );
 
         if (!response.ok) {
           throw new Error(`Server returned ${response.status}`);
@@ -200,10 +211,10 @@ export default function LogistCreateOrderModal({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, token]);
+  }, [isOpen, token, machineId]);
 
   useEffect(() => {
-    if (!newOrder.delivery_option_id) {
+    if (!machineId) {
       if (newOrder.driver_id) {
         setNewOrder((prev) => ({ ...prev, driver_id: "" }));
       }
@@ -217,7 +228,7 @@ export default function LogistCreateOrderModal({
     const hasSelectedDriver = availableDrivers.some(
       (driver) =>
         driver.id === newOrder.driver_id &&
-        getDriverDeliveryOptionId(driver) === newOrder.delivery_option_id,
+        getDriverDeliveryOptionId(driver) === machineId,
     );
 
     if (!hasSelectedDriver) {
@@ -225,7 +236,7 @@ export default function LogistCreateOrderModal({
     }
   }, [
     availableDrivers,
-    newOrder.delivery_option_id,
+    machineId,
     newOrder.driver_id,
   ]);
 
@@ -234,10 +245,10 @@ export default function LogistCreateOrderModal({
   const selectedDeliveryOption =
     deliveryOptions.find((item) => item.id === newOrder.delivery_option_id) ||
     null;
-  const filteredAvailableDrivers = newOrder.delivery_option_id
+  const filteredAvailableDrivers = machineId
     ? availableDrivers.filter(
         (driver) =>
-          getDriverDeliveryOptionId(driver) === newOrder.delivery_option_id,
+          getDriverDeliveryOptionId(driver) === machineId,
       )
     : [];
   const computedMaterialCost = calculateMaterialCost(

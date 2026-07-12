@@ -839,25 +839,28 @@ export const DriverOrderCard: React.FC<{
     const isToClient = type === 'client';
     const lat = isToClient ? order.delivery_lat : order.pickup_lat;
     const lon = isToClient ? order.delivery_lon : order.pickup_lon;
-    const clientAddress = (order.delivery_address || order.address || '').trim();
-    const label = isToClient
-      ? clientAddress || 'Адрес клиента'
-      : 'Карьер';
 
     if (!lat || !lon) {
       toast.error("Координаты отсутствуют");
       return;
     }
 
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    if (isMobile) {
-      window.location.href = `geo:${lat},${lon}?q=${lat},${lon}(${encodeURIComponent(label)})`;
+    const isIOS = /iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent);
+    if (isIOS) {
+      window.open(
+        `https://2gis.ru/routeSearch/rsType/car/to/${lon},${lat}`,
+        "_blank",
+      );
       return;
     }
 
-    const destinationUrl = isToClient && clientAddress
-      ? `https://2gis.ru/search/${encodeURIComponent(clientAddress)}/geo/${lon},${lat}`
-      : `https://2gis.ru/routeSearch/rsType/car/to/${lon},${lat}`;
+    const isAndroid = /Android/i.test(navigator.userAgent);
+    if (isAndroid) {
+      window.location.href = `geo:${lat},${lon}?q=${lat},${lon}`;
+      return;
+    }
+
+    const destinationUrl = `https://2gis.ru/routeSearch/rsType/car/to/${lon},${lat}`;
 
     window.open(destinationUrl, "_blank");
   };

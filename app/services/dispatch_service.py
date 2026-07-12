@@ -684,6 +684,8 @@ async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate)
     if payload.delivery_cost is not None:
         resolved_delivery_cost = round(payload.delivery_cost, 2)
 
+    should_auto_dispatch = payload.auto_dispatch and payload.driver_id is None
+
     order = await build_order(
         session,
         client=client,
@@ -694,7 +696,7 @@ async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate)
         source=payload.source or "dispatcher",
         created_by_source="dispatcher",
         quantity=payload.quantity,
-        auto_dispatch=payload.auto_dispatch,
+        auto_dispatch=should_auto_dispatch,
         pickup_address=resolved_pickup_address,
         pickup_lat=resolved_pickup_lat,
         pickup_lon=resolved_pickup_lon,
@@ -711,7 +713,13 @@ async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate)
     )
     await session.commit()
     schedule_client_order_created_notification(order)
-    if payload.auto_dispatch:
+    if payload.driver_id is not None:
+        return await assign_order_to_driver_manually(
+            session,
+            order_id=order.id,
+            driver_id=payload.driver_id,
+        )
+    if should_auto_dispatch:
         await enqueue_order_for_dispatch_safe(order.id)
     return await get_order_by_id(session, order.id)
 

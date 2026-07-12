@@ -22,6 +22,19 @@ interface DeliveryCalculationResult {
   estimated_total_amount: number;
 }
 
+interface AvailableDriver {
+  id: string;
+  name: string;
+  status: string;
+  vehicle?: {
+    title?: string;
+    plate_number?: string;
+    delivery_option?: {
+      capacity_m3?: number;
+    };
+  } | null;
+}
+
 const calculateMaterialCost = (material: any, deliveryOption: any) =>
   Math.round(
     Number(material?.price ?? 0) * Number(deliveryOption?.capacity_m3 ?? 0),
@@ -78,6 +91,7 @@ export default function LogistCreateOrderModal({
   const [newOrder, setNewOrder] = useState({
     client_name: "",
     client_phone: "",
+    driver_id: "",
     material_id: "",
     delivery_option_id: "",
     delivery_address: "",
@@ -87,6 +101,8 @@ export default function LogistCreateOrderModal({
   });
 
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [availableDrivers, setAvailableDrivers] = useState<AvailableDriver[]>([]);
+  const [isLoadingDrivers, setIsLoadingDrivers] = useState(false);
   const deliveryInputRef = useRef<HTMLInputElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
@@ -121,6 +137,7 @@ export default function LogistCreateOrderModal({
       setNewOrder({
         client_name: "",
         client_phone: "",
+        driver_id: "",
         material_id: "",
         delivery_option_id: "",
         delivery_address: "",
@@ -130,6 +147,49 @@ export default function LogistCreateOrderModal({
       });
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !token) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const fetchAvailableDrivers = async () => {
+      try {
+        setIsLoadingDrivers(true);
+        const response = await fetch(`${baseURL}/drivers/?status=available`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`Server returned ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (!cancelled) {
+          setAvailableDrivers(Array.isArray(data) ? data : []);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setAvailableDrivers([]);
+          toast.error("Не удалось загрузить свободных водителей");
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingDrivers(false);
+        }
+      }
+    };
+
+    void fetchAvailableDrivers();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, token]);
 
   const selectedMaterial =
     materials.find((item) => item.id === newOrder.material_id) || null;
@@ -361,6 +421,7 @@ export default function LogistCreateOrderModal({
       const payload = {
         client_name: normalizedClientName,
         client_phone: cleanPhone,
+        driver_id: newOrder.driver_id || undefined,
         material_id: newOrder.material_id,
         delivery_option_id: newOrder.delivery_option_id,
         quarry_id: calculationResult.quarry_id,
@@ -375,7 +436,7 @@ export default function LogistCreateOrderModal({
         notes: newOrder.notes,
         quantity: 1,
         source: "dispatcher",
-        auto_dispatch: true,
+        auto_dispatch: !newOrder.driver_id,
       };
 
       const res = await fetch(`${baseURL}/logist/orders`, {
@@ -534,6 +595,36 @@ export default function LogistCreateOrderModal({
                   ))}
               </select>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+              Назначить водителя (Опционально)
+            </label>
+            <select
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-[#2DB0E6] focus:ring-1 focus:ring-[#2DB0E6] text-sm bg-white"
+              value={newOrder.driver_id}
+              onChange={(e) =>
+                setNewOrder((prev) => ({
+                  ...prev,
+                  driver_id: e.target.value,
+                }))
+              }
+              disabled={isLoadingDrivers}
+            >
+              <option value="">
+                {isLoadingDrivers ? "Загрузка водителей..." : "Не назначать"}
+              </option>
+              {availableDrivers.map((driver) => (
+                <option key={driver.id} value={driver.id}>
+                  {driver.name}
+                  {driver.vehicle?.title ? ` • ${driver.vehicle.title}` : ""}
+                  {driver.vehicle?.delivery_option?.capacity_m3
+                    ? ` • ${driver.vehicle.delivery_option.capacity_m3} м3`
+                    : ""}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="relative" ref={wrapperRef}>

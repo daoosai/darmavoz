@@ -268,14 +268,16 @@ export default function LogistDashboardScreen({
     }
     try {
       if (!silent) setIsLoading(true);
-      const url = new URL(`${baseURL}/logist/orders`);
+      const searchParams = new URLSearchParams();
       if (orderDateFilter) {
-        url.searchParams.append("date", orderDateFilter);
+        searchParams.append("date", orderDateFilter);
       }
       if (orderStatusTab === "archived") {
-        url.searchParams.append("is_deleted", "true");
+        searchParams.append("is_deleted", "true");
       }
-      const res = await fetch(url.toString(), {
+      const queryString = searchParams.toString();
+      const requestUrl = `${baseURL}/logist/orders${queryString ? `?${queryString}` : ""}`;
+      const res = await fetch(requestUrl, {
         headers: {
           Authorization: `Bearer ${token}`,
         },

@@ -49,6 +49,14 @@ jobs:
           set -euo pipefail
           npm install
           npm install -D @capacitor/cli @capacitor/core @capacitor/android
+          
+          # FORCE production URLs for the APK web bundle.
+          cat > .env.production <<EOF
+          VITE_API_BASE_URL=https://darmavoz.ru/api/v1
+          VITE_API_URL=https://darmavoz.ru/api/v1
+          VITE_S3_URL=https://darmavoz.ru/s3
+          EOF
+          
           npm run build
 
       - name: Sync Capacitor
@@ -63,6 +71,14 @@ jobs:
           set -euo pipefail
           npm install
           npm install -D @capacitor/cli @capacitor/core @capacitor/android @capacitor/assets
+          
+          # FORCE production URLs for the APK web bundle.
+          cat > .env.production <<EOF
+          VITE_API_BASE_URL=https://darmavoz.ru/api/v1
+          VITE_API_URL=https://darmavoz.ru/api/v1
+          VITE_S3_URL=https://darmavoz.ru/s3
+          EOF
+          
           npm run build
 
       - name: Generate Icons & Sync Capacitor

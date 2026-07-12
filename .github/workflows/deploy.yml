@@ -41,6 +41,14 @@ jobs:
         working-directory: ./frontend
         run: |
           set -euo pipefail
+          
+          # FORCE production URLs for the web build.
+          cat > .env.production <<EOF
+          VITE_API_BASE_URL=https://darmavoz.ru/api/v1
+          VITE_API_URL=https://darmavoz.ru/api/v1
+          VITE_S3_URL=https://darmavoz.ru/s3
+          EOF
+          
           npm run build
 
       - name: Setup SSH key

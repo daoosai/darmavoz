@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { useAuthStore } from './store';
 import { baseURL } from './utils';
@@ -35,6 +35,128 @@ export const usePushNotifications = () => {
   const [isPushEnabled, setIsPushEnabled] = useState<boolean>(() =>
     isPushEnabledForRole(useAuthStore.getState().role),
   );
+  const notificationSoundRef = useRef<HTMLAudioElement | null>(null);
+  const isNotificationSoundAvailableRef = useRef(true);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const audio = new Audio('/notification.mp3');
+    audio.preload = 'auto';
+    const handleAudioReady = () => {
+      isNotificationSoundAvailableRef.current = true;
+    };
+    const handleAudioError = () => {
+      isNotificationSoundAvailableRef.current = false;
+      console.warn('notification.mp3 is unavailable, foreground notifications will use a short synthetic ping');
+    };
+
+    audio.addEventListener('canplaythrough', handleAudioReady);
+    audio.addEventListener('error', handleAudioError);
+    audio.load();
+    notificationSoundRef.current = audio;
+
+    return () => {
+      audio.pause();
+      audio.removeEventListener('canplaythrough', handleAudioReady);
+      audio.removeEventListener('error', handleAudioError);
+      notificationSoundRef.current = null;
+    };
+  }, []);
+
+  const playFallbackPing = () => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const audioContextClass =
+      window.AudioContext ||
+      (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+
+    if (!audioContextClass) {
+      console.warn('AudioContext is unavailable, synthetic notification ping skipped');
+      return;
+    }
+
+    const audioContext = new audioContextClass();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(988, audioContext.currentTime);
+    gainNode.gain.setValueAtTime(0.0001, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.12, audioContext.currentTime + 0.01);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.22);
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.22);
+
+    oscillator.onended = () => {
+      gainNode.disconnect();
+      oscillator.disconnect();
+      audioContext.close().catch(() => {
+        // ignore close failures
+      });
+    };
+  };
+
+  const playNotificationSound = () => {
+    const notificationSound = notificationSoundRef.current;
+
+    if (!notificationSound) {
+      playFallbackPing();
+      return;
+    }
+
+    if (!isNotificationSoundAvailableRef.current) {
+      playFallbackPing();
+      return;
+    }
+
+    notificationSound.currentTime = 0;
+
+    notificationSound
+      .play()
+      .then(() => {
+        console.log('Sound played successfully');
+      })
+      .catch((err) => {
+        console.error('Audio autoplay blocked by browser:', err);
+        notificationSound.muted = false;
+
+        notificationSound.play().catch((retryError) => {
+          console.error('Retry failed:', retryError);
+          playFallbackPing();
+        });
+      });
+  };
+
+  const handleForegroundPush = (title?: string, body?: string) => {
+    const safeTitle = title?.trim() || '';
+    const safeBody = body?.trim() || '';
+    playNotificationSound();
+
+    const toastMessage = [safeTitle, safeBody].filter(Boolean).join('\n');
+    if (toastMessage) {
+      toast.success(toastMessage, {
+        duration: 6000,
+        position: 'top-center',
+        style: {
+          fontSize: '16px',
+          fontWeight: 'bold',
+        },
+      });
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('refresh_orders'));
+    }
+  };
 
   useEffect(() => {
     setIsPushEnabled(isPushEnabledForRole(role));
@@ -100,11 +222,9 @@ export const usePushNotifications = () => {
         });
 
         PushNotifications.addListener('pushNotificationReceived', (notification) => {
-          if (!isMounted || !notification.title) return;
-          toast.info(`🔔 ${notification.title}
-${notification.body || ''}`, {
-            duration: 5000,
-          });
+          if (!isMounted) return;
+          console.log('Foreground push received:', notification);
+          handleForegroundPush(notification.title, notification.body);
         });
 
         PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
@@ -136,20 +256,26 @@ ${notification.body || ''}`, {
         }
 
         webUnsubscribe = onMessage(messaging, (payload) => {
-          if (!isMounted || !payload.notification) return;
+          if (!isMounted) return;
+          console.log('Foreground push received:', payload);
+          const notificationTitle = payload.notification?.title?.trim() || '';
+          const notificationBody = payload.notification?.body?.trim() || '';
           if (Notification.permission === 'granted') {
             try {
-              new Notification(payload.notification.title || 'Новое уведомление', {
-                body: payload.notification.body || '',
-              });
+              const systemNotificationTitle = notificationTitle || notificationBody;
+              const systemNotificationBody =
+                notificationTitle && notificationBody ? notificationBody : '';
+
+              if (systemNotificationTitle) {
+                new Notification(systemNotificationTitle, {
+                  body: systemNotificationBody,
+                });
+              }
             } catch {
               // ignore system notification errors in foreground
             }
           }
-          toast.info(`🔔 ${payload.notification.title}
-${payload.notification.body || ''}`, {
-            duration: 5000,
-          });
+          handleForegroundPush(notificationTitle, notificationBody);
         });
       } catch (err) {
         console.error('Web push notification setup failed', err);

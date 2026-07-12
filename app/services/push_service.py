@@ -57,8 +57,12 @@ def _send_push(token: str, title: str, body: str, data: dict[str, str] | None = 
             notification=messaging.AndroidNotification(sound="default"),
         ),
         apns=messaging.APNSConfig(
+            headers={
+                "apns-priority": "10",
+                "apns-push-type": "alert",
+            },
             payload=messaging.APNSPayload(
-                aps=messaging.Aps(sound="default"),
+                aps=messaging.Aps(sound="default", content_available=True),
             ),
         ),
         webpush=messaging.WebpushConfig(

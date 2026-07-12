@@ -117,8 +117,18 @@ def schedule_driver_new_order_notification(order: Order, driver_id: UUID) -> Non
     _safe_schedule(
         schedule_push_to_driver,
         driver_id,
-        "Новый заказ",
-        "Поступил новый заказ. Откройте приложение и подтвердите решение.",
+        "Новый заказ!",
+        "Поступило новое предложение. Успейте принять заказ.",
+        _order_push_data(order),
+    )
+
+
+def schedule_driver_manual_assignment_notification(order: Order, driver_id: UUID) -> None:
+    _safe_schedule(
+        schedule_push_to_driver,
+        driver_id,
+        "Вам назначен рейс",
+        "Логист добавил новый заказ в ваш профиль. Можно выезжать на карьер.",
         _order_push_data(order),
     )
 
@@ -127,8 +137,18 @@ def schedule_driver_order_changed_notification(order: Order, driver_id: UUID) ->
     _safe_schedule(
         schedule_push_to_driver,
         driver_id,
-        "Внимание: Заказ изменен",
-        "Логист обновил детали вашего текущего заказа (сумма/адрес). Проверьте приложение.",
+        "Детали заказа изменены",
+        "Логист обновил информацию по текущему рейсу.",
+        _order_push_data(order),
+    )
+
+
+def schedule_driver_order_cancelled_notification(order: Order, driver_id: UUID) -> None:
+    _safe_schedule(
+        schedule_push_to_driver,
+        driver_id,
+        "Заказ отменен",
+        "К сожалению, текущий рейс был отменен. Вы снова свободны.",
         _order_push_data(order),
     )
 

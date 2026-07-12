@@ -65,6 +65,11 @@ interface AdminOrder {
   notes?: string;
 }
 
+const mergeOrderIntoList = (orders: AdminOrder[], nextOrder: AdminOrder) => [
+  nextOrder,
+  ...orders.filter((order) => order.id !== nextOrder.id),
+];
+
 interface AdminDriver {
   id: string;
   name: string;
@@ -125,10 +130,14 @@ const isDriverCompatibleWithOrder = (
   // Извлекаем новые поля
   const min =
     (driver as any).vehicle_cubature_min ?? driver.vehicle.cubature_min;
+  const fallbackVolume =
+    driver.vehicle.delivery_option?.capacity_m3 ?? min ?? 0;
   const max =
-    (driver as any).vehicle_cubature_max ?? driver.vehicle.cubature_max;
+    (driver as any).vehicle_cubature_max ??
+    driver.vehicle.cubature_max ??
+    fallbackVolume;
 
-  // Если у водителя нет этих полей (старая тестовая запись) - отбраковываем
+  // Если у водителя нет ни диапазона, ни тарифной кубатуры - отбраковываем
   if (min == null || max == null) {
     return false;
   }
@@ -227,7 +236,7 @@ export default function LogistDashboardScreen({
   
 
   return () => clearInterval(intervalId);
-  }, [orderDateFilter, orderStatusTab]);
+  }, [orderDateFilter, orderStatusTab, token]);
 
   useEffect(() => {
     if (activeTab === "drivers" && drivers.length === 0) {
@@ -259,16 +268,16 @@ export default function LogistDashboardScreen({
     }
     try {
       if (!silent) setIsLoading(true);
-      const params = new URLSearchParams();
+      const searchParams = new URLSearchParams();
       if (orderDateFilter) {
-        params.append("date", orderDateFilter);
+        searchParams.append("date", orderDateFilter);
       }
       if (orderStatusTab === "archived") {
-        params.append("is_deleted", "true");
+        searchParams.append("is_deleted", "true");
       }
-      const query = params.toString();
-      const url = `${baseURL}/logist/orders${query ? `?${query}` : ""}`;
-      const res = await fetch(url, {
+      const queryString = searchParams.toString();
+      const requestUrl = `${baseURL}/logist/orders${queryString ? `?${queryString}` : ""}`;
+      const res = await fetch(requestUrl, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -1163,7 +1172,16 @@ export default function LogistDashboardScreen({
         token={token}
         materials={materials}
         deliveryOptions={deliveryOptions}
-        onOrderCreated={() => fetchOrders(true)}
+        onOrderCreated={async (createdOrder) => {
+          setActiveTab("orders");
+          setOrderStatusTab("active");
+          setOrderDateFilter("");
+          setIsLoading(false);
+          if (createdOrder?.id) {
+            setOrders((prev) => mergeOrderIntoList(prev, createdOrder));
+          }
+          await fetchOrders(true);
+        }}
       />
 
       {manualAssignOrder && (

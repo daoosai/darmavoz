@@ -10,7 +10,7 @@ interface CreateOrderModalProps {
   token: string | null;
   materials: any[];
   deliveryOptions: any[];
-  onOrderCreated: () => void;
+  onOrderCreated: (createdOrder?: any) => void | Promise<void>;
 }
 
 interface DeliveryCalculationResult {
@@ -22,10 +22,57 @@ interface DeliveryCalculationResult {
   estimated_total_amount: number;
 }
 
+interface AvailableDriver {
+  id: string;
+  name: string;
+  status: string;
+  moderation_status?: string | null;
+  vehicle?: {
+    title?: string;
+    plate_number?: string;
+    body_volume_m3?: number;
+    cubature_min?: number;
+    cubature_max?: number;
+    delivery_option_id?: string;
+    delivery_option?: {
+      id?: string;
+      capacity_m3?: number;
+    };
+  } | null;
+}
+
 const calculateMaterialCost = (material: any, deliveryOption: any) =>
   Math.round(
     Number(material?.price ?? 0) * Number(deliveryOption?.capacity_m3 ?? 0),
   );
+
+const getDriverDeliveryOptionId = (driver: AvailableDriver) =>
+  driver.vehicle?.delivery_option_id || driver.vehicle?.delivery_option?.id || "";
+
+const getDriverVehicleVolume = (driver: AvailableDriver) =>
+  driver.vehicle?.cubature_max || driver.vehicle?.delivery_option?.capacity_m3 || 0;
+
+const getDriverVehicleVolumeRange = (driver: AvailableDriver) => {
+  const fallbackVolume =
+    driver.vehicle?.body_volume_m3 ||
+    driver.vehicle?.delivery_option?.capacity_m3 ||
+    0;
+  const minVolume = Number(driver.vehicle?.cubature_min || fallbackVolume || 0);
+  const maxVolume = Number(
+    driver.vehicle?.cubature_max || fallbackVolume || minVolume || 0,
+  );
+
+  return {
+    minVolume,
+    maxVolume,
+  };
+};
+
+const getDriverVehicleLabel = (driver: AvailableDriver) => {
+  const title = driver.vehicle?.title?.trim();
+  const plate = driver.vehicle?.plate_number?.trim();
+  return [title, plate].filter(Boolean).join(" • ") || "Машина не указана";
+};
 
 const formatFastApiDetail = (detail: any, fallback: string) => {
   if (Array.isArray(detail)) {
@@ -78,6 +125,7 @@ export default function LogistCreateOrderModal({
   const [newOrder, setNewOrder] = useState({
     client_name: "",
     client_phone: "",
+    driver_id: "",
     material_id: "",
     delivery_option_id: "",
     delivery_address: "",
@@ -87,6 +135,8 @@ export default function LogistCreateOrderModal({
   });
 
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [availableDrivers, setAvailableDrivers] = useState<AvailableDriver[]>([]);
+  const [isLoadingDrivers, setIsLoadingDrivers] = useState(false);
   const deliveryInputRef = useRef<HTMLInputElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
@@ -121,6 +171,7 @@ export default function LogistCreateOrderModal({
       setNewOrder({
         client_name: "",
         client_phone: "",
+        driver_id: "",
         material_id: "",
         delivery_option_id: "",
         delivery_address: "",
@@ -131,11 +182,134 @@ export default function LogistCreateOrderModal({
     }
   }, [isOpen]);
 
+  const machineId = newOrder.delivery_option_id;
+
+  useEffect(() => {
+    if (!isOpen || !token) {
+      return;
+    }
+
+    if (!machineId) {
+      setAvailableDrivers([]);
+      setIsLoadingDrivers(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const fetchAvailableDrivers = async () => {
+      try {
+        setIsLoadingDrivers(true);
+        const response = await fetch(
+          `${baseURL}/drivers/?status=available&delivery_option_id=${encodeURIComponent(machineId)}`,
+          {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          },
+        );
+
+        if (!response.ok) {
+          throw new Error(`Server returned ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (!cancelled) {
+          console.log("[LogistCreateOrderModal] available drivers response", {
+            machineId,
+            drivers: Array.isArray(data) ? data : [],
+          });
+          setAvailableDrivers(Array.isArray(data) ? data : []);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setAvailableDrivers([]);
+          toast.error("Не удалось загрузить свободных водителей");
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingDrivers(false);
+        }
+      }
+    };
+
+    void fetchAvailableDrivers();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, token, machineId]);
+
+  useEffect(() => {
+    if (!machineId) {
+      if (newOrder.driver_id) {
+        setNewOrder((prev) => ({ ...prev, driver_id: "" }));
+      }
+      return;
+    }
+
+    if (!newOrder.driver_id) {
+      return;
+    }
+
+    const hasSelectedDriver = availableDrivers.some(
+      (driver) =>
+        driver.id === newOrder.driver_id &&
+        doesDriverMatchSelectedMachine(driver),
+    );
+
+    if (!hasSelectedDriver) {
+      setNewOrder((prev) => ({ ...prev, driver_id: "" }));
+    }
+  }, [
+    availableDrivers,
+    machineId,
+    newOrder.driver_id,
+  ]);
+
   const selectedMaterial =
     materials.find((item) => item.id === newOrder.material_id) || null;
   const selectedDeliveryOption =
     deliveryOptions.find((item) => item.id === newOrder.delivery_option_id) ||
     null;
+  const selectedMachineVolume = Number(selectedDeliveryOption?.capacity_m3 || 0);
+
+  const doesDriverMatchSelectedMachine = (driver: AvailableDriver) => {
+    const driverDeliveryOptionId = getDriverDeliveryOptionId(driver);
+    const driverMachineVolume = Number(getDriverVehicleVolume(driver) || 0);
+    const { minVolume, maxVolume } = getDriverVehicleVolumeRange(driver);
+    const isExactMatch = driverDeliveryOptionId === machineId;
+    const isVolumeMatch =
+      selectedMachineVolume > 0 &&
+      minVolume > 0 &&
+      maxVolume > 0 &&
+      selectedMachineVolume >= minVolume &&
+      selectedMachineVolume <= maxVolume;
+    const matches = isExactMatch || isVolumeMatch;
+
+    console.log("[LogistCreateOrderModal] driver filter", {
+      machineId,
+      selectedMachineVolume,
+      driverId: driver.id,
+      driverName: driver.name,
+      driverStatus: driver.status,
+      driverModerationStatus: driver.moderation_status,
+      hasVehicle: Boolean(driver.vehicle),
+      driverDeliveryOptionId,
+      driverMachineVolume,
+      minVolume,
+      maxVolume,
+      isExactMatch,
+      isVolumeMatch,
+      matches,
+    });
+
+    return matches;
+  };
+
+  const filteredAvailableDrivers = machineId
+    ? availableDrivers.filter((driver) => doesDriverMatchSelectedMachine(driver))
+    : [];
   const computedMaterialCost = calculateMaterialCost(
     selectedMaterial,
     selectedDeliveryOption,
@@ -361,6 +535,7 @@ export default function LogistCreateOrderModal({
       const payload = {
         client_name: normalizedClientName,
         client_phone: cleanPhone,
+        driver_id: newOrder.driver_id || undefined,
         material_id: newOrder.material_id,
         delivery_option_id: newOrder.delivery_option_id,
         quarry_id: calculationResult.quarry_id,
@@ -375,7 +550,7 @@ export default function LogistCreateOrderModal({
         notes: newOrder.notes,
         quantity: 1,
         source: "dispatcher",
-        auto_dispatch: true,
+        auto_dispatch: !newOrder.driver_id,
       };
 
       const res = await fetch(`${baseURL}/logist/orders`, {
@@ -398,7 +573,7 @@ export default function LogistCreateOrderModal({
       }
 
       toast.success("Заказ создан");
-      onOrderCreated();
+      await onOrderCreated(responseData);
       onClose();
     } catch (err: any) {
       toast.error(err?.message || "Ошибка при создании заказа");
@@ -534,6 +709,101 @@ export default function LogistCreateOrderModal({
                   ))}
               </select>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+              Назначить водителя (Опционально)
+            </label>
+            {!newOrder.delivery_option_id ? (
+              <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-500 text-center">
+                Сначала выберите машину, чтобы увидеть подходящих свободных водителей
+              </div>
+            ) : isLoadingDrivers ? (
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-500 text-center">
+                Загрузка свободных водителей...
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+                <div className="max-h-64 overflow-y-auto">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setNewOrder((prev) => ({
+                        ...prev,
+                        driver_id: "",
+                      }))
+                    }
+                    className={`w-full p-4 border-b border-slate-100 text-left transition-colors ${
+                      !newOrder.driver_id
+                        ? "border-blue-500 bg-blue-50"
+                        : "hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="radio"
+                        readOnly
+                        checked={!newOrder.driver_id}
+                        className="mt-1 h-4 w-4 text-[#2DB0E6]"
+                      />
+                      <div className="min-w-0">
+                        <div className="text-sm font-bold text-slate-900">
+                          Не назначать (Автопоиск)
+                        </div>
+                        <div className="mt-1 text-xs text-slate-500">
+                          Заказ уйдет в обычный автопоиск подходящего водителя
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+
+                  {filteredAvailableDrivers.map((driver) => {
+                    const isSelected = newOrder.driver_id === driver.id;
+                    return (
+                      <button
+                        key={driver.id}
+                        type="button"
+                        onClick={() =>
+                          setNewOrder((prev) => ({
+                            ...prev,
+                            driver_id: driver.id,
+                          }))
+                        }
+                        className={`w-full p-4 border-b border-slate-100 last:border-b-0 text-left transition-colors ${
+                          isSelected
+                            ? "border-blue-500 bg-blue-50"
+                            : "hover:bg-slate-50"
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <input
+                            type="radio"
+                            readOnly
+                            checked={isSelected}
+                            className="mt-1 h-4 w-4 text-[#2DB0E6]"
+                          />
+                          <div className="min-w-0">
+                            <div className="text-sm font-bold text-slate-900">
+                              {driver.name}
+                            </div>
+                            <div className="mt-1 text-xs text-slate-500">
+                              {getDriverVehicleLabel(driver)}
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {filteredAvailableDrivers.length === 0 && (
+                  <div className="p-4 text-sm text-slate-500 text-center border-t border-slate-100">
+                    Нет свободных водителей для этого типа машины
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="relative" ref={wrapperRef}>

@@ -161,6 +161,7 @@ class ClientOrderCalculationOut(BaseModel):
 class LogistOrderCreate(BaseModel):
     client_name: str | None = Field(default=None, max_length=255)
     client_phone: str = Field(min_length=11, max_length=20)
+    driver_id: UUID | None = Field(default=None, validation_alias=AliasChoices("driver_id", "driverId"))
     material_id: UUID
     delivery_option_id: UUID
     quantity: int = Field(default=1, ge=1)

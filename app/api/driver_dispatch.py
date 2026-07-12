@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -42,6 +43,7 @@ from app.services.vehicle_moderation import (
 from app.utils.phones import normalize_phone
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _build_vehicle_title(vehicle: Vehicle) -> str:
@@ -531,6 +533,13 @@ async def save_driver_fcm_token(
     current_driver: Driver = Depends(get_current_driver),
 ) -> DriverFcmTokenOut:
     normalized_token = payload.token.strip()
+    logger.info(
+        "driver_fcm_token_save_requested",
+        extra={
+            "driver_id": str(current_driver.id),
+            "token_prefix": normalized_token[:24],
+        },
+    )
     await detach_fcm_token_from_other_entities(
         db,
         normalized_token,
@@ -546,6 +555,10 @@ async def delete_driver_fcm_token(
     db: AsyncSession = Depends(get_db),
     current_driver: Driver = Depends(get_current_driver),
 ) -> DriverFcmTokenOut:
+    logger.info(
+        "driver_fcm_token_deleted",
+        extra={"driver_id": str(current_driver.id)},
+    )
     current_driver.fcm_token = None
     await db.commit()
     return DriverFcmTokenOut(ok=True, token=None)

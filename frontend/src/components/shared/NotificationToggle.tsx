@@ -5,12 +5,10 @@ import { PushNotifications } from '@capacitor/push-notifications';
 import { useAuthStore } from '../../store';
 import { baseURL } from '../../utils';
 import {
-  ensureFirebaseMessagingServiceWorker,
   deleteToken,
-  FIREBASE_WEB_VAPID_KEY,
-  getToken,
   messaging,
 } from '../../services/firebase';
+import { getWebPushTokenWithRetry } from '../../services/webPush';
 import { emitPushSettingsChanged, getPushTokenEndpoint } from '../../pushAuth';
 
 interface NotificationToggleProps {
@@ -110,11 +108,12 @@ export const NotificationToggle: React.FC<NotificationToggleProps> = ({ role }) 
           return;
         }
 
-        const serviceWorkerRegistration = await ensureFirebaseMessagingServiceWorker();
-        currentToken = await getToken(messaging, {
-          vapidKey: FIREBASE_WEB_VAPID_KEY,
-          serviceWorkerRegistration,
-        });
+        currentToken = await getWebPushTokenWithRetry();
+        if (!currentToken) {
+          console.error('Web push enable failed: empty Firebase token', { role });
+          toast.error('Не удалось получить push-токен браузера. Попробуйте еще раз.');
+          return;
+        }
       }
 
       if (currentToken) {

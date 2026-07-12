@@ -1,6 +1,30 @@
+# Git and CI metadata
 .git
-__pycache__/
-.pytest_cache/
-frontend/node_modules/
-frontend/dist/
-frontend/.vite/
+.github
+
+# Python caches
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# Local environments
+.venv
+venv
+
+# Frontend dependencies and build artifacts
+node_modules
+frontend/node_modules
+frontend/dist
+react_web/node_modules
+react_web/dist
+
+# Mobile / local build artifacts
+mobile/.dart_tool
+mobile/build
+
+# Logs
+*.log

@@ -325,6 +325,122 @@ async def test_dispatch_skips_wrong_vehicle_and_moves_to_next_driver(client, ses
 
 
 @pytest.mark.asyncio
+async def test_dispatch_tick_sends_driver_reminder_once_for_stale_assigned_order(session_factory, monkeypatch):
+    fake_redis = FakeRedis()
+    reminder_calls: list[tuple[str, str]] = []
+
+    def fake_schedule_driver_reminder(order, driver_id):
+        reminder_calls.append((str(order.id), str(driver_id)))
+
+    monkeypatch.setattr(
+        "app.services.dispatch_service.schedule_driver_order_reminder_notification",
+        fake_schedule_driver_reminder,
+    )
+    monkeypatch.setattr("app.services.dispatch_service.settings.DRIVER_ORDER_REMINDER_DELAY_SECONDS", 60)
+
+    async with session_factory() as session:
+        driver_role = await ensure_role(session, "driver")
+
+        category = Category(name="Reminder Sand", slug="driver-reminder-order", sort_order=0, is_active=True)
+        material = Material(
+            category=category,
+            name="Reminder Material",
+            description="",
+            price=2100.0,
+            unit="m3",
+            min_volume=5.0,
+            is_active=True,
+            sort_order=0,
+        )
+        delivery_option = DeliveryOption(
+            capacity_m3=10.0,
+            title="10 m3",
+            description="",
+            base_price=0.0,
+            is_active=True,
+            sort_order=0,
+        )
+        session.add_all([category, material, delivery_option])
+        await session.flush()
+
+        driver_user = await create_driver_user(session, username="driver_reminder_user", role=driver_role)
+        vehicle = Vehicle(
+            title="Reminder Truck",
+            delivery_option_id=delivery_option.id,
+            is_active=True,
+            moderation_status=ModerationStatus.approved.value,
+        )
+        session.add(vehicle)
+        await session.flush()
+
+        driver = Driver(
+            user_id=driver_user.id,
+            vehicle_id=vehicle.id,
+            name="Reminder Driver",
+            phone="+79000000777",
+            status=DriverStatus.busy.value,
+            dispatch_priority=100,
+            is_auto_dispatch_enabled=True,
+            is_active=True,
+            moderation_status=ModerationStatus.approved.value,
+        )
+        session.add(driver)
+        await session.flush()
+
+        client_record = Client(name="Reminder Client", phone="+79990007777")
+        session.add(client_record)
+        await session.flush()
+
+        assigned_at = datetime.now(UTC) - timedelta(minutes=5)
+        order = Order(
+            client_id=client_record.id,
+            driver_id=driver.id,
+            delivery_option_id=delivery_option.id,
+            address="???????, ???????? 1",
+            delivery_address="???????, ???????? 1",
+            total_amount=21000.0,
+            status=OrderStatus.driver_assigned.value,
+            source="dispatcher",
+            created_by_source="dispatcher",
+            assigned_at=assigned_at,
+            dispatch_started_at=assigned_at,
+        )
+        session.add(order)
+        await session.flush()
+        session.add(
+            OrderItem(
+                order_id=order.id,
+                material_id=material.id,
+                quantity=1,
+                volume=10.0,
+                price=2100.0,
+                amount=21000.0,
+            )
+        )
+        await session.commit()
+        order_id = order.id
+        driver_id = driver.id
+
+    processed_first = await run_dispatch_tick(fake_redis, session_factory)
+    processed_second = await run_dispatch_tick(fake_redis, session_factory)
+
+    assert processed_first >= 1
+    assert processed_second == 0
+    assert reminder_calls == [(str(order_id), str(driver_id))]
+
+    async with session_factory() as session:
+        reminder_events = (
+            await session.execute(
+                select(EventLog).where(
+                    EventLog.order_id == order_id,
+                    EventLog.event_type == "driver_order_reminder_sent",
+                )
+            )
+        ).scalars().all()
+        assert len(reminder_events) == 1
+
+
+@pytest.mark.asyncio
 async def test_driver_can_cancel_assigned_order_and_return_it_to_dispatch(client, session_factory, monkeypatch):
     queued_order_ids: list[str] = []
 

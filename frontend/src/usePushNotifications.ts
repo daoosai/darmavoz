@@ -5,12 +5,10 @@ import { baseURL } from './utils';
 import toast from 'react-hot-toast';
 import { Capacitor } from '@capacitor/core';
 import {
-  ensureFirebaseMessagingServiceWorker,
-  FIREBASE_WEB_VAPID_KEY,
-  getToken,
   messaging,
   onMessage,
 } from './services/firebase';
+import { getWebPushTokenWithRetry } from './services/webPush';
 import {
   getPushTokenEndpoint,
   isPushEnabledForRole,
@@ -18,7 +16,7 @@ import {
 } from './pushAuth';
 
 const saveFcmToken = async (endpoint: string, authToken: string, fcmToken: string) => {
-  await fetch(`${baseURL}${endpoint}`, {
+  const response = await fetch(`${baseURL}${endpoint}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -26,6 +24,10 @@ const saveFcmToken = async (endpoint: string, authToken: string, fcmToken: strin
     },
     body: JSON.stringify({ token: fcmToken }),
   });
+
+  if (!response.ok) {
+    throw new Error(`FCM token save failed: ${response.status}`);
+  }
 };
 
 export const usePushNotifications = () => {
@@ -123,17 +125,14 @@ ${notification.body || ''}`, {
           return;
         }
 
-        const serviceWorkerRegistration = await ensureFirebaseMessagingServiceWorker();
-        const currentToken = await getToken(messaging, {
-          vapidKey: FIREBASE_WEB_VAPID_KEY,
-          serviceWorkerRegistration,
-        });
+        const currentToken = await getWebPushTokenWithRetry();
 
         if (currentToken) {
           await saveFcmToken(endpoint, token, currentToken);
           console.log('FCM token sent to backend (Web)');
         } else {
-          console.warn('FCM token is empty for web push');
+          console.error('FCM token is empty for web push; backend registration skipped');
+          return;
         }
 
         webUnsubscribe = onMessage(messaging, (payload) => {

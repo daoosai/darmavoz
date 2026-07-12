@@ -1,0 +1,105 @@
+name: Deploy Test Environment
+
+on:
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+
+jobs:
+  deploy-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend on runner
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build
+          tar -C dist -cf ../frontend-dist.tar .
+
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Configure SSH
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          cat > ~/.ssh/config <<'EOF'
+          Host *
+            StrictHostKeyChecking accept-new
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Upload frontend bundle
+        run: |
+          set -euo pipefail
+          ssh_opts=(
+            -o BatchMode=yes
+            -o ConnectTimeout=30
+            -o ServerAliveInterval=15
+            -o ServerAliveCountMax=4
+          )
+          cat frontend-dist.tar | ssh "${ssh_opts[@]}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+            "cat > /tmp/frontend-dist.tar"
+
+      - name: Deploy staging on server
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" <<'EOF'
+          set -euo pipefail
+          SOURCE_DIR=/opt/darmavoz_test
+          DEPLOY_DIR=/opt/darmavoz_test_deploy
+
+          cd "${SOURCE_DIR}"
+          git fetch origin develop
+
+          # САМОИСЦЕЛЕНИЕ GIT WORKTREE (Убиваем зомби-папки)
+          git worktree prune || true
+          if git worktree list | grep -q "${DEPLOY_DIR}"; then
+            git -C "${DEPLOY_DIR}" fetch origin develop
+            if [ -n "$(git -C "${DEPLOY_DIR}" status --porcelain)" ]; then
+              git worktree remove --force "${DEPLOY_DIR}" || true
+              rm -rf "${DEPLOY_DIR}"
+              git worktree prune || true
+              git worktree add --detach "${DEPLOY_DIR}" origin/develop
+            else
+              git -C "${DEPLOY_DIR}" checkout --detach origin/develop
+            fi
+          else
+            rm -rf "${DEPLOY_DIR}"
+            git worktree add --detach "${DEPLOY_DIR}" origin/develop
+          fi
+
+          if [ -f "${SOURCE_DIR}/.env" ]; then
+            ln -sfn "${SOURCE_DIR}/.env" "${DEPLOY_DIR}/.env"
+          fi
+
+          mkdir -p /opt/daoos-kit/sites/darmavoz_test/frontend /opt/daoos-kit/sites/darmavoz_test/static
+          rm -rf /opt/daoos-kit/sites/darmavoz_test/frontend/*
+          tar -xf /tmp/frontend-dist.tar -C /opt/daoos-kit/sites/darmavoz_test/frontend
+          rm -f /tmp/frontend-dist.tar
+          cp -a "${DEPLOY_DIR}/static/." /opt/daoos-kit/sites/darmavoz_test/static/
+
+          # УБИВАЕМ ЗАВИСШИЕ КОНТЕЙНЕРЫ
+          docker rm -f minio_test db_test redis_test backend_test || true
+
+          # ПОДНИМАЕМ ЗАНОВО
+          docker compose -f "${DEPLOY_DIR}/docker-compose.test.yml" up -d db_test redis_test minio_test backend_test --build --force-recreate
+          docker exec backend_test alembic upgrade head
+          EOF

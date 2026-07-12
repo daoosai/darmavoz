@@ -1,4 +1,5 @@
 
+import logging
 from datetime import date as date_type
 from uuid import UUID
 
@@ -30,6 +31,7 @@ from app.services.dispatch_service import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.post("/me/fcm-token", response_model=ClientFcmTokenOut)
@@ -39,6 +41,13 @@ async def save_logist_fcm_token(
     current_user: User = Depends(get_current_logist_user),
 ) -> ClientFcmTokenOut:
     normalized_token = payload.token.strip()
+    logger.info(
+        "logist_fcm_token_save_requested",
+        extra={
+            "user_id": str(current_user.id),
+            "token_prefix": normalized_token[:24],
+        },
+    )
     await detach_fcm_token_from_other_entities(
         db,
         normalized_token,
@@ -54,6 +63,10 @@ async def delete_logist_fcm_token(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_logist_user),
 ) -> ClientFcmTokenOut:
+    logger.info(
+        "logist_fcm_token_deleted",
+        extra={"user_id": str(current_user.id)},
+    )
     current_user.fcm_token = None
     await db.commit()
     return ClientFcmTokenOut(ok=True, token=None)

@@ -1,3 +1,4 @@
+import logging
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -20,6 +21,7 @@ from app.services.dispatch_service import list_orders_for_client
 from app.services.fcm_tokens import detach_fcm_token_from_other_entities
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def split_client_name(name: str | None) -> tuple[str, str | None]:
@@ -103,6 +105,13 @@ async def save_my_fcm_token(
     db: AsyncSession = Depends(get_db),
 ) -> ClientFcmTokenOut:
     normalized_token = payload.token.strip()
+    logger.info(
+        "client_fcm_token_save_requested",
+        extra={
+            "client_id": str(current_client.id),
+            "token_prefix": normalized_token[:24],
+        },
+    )
     await detach_fcm_token_from_other_entities(
         db,
         normalized_token,
@@ -118,6 +127,10 @@ async def delete_my_fcm_token(
     current_client: Client = Depends(get_current_client),
     db: AsyncSession = Depends(get_db),
 ) -> ClientFcmTokenOut:
+    logger.info(
+        "client_fcm_token_deleted",
+        extra={"client_id": str(current_client.id)},
+    )
     current_client.fcm_token = None
     await db.commit()
     return ClientFcmTokenOut(ok=True, token=None)

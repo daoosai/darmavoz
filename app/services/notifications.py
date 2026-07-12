@@ -38,6 +38,15 @@ def _format_driver_label(driver_name: str | None, driver_id: UUID) -> str:
 
 
 def schedule_client_order_created_notification(order: Order) -> None:
+    logger.info(
+        "client_push_scheduled",
+        extra={
+            "event": "order_created",
+            "order_id": str(order.id),
+            "client_id": str(order.client_id),
+            "order_status": str(order.status),
+        },
+    )
     _safe_schedule(
         schedule_push_to_client,
         order.client_id,
@@ -48,6 +57,15 @@ def schedule_client_order_created_notification(order: Order) -> None:
 
 
 def schedule_client_driver_assigned_notification(order: Order) -> None:
+    logger.info(
+        "client_push_scheduled",
+        extra={
+            "event": "driver_assigned",
+            "order_id": str(order.id),
+            "client_id": str(order.client_id),
+            "order_status": str(order.status),
+        },
+    )
     _safe_schedule(
         schedule_push_to_client,
         order.client_id,
@@ -58,6 +76,15 @@ def schedule_client_driver_assigned_notification(order: Order) -> None:
 
 
 def schedule_client_heading_to_client_notification(order: Order) -> None:
+    logger.info(
+        "client_push_scheduled",
+        extra={
+            "event": "heading_to_client",
+            "order_id": str(order.id),
+            "client_id": str(order.client_id),
+            "order_status": str(order.status),
+        },
+    )
     _safe_schedule(
         schedule_push_to_client,
         order.client_id,
@@ -68,6 +95,15 @@ def schedule_client_heading_to_client_notification(order: Order) -> None:
 
 
 def schedule_client_order_completed_notification(order: Order) -> None:
+    logger.info(
+        "client_push_scheduled",
+        extra={
+            "event": "completed",
+            "order_id": str(order.id),
+            "client_id": str(order.client_id),
+            "order_status": str(order.status),
+        },
+    )
     _safe_schedule(
         schedule_push_to_client,
         order.client_id,

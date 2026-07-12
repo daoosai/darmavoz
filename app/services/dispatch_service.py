@@ -42,6 +42,7 @@ from app.services.notifications import (
     schedule_client_order_created_notification,
     schedule_driver_new_order_notification,
     schedule_driver_order_changed_notification,
+    schedule_driver_order_reminder_notification,
     schedule_logist_driver_rejected_notification,
     schedule_logist_no_driver_found_notification,
     schedule_logist_timeout_notification,
@@ -82,6 +83,11 @@ ACTIVE_ASSIGNED_ORDER_STATUSES = {
     OrderStatus.loading.value,
     OrderStatus.heading_to_client.value,
     OrderStatus.delivered.value,
+}
+
+DRIVER_REMINDER_ORDER_STATUSES = {
+    OrderStatus.driver_assigned.value,
+    OrderStatus.driver_accepted.value,
 }
 
 FULL_ORDER_EDIT_STATUSES = {
@@ -244,6 +250,37 @@ def schedule_new_order_push(order: Order, driver_id: UUID | None) -> None:
     if driver_id is None:
         return
     schedule_driver_new_order_notification(order, driver_id)
+
+
+async def maybe_schedule_driver_order_reminder(session: AsyncSession, order: Order) -> bool:
+    if order.driver_id is None or order.status not in DRIVER_REMINDER_ORDER_STATUSES:
+        return False
+
+    if order.assigned_at is None:
+        return False
+
+    reminder_due_at = order.assigned_at + timedelta(seconds=settings.DRIVER_ORDER_REMINDER_DELAY_SECONDS)
+    if reminder_due_at > utcnow():
+        return False
+
+    reminder_sent = await session.scalar(
+        select(OrderEvent.id)
+        .where(OrderEvent.order_id == order.id)
+        .where(OrderEvent.event_type == "driver_order_reminder_sent")
+        .limit(1)
+    )
+    if reminder_sent is not None:
+        return False
+
+    await add_event(
+        session,
+        order.id,
+        "driver_order_reminder_sent",
+        f"Driver reminder sent to {order.driver_id}",
+        order_status=order.status,
+    )
+    schedule_driver_order_reminder_notification(order, order.driver_id)
+    return True
 
 
 async def enqueue_order_for_dispatch_safe(order_id: UUID) -> None:
@@ -1731,6 +1768,13 @@ async def build_order_status_history(session: AsyncSession, order_id: UUID) -> O
 
 async def get_orders_needing_dispatch(session: AsyncSession, limit: int = 50) -> list[UUID]:
     now = utcnow()
+    reminder_due_before = now - timedelta(seconds=settings.DRIVER_ORDER_REMINDER_DELAY_SECONDS)
+    reminder_sent_subquery = (
+        select(OrderEvent.id)
+        .where(OrderEvent.order_id == Order.id)
+        .where(OrderEvent.event_type == "driver_order_reminder_sent")
+        .exists()
+    )
     result = await session.execute(
         select(Order.id)
         .outerjoin(Order.current_offer)
@@ -1748,6 +1792,13 @@ async def get_orders_needing_dispatch(session: AsyncSession, limit: int = 50) ->
                         OrderOffer.expires_at <= now,
                     )
                 ),
+                (
+                    Order.status.in_(sorted(DRIVER_REMINDER_ORDER_STATUSES))
+                )
+                & Order.driver_id.is_not(None)
+                & Order.assigned_at.is_not(None)
+                & (Order.assigned_at <= reminder_due_before)
+                & (~reminder_sent_subquery),
             )
         )
         .order_by(Order.dispatch_started_at.asc().nullsfirst(), Order.created_at.asc())
@@ -1758,6 +1809,11 @@ async def get_orders_needing_dispatch(session: AsyncSession, limit: int = 50) ->
 
 async def process_dispatch_for_order(session: AsyncSession, order_id: UUID) -> None:
     order = await get_order_by_id(session, order_id)
+
+    if await maybe_schedule_driver_order_reminder(session, order):
+        await session.commit()
+        return
+
     current_offer = order.current_offer
     if current_offer is not None and current_offer.status == OrderOfferStatus.pending.value:
         if current_offer.expires_at and current_offer.expires_at <= utcnow():

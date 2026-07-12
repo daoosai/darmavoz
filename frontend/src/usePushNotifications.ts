@@ -36,6 +36,7 @@ export const usePushNotifications = () => {
     isPushEnabledForRole(useAuthStore.getState().role),
   );
   const notificationSoundRef = useRef<HTMLAudioElement | null>(null);
+  const isNotificationSoundAvailableRef = useRef(true);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -44,32 +45,76 @@ export const usePushNotifications = () => {
 
     const audio = new Audio('/notification.mp3');
     audio.preload = 'auto';
-
-    const switchToFallbackSound = () => {
-      if (audio.src.endsWith('/new_order.mp3')) {
-        return;
-      }
-
-      console.warn('notification.mp3 is unavailable, falling back to /new_order.mp3');
-      audio.src = '/new_order.mp3';
-      audio.load();
+    const handleAudioReady = () => {
+      isNotificationSoundAvailableRef.current = true;
+    };
+    const handleAudioError = () => {
+      isNotificationSoundAvailableRef.current = false;
+      console.warn('notification.mp3 is unavailable, foreground notifications will use a short synthetic ping');
     };
 
-    audio.addEventListener('error', switchToFallbackSound);
+    audio.addEventListener('canplaythrough', handleAudioReady);
+    audio.addEventListener('error', handleAudioError);
     audio.load();
     notificationSoundRef.current = audio;
 
     return () => {
       audio.pause();
-      audio.removeEventListener('error', switchToFallbackSound);
+      audio.removeEventListener('canplaythrough', handleAudioReady);
+      audio.removeEventListener('error', handleAudioError);
       notificationSoundRef.current = null;
     };
   }, []);
+
+  const playFallbackPing = () => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const audioContextClass =
+      window.AudioContext ||
+      (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+
+    if (!audioContextClass) {
+      console.warn('AudioContext is unavailable, synthetic notification ping skipped');
+      return;
+    }
+
+    const audioContext = new audioContextClass();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(988, audioContext.currentTime);
+    gainNode.gain.setValueAtTime(0.0001, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.12, audioContext.currentTime + 0.01);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.22);
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.22);
+
+    oscillator.onended = () => {
+      gainNode.disconnect();
+      oscillator.disconnect();
+      audioContext.close().catch(() => {
+        // ignore close failures
+      });
+    };
+  };
 
   const playNotificationSound = () => {
     const notificationSound = notificationSoundRef.current;
 
     if (!notificationSound) {
+      playFallbackPing();
+      return;
+    }
+
+    if (!isNotificationSoundAvailableRef.current) {
+      playFallbackPing();
       return;
     }
 
@@ -86,14 +131,7 @@ export const usePushNotifications = () => {
 
         notificationSound.play().catch((retryError) => {
           console.error('Retry failed:', retryError);
-
-          if (!notificationSound.src.endsWith('/new_order.mp3')) {
-            notificationSound.src = '/new_order.mp3';
-            notificationSound.load();
-            notificationSound.play().catch((fallbackError) => {
-              console.error('Fallback sound failed:', fallbackError);
-            });
-          }
+          playFallbackPing();
         });
       });
   };

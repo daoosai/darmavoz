@@ -7,42 +7,6 @@ export const baseURL =
 
 export const APP_VERSION = import.meta.env.VITE_APP_VERSION || "2.4.5";
 
-export const playNewOrderSound = () => {
-  try {
-    const audio = new Audio("/new_order.mp3");
-    let playCount = 1;
-    const maxPlays = 4; // РљРѕР»РёС‡РµСЃС‚РІРѕ РїРѕРІС‚РѕСЂРµРЅРёР№
-
-    const playSequence = () => {
-      /*
-      audio.play().catch((e) => {
-        console.warn(
-          "РђРІС‚РѕРІРѕСЃРїСЂРѕРёР·РІРµРґРµРЅРёРµ Р·Р°Р±Р»РѕРєРёСЂРѕРІР°РЅРѕ Р±СЂР°СѓР·РµСЂРѕРј. Р’РѕРґРёС‚РµР»СЊ РґРѕР»Р¶РµРЅ С‚Р°РїРЅСѓС‚СЊ РїРѕ СЌРєСЂР°РЅСѓ.",
-          e,
-        );
-      });
-      */
-    };
-
-    // РЎР»СѓС€Р°РµРј СЃРѕР±С‹С‚РёРµ Р·Р°РІРµСЂС€РµРЅРёСЏ С‚СЂРµРєР°
-    audio.addEventListener("ended", () => {
-      /*
-      if (playCount < maxPlays) {
-        playCount++;
-        // РЎР±СЂР°СЃС‹РІР°РµРј РІСЂРµРјСЏ РІ РЅР°С‡Р°Р»Рѕ (РЅР° РІСЃСЏРєРёР№ СЃР»СѓС‡Р°Р№) Рё Р·Р°РїСѓСЃРєР°РµРј СЃРЅРѕРІР°
-        audio.currentTime = 0;
-        playSequence();
-      }
-      */
-    });
-
-    // РџРµСЂРІС‹Р№ Р·Р°РїСѓСЃРє
-    // playSequence();
-  } catch (error) {
-    console.error("РћС€РёР±РєР° РёРЅРёС†РёР°Р»РёР·Р°С†РёРё Р·РІСѓРєР°:", error);
-  }
-};
-
 
 export const orderStatusColors: Record<string, string> = {
   created: "bg-gray-200 text-gray-700 border border-gray-300",

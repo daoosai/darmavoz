@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { useAuthStore } from './store';
 import { baseURL } from './utils';
@@ -35,13 +35,73 @@ export const usePushNotifications = () => {
   const [isPushEnabled, setIsPushEnabled] = useState<boolean>(() =>
     isPushEnabledForRole(useAuthStore.getState().role),
   );
+  const notificationSoundRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const audio = new Audio('/notification.mp3');
+    audio.preload = 'auto';
+
+    const switchToFallbackSound = () => {
+      if (audio.src.endsWith('/new_order.mp3')) {
+        return;
+      }
+
+      console.warn('notification.mp3 is unavailable, falling back to /new_order.mp3');
+      audio.src = '/new_order.mp3';
+      audio.load();
+    };
+
+    audio.addEventListener('error', switchToFallbackSound);
+    audio.load();
+    notificationSoundRef.current = audio;
+
+    return () => {
+      audio.pause();
+      audio.removeEventListener('error', switchToFallbackSound);
+      notificationSoundRef.current = null;
+    };
+  }, []);
+
+  const playNotificationSound = () => {
+    const notificationSound = notificationSoundRef.current;
+
+    if (!notificationSound) {
+      return;
+    }
+
+    notificationSound.currentTime = 0;
+
+    notificationSound
+      .play()
+      .then(() => {
+        console.log('Sound played successfully');
+      })
+      .catch((err) => {
+        console.error('Audio autoplay blocked by browser:', err);
+        notificationSound.muted = false;
+
+        notificationSound.play().catch((retryError) => {
+          console.error('Retry failed:', retryError);
+
+          if (!notificationSound.src.endsWith('/new_order.mp3')) {
+            notificationSound.src = '/new_order.mp3';
+            notificationSound.load();
+            notificationSound.play().catch((fallbackError) => {
+              console.error('Fallback sound failed:', fallbackError);
+            });
+          }
+        });
+      });
+  };
 
   const handleForegroundPush = (title?: string, body?: string) => {
     const safeTitle = title || 'Новое уведомление';
     const safeBody = body || 'Обновите список заказов';
-    const audio = new Audio('/notification.mp3');
-
-    audio.play().catch((err) => console.log('Audio autoplay blocked:', err));
+    playNotificationSound();
 
     toast.success(`${safeTitle}\n${safeBody}`, {
       duration: 6000,

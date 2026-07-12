@@ -36,6 +36,27 @@ export const usePushNotifications = () => {
     isPushEnabledForRole(useAuthStore.getState().role),
   );
 
+  const handleForegroundPush = (title?: string, body?: string) => {
+    const safeTitle = title || 'Новое уведомление';
+    const safeBody = body || 'Обновите список заказов';
+    const audio = new Audio('/notification.mp3');
+
+    audio.play().catch((err) => console.log('Audio autoplay blocked:', err));
+
+    toast.success(`${safeTitle}\n${safeBody}`, {
+      duration: 6000,
+      position: 'top-center',
+      style: {
+        fontSize: '16px',
+        fontWeight: 'bold',
+      },
+    });
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('refresh_orders'));
+    }
+  };
+
   useEffect(() => {
     setIsPushEnabled(isPushEnabledForRole(role));
 
@@ -100,11 +121,9 @@ export const usePushNotifications = () => {
         });
 
         PushNotifications.addListener('pushNotificationReceived', (notification) => {
-          if (!isMounted || !notification.title) return;
-          toast.info(`🔔 ${notification.title}
-${notification.body || ''}`, {
-            duration: 5000,
-          });
+          if (!isMounted) return;
+          console.log('Foreground push received:', notification);
+          handleForegroundPush(notification.title, notification.body);
         });
 
         PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
@@ -136,20 +155,18 @@ ${notification.body || ''}`, {
         }
 
         webUnsubscribe = onMessage(messaging, (payload) => {
-          if (!isMounted || !payload.notification) return;
+          if (!isMounted) return;
+          console.log('Foreground push received:', payload);
           if (Notification.permission === 'granted') {
             try {
-              new Notification(payload.notification.title || 'Новое уведомление', {
-                body: payload.notification.body || '',
+              new Notification(payload.notification?.title || 'Новое уведомление', {
+                body: payload.notification?.body || '',
               });
             } catch {
               // ignore system notification errors in foreground
             }
           }
-          toast.info(`🔔 ${payload.notification.title}
-${payload.notification.body || ''}`, {
-            duration: 5000,
-          });
+          handleForegroundPush(payload.notification?.title, payload.notification?.body);
         });
       } catch (err) {
         console.error('Web push notification setup failed', err);

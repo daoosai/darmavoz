@@ -328,6 +328,23 @@ export default function DriverOrdersScreen({
   }, [activeTab]);
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const handleRefreshOrders = () => {
+      checkIncomingOffer();
+      fetchOrders(true);
+    };
+
+    window.addEventListener("refresh_orders", handleRefreshOrders);
+
+    return () => {
+      window.removeEventListener("refresh_orders", handleRefreshOrders);
+    };
+  }, [checkIncomingOffer, fetchOrders]);
+
+  useEffect(() => {
     let pollingInterval: NodeJS.Timeout;
 
     if (token && moderationStatus === "approved" && isDriverActive) {

@@ -26,9 +26,12 @@ interface AvailableDriver {
   id: string;
   name: string;
   status: string;
+  moderation_status?: string | null;
   vehicle?: {
     title?: string;
     plate_number?: string;
+    cubature_min?: number;
+    cubature_max?: number;
     delivery_option_id?: string;
     delivery_option?: {
       id?: string;
@@ -44,6 +47,9 @@ const calculateMaterialCost = (material: any, deliveryOption: any) =>
 
 const getDriverDeliveryOptionId = (driver: AvailableDriver) =>
   driver.vehicle?.delivery_option_id || driver.vehicle?.delivery_option?.id || "";
+
+const getDriverVehicleVolume = (driver: AvailableDriver) =>
+  driver.vehicle?.cubature_max || driver.vehicle?.delivery_option?.capacity_m3 || 0;
 
 const getDriverVehicleLabel = (driver: AvailableDriver) => {
   const title = driver.vehicle?.title?.trim();
@@ -192,6 +198,10 @@ export default function LogistCreateOrderModal({
 
         const data = await response.json();
         if (!cancelled) {
+          console.log("[LogistCreateOrderModal] available drivers response", {
+            machineId,
+            drivers: Array.isArray(data) ? data : [],
+          });
           setAvailableDrivers(Array.isArray(data) ? data : []);
         }
       } catch (error) {
@@ -228,7 +238,7 @@ export default function LogistCreateOrderModal({
     const hasSelectedDriver = availableDrivers.some(
       (driver) =>
         driver.id === newOrder.driver_id &&
-        getDriverDeliveryOptionId(driver) === machineId,
+        doesDriverMatchSelectedMachine(driver),
     );
 
     if (!hasSelectedDriver) {
@@ -245,11 +255,38 @@ export default function LogistCreateOrderModal({
   const selectedDeliveryOption =
     deliveryOptions.find((item) => item.id === newOrder.delivery_option_id) ||
     null;
+  const selectedMachineVolume = Number(selectedDeliveryOption?.capacity_m3 || 0);
+
+  const doesDriverMatchSelectedMachine = (driver: AvailableDriver) => {
+    const driverDeliveryOptionId = getDriverDeliveryOptionId(driver);
+    const driverMachineVolume = Number(getDriverVehicleVolume(driver) || 0);
+    const isExactMatch = driverDeliveryOptionId === machineId;
+    const isVolumeMatch =
+      selectedMachineVolume > 0 &&
+      driverMachineVolume > 0 &&
+      driverMachineVolume >= selectedMachineVolume;
+    const matches = isExactMatch || isVolumeMatch;
+
+    console.log("[LogistCreateOrderModal] driver filter", {
+      machineId,
+      selectedMachineVolume,
+      driverId: driver.id,
+      driverName: driver.name,
+      driverStatus: driver.status,
+      driverModerationStatus: driver.moderation_status,
+      hasVehicle: Boolean(driver.vehicle),
+      driverDeliveryOptionId,
+      driverMachineVolume,
+      isExactMatch,
+      isVolumeMatch,
+      matches,
+    });
+
+    return matches;
+  };
+
   const filteredAvailableDrivers = machineId
-    ? availableDrivers.filter(
-        (driver) =>
-          getDriverDeliveryOptionId(driver) === machineId,
-      )
+    ? availableDrivers.filter((driver) => doesDriverMatchSelectedMachine(driver))
     : [];
   const computedMaterialCost = calculateMaterialCost(
     selectedMaterial,

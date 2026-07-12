@@ -78,6 +78,7 @@ interface AdminDriver {
   phone: string;
   delivery_option_id: string;
   is_active: boolean;
+  status?: string | null;
   vehicle_brand?: string;
   vehicle_plate_number?: string;
   vehicle_type?: string;
@@ -169,6 +170,7 @@ export default function AdminDashboardScreen({
       name?: string;
       phone?: string;
       status?: string;
+      moderation_status?: string | null;
     };
   }
   const [fleetSubTab, setFleetSubTab] = useState<"live" | "tariffs">("live");
@@ -200,26 +202,100 @@ export default function AdminDashboardScreen({
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingModeration, setIsLoadingModeration] = useState(false);
 
-  const getLiveFleetStatus = (car: LiveFleetCar) =>
-    car.driver?.status || car.status || "Нет статуса";
+  const normalizeDriverModerationStatus = (value?: string | null) => {
+    const normalized = value?.trim().toLowerCase();
 
-  const getLiveFleetStatusClasses = (status: string) => {
-    const normalizedStatus = status.trim().toLowerCase();
+    if (!normalized) {
+      return null;
+    }
+    if (
+      normalized === "blocked" ||
+      normalized === "suspended" ||
+      normalized === "заблокирован"
+    ) {
+      return "blocked";
+    }
+    if (normalized === "rejected" || normalized === "отклонен") {
+      return "rejected";
+    }
+    if (
+      normalized === "pending" ||
+      normalized === "pending_moderation" ||
+      normalized === "на модерации" ||
+      normalized === "на проверке"
+    ) {
+      return "pending";
+    }
+    if (normalized === "approved" || normalized === "одобрен") {
+      return "approved";
+    }
 
-    if (normalizedStatus === "свободен") {
-      return "bg-emerald-100 text-emerald-800 border border-emerald-200";
+    return null;
+  };
+
+  const normalizeDriverWorkStatus = (value?: string | null) => {
+    const normalized = value?.trim().toLowerCase();
+
+    if (normalized === "available" || normalized === "свободен") {
+      return "available";
     }
-    if (normalizedStatus === "занят") {
-      return "bg-amber-100 text-amber-800 border border-amber-200";
-    }
-    if (normalizedStatus === "недоступен") {
-      return "bg-slate-100 text-slate-700 border border-slate-200";
-    }
-    if (normalizedStatus === "заблокирован") {
-      return "bg-red-100 text-red-800 border border-red-200";
+    if (normalized === "busy" || normalized === "занят") {
+      return "busy";
     }
 
-    return "bg-slate-100 text-slate-700 border border-slate-200";
+    return "offline";
+  };
+
+  const getDriverStatusBadge = (
+    driver?: { moderation_status?: string | null; status?: string | null } | null,
+    carStatus?: string,
+  ) => {
+    const moderationStatus = normalizeDriverModerationStatus(
+      driver?.moderation_status ?? carStatus,
+    );
+
+    if (moderationStatus === "blocked") {
+      return (
+        <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold text-red-600 bg-red-100">
+          Заблокирован
+        </span>
+      );
+    }
+    if (moderationStatus === "rejected") {
+      return (
+        <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold text-red-600 bg-red-100">
+          Отклонен
+        </span>
+      );
+    }
+    if (moderationStatus === "pending") {
+      return (
+        <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold text-yellow-600 bg-yellow-100">
+          На модерации
+        </span>
+      );
+    }
+
+    const status = normalizeDriverWorkStatus(driver?.status || carStatus || "offline");
+    if (status === "available") {
+      return (
+        <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold text-green-600 bg-green-100">
+          Свободен
+        </span>
+      );
+    }
+    if (status === "busy") {
+      return (
+        <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold text-blue-600 bg-blue-100">
+          Занят
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold text-gray-600 bg-gray-100">
+        Недоступен
+      </span>
+    );
   };
 
   // Modals state
@@ -1877,13 +1953,7 @@ export default function AdminDashboardScreen({
                                   </div>
                                 </td>
                                 <td className="px-6 py-4">
-                                  <span
-                                    className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${getLiveFleetStatusClasses(
-                                      getLiveFleetStatus(car),
-                                    )}`}
-                                  >
-                                    {getLiveFleetStatus(car)}
-                                  </span>
+                                  {getDriverStatusBadge(car.driver, car.status)}
                                 </td>
                                 <td className="px-6 py-4 text-right">
                                   <button
@@ -1977,13 +2047,7 @@ export default function AdminDashboardScreen({
                                 </div>
                               </div>
                               <div>
-                                <span
-                                  className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${getLiveFleetStatusClasses(
-                                    getLiveFleetStatus(car),
-                                  )}`}
-                                >
-                                  {getLiveFleetStatus(car)}
-                                </span>
+                                {getDriverStatusBadge(car.driver, car.status)}
                               </div>
                             </div>
                             <div className="flex flex-col gap-1">

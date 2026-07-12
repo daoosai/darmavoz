@@ -137,18 +137,21 @@ export const usePushNotifications = () => {
   };
 
   const handleForegroundPush = (title?: string, body?: string) => {
-    const safeTitle = title || 'Новое уведомление';
-    const safeBody = body || 'Обновите список заказов';
+    const safeTitle = title?.trim() || '';
+    const safeBody = body?.trim() || '';
     playNotificationSound();
 
-    toast.success(`${safeTitle}\n${safeBody}`, {
-      duration: 6000,
-      position: 'top-center',
-      style: {
-        fontSize: '16px',
-        fontWeight: 'bold',
-      },
-    });
+    const toastMessage = [safeTitle, safeBody].filter(Boolean).join('\n');
+    if (toastMessage) {
+      toast.success(toastMessage, {
+        duration: 6000,
+        position: 'top-center',
+        style: {
+          fontSize: '16px',
+          fontWeight: 'bold',
+        },
+      });
+    }
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new Event('refresh_orders'));
@@ -255,16 +258,24 @@ export const usePushNotifications = () => {
         webUnsubscribe = onMessage(messaging, (payload) => {
           if (!isMounted) return;
           console.log('Foreground push received:', payload);
+          const notificationTitle = payload.notification?.title?.trim() || '';
+          const notificationBody = payload.notification?.body?.trim() || '';
           if (Notification.permission === 'granted') {
             try {
-              new Notification(payload.notification?.title || 'Новое уведомление', {
-                body: payload.notification?.body || '',
-              });
+              const systemNotificationTitle = notificationTitle || notificationBody;
+              const systemNotificationBody =
+                notificationTitle && notificationBody ? notificationBody : '';
+
+              if (systemNotificationTitle) {
+                new Notification(systemNotificationTitle, {
+                  body: systemNotificationBody,
+                });
+              }
             } catch {
               // ignore system notification errors in foreground
             }
           }
-          handleForegroundPush(payload.notification?.title, payload.notification?.body);
+          handleForegroundPush(notificationTitle, notificationBody);
         });
       } catch (err) {
         console.error('Web push notification setup failed', err);

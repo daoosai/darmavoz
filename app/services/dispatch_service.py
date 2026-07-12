@@ -40,7 +40,9 @@ from app.services.notifications import (
     schedule_client_heading_to_client_notification,
     schedule_client_order_completed_notification,
     schedule_client_order_created_notification,
+    schedule_driver_manual_assignment_notification,
     schedule_driver_new_order_notification,
+    schedule_driver_order_cancelled_notification,
     schedule_driver_order_changed_notification,
     schedule_driver_order_reminder_notification,
     schedule_logist_driver_rejected_notification,
@@ -195,27 +197,19 @@ def format_money(value: float | None) -> str:
 
 
 def build_offer_push_message(order: Order) -> tuple[str, str]:
-    material_name = get_order_material_name(order)
-    volume = format_order_volume(order)
-    address = get_order_delivery_address(order)
-    title = f"🔥 Новый заказ: {material_name}, {volume} м³"
-    body = (
-        f"📍 Адрес: {address}. Доставка: {format_money(order.delivery_cost)}. "
-        f"Итого: {format_money(get_order_estimated_total_amount(order))}. Нажмите, чтобы принять!"
+    del order
+    return (
+        "Новый заказ!",
+        "Поступило новое предложение. Успейте принять заказ.",
     )
-    return title, body
 
 
 def build_manual_assign_push_message(order: Order) -> tuple[str, str]:
-    material_name = get_order_material_name(order)
-    volume = format_order_volume(order)
-    address = get_order_delivery_address(order)
-    title = "✅ Вы назначены на заказ!"
-    body = (
-        f"📍 Везем {material_name} ({volume} м³) по адресу: {address}. "
-        f"Доставка: {format_money(order.delivery_cost)}. Итого: {format_money(get_order_estimated_total_amount(order))}."
+    del order
+    return (
+        "Вам назначен рейс",
+        "Логист добавил новый заказ в ваш профиль. Можно выезжать на карьер.",
     )
-    return title, body
 
 
 def build_vehicle_volume_match_clause(requested_volume: float | None):
@@ -801,7 +795,7 @@ async def assign_order_to_driver_manually(session: AsyncSession, *, order_id: UU
     await session.commit()
     refreshed_order = await get_order_by_id(session, order.id)
     schedule_client_driver_assigned_notification(refreshed_order)
-    schedule_driver_new_order_notification(refreshed_order, driver.id)
+    schedule_driver_manual_assignment_notification(refreshed_order, driver.id)
     return refreshed_order
 
 
@@ -1042,6 +1036,7 @@ async def delete_order_by_id(session: AsyncSession, order_id: UUID) -> None:
     if order is None or order.is_deleted:
         raise HTTPException(status_code=404, detail="Order not found")
 
+    cancelled_driver_id = order.driver_id
     order.is_deleted = True
     order.status = OrderStatus.cancelled.value
     order.current_offer_id = None
@@ -1051,6 +1046,8 @@ async def delete_order_by_id(session: AsyncSession, order_id: UUID) -> None:
         .values(status=OrderOfferStatus.cancelled.value)
     )
     await session.commit()
+    if cancelled_driver_id is not None:
+        schedule_driver_order_cancelled_notification(order, cancelled_driver_id)
 
 
 def _matching_drivers_base_query(order: Order) -> Select[tuple[Driver]]:

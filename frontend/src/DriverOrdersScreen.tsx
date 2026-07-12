@@ -856,13 +856,37 @@ export const DriverOrderCard: React.FC<{
     const isToClient = type === 'client';
     const lat = isToClient ? order.delivery_lat : order.pickup_lat;
     const lon = isToClient ? order.delivery_lon : order.pickup_lon;
+    const address = isToClient ? order.delivery_address : order.pickup_address;
+    const label = isToClient ? "Клиент" : "Карьер";
 
-    if (!lat || !lon) {
-      toast.error("Координаты отсутствуют");
+    const isIOS = /iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent);
+    if (isToClient && address) {
+      if (isIOS) {
+        window.open(
+          `https://2gis.ru/routeSearch/rsType/car/to/${encodeURIComponent(address)}`,
+          "_blank",
+        );
+        return;
+      }
+
+      const isAndroid = /Android/i.test(navigator.userAgent);
+      if (isAndroid) {
+        window.location.href = `geo:0,0?q=${encodeURIComponent(address)}`;
+        return;
+      }
+
+      window.open(
+        `https://2gis.ru/routeSearch/rsType/car/to/${encodeURIComponent(address)}`,
+        "_blank",
+      );
       return;
     }
 
-    const isIOS = /iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent);
+    if (lat == null || lon == null) {
+      toast.error("Нет данных для построения маршрута");
+      return;
+    }
+
     if (isIOS) {
       window.open(
         `https://2gis.ru/routeSearch/rsType/car/to/${lon},${lat}`,
@@ -873,7 +897,7 @@ export const DriverOrderCard: React.FC<{
 
     const isAndroid = /Android/i.test(navigator.userAgent);
     if (isAndroid) {
-      window.location.href = `geo:${lat},${lon}?q=${lat},${lon}`;
+      window.location.href = `geo:${lat},${lon}?q=${lat},${lon}(${encodeURIComponent(label)})`;
       return;
     }
 

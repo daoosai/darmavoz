@@ -138,7 +138,7 @@ def schedule_driver_order_changed_notification(order: Order, driver_id: UUID) ->
         schedule_push_to_driver,
         driver_id,
         "Детали заказа изменены",
-        "Логист обновил информацию по текущему рейсу (адрес или сумму).",
+        "Логист обновил информацию по текущему рейсу.",
         _order_push_data(order),
     )
 

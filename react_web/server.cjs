@@ -25,15 +25,14 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 var import_express = __toESM(require("express"), 1);
 var import_path = __toESM(require("path"), 1);
 var import_vite = require("vite");
+var API_BASE_URL = process.env.VITE_API_BASE_URL || process.env.VITE_API_URL || process.env.API_BASE_URL || "http://127.0.0.1:8000/api/v1";
 async function startServer() {
   const app = (0, import_express.default)();
   const PORT = 3e3;
   app.use(import_express.default.json());
   app.get("/api/v1/catalog/categories/", async (req, res) => {
     try {
-      const response = await fetch(
-        "https://darmavoz.ru/api/v1/catalog/categories/"
-      );
+      const response = await fetch(`${API_BASE_URL}/catalog/categories/`);
       const data = await response.json();
       res.json(data);
     } catch (error) {
@@ -43,9 +42,7 @@ async function startServer() {
   });
   app.get("/api/v1/catalog/materials", async (req, res) => {
     try {
-      const response = await fetch(
-        "https://darmavoz.ru/api/v1/catalog/materials/"
-      );
+      const response = await fetch(`${API_BASE_URL}/catalog/materials/`);
       const data = await response.json();
       res.json(data);
     } catch (error) {
@@ -55,9 +52,7 @@ async function startServer() {
   });
   app.get("/api/v1/catalog/delivery-options", async (req, res) => {
     try {
-      const response = await fetch(
-        "https://darmavoz.ru/api/v1/catalog/delivery-options/"
-      );
+      const response = await fetch(`${API_BASE_URL}/catalog/delivery-options/`);
       const data = await response.json();
       res.json(data);
     } catch (error) {
@@ -67,9 +62,9 @@ async function startServer() {
   });
   app.get("/api/v1/orders/", async (req, res) => {
     try {
-      const response = await fetch("https://darmavoz.ru/api/v1/orders/", {
+      const response = await fetch(`${API_BASE_URL}/orders/`, {
         headers: {
-          Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsImV4cCI6MTc4MDA1MDQyMX0.ZqbX-husqO2QHU4tE7_RzZFF0NGOtARDAY5-CNCZiuo"
+          Authorization: req.headers.authorization || ""
         }
       });
       if (!response.ok) {
@@ -86,18 +81,15 @@ async function startServer() {
   });
   app.post("/api/v1/orders/checkout", async (req, res) => {
     try {
-      const response = await fetch(
-        "https://darmavoz.ru/api/v1/orders/checkout",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            session_key: req.headers["session_key"] || "demo-session",
-            Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsImV4cCI6MTc4MDA1MDQyMX0.ZqbX-husqO2QHU4tE7_RzZFF0NGOtARDAY5-CNCZiuo"
-          },
-          body: JSON.stringify(req.body)
-        }
-      );
+      const response = await fetch(`${API_BASE_URL}/orders/checkout`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          session_key: req.headers["session_key"] || "demo-session",
+          Authorization: req.headers.authorization || ""
+        },
+        body: JSON.stringify(req.body)
+      });
       if (!response.ok) {
         const err = await response.json().catch(() => ({}));
         res.status(response.status).json(err);

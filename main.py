@@ -59,6 +59,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(auth.driver_auth_router, tags=["driver-auth"])
 app.include_router(client_auth.router, prefix="/api/v1/auth", tags=["client-auth"])
 app.include_router(client_addresses.router, prefix="/api/v1")
 app.include_router(client_orders.router, prefix="/api/v1", tags=["client-orders"])

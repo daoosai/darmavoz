@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.exc import IntegrityError
@@ -7,14 +9,27 @@ from sqlalchemy.orm import selectinload
 
 from app.db.database import get_db
 from app.models.models import Driver, ModerationStatus, Role, User, Vehicle
-from app.schemas.driver import DriverRegistrationResponse
-from app.schemas.driver import DriverRegisterRequest
+from app.schemas.driver import (
+    DriverRegisterRequest,
+    DriverRegistrationResponse,
+    DriverSmsChallengeResponse,
+    DriverVerifyCodeRequest,
+)
+from app.schemas.token import Token
 from app.security.auth import get_password_hash, verify_password
 from app.security.jwt import create_access_token
-from app.schemas.token import Token
+from app.services.redis_client import get_redis
+from app.services.sms_service import generate_otp_code, normalize_sms_phone, send_auth_sms_code
 from app.utils.phones import normalize_phone, normalize_phone_like_username
 
 router = APIRouter()
+driver_auth_router = APIRouter()
+
+DRIVER_AUTH_CODE_TTL_SECONDS = 300
+DRIVER_LOGIN_CODE_KEY_PREFIX = "otp:driver_login"
+DRIVER_LOGIN_PENDING_KEY_PREFIX = "otp:driver_login_pending"
+DRIVER_REGISTER_CODE_KEY_PREFIX = "otp:driver_register"
+DRIVER_REGISTER_PENDING_KEY_PREFIX = "otp:driver_register_pending"
 
 
 def _error_detail(code: str, message: str) -> dict[str, str]:
@@ -42,27 +57,44 @@ async def _get_or_create_driver_role(db: AsyncSession) -> Role:
     return role
 
 
-@router.post("/driver/register", response_model=DriverRegistrationResponse, status_code=status.HTTP_201_CREATED)
-async def driver_register(
-    payload: DriverRegisterRequest,
-    db: AsyncSession = Depends(get_db),
-):
-    normalized_phone = normalize_phone(payload.phone)
+def _driver_login_code_key(phone: str) -> str:
+    return f"{DRIVER_LOGIN_CODE_KEY_PREFIX}:{phone}"
 
+
+def _driver_login_pending_key(phone: str) -> str:
+    return f"{DRIVER_LOGIN_PENDING_KEY_PREFIX}:{phone}"
+
+
+def _driver_register_code_key(phone: str) -> str:
+    return f"{DRIVER_REGISTER_CODE_KEY_PREFIX}:{phone}"
+
+
+def _driver_register_pending_key(phone: str) -> str:
+    return f"{DRIVER_REGISTER_PENDING_KEY_PREFIX}:{phone}"
+
+
+async def _ensure_driver_phone_is_available(db: AsyncSession, normalized_phone: str) -> None:
     existing_user = await db.scalar(select(User).where(User.username == normalized_phone))
     if existing_user is not None:
         raise HTTPException(
-            status_code=409,
+            status_code=status.HTTP_409_CONFLICT,
             detail=_error_detail("DRIVER_PHONE_ALREADY_EXISTS", "Пользователь с таким номером уже зарегистрирован"),
         )
 
     existing_driver = await db.scalar(select(Driver).where(Driver.phone == normalized_phone))
     if existing_driver is not None:
         raise HTTPException(
-            status_code=409,
+            status_code=status.HTTP_409_CONFLICT,
             detail=_error_detail("DRIVER_PHONE_ALREADY_EXISTS", "Пользователь с таким номером уже зарегистрирован"),
         )
 
+
+async def _create_driver_from_payload(
+    db: AsyncSession,
+    *,
+    payload: DriverRegisterRequest,
+    normalized_phone: str,
+) -> tuple[Role, Driver, User]:
     role = await _get_or_create_driver_role(db)
     user = User(
         username=normalized_phone,
@@ -75,8 +107,8 @@ async def driver_register(
 
     vehicle = Vehicle(
         title=_build_registration_vehicle_title(
-            brand=payload.vehicle_brand,
-            plate_number=payload.vehicle_plate_number,
+            brand=payload.vehicle_brand or "",
+            plate_number=payload.vehicle_plate_number or "",
         ),
         brand=payload.vehicle_brand,
         plate_number=payload.vehicle_plate_number,
@@ -102,21 +134,18 @@ async def driver_register(
         moderation_status=ModerationStatus.incomplete.value,
     )
     db.add(driver)
-    try:
-        await db.commit()
-    except IntegrityError as exc:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=_error_detail("DRIVER_PHONE_ALREADY_EXISTS", "Пользователь с таким номером уже зарегистрирован"),
-        ) from exc
+    await db.commit()
+
     result = await db.execute(
         select(Driver)
         .options(selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option))
         .where(Driver.id == driver.id)
     )
-    driver = result.scalar_one()
+    persisted_driver = result.scalar_one()
+    return role, persisted_driver, user
 
+
+def _build_driver_registration_response(*, role: Role, user: User, driver: Driver) -> DriverRegistrationResponse:
     access_token = create_access_token(data={"sub": user.username, "role": role.name})
     return DriverRegistrationResponse(
         access_token=access_token,
@@ -126,13 +155,46 @@ async def driver_register(
         driver=driver,
     )
 
-@router.post("/login", response_model=Token)
+
+async def _issue_driver_login_code(*, normalized_phone: str, user_id: str) -> DriverSmsChallengeResponse:
+    code = generate_otp_code()
+    sms_phone = normalize_sms_phone(normalized_phone)
+    stored_code = await send_auth_sms_code(phone_number=sms_phone, code=code, log_prefix="driver_login_smsc")
+
+    redis = get_redis()
+    await redis.setex(_driver_login_code_key(normalized_phone), DRIVER_AUTH_CODE_TTL_SECONDS, stored_code)
+    await redis.setex(_driver_login_pending_key(normalized_phone), DRIVER_AUTH_CODE_TTL_SECONDS, user_id)
+    return DriverSmsChallengeResponse(status="sms_sent", phone=normalized_phone)
+
+
+@router.post("/driver/register", response_model=DriverSmsChallengeResponse, status_code=status.HTTP_202_ACCEPTED)
+async def driver_register(
+    payload: DriverRegisterRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    normalized_phone = normalize_phone(payload.phone)
+    await _ensure_driver_phone_is_available(db, normalized_phone)
+
+    code = generate_otp_code()
+    sms_phone = normalize_sms_phone(normalized_phone)
+    stored_code = await send_auth_sms_code(phone_number=sms_phone, code=code, log_prefix="driver_register_smsc")
+
+    redis = get_redis()
+    await redis.setex(_driver_register_code_key(normalized_phone), DRIVER_AUTH_CODE_TTL_SECONDS, stored_code)
+    await redis.setex(
+        _driver_register_pending_key(normalized_phone),
+        DRIVER_AUTH_CODE_TTL_SECONDS,
+        payload.model_copy(update={"phone": normalized_phone}).model_dump_json(),
+    )
+    return DriverSmsChallengeResponse(status="sms_sent", phone=normalized_phone)
+
+
+@router.post("/login", response_model=Token | DriverSmsChallengeResponse)
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     normalized_username = normalize_phone_like_username(form_data.username)
-    # Fetch user
     query = (
         select(User)
         .where(User.username == normalized_username)
@@ -140,28 +202,119 @@ async def login(
     )
     result = await db.execute(query)
     user = result.scalar_one_or_none()
-    
+
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=_error_detail("INVALID_CREDENTIALS", "Неверный логин или пароль"),
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     if not user.is_active:
         raise _blocked_profile_exception()
     if user.driver_profile is not None and user.driver_profile.moderation_status == ModerationStatus.suspended.value:
         raise _blocked_profile_exception()
-    
+
+    role_name = user.role.name if user.role else None
+    if role_name == "driver":
+        return await _issue_driver_login_code(
+            normalized_phone=normalized_username,
+            user_id=str(user.id),
+        )
+
+    access_token = create_access_token(
+        data={
+            "sub": user.username,
+            "role": role_name,
+        }
+    )
+    return Token(
+        access_token=access_token,
+        token_type="bearer",
+        role=role_name,
+        driver_id=user.driver_profile.id if user.driver_profile else None,
+    )
+
+
+@driver_auth_router.post("/api/v1/driver/auth/verify-login", response_model=Token)
+async def verify_driver_login(
+    payload: DriverVerifyCodeRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    normalized_phone = normalize_phone(payload.phone)
+    redis = get_redis()
+    saved_code = await redis.get(_driver_login_code_key(normalized_phone))
+    pending_user_id = await redis.get(_driver_login_pending_key(normalized_phone))
+
+    if saved_code is None or pending_user_id is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Код истек или не запрашивался")
+    if payload.code.strip() != saved_code:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неверный код")
+
+    result = await db.execute(
+        select(User)
+        .where(User.username == normalized_phone)
+        .options(selectinload(User.role), selectinload(User.driver_profile))
+    )
+    user = result.scalar_one_or_none()
+    if user is None or str(user.id) != pending_user_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
+    if not user.is_active:
+        raise _blocked_profile_exception()
+    if user.driver_profile is not None and user.driver_profile.moderation_status == ModerationStatus.suspended.value:
+        raise _blocked_profile_exception()
+
     access_token = create_access_token(
         data={
             "sub": user.username,
             "role": user.role.name if user.role else None,
         }
     )
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "role": user.role.name if user.role else None,
-        "driver_id": user.driver_profile.id if user.driver_profile else None,
-    }
+    await redis.delete(_driver_login_code_key(normalized_phone))
+    await redis.delete(_driver_login_pending_key(normalized_phone))
+
+    return Token(
+        access_token=access_token,
+        token_type="bearer",
+        role=user.role.name if user.role else None,
+        driver_id=user.driver_profile.id if user.driver_profile else None,
+    )
+
+
+@driver_auth_router.post("/api/v1/driver/auth/verify-register", response_model=DriverRegistrationResponse)
+async def verify_driver_register(
+    payload: DriverVerifyCodeRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    normalized_phone = normalize_phone(payload.phone)
+    redis = get_redis()
+    saved_code = await redis.get(_driver_register_code_key(normalized_phone))
+    pending_payload_raw = await redis.get(_driver_register_pending_key(normalized_phone))
+
+    if saved_code is None or pending_payload_raw is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Код истек или не запрашивался")
+    if payload.code.strip() != saved_code:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неверный код")
+
+    try:
+        pending_payload = DriverRegisterRequest.model_validate(json.loads(pending_payload_raw))
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Заявка на регистрацию повреждена") from exc
+
+    await _ensure_driver_phone_is_available(db, normalized_phone)
+    try:
+        role, driver, user = await _create_driver_from_payload(
+            db,
+            payload=pending_payload,
+            normalized_phone=normalized_phone,
+        )
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_error_detail("DRIVER_PHONE_ALREADY_EXISTS", "Пользователь с таким номером уже зарегистрирован"),
+        ) from exc
+
+    await redis.delete(_driver_register_code_key(normalized_phone))
+    await redis.delete(_driver_register_pending_key(normalized_phone))
+    return _build_driver_registration_response(role=role, user=user, driver=driver)

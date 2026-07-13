@@ -1,9 +1,11 @@
 import React, { useState } from "react";
-import { UserRole } from "./store";
-import { ArrowLeft, Loader2, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
+
+import OtpVerificationStep from "./OtpVerificationStep";
 import { switchAuthenticatedSession } from "./pushAuth";
-import { baseURL, formatPhoneNumber } from "./utils";
+import { UserRole } from "./store";
+import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
 
 interface LoginScreenProps {
   onLogin: (role: UserRole) => void;
@@ -15,59 +17,104 @@ export default function LoginScreen({ onLogin, onBack }: LoginScreenProps) {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const handleLoginChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let val = e.target.value;
-    if (/^[\d+()\-\s]*$/.test(val) && val !== '') {
-      if (val === '+') {
-        setUsername('+');
+  const [otpStep, setOtpStep] = useState(false);
+  const [otpPhone, setOtpPhone] = useState("");
+  const [otpError, setOtpError] = useState("");
+
+  const normalizePhoneValue = (value: string) => value.replace(/[\s()-]/g, "");
+
+  const handleLoginChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value;
+    if (/^[\d+()\-\s]*$/.test(value) && value !== "") {
+      if (value === "+") {
+        setUsername("+");
         return;
       }
-      setUsername(formatPhoneNumber(val));
-    } else {
-      setUsername(val);
+      setUsername(formatPhoneNumber(value));
+      return;
     }
+    setUsername(value);
   };
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const submitLogin = async () => {
+    const formData = new URLSearchParams();
+    formData.append("username", normalizePhoneValue(username));
+    formData.append("password", password);
+
+    const response = await fetch(`${baseURL}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: formData.toString(),
+    });
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(extractApiErrorMessage(data, "Неверный логин или пароль"));
+    }
+
+    return data;
+  };
+
+  const handleLogin = async (event: React.FormEvent) => {
+    event.preventDefault();
     if (!username || !password) {
       toast.error("Введите логин и пароль");
       return;
     }
 
     setIsLoading(true);
+    setOtpError("");
     try {
-      const cleanLogin = username.replace(/[\s()-]/g, '');
-      const formData = new URLSearchParams();
-      formData.append("username", cleanLogin);
-      formData.append("password", password);
-
-      const response = await fetch(`${baseURL}/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: formData.toString(),
-      });
-
-      if (!response.ok) {
-        throw new Error("Неверный логин или пароль");
+      const data = await submitLogin();
+      if (data.status === "sms_sent") {
+        setOtpPhone(formatPhoneNumber(data.phone || normalizePhoneValue(username)));
+        setOtpStep(true);
+        return;
       }
 
-      const data = await response.json();
-      const token = data.access_token;
-      const role = data.role as typeof username extends string ? any : "driver" | "logist" | "admin"; // it can be "driver", "logist", etc.
-      
-      await switchAuthenticatedSession(token, data.role, data.driver_id);
+      await switchAuthenticatedSession(data.access_token, data.role, data.driver_id);
       onLogin(data.role);
     } catch (error) {
-      toast.error("Неверный логин или пароль");
+      toast.error(error instanceof Error ? error.message : "Неверный логин или пароль");
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handleVerifyLogin = async (code: string) => {
+    setIsLoading(true);
+    setOtpError("");
+    try {
+      const response = await fetch(`${baseURL}/driver/auth/verify-login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: normalizePhoneValue(otpPhone), code }),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        setOtpError(extractApiErrorMessage(data, "Неверный код"));
+        return;
+      }
+
+      await switchAuthenticatedSession(data.access_token, data.role, data.driver_id);
+      onLogin(data.role);
+    } catch (error) {
+      setOtpError(error instanceof Error ? error.message : "Сетевая ошибка");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResendLoginCode = async () => {
+    const data = await submitLogin();
+    if (data.status !== "sms_sent") {
+      throw new Error("Не удалось отправить код повторно");
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen bg-white text-slate-900 pb-8 sm:max-w-md sm:mx-auto">
-      {/* Header */}
       <div className="flex items-center p-4 border-b border-slate-100">
         <button
           onClick={onBack}
@@ -85,58 +132,70 @@ export default function LoginScreen({ onLogin, onBack }: LoginScreenProps) {
           Сотрудники
         </h2>
 
-        <form
-          onSubmit={handleLogin}
-          className="w-full max-w-sm flex flex-col gap-4"
-        >
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-700">
-              Логин или Телефон
-            </label>
-            <input
-              type="text"
-              name="username"
-              value={username}
-              onChange={handleLoginChange}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/50 transition-all"
-              placeholder="Введите логин"
-            />
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-700">Пароль</label>
-            <div className="relative w-full">
+        {otpStep ? (
+          <OtpVerificationStep
+            title="Введите код"
+            phone={otpPhone}
+            errorText={otpError}
+            isSubmitting={isLoading}
+            onBack={() => {
+              setOtpStep(false);
+              setOtpError("");
+            }}
+            onResend={handleResendLoginCode}
+            onVerify={handleVerifyLogin}
+          />
+        ) : (
+          <form onSubmit={handleLogin} className="w-full max-w-sm flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-slate-700">
+                Логин или Телефон
+              </label>
               <input
-                type={showPassword ? "text" : "password"}
-                name="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 pr-12 text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/50 transition-all"
-                placeholder="Введите пароль"
+                type="text"
+                name="username"
+                value={username}
+                onChange={handleLoginChange}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/50 transition-all"
+                placeholder="Введите логин"
               />
-              <button
-                type="button"
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
-                onClick={() => setShowPassword(!showPassword)}
-              >
-                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-              </button>
             </div>
-          </div>
 
-          <button
-            type="submit"
-            disabled={isLoading}
-            className={`w-full text-white rounded-xl py-4 font-bold text-lg mt-4 shadow-sm transition-all flex items-center justify-center gap-2 ${
-              isLoading
-                ? "bg-[#2DB0E6]/70 cursor-not-allowed"
-                : "bg-[#2DB0E6] active:bg-[#209BD6] hover:bg-[#209BD6]"
-            }`}
-          >
-            {isLoading && <Loader2 className="w-5 h-5 animate-spin" />}
-            {isLoading ? "Вход..." : "Войти"}
-          </button>
-        </form>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-slate-700">Пароль</label>
+              <div className="relative w-full">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  name="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 pr-12 text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/50 transition-all"
+                  placeholder="Введите пароль"
+                />
+                <button
+                  type="button"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className={`w-full text-white rounded-xl py-4 font-bold text-lg mt-4 shadow-sm transition-all flex items-center justify-center gap-2 ${
+                isLoading
+                  ? "bg-[#2DB0E6]/70 cursor-not-allowed"
+                  : "bg-[#2DB0E6] active:bg-[#209BD6] hover:bg-[#209BD6]"
+              }`}
+            >
+              {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : null}
+              {isLoading ? "Вход..." : "Войти"}
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );

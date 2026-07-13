@@ -49,33 +49,34 @@ def _generate_otp_code() -> str:
     return f"{secrets.randbelow(10000):04d}"
 
 
-async def _send_sms_ru_code(*, phone_number: str, code: str, client_ip: str | None = None) -> str:
+async def _send_smsc_code(*, phone_number: str, code: str, client_ip: str | None = None) -> str:
     fallback_code = "0000"
-    api_key = settings.SMS_RU_API_ID
-    if not api_key:
+    login = settings.SMSC_LOGIN
+    password = settings.SMSC_PASSWORD
+    if not login or not password:
         logger.warning(
-            "sms_ru_not_configured_fallback phone=%s fallback_code=%s",
+            "smsc_not_configured_fallback phone=%s fallback_code=%s",
             phone_number,
             fallback_code,
         )
         return fallback_code
 
     payload = {
-        "api_id": api_key,
-        "to": phone_number,
-        "msg": f"Код авторизации Дармавоз: {code}",
-        "json": 1,
+        "login": login,
+        "psw": password,
+        "phones": phone_number,
+        "mes": f"Код авторизации Дармавоз: {code}",
+        "fmt": 3,
+        "charset": "utf-8",
     }
-    if client_ip:
-        payload["ip"] = client_ip
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.get("https://sms.ru/sms/send", params=payload)
+            response = await client.get("https://smsc.ru/sys/send.php", params=payload)
             response.raise_for_status()
     except httpx.HTTPError:
         logger.warning(
-            "sms_ru_request_failed_fallback phone=%s fallback_code=%s",
+            "smsc_request_failed_fallback phone=%s fallback_code=%s",
             phone_number,
             fallback_code,
             exc_info=True,
@@ -86,61 +87,36 @@ async def _send_sms_ru_code(*, phone_number: str, code: str, client_ip: str | No
         response_data = response.json()
     except ValueError:
         logger.warning(
-            "sms_ru_invalid_response_fallback phone=%s body=%s fallback_code=%s",
+            "smsc_invalid_response_fallback phone=%s body=%s fallback_code=%s",
             phone_number,
             response.text[:500],
             fallback_code,
         )
         return fallback_code
 
-    if response_data.get("status") != "OK":
-        status_text = response_data.get("status_text") or "Неизвестная ошибка SMS.ru"
+    if not isinstance(response_data, dict):
         logger.warning(
-            "sms_ru_gateway_error_fallback phone=%s status_code=%s status_text=%s response=%s fallback_code=%s",
-            phone_number,
-            response_data.get("status_code"),
-            status_text,
-            response_data,
-            fallback_code,
-        )
-        return fallback_code
-
-    sms_data = response_data.get("sms")
-    if not isinstance(sms_data, dict):
-        logger.warning(
-            "sms_ru_invalid_sms_payload_fallback phone=%s response=%s fallback_code=%s",
+            "smsc_invalid_payload_fallback phone=%s response=%s fallback_code=%s",
             phone_number,
             response_data,
             fallback_code,
         )
         return fallback_code
 
-    sms_info = sms_data.get(phone_number)
-    if not isinstance(sms_info, dict):
+    if "error" in response_data:
         logger.warning(
-            "sms_ru_phone_payload_missing_fallback phone=%s response=%s fallback_code=%s",
+            "smsc_gateway_error_fallback phone=%s error_code=%s error=%s response=%s fallback_code=%s",
             phone_number,
+            response_data.get("error_code"),
+            response_data.get("error"),
             response_data,
             fallback_code,
         )
         return fallback_code
 
-    phone_status = sms_info.get("status")
-    if phone_status == "ERROR":
-        status_text = sms_info.get("status_text") or "Ошибка шлюза СМС"
+    if "id" not in response_data:
         logger.warning(
-            "sms_ru_phone_error_fallback phone=%s status_code=%s status_text=%s response=%s fallback_code=%s",
-            phone_number,
-            sms_info.get("status_code"),
-            status_text,
-            response_data,
-            fallback_code,
-        )
-        return fallback_code
-
-    if phone_status != "OK":
-        logger.warning(
-            "sms_ru_phone_unknown_status_fallback phone=%s response=%s fallback_code=%s",
+            "smsc_missing_message_id_fallback phone=%s response=%s fallback_code=%s",
             phone_number,
             response_data,
             fallback_code,
@@ -150,7 +126,7 @@ async def _send_sms_ru_code(*, phone_number: str, code: str, client_ip: str | No
     return code
 
 
-def _sms_ru_phone(phone_number: str) -> str:
+def _smsc_phone(phone_number: str) -> str:
     sms_phone = phone_number.replace("+", "").strip()
     if len(sms_phone) == 10:
         sms_phone = "7" + sms_phone
@@ -170,11 +146,11 @@ async def send_code(
     db: AsyncSession = Depends(get_db),
 ):
     normalized_phone = _normalize_phone_number(payload.phone_number)
-    sms_phone = _sms_ru_phone(normalized_phone)
+    sms_phone = _smsc_phone(normalized_phone)
     code = _generate_otp_code()
     client_ip = request.client.host if request.client is not None else None
 
-    code = await _send_sms_ru_code(phone_number=sms_phone, code=code, client_ip=client_ip)
+    code = await _send_smsc_code(phone_number=sms_phone, code=code, client_ip=client_ip)
 
     client = await db.scalar(select(Client).where(Client.phone == normalized_phone))
     is_new_user = client is None

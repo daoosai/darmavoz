@@ -27,17 +27,20 @@ def load_env_value(*names: str) -> str | None:
     return None
 
 
-api_key = load_env_value('SMS_RU_API_ID', 'SMSRU_API_KEY')
-if not api_key:
-    raise SystemExit('SMS.ru API key not found in .env')
+login = load_env_value('SMSC_LOGIN')
+password = load_env_value('SMSC_PASSWORD')
+if not login or not password:
+    raise SystemExit('SMSC credentials not found in .env')
 
 phone = os.getenv('SMS_DEBUG_PHONE', '79990000001')
-url = 'https://sms.ru/sms/send'
+url = 'https://smsc.ru/sys/send.php'
 params = {
-    'api_id': api_key,
-    'to': phone,
-    'msg': '???????? ??? 1234',
-    'json': 1,
+    'login': login,
+    'psw': password,
+    'phones': phone,
+    'mes': 'Код входа 1234',
+    'fmt': 3,
+    'charset': 'utf-8',
 }
 
 try:

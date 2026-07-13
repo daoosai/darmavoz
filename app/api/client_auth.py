@@ -1,7 +1,4 @@
 import logging
-import secrets
-
-import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +15,7 @@ from app.schemas.client import (
 )
 from app.security.jwt import create_access_token
 from app.services.redis_client import get_redis
+from app.services.sms_service import generate_otp_code, normalize_sms_phone, send_auth_sms_code
 from app.utils.phones import normalize_phone
 
 router = APIRouter(prefix="/client")
@@ -45,96 +43,6 @@ def _code_key(phone_number: str) -> str:
     return f"otp:client:{phone_number}"
 
 
-def _generate_otp_code() -> str:
-    return f"{secrets.randbelow(10000):04d}"
-
-
-async def _send_smsc_code(*, phone_number: str, code: str, client_ip: str | None = None) -> str:
-    fallback_code = "0000"
-    login = settings.SMSC_LOGIN
-    password = settings.SMSC_PASSWORD
-    if not login or not password:
-        logger.warning(
-            "smsc_not_configured_fallback phone=%s fallback_code=%s",
-            phone_number,
-            fallback_code,
-        )
-        return fallback_code
-
-    payload = {
-        "login": login,
-        "psw": password,
-        "phones": phone_number,
-        "mes": f"Код авторизации Дармавоз: {code}",
-        "fmt": 3,
-        "charset": "utf-8",
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.get("https://smsc.ru/sys/send.php", params=payload)
-            response.raise_for_status()
-    except httpx.HTTPError:
-        logger.warning(
-            "smsc_request_failed_fallback phone=%s fallback_code=%s",
-            phone_number,
-            fallback_code,
-            exc_info=True,
-        )
-        return fallback_code
-
-    try:
-        response_data = response.json()
-    except ValueError:
-        logger.warning(
-            "smsc_invalid_response_fallback phone=%s body=%s fallback_code=%s",
-            phone_number,
-            response.text[:500],
-            fallback_code,
-        )
-        return fallback_code
-
-    if not isinstance(response_data, dict):
-        logger.warning(
-            "smsc_invalid_payload_fallback phone=%s response=%s fallback_code=%s",
-            phone_number,
-            response_data,
-            fallback_code,
-        )
-        return fallback_code
-
-    if "error" in response_data:
-        logger.warning(
-            "smsc_gateway_error_fallback phone=%s error_code=%s error=%s response=%s fallback_code=%s",
-            phone_number,
-            response_data.get("error_code"),
-            response_data.get("error"),
-            response_data,
-            fallback_code,
-        )
-        return fallback_code
-
-    if "id" not in response_data:
-        logger.warning(
-            "smsc_missing_message_id_fallback phone=%s response=%s fallback_code=%s",
-            phone_number,
-            response_data,
-            fallback_code,
-        )
-        return fallback_code
-
-    return code
-
-
-def _smsc_phone(phone_number: str) -> str:
-    sms_phone = phone_number.replace("+", "").strip()
-    if len(sms_phone) == 10:
-        sms_phone = "7" + sms_phone
-    elif len(sms_phone) == 11 and sms_phone.startswith("8"):
-        sms_phone = "7" + sms_phone[1:]
-    return sms_phone
-
-
 def _default_client_name(phone_number: str) -> str:
     return f"Клиент {phone_number[-4:]}"
 
@@ -146,11 +54,12 @@ async def send_code(
     db: AsyncSession = Depends(get_db),
 ):
     normalized_phone = _normalize_phone_number(payload.phone_number)
-    sms_phone = _smsc_phone(normalized_phone)
-    code = _generate_otp_code()
+    sms_phone = normalize_sms_phone(normalized_phone)
+    code = generate_otp_code()
     client_ip = request.client.host if request.client is not None else None
 
-    code = await _send_smsc_code(phone_number=sms_phone, code=code, client_ip=client_ip)
+    del client_ip
+    code = await send_auth_sms_code(phone_number=sms_phone, code=code, log_prefix="client_smsc")
 
     client = await db.scalar(select(Client).where(Client.phone == normalized_phone))
     is_new_user = client is None

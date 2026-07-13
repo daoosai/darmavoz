@@ -220,6 +220,24 @@ class DriverRegistrationResponse(BaseModel):
     driver: DriverResponse
 
 
+class DriverSmsChallengeResponse(BaseModel):
+    status: str
+    phone: str
+
+
+class DriverVerifyCodeRequest(BaseModel):
+    phone: str
+    code: str = Field(min_length=4, max_length=4)
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) != 4 or not normalized.isdigit():
+            raise ValueError("Код должен состоять из 4 цифр")
+        return normalized
+
+
 class DriverFullProfileResponse(DriverResponse):
     pass
 

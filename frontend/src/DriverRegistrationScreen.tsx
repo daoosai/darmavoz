@@ -1,14 +1,16 @@
 import React, { useState } from "react";
-import { ArrowLeft, Loader2, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
+
+import OtpVerificationStep from "./OtpVerificationStep";
+import { switchAuthenticatedSession } from "./pushAuth";
+import { UserRole } from "./store";
 import {
   baseURL,
   extractApiErrorMessage,
   formatPhoneNumber,
   handleApiError,
 } from "./utils";
-import { switchAuthenticatedSession } from "./pushAuth";
-import { UserRole } from "./store";
 
 interface DriverRegistrationScreenProps {
   onRegister: (role: UserRole) => void;
@@ -33,8 +35,83 @@ export default function DriverRegistrationScreen({
   const [vehicleType, setVehicleType] = useState("Самосвал");
 
   const [isLoading, setIsLoading] = useState(false);
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const [otpStep, setOtpStep] = useState(false);
+  const [otpPhone, setOtpPhone] = useState("");
+  const [otpError, setOtpError] = useState("");
+
+  const normalizePhoneValue = (value: string) => value.replace(/[^\d+]/g, "");
+
+  const buildPayload = () => ({
+    name: name.trim(),
+    phone: normalizePhoneValue(phone),
+    password,
+    vehicle_brand: vehicleBrand.trim(),
+    vehicle_plate_number: vehiclePlate.trim().toUpperCase(),
+    cubature_min: volumeMin ? Number(volumeMin) : null,
+    cubature_max: volumeMax ? Number(volumeMax) : null,
+    tonnage_min: tonnageMin ? Number(tonnageMin) : null,
+    tonnage_max: tonnageMax ? Number(tonnageMax) : null,
+    vehicle_type: vehicleType,
+  });
+
+  const submitRegistration = async () => {
+    const response = await fetch(`${baseURL}/auth/driver/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(buildPayload()),
+    });
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      const fieldMap: Record<string, string> = {
+        password: "Пароль",
+        phone: "Телефон",
+        name: "ФИО",
+        full_name: "ФИО",
+        vehicle_plate_number: "Госномер",
+        vehicle_brand: "Марка машины",
+        cubature_min: "Минимальная кубатура",
+        cubature_max: "Максимальная кубатура",
+        tonnage_min: "Минимальный тоннаж",
+        tonnage_max: "Максимальный тоннаж",
+        vehicle_type: "Тип кузова",
+      };
+
+      const msgMap: Record<string, string> = {
+        "String should have at least 6 characters": "должен содержать не менее 6 символов",
+        "String should have at least 1 characters": "обязательное поле для заполнения",
+        "Field required": "обязательное поле для заполнения",
+        "value is not a valid float": "должно быть числом",
+      };
+
+      if (Array.isArray(data.detail)) {
+        const errMsg = data.detail
+          .map((entry: any) => {
+            const field = entry.loc ? entry.loc[entry.loc.length - 1] : "";
+            const translatedField = fieldMap[field] || field;
+            let translatedMsg = entry.msg;
+
+            for (const [key, value] of Object.entries(msgMap)) {
+              if (entry.msg.includes(key)) {
+                translatedMsg = value;
+                break;
+              }
+            }
+
+            return `${translatedField}: ${translatedMsg}`;
+          })
+          .join(", ");
+        throw new Error(errMsg);
+      }
+
+      throw new Error(extractApiErrorMessage(data, "Ошибка при регистрации"));
+    }
+
+    return data;
+  };
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     if (
       !name.trim() ||
       !phone.trim() ||
@@ -45,92 +122,55 @@ export default function DriverRegistrationScreen({
       toast.error("Пожалуйста, заполните все обязательные поля");
       return;
     }
+
     setIsLoading(true);
-
+    setOtpError("");
     try {
-      const cleanPhone = phone.replace(/[^\d+]/g, "");
-
-      const payload = {
-        name: name.trim(),
-        phone: cleanPhone,
-        password: password,
-        vehicle_brand: vehicleBrand.trim(),
-        vehicle_plate_number: vehiclePlate.trim().toUpperCase(),
-        cubature_min: volumeMin ? Number(volumeMin) : null,
-        cubature_max: volumeMax ? Number(volumeMax) : null,
-        tonnage_min: tonnageMin ? Number(tonnageMin) : null,
-        tonnage_max: tonnageMax ? Number(tonnageMax) : null,
-        vehicle_type: vehicleType,
-      };
-
-      const response = await fetch(`${baseURL}/auth/driver/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-
-        const fieldMap: Record<string, string> = {
-          password: "Пароль",
-          phone: "Телефон",
-          name: "ФИО",
-          full_name: "ФИО",
-          vehicle_plate_number: "Госномер",
-          vehicle_brand: "Марка машины",
-          cubature_min: "Минимальная кубатура",
-          cubature_max: "Максимальная кубатура",
-          tonnage_min: "Минимальный тоннаж",
-          tonnage_max: "Максимальный тоннаж",
-          vehicle_type: "Тип кузова",
-        };
-
-        const msgMap: Record<string, string> = {
-          "String should have at least 6 characters":
-            "должен содержать не менее 6 символов",
-          "String should have at least 1 characters":
-            "обязательное поле для заполнения",
-          "Field required": "обязательное поле для заполнения",
-          "value is not a valid float": "должно быть числом",
-        };
-
-        if (errData.detail && Array.isArray(errData.detail)) {
-          const errMsg = errData.detail
-            .map((e: any) => {
-              const field = e.loc ? e.loc[e.loc.length - 1] : "";
-              const translatedField = fieldMap[field] || field;
-
-              let translatedMsg = e.msg;
-              for (const [key, val] of Object.entries(msgMap)) {
-                if (e.msg.includes(key)) {
-                  translatedMsg = val;
-                  break;
-                }
-              }
-
-              return `${translatedField}: ${translatedMsg}`;
-            })
-            .join(", ");
-          throw new Error(errMsg);
-        }
-        throw new Error(extractApiErrorMessage(errData, "Ошибка при регистрации"));
+      const data = await submitRegistration();
+      if (data.status !== "sms_sent") {
+        throw new Error("Сервер не вернул статус отправки кода");
       }
 
-      const data = await response.json();
-
-      if (data.access_token) {
-        await switchAuthenticatedSession(data.access_token, data.role || "driver");
-        toast.success("Регистрация успешна!");
-        onRegister(data.role || "driver");
-      } else {
-        throw new Error("Токен не получен от сервера");
-      }
-    } catch (err: any) {
-      console.error(err);
-      toast.error(handleApiError(err, "Сбой при регистрации"));
+      setOtpPhone(formatPhoneNumber(data.phone || buildPayload().phone));
+      setOtpStep(true);
+    } catch (error) {
+      console.error(error);
+      toast.error(handleApiError(error, "Сбой при регистрации"));
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleVerifyRegister = async (code: string) => {
+    setIsLoading(true);
+    setOtpError("");
+    try {
+      const response = await fetch(`${baseURL}/driver/auth/verify-register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: normalizePhoneValue(otpPhone), code }),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        setOtpError(extractApiErrorMessage(data, "Неверный код"));
+        return;
+      }
+
+      await switchAuthenticatedSession(data.access_token, data.role || "driver", data.driver_id);
+      toast.success("Регистрация успешна!");
+      onRegister(data.role || "driver");
+    } catch (error) {
+      setOtpError(handleApiError(error, "Сбой при подтверждении номера"));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResendRegisterCode = async () => {
+    const data = await submitRegistration();
+    if (data.status !== "sms_sent") {
+      throw new Error("Не удалось отправить код повторно");
     }
   };
 
@@ -153,165 +193,174 @@ export default function DriverRegistrationScreen({
           Создание аккаунта водителя
         </h2>
 
-        <form
-          onSubmit={handleSubmit}
-          className="w-full max-w-sm flex flex-col space-y-4"
-        >
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">
-              ФИО
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-[#2DB0E6] focus:border-[#2DB0E6] transition-all"
-              placeholder="Иванов Иван Иванович"
-            />
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">
-              Номер телефона
-            </label>
-            <input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(formatPhoneNumber(e.target.value))}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-[#2DB0E6] focus:border-[#2DB0E6] transition-all"
-              placeholder="+7 (999) 000-00-00"
-              maxLength={18}
-            />
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">
-              Пароль
-            </label>
-            <div className="relative w-full">
+        {otpStep ? (
+          <OtpVerificationStep
+            title="Подтвердите номер"
+            phone={otpPhone}
+            errorText={otpError}
+            isSubmitting={isLoading}
+            onBack={() => {
+              setOtpStep(false);
+              setOtpError("");
+            }}
+            onResend={handleResendRegisterCode}
+            onVerify={handleVerifyRegister}
+            submitLabel="Завершить регистрацию"
+          />
+        ) : (
+          <form onSubmit={handleSubmit} className="w-full max-w-sm flex flex-col space-y-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">
+                ФИО
+              </label>
               <input
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 pr-12 text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-[#2DB0E6] focus:border-[#2DB0E6] transition-all"
-                placeholder="Придумайте пароль"
+                type="text"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-[#2DB0E6] focus:border-[#2DB0E6] transition-all"
+                placeholder="Иванов Иван Иванович"
               />
-              <button
-                type="button"
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
-                onClick={() => setShowPassword(!showPassword)}
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">
+                Номер телефона
+              </label>
+              <input
+                type="tel"
+                value={phone}
+                onChange={(event) => setPhone(formatPhoneNumber(event.target.value))}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-[#2DB0E6] focus:border-[#2DB0E6] transition-all"
+                placeholder="+7 (999) 000-00-00"
+                maxLength={18}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">
+                Пароль
+              </label>
+              <div className="relative w-full">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 pr-12 text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-[#2DB0E6] focus:border-[#2DB0E6] transition-all"
+                  placeholder="Придумайте пароль"
+                />
+                <button
+                  type="button"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+            </div>
+
+            <div className="w-full h-px bg-slate-100 my-2" />
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">
+                Марка машины
+              </label>
+              <input
+                type="text"
+                value={vehicleBrand}
+                onChange={(event) => setVehicleBrand(event.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-[#2DB0E6] focus:border-[#2DB0E6] transition-all"
+                placeholder="Например, КАМАЗ"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">
+                Госномер
+              </label>
+              <input
+                type="text"
+                value={vehiclePlate}
+                onChange={(event) => setVehiclePlate(event.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 font-bold uppercase focus:outline-none focus:ring-1 focus:ring-[#2DB0E6] focus:border-[#2DB0E6] transition-all"
+                placeholder="А000АА77"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">
+                Тип машины
+              </label>
+              <select
+                value={vehicleType}
+                onChange={(event) => setVehicleType(event.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-[#2DB0E6] focus:border-[#2DB0E6] transition-all appearance-none"
               >
-                {showPassword ? (
-                  <EyeOff className="w-5 h-5" />
-                ) : (
-                  <Eye className="w-5 h-5" />
-                )}
-              </button>
+                <option value="Самосвал">Самосвал</option>
+                <option value="Бортовой">Бортовой</option>
+                <option value="Будка">Будка</option>
+              </select>
             </div>
-          </div>
 
-          <div className="w-full h-px bg-slate-100 my-2"></div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5 w-full">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">
+                  Кубатура (м3)
+                </label>
+                <div className="grid grid-cols-2 gap-2 w-full overflow-hidden">
+                  <input
+                    type="number"
+                    value={volumeMin}
+                    onChange={(event) => setVolumeMin(event.target.value)}
+                    className="w-full min-w-0 bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-[#2DB0E6] focus:border-[#2DB0E6] transition-all"
+                    placeholder="От"
+                  />
+                  <input
+                    type="number"
+                    value={volumeMax}
+                    onChange={(event) => setVolumeMax(event.target.value)}
+                    className="w-full min-w-0 bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-[#2DB0E6] focus:border-[#2DB0E6] transition-all"
+                    placeholder="До"
+                  />
+                </div>
+              </div>
 
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">
-              Марка машины
-            </label>
-            <input
-              type="text"
-              value={vehicleBrand}
-              onChange={(e) => setVehicleBrand(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-[#2DB0E6] focus:border-[#2DB0E6] transition-all"
-              placeholder="Например, КАМАЗ"
-            />
-          </div>
+              <div className="flex flex-col gap-1.5 w-full">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">
+                  Тоннаж (т)
+                </label>
+                <div className="grid grid-cols-2 gap-2 w-full overflow-hidden">
+                  <input
+                    type="number"
+                    value={tonnageMin}
+                    onChange={(event) => setTonnageMin(event.target.value)}
+                    className="w-full min-w-0 bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-[#2DB0E6] focus:border-[#2DB0E6] transition-all"
+                    placeholder="От"
+                  />
+                  <input
+                    type="number"
+                    value={tonnageMax}
+                    onChange={(event) => setTonnageMax(event.target.value)}
+                    className="w-full min-w-0 bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-[#2DB0E6] focus:border-[#2DB0E6] transition-all"
+                    placeholder="До"
+                  />
+                </div>
+              </div>
+            </div>
 
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">
-              Госномер
-            </label>
-            <input
-              type="text"
-              value={vehiclePlate}
-              onChange={(e) => setVehiclePlate(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 font-bold uppercase focus:outline-none focus:ring-1 focus:ring-[#2DB0E6] focus:border-[#2DB0E6] transition-all"
-              placeholder="А000АА77"
-            />
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">
-              Тип машины
-            </label>
-            <select
-              value={vehicleType}
-              onChange={(e) => setVehicleType(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-[#2DB0E6] focus:border-[#2DB0E6] transition-all appearance-none"
+            <button
+              type="submit"
+              disabled={isLoading}
+              className={`w-full text-white rounded-full py-4 font-bold text-lg mt-6 shadow-sm transition-all flex items-center justify-center gap-2 ${
+                isLoading
+                  ? "bg-[#2DB0E6]/70 cursor-not-allowed"
+                  : "bg-[#2DB0E6] active:bg-[#209BD6] hover:bg-[#209BD6]"
+              }`}
             >
-              <option value="Самосвал">Самосвал</option>
-              <option value="Бортовой">Бортовой</option>
-              <option value="Будка">Будка</option>
-            </select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1.5 w-full">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">
-                Кубатура (м³)
-              </label>
-              <div className="grid grid-cols-2 gap-2 w-full overflow-hidden">
-                <input
-                  type="number"
-                  value={volumeMin}
-                  onChange={(e) => setVolumeMin(e.target.value)}
-                  className="w-full min-w-0 bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-[#2DB0E6] focus:border-[#2DB0E6] transition-all"
-                  placeholder="От"
-                />
-                <input
-                  type="number"
-                  value={volumeMax}
-                  onChange={(e) => setVolumeMax(e.target.value)}
-                  className="w-full min-w-0 bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-[#2DB0E6] focus:border-[#2DB0E6] transition-all"
-                  placeholder="До"
-                />
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-1.5 w-full">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">
-                Тоннаж (т)
-              </label>
-              <div className="grid grid-cols-2 gap-2 w-full overflow-hidden">
-                <input
-                  type="number"
-                  value={tonnageMin}
-                  onChange={(e) => setTonnageMin(e.target.value)}
-                  className="w-full min-w-0 bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-[#2DB0E6] focus:border-[#2DB0E6] transition-all"
-                  placeholder="От"
-                />
-                <input
-                  type="number"
-                  value={tonnageMax}
-                  onChange={(e) => setTonnageMax(e.target.value)}
-                  className="w-full min-w-0 bg-slate-50 border border-slate-200 rounded-xl px-3 py-3 text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-[#2DB0E6] focus:border-[#2DB0E6] transition-all"
-                  placeholder="До"
-                />
-              </div>
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={isLoading}
-            className={`w-full text-white rounded-full py-4 font-bold text-lg mt-6 shadow-sm transition-all flex items-center justify-center gap-2 ${
-              isLoading
-                ? "bg-[#2DB0E6]/70 cursor-not-allowed"
-                : "bg-[#2DB0E6] active:bg-[#209BD6] hover:bg-[#209BD6]"
-            }`}
-          >
-            {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : null}
-            {isLoading ? "Регистрация..." : "Зарегистрироваться"}
-          </button>
-        </form>
+              {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : null}
+              {isLoading ? "Регистрация..." : "Зарегистрироваться"}
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );

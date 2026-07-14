@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { X, ImageIcon, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { X, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { MaterialProps, DeliveryOption } from "./MaterialDetailScreen";
 import { useCartStore } from "./store";
@@ -12,6 +12,11 @@ interface MaterialBottomSheetProps {
   onClose: () => void;
   pickupPoint?: PickupPointSelection | null;
 }
+
+const getTruckFallback = (capacity: number) =>
+  capacity <= 5
+    ? "/static/vehicles/zil-dump-truck.svg"
+    : "/static/vehicles/kamaz-dump-truck.svg";
 
 export default function MaterialBottomSheet({
   material,
@@ -60,25 +65,16 @@ export default function MaterialBottomSheet({
 
   if (!material) return null;
 
-  const pointImages = pickupPoint?.media_files?.length
-    ? pickupPoint.media_files.map((media) => media.public_url)
-    : pickupPoint?.primary_image_url
-      ? [pickupPoint.primary_image_url]
-      : [];
-  const images = pointImages.length
-    ? pointImages
-    : material.media_files?.length
-      ? material.media_files.map((m) => m.public_url)
-    : [
-        getImageUrl(material),
-        "https://placehold.co/400x300/e2e8f0/64748b?text=Photo+2",
-        "https://placehold.co/400x300/e2e8f0/64748b?text=Photo+3",
-      ];
+  const materialImages = [
+    material.primary_image_url,
+    ...(material.media_files || []).map((media) => media.public_url),
+    material.image_url,
+  ].filter((url): url is string => Boolean(url));
+  const images = materialImages.length
+    ? Array.from(new Set(materialImages))
+    : [getImageUrl(material)];
 
   const materialPrice = pickupPoint?.price ?? material.price;
-  const totalPrice = selectedOption
-    ? materialPrice * selectedOption.capacity_m3
-    : 0;
   const isSubmitDisabled = !selectedOption;
 
   const handleSubmit = () => {
@@ -108,12 +104,12 @@ export default function MaterialBottomSheet({
           >
             {/* Handle for drag */}
             <div className="w-full flex justify-center py-3">
-              <div className="w-12 h-1.5 bg-slate-200 rounded-full" />
+              <div className="h-1.5 w-12 rounded-full bg-gray-200" />
             </div>
 
             <button
               onClick={onClose}
-              className="absolute right-4 top-4 z-50 p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200 shadow-sm"
+              className="absolute right-4 top-4 z-50 rounded-full bg-gray-100 p-2 text-gray-500 shadow-sm hover:bg-gray-200"
             >
               <X className="w-5 h-5" />
             </button>
@@ -124,10 +120,10 @@ export default function MaterialBottomSheet({
             >
               {/* Header and Images */}
               <div>
-                <h2 className="text-2xl font-bold text-slate-900 mb-3">
+                <h2 className="mb-3 text-2xl font-bold text-gray-900">
                   {material?.name}
                 </h2>
-                <div className="relative w-full aspect-[4/3] rounded-2xl overflow-hidden bg-slate-100 group">
+                <div className="group relative aspect-[4/3] w-full overflow-hidden rounded-2xl bg-gray-100">
                   <div
                     className="flex w-full h-full overflow-x-auto snap-x snap-mandatory hide-scrollbar"
                     onScroll={(e) => {
@@ -163,19 +159,18 @@ export default function MaterialBottomSheet({
 
               {/* Delivery Options */}
               {pickupPoint && (
-                <div className="rounded-2xl bg-[#f4f1e8] p-4">
-                  <span className="text-xs uppercase tracking-wider text-stone-500">Точка забора</span>
-                  <p className="font-bold text-stone-900">{pickupPoint.name}</p>
-                  <p className="text-sm text-stone-600">Доставка от {Number(pickupPoint.min_delivery_price).toLocaleString("ru-RU")} ₽</p>
+                <div className="rounded-xl border border-gray-200 bg-white p-4">
+                  <span className="text-xs uppercase tracking-wider text-gray-500">Точка забора</span>
+                  <p className="font-bold text-gray-900">{pickupPoint.name}</p>
                 </div>
               )}
               <div>
-                <h3 className="font-semibold text-slate-800 mb-3">
+                <h3 className="mb-3 font-semibold text-gray-900">
                   Выберите кубатуру
                 </h3>
                 {isLoadingOptions ? (
                   <div className="flex justify-center py-4">
-                    <Loader2 className="w-6 h-6 animate-spin text-slate-300" />
+                    <Loader2 className="h-6 w-6 animate-spin text-gray-300" />
                   </div>
                 ) : (
                   <div className="flex gap-3 overflow-x-auto pb-2 hide-scrollbar -mx-4 px-4">
@@ -185,11 +180,12 @@ export default function MaterialBottomSheet({
                       )
                       .map((option) => {
                         const isSelected = selectedOption?.id === option.id;
+                        const fallbackImage = getTruckFallback(option.capacity_m3 || 0);
                         const imgSrc =
                           option.media_files?.[0]?.public_url ||
                           option.primary_image_url ||
                           option.image_url ||
-                          "https://placehold.co/100x100/e2e8f0/64748b?text=Truck";
+                          fallbackImage;
 
                         return (
                           <button
@@ -197,8 +193,8 @@ export default function MaterialBottomSheet({
                             onClick={() => setSelectedOption(option)}
                             className={`shrink-0 min-w-[130px] p-3 rounded-2xl border text-left transition-all ${
                               isSelected
-                                ? "border-[#2DB0E6] bg-[#2DB0E6]/5 shadow-sm ring-1 ring-[#2DB0E6]/20"
-                                : "border-slate-200 bg-white hover:border-slate-300"
+                                ? "border-sky-500 bg-sky-50 shadow-sm ring-1 ring-sky-200"
+                                : "border-gray-200 bg-white hover:border-gray-300"
                             }`}
                           >
                             <div className="w-full h-16 bg-white rounded-lg mb-2 overflow-hidden flex items-center justify-center">
@@ -206,15 +202,19 @@ export default function MaterialBottomSheet({
                                 src={imgSrc}
                                 alt={option.title}
                                 className="max-w-full max-h-full object-contain"
+                                onError={(event) => {
+                                  event.currentTarget.onerror = null;
+                                  event.currentTarget.src = fallbackImage;
+                                }}
                               />
                             </div>
                             <span
-                              className={`block font-semibold text-base mb-1 whitespace-nowrap ${isSelected ? "text-[#2DB0E6]" : "text-slate-900"}`}
+                              className={`mb-1 block whitespace-nowrap text-base font-semibold ${isSelected ? "text-sky-600" : "text-gray-900"}`}
                             >
                               {option.capacity_m3} м³
                             </span>
                             <span
-                              className={`block text-xs font-medium whitespace-nowrap ${isSelected ? "text-[#2DB0E6]/80" : "text-slate-500"}`}
+                              className={`block whitespace-nowrap text-xs font-medium ${isSelected ? "text-sky-600" : "text-gray-500"}`}
                             >
                               {option.title}
                             </span>
@@ -228,7 +228,7 @@ export default function MaterialBottomSheet({
               {/* Description */}
               {material.description && (
                 <div>
-                  <h3 className="font-semibold text-slate-800 mb-2">
+                  <h3 className="mb-2 font-semibold text-gray-900">
                     Описание
                   </h3>
                   <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">
@@ -238,7 +238,7 @@ export default function MaterialBottomSheet({
               )}
               {pickupPoint?.description && (
                 <div>
-                  <h3 className="font-semibold text-slate-800 mb-2">О точке</h3>
+                  <h3 className="mb-2 font-semibold text-gray-900">О точке</h3>
                   <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">
                     {pickupPoint.description}
                   </p>
@@ -248,14 +248,14 @@ export default function MaterialBottomSheet({
               {/* Comment */}
               <div className="flex flex-col gap-4">
                 <div>
-                  <h3 className="font-semibold text-slate-800 mb-2">
+                  <h3 className="mb-2 font-semibold text-gray-900">
                     Комментарий для водителя
                   </h3>
                   <textarea
                     value={comment}
                     onChange={(e) => setComment(e.target.value)}
                     placeholder="Опционально..."
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6]/50 transition-all resize-none h-20"
+                    className="h-20 w-full resize-none rounded-xl border border-gray-200 bg-gray-50 p-3.5 text-sm text-gray-900 placeholder-gray-400 transition-all focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-100"
                   />
                 </div>
               </div>
@@ -266,7 +266,7 @@ export default function MaterialBottomSheet({
               <button
                 disabled={isSubmitDisabled}
                 onClick={handleSubmit}
-                className="w-full bg-[#2DB0E6] hover:bg-[#209ccf] text-white font-bold py-3.5 px-6 rounded-full shadow-md transition-all text-center disabled:opacity-50"
+                className="w-full rounded-xl bg-sky-500 px-6 py-3.5 text-center font-bold text-white shadow-md transition-all hover:bg-sky-600 disabled:opacity-50"
               >
                 В корзину
               </button>

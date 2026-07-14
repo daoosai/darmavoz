@@ -88,27 +88,41 @@ export default function PickupPointMapScreen({ material, onClose, onSelect }: Pr
   useEffect(() => {
     const mapgl = (window as any).mapgl;
     if (!mapRef.current || !mapgl) return;
+    if (!mapgl.HtmlMarker) {
+      setError("Кастомные маркеры карты недоступны");
+      return;
+    }
     markerRefs.current.forEach((marker) => marker.destroy());
     markerRefs.current = [];
     const visible = points.filter((point) => filter === "all" || point.point_type === filter);
     markerRefs.current = visible.map((point) => {
-      if (mapgl.HtmlMarker) {
-        const element = document.createElement("button");
-        element.className = "pickup-point-marker";
-        const title = document.createElement("span");
-        title.textContent = point.short_name;
-        const price = document.createElement("strong");
-        price.textContent = `${Number(point.price).toLocaleString("ru-RU")} ₽/${point.unit}`;
-        element.append(title, price);
-        element.addEventListener("click", () => void openPoint(point));
-        return new mapgl.HtmlMarker(mapRef.current, {
-          coordinates: [point.lon, point.lat],
-          html: element,
-        });
-      }
-      const marker = new mapgl.Marker(mapRef.current, { coordinates: [point.lon, point.lat] });
-      marker.on?.("click", () => void openPoint(point));
-      return marker;
+      const element = document.createElement("button");
+      element.type = "button";
+      element.className = "pickup-point-marker";
+      element.setAttribute("aria-label", `Выбрать точку ${point.short_name || point.name}`);
+
+      const icon = document.createElement("span");
+      icon.className = "pickup-point-marker__icon";
+      icon.innerHTML = point.point_type === "quarry"
+        ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 19 6.4-11 3.2 5.2L15.4 9 21 19H3Z"/><path d="m7.5 19 3.1-5.3 3.2 5.3H7.5Z" opacity=".45"/></svg>'
+        : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5 12 5l8 4.5V19h-3v-6H7v6H4V9.5Z"/><path d="M9 15h6v4H9v-4Z" opacity=".45"/></svg>';
+
+      const content = document.createElement("span");
+      content.className = "pickup-point-marker__content";
+      const title = document.createElement("span");
+      title.className = "pickup-point-marker__title";
+      title.textContent = point.short_name || point.name;
+      const price = document.createElement("strong");
+      price.className = "pickup-point-marker__price";
+      price.textContent = `${Number(point.price).toLocaleString("ru-RU")} ₽/${point.unit}`;
+      content.append(title, price);
+      element.append(icon, content);
+      element.addEventListener("click", () => void openPoint(point));
+
+      return new mapgl.HtmlMarker(mapRef.current, {
+        coordinates: [point.lon, point.lat],
+        html: element,
+      });
     });
   }, [points, filter]);
 
@@ -128,16 +142,16 @@ export default function PickupPointMapScreen({ material, onClose, onSelect }: Pr
   };
 
   return (
-    <div className="fixed inset-0 z-[90] bg-[#f4f1e8] sm:max-w-md sm:mx-auto sm:rounded-[32px] overflow-hidden">
+    <div className="fixed inset-0 z-[90] overflow-hidden bg-gray-50 sm:mx-auto sm:max-w-md sm:rounded-[32px]">
       <div ref={mapContainerRef} className="absolute inset-0" />
       <header className="absolute top-0 inset-x-0 p-4 pt-[max(1rem,env(safe-area-inset-top))] pointer-events-none">
         <div className="flex items-center gap-3 pointer-events-auto">
-          <button onClick={onClose} className="h-11 w-11 rounded-full bg-white shadow-lg grid place-items-center">
+          <button onClick={onClose} className="grid h-11 w-11 place-items-center rounded-full bg-white text-gray-900 shadow-lg">
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <div className="flex-1 bg-white/95 backdrop-blur rounded-2xl px-4 py-3 shadow-lg">
-            <p className="text-xs uppercase tracking-[0.16em] text-stone-500">Точки забора</p>
-            <h1 className="font-bold text-stone-900 truncate">{material.name}</h1>
+          <div className="flex-1 rounded-2xl bg-white/95 px-4 py-3 shadow-lg backdrop-blur">
+            <p className="text-xs uppercase tracking-[0.16em] text-gray-500">Точки забора</p>
+            <h1 className="truncate font-bold text-gray-900">{material.name}</h1>
           </div>
         </div>
         <div className="mt-3 flex gap-2 pointer-events-auto">
@@ -145,7 +159,7 @@ export default function PickupPointMapScreen({ material, onClose, onSelect }: Pr
             <button
               key={value}
               onClick={() => setFilter(value)}
-              className={`px-4 py-2 rounded-full text-sm font-semibold shadow ${filter === value ? "bg-[#163f35] text-white" : "bg-white text-stone-700"}`}
+              className={`rounded-xl px-4 py-2 text-sm font-semibold shadow transition-colors ${filter === value ? "bg-sky-500 text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}
             >
               {value === "all" ? "Все" : TYPE_LABELS[value]}
             </button>
@@ -163,28 +177,22 @@ export default function PickupPointMapScreen({ material, onClose, onSelect }: Pr
       {selected && (
         <div className="absolute bottom-0 inset-x-0 bg-white rounded-t-[28px] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl">
           <div className="flex gap-4">
-            <div className="w-24 h-24 rounded-2xl bg-stone-100 overflow-hidden grid place-items-center shrink-0">
+            <div className="grid h-24 w-24 shrink-0 place-items-center overflow-hidden rounded-2xl bg-gray-100 text-gray-400">
               {selected.primary_image_url ? (
                 <img src={selected.primary_image_url} alt="" className="w-full h-full object-cover" />
               ) : selected.point_type === "quarry" ? <Mountain /> : <Warehouse />}
             </div>
             <div className="min-w-0">
-              <span className="text-xs font-bold uppercase tracking-wide text-[#b26838]">{TYPE_LABELS[selected.point_type]}</span>
-              <h2 className="text-xl font-bold text-stone-900 truncate">{selected.name}</h2>
-              <p className="text-sm text-stone-500 line-clamp-2">{selected.address}</p>
+              <span className="text-xs font-bold uppercase tracking-wide text-sky-500">{TYPE_LABELS[selected.point_type]}</span>
+              <h2 className="truncate text-xl font-bold text-gray-900">{selected.name}</h2>
+              <p className="line-clamp-2 text-sm text-gray-500">{selected.address}</p>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3 my-4">
-            <div className="rounded-2xl bg-[#f4f1e8] p-3">
-              <span className="block text-xs text-stone-500">Материал</span>
-              <strong>{Number(selected.price).toLocaleString("ru-RU")} ₽/{selected.unit}</strong>
-            </div>
-            <div className="rounded-2xl bg-[#f4f1e8] p-3">
-              <span className="block text-xs text-stone-500">Доставка</span>
-              <strong>от {Number(selected.min_delivery_price).toLocaleString("ru-RU")} ₽</strong>
-            </div>
+          <div className="my-4 rounded-xl bg-gray-50 p-3">
+            <span className="block text-xs text-gray-500">Материал</span>
+            <strong className="text-gray-900">{Number(selected.price).toLocaleString("ru-RU")} ₽/{selected.unit}</strong>
           </div>
-          <button onClick={() => onSelect(selected)} className="w-full rounded-full bg-[#163f35] text-white font-bold py-4">
+          <button onClick={() => onSelect(selected)} className="w-full rounded-xl bg-sky-500 py-4 font-bold text-white hover:bg-sky-600">
             Выбрать точку
           </button>
         </div>

@@ -101,7 +101,25 @@ jobs:
           # УБИВАЕМ ЗАВИСШИЕ КОНТЕЙНЕРЫ
           docker rm -f minio_test db_test redis_test backend_test || true
 
-          # ПОДНИМАЕМ ЗАНОВО
-          docker compose -f "${DEPLOY_DIR}/docker-compose.test.yml" up -d db_test redis_test minio_test backend_test --build --force-recreate
-          docker exec backend_test alembic upgrade head
+          COMPOSE_FILE="${DEPLOY_DIR}/docker-compose.test.yml"
+
+          # Сначала поднимаем инфраструктуру и собираем backend. Миграции должны
+          # выполняться одним процессом, иначе PostgreSQL DDL может столкнуться
+          # с параллельным запуском Alembic из entrypoint.sh.
+          docker compose -f "${COMPOSE_FILE}" up -d db_test redis_test minio_test --force-recreate
+          docker compose -f "${COMPOSE_FILE}" build backend_test
+
+          for attempt in $(seq 1 30); do
+            if [ "$(docker inspect -f '{{.State.Health.Status}}' db_test 2>/dev/null || true)" = "healthy" ]; then
+              break
+            fi
+            if [ "${attempt}" -eq 30 ]; then
+              echo "Test database did not become healthy in time" >&2
+              exit 1
+            fi
+            sleep 2
+          done
+
+          docker compose -f "${COMPOSE_FILE}" run --rm --no-deps --entrypoint alembic backend_test upgrade heads
+          docker compose -f "${COMPOSE_FILE}" up -d --no-deps --force-recreate backend_test
           EOF

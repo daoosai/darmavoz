@@ -60,7 +60,24 @@ export default function AdminQuarriesScreen({
 
   useEffect(() => {
     fetchQuarries();
-  }, []);
+  }, [statusFilter, typeFilter]);
+
+  const moderatePoint = async (pointId: string, action: "approve" | "reject") => {
+    const comment = action === "reject" ? window.prompt("Причина отклонения") : "";
+    if (action === "reject" && !comment) return;
+    const response = await fetch(`${baseURL}/admin/pickup-points/${pointId}/${action}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ comment }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      toast.error(typeof data.detail === "string" ? data.detail : "Не удалось изменить статус");
+      return;
+    }
+    toast.success(action === "approve" ? "Точка одобрена" : "Заявка отклонена");
+    await fetchQuarries();
+  };
 
   const handleOpenModal = (quarry?: Quarry) => {
     if (quarry) {
@@ -284,24 +301,7 @@ function EditQuarryModal({
       .then((response) => (response.ok ? response.json() : []))
       .then((data) => setDeliveryOptions(Array.isArray(data) ? data : []))
       .catch(() => setDeliveryOptions([]));
-  }, [statusFilter, typeFilter]);
-
-  const moderatePoint = async (pointId: string, action: "approve" | "reject") => {
-    const comment = action === "reject" ? window.prompt("Причина отклонения") : "";
-    if (action === "reject" && !comment) return;
-    const response = await fetch(`${baseURL}/admin/pickup-points/${pointId}/${action}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ comment }),
-    });
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
-      toast.error(typeof data.detail === "string" ? data.detail : "Не удалось изменить статус");
-      return;
-    }
-    toast.success(action === "approve" ? "Точка одобрена" : "Заявка отклонена");
-    fetchQuarries();
-  };
+  }, []);
 
   React.useEffect(() => {
     let mapInstance: any = null;

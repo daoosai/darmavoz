@@ -152,11 +152,8 @@ class RejectionDecision(BaseModel):
     comment: str = Field(min_length=1, max_length=2000)
 
 
-class SupplierRegisterRequest(QuarryBase):
+class SupplierRegisterRequest(BaseModel):
     phone: str = Field(min_length=10, max_length=20)
-    password: str = Field(min_length=6, max_length=128)
-    point_type: Literal["quarry", "accumulator"] = "quarry"
-    material_offers: list[QuarryMaterialOfferIn] = Field(default_factory=list)
 
 
 class SupplierVerifyCodeRequest(BaseModel):
@@ -168,8 +165,6 @@ class SupplierRegistrationOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
     role: str = "supplier"
-    point_id: UUID
-    point: QuarryOut
 
 
 class SupplierSmsChallengeOut(BaseModel):

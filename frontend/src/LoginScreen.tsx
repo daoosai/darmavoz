@@ -10,9 +10,10 @@ import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
 interface LoginScreenProps {
   onLogin: (role: UserRole) => void;
   onBack: () => void;
+  onSelectSupplier?: () => void;
 }
 
-export default function LoginScreen({ onLogin, onBack }: LoginScreenProps) {
+export default function LoginScreen({ onLogin, onBack, onSelectSupplier }: LoginScreenProps) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -194,6 +195,16 @@ export default function LoginScreen({ onLogin, onBack }: LoginScreenProps) {
               {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : null}
               {isLoading ? "Вход..." : "Войти"}
             </button>
+
+            {onSelectSupplier ? (
+              <button
+                type="button"
+                onClick={onSelectSupplier}
+                className="mt-2 text-sm font-semibold text-[#187fac] underline decoration-[#2DB0E6]/40 underline-offset-4"
+              >
+                Стать поставщиком (Владельцам карьеров)
+              </button>
+            ) : null}
           </form>
         )}
       </div>

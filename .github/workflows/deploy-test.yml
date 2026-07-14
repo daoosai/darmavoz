@@ -99,7 +99,7 @@ jobs:
           cp -a "${DEPLOY_DIR}/static/." /opt/daoos-kit/sites/darmavoz_test/static/
 
           # УБИВАЕМ ЗАВИСШИЕ КОНТЕЙНЕРЫ
-          docker rm -f minio_test db_test redis_test backend_test || true
+          docker rm -f minio_test db_test redis_test || true
 
           COMPOSE_FILE="${DEPLOY_DIR}/docker-compose.test.yml"
 
@@ -121,5 +121,18 @@ jobs:
           done
 
           docker compose -f "${COMPOSE_FILE}" run --rm --no-deps --entrypoint alembic backend_test upgrade heads
+          docker rm -f backend_test || true
           docker compose -f "${COMPOSE_FILE}" up -d --no-deps --force-recreate backend_test
+
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:8001/health >/dev/null; then
+              exit 0
+            fi
+            if [ "${attempt}" -eq 30 ]; then
+              docker logs --tail 200 backend_test >&2 || true
+              echo "Test backend did not become healthy in time" >&2
+              exit 1
+            fi
+            sleep 2
+          done
           EOF

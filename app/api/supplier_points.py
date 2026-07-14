@@ -18,7 +18,7 @@ from app.services.pickup_points import (
 )
 
 router = APIRouter()
-SUPPLIER_POINT_TYPES = {"quarry", "accumulator", "warehouse"}
+SUPPLIER_POINT_TYPES = {"quarry", "accumulator"}
 
 
 async def _owned_point(db: AsyncSession, user: User, point_id: UUID) -> Quarry:
@@ -54,7 +54,7 @@ async def create_supplier_point(
     current_user: User = Depends(get_current_supplier_user),
 ) -> dict:
     if payload.point_type not in SUPPLIER_POINT_TYPES:
-        raise HTTPException(status_code=422, detail="Suppliers may create only quarry, accumulator or warehouse points")
+        raise HTTPException(status_code=422, detail="Suppliers may create only quarry or accumulator points")
     point = Quarry(
         name=payload.name,
         short_name=payload.short_name,
@@ -101,7 +101,7 @@ async def update_supplier_point(
 ) -> dict:
     point = await _owned_point(db, current_user, point_id)
     if payload.point_type is not None and payload.point_type not in SUPPLIER_POINT_TYPES:
-        raise HTTPException(status_code=422, detail="Suppliers may create only quarry, accumulator or warehouse points")
+        raise HTTPException(status_code=422, detail="Suppliers may create only quarry or accumulator points")
     changed = payload.model_fields_set
     for field in ("name", "short_name", "point_type", "address", "description", "lat", "lon", "is_active"):
         if field in changed:

@@ -40,7 +40,7 @@ class QuarryBase(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     short_name: str | None = Field(default=None, max_length=100)
     point_type: PickupPointTypeValue = "quarry"
-    address: str = Field(min_length=1, max_length=1000)
+    address: str = Field(default="", max_length=1000)
     description: str | None = Field(default=None, max_length=5000)
     lat: float
     lon: float
@@ -83,7 +83,7 @@ class QuarryUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     short_name: str | None = Field(default=None, max_length=100)
     point_type: PickupPointTypeValue | None = None
-    address: str | None = Field(default=None, min_length=1, max_length=1000)
+    address: str | None = Field(default=None, max_length=1000)
     description: str | None = Field(default=None, max_length=5000)
     lat: float | None = None
     lon: float | None = None
@@ -149,7 +149,9 @@ class ModerationDecision(BaseModel):
 
 
 class RejectionDecision(BaseModel):
-    comment: str = Field(min_length=1, max_length=2000)
+    reason: str = Field(min_length=1, max_length=2000)
+
+    model_config = ConfigDict(str_strip_whitespace=True)
 
 
 class SupplierRegisterRequest(BaseModel):

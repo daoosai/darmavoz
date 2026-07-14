@@ -234,26 +234,20 @@ async def pickup_point_payload(db: AsyncSession, point: Quarry) -> dict:
 
 async def validate_point_can_be_approved(db: AsyncSession, point: Quarry) -> None:
     payload = await pickup_point_payload(db, point)
+    missing: list[str] = []
     if not payload["material_offers"] or not any(
         offer["is_active"] and offer["price"] is not None and float(offer["price"]) > 0
         for offer in payload["material_offers"]
     ):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Pickup point must have at least one active material offer",
-        )
+        missing.append("хотя бы один активный материал с ценой")
     if not payload["delivery_option_ids"]:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Pickup point must have at least one delivery option",
-        )
+        missing.append("хотя бы один вариант доставки")
     if point.min_delivery_price is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Pickup point minimum delivery price is not configured",
-        )
+        missing.append("минимальная стоимость доставки")
     if not payload["media_files"]:
+        missing.append("фотография")
+    if missing:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Pickup point must have at least one photo",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Для одобрения заполните: " + ", ".join(missing),
         )

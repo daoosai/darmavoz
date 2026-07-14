@@ -37,6 +37,9 @@ export default function AdminQuarriesScreen({
   const [editingQuarry, setEditingQuarry] = useState<Quarry | null>(null);
   const [statusFilter, setStatusFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
+  const [rejectingPoint, setRejectingPoint] = useState<Quarry | null>(null);
+  const [rejectionReason, setRejectionReason] = useState("");
+  const [isModerating, setIsModerating] = useState(false);
 
   const fetchQuarries = async () => {
     try {
@@ -62,21 +65,42 @@ export default function AdminQuarriesScreen({
     fetchQuarries();
   }, [statusFilter, typeFilter]);
 
-  const moderatePoint = async (pointId: string, action: "approve" | "reject") => {
-    const comment = action === "reject" ? window.prompt("Причина отклонения") : "";
-    if (action === "reject" && !comment) return;
-    const response = await fetch(`${baseURL}/admin/pickup-points/${pointId}/${action}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ comment }),
-    });
-    if (!response.ok) {
+  const moderatePoint = async (
+    pointId: string,
+    action: "approve" | "reject",
+    reason?: string,
+  ) => {
+    setIsModerating(true);
+    try {
+      const response = await fetch(`${baseURL}/admin/pickup-points/${pointId}/${action}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(action === "reject" ? { reason } : { comment: null }),
+      });
       const data = await response.json().catch(() => ({}));
-      toast.error(typeof data.detail === "string" ? data.detail : "Не удалось изменить статус");
-      return;
+      if (!response.ok) {
+        toast.error(typeof data.detail === "string" ? data.detail : "Не удалось изменить статус");
+        return false;
+      }
+      toast.success(action === "approve" ? "Точка одобрена" : "Заявка отклонена");
+      await fetchQuarries();
+      return true;
+    } catch {
+      toast.error("Не удалось связаться с сервером");
+      return false;
+    } finally {
+      setIsModerating(false);
     }
-    toast.success(action === "approve" ? "Точка одобрена" : "Заявка отклонена");
-    await fetchQuarries();
+  };
+
+  const submitRejection = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!rejectingPoint?.id || !rejectionReason.trim()) return;
+    const rejected = await moderatePoint(rejectingPoint.id, "reject", rejectionReason.trim());
+    if (rejected) {
+      setRejectingPoint(null);
+      setRejectionReason("");
+    }
   };
 
   const handleOpenModal = (quarry?: Quarry) => {
@@ -191,18 +215,20 @@ export default function AdminQuarriesScreen({
                       )}
                     </td>
                     <td className="p-4">
-                      <button
-                        onClick={() => handleOpenModal(quarry)}
-                        className="p-2 text-slate-400 hover:text-[#2DB0E6] hover:bg-[#2DB0E6]/10 rounded-xl transition-all"
-                      >
-                        <Edit2 className="w-5 h-5" />
-                      </button>
-                      {quarry.moderation_status === "pending_moderation" && quarry.id && (
-                        <>
-                          <button onClick={() => void moderatePoint(quarry.id!, "approve")} className="ml-2 px-3 py-2 text-xs font-bold text-emerald-700 bg-emerald-50 rounded-xl">Одобрить</button>
-                          <button onClick={() => void moderatePoint(quarry.id!, "reject")} className="ml-2 px-3 py-2 text-xs font-bold text-rose-700 bg-rose-50 rounded-xl">Отклонить</button>
-                        </>
-                      )}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          onClick={() => handleOpenModal(quarry)}
+                          className="p-2 text-slate-400 hover:text-[#2DB0E6] hover:bg-[#2DB0E6]/10 rounded-xl transition-all"
+                        >
+                          <Edit2 className="w-5 h-5" />
+                        </button>
+                        {quarry.moderation_status === "pending_moderation" && quarry.id && (
+                          <>
+                            <button disabled={isModerating} onClick={() => void moderatePoint(quarry.id!, "approve")} className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50">Одобрить</button>
+                            <button disabled={isModerating} onClick={() => { setRejectingPoint(quarry); setRejectionReason(""); }} className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-50">Отклонить</button>
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -254,6 +280,12 @@ export default function AdminQuarriesScreen({
                   >
                     <Edit2 className="w-5 h-5" />
                   </button>
+                  {quarry.moderation_status === "pending_moderation" && quarry.id ? (
+                    <>
+                      <button disabled={isModerating} onClick={() => void moderatePoint(quarry.id!, "approve")} className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">Одобрить</button>
+                      <button disabled={isModerating} onClick={() => { setRejectingPoint(quarry); setRejectionReason(""); }} className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700">Отклонить</button>
+                    </>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -272,6 +304,28 @@ export default function AdminQuarriesScreen({
           }}
         />
       )}
+
+      {rejectingPoint ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
+          <form onSubmit={submitRejection} className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl">
+            <h3 className="text-xl font-bold text-slate-900">Укажите причину отклонения</h3>
+            <p className="mt-1 text-sm text-slate-500">{rejectingPoint.name}</p>
+            <textarea
+              autoFocus
+              required
+              maxLength={2000}
+              value={rejectionReason}
+              onChange={(event) => setRejectionReason(event.target.value)}
+              placeholder="Например: отсутствует фотография въезда"
+              className="mt-4 min-h-28 w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" disabled={isModerating} onClick={() => { setRejectingPoint(null); setRejectionReason(""); }} className="rounded-xl px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100">Отмена</button>
+              <button disabled={isModerating || !rejectionReason.trim()} className="rounded-xl bg-rose-600 px-4 py-2 font-bold text-white hover:bg-rose-700 disabled:opacity-50">Отклонить</button>
+            </div>
+          </form>
+        </div>
+      ) : null}
     </div>
   );
 }

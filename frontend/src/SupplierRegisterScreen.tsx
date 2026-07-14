@@ -67,21 +67,21 @@ export default function SupplierRegisterScreen({ onBack }: Props) {
   };
 
   return (
-    <div className="min-h-screen bg-[#f2efe7] text-[#183c33] sm:max-w-md sm:mx-auto">
+    <div className="min-h-screen bg-gray-50 text-gray-900 sm:max-w-md sm:mx-auto">
       <header className="flex items-center px-5 py-4">
-        <button onClick={onBack} className="rounded-full bg-white p-3 shadow-sm" aria-label="Назад">
+        <button onClick={onBack} className="rounded-full bg-white p-3 text-gray-700 shadow-sm hover:bg-gray-100" aria-label="Назад">
           <ArrowLeft className="h-5 w-5" />
         </button>
       </header>
 
       <main className="px-5 pb-10 pt-8">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#b46b3f]">Партнерам</p>
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-sky-500">Партнерам</p>
         <h1 className="mt-3 text-4xl font-black leading-tight">Кабинет поставщика</h1>
-        <p className="mt-4 max-w-sm text-stone-600">
-          Войдите по номеру телефона. Карьеры, накопители и базы добавляются отдельно в кабинете.
+        <p className="mt-4 max-w-sm text-gray-500">
+          Войдите по номеру телефона. Карьеры и накопители добавляются отдельно в кабинете.
         </p>
 
-        <section className="mt-10 rounded-[2rem] bg-white p-6 shadow-[0_20px_60px_rgba(24,60,51,0.08)]">
+        <section className="mt-10 rounded-2xl bg-white p-6 shadow-sm">
           {challengePhone ? (
             <OtpVerificationStep
               title="Введите код из SMS"
@@ -97,10 +97,10 @@ export default function SupplierRegisterScreen({ onBack }: Props) {
             />
           ) : (
             <form onSubmit={handleSendCode} className="space-y-5">
-              <label className="block text-sm font-bold text-stone-700">
+              <label className="block text-sm font-bold text-gray-900">
                 Номер телефона
-                <span className="mt-2 flex items-center gap-3 rounded-2xl border border-stone-200 bg-stone-50 px-4">
-                  <Phone className="h-5 w-5 text-[#b46b3f]" />
+                <span className="mt-2 flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 focus-within:border-sky-500">
+                  <Phone className="h-5 w-5 text-sky-500" />
                   <input
                     required
                     inputMode="tel"
@@ -113,7 +113,7 @@ export default function SupplierRegisterScreen({ onBack }: Props) {
               </label>
               <button
                 disabled={isBusy || normalizePhone(phone).length < 12}
-                className="flex w-full items-center justify-center rounded-2xl bg-[#183c33] py-4 text-lg font-bold text-white disabled:opacity-40"
+                className="flex w-full items-center justify-center rounded-xl bg-sky-500 py-4 text-lg font-bold text-white hover:bg-sky-600 disabled:opacity-40"
               >
                 {isBusy ? <Loader2 className="h-5 w-5 animate-spin" /> : "Получить код"}
               </button>

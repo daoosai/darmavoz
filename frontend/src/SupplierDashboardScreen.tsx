@@ -98,10 +98,10 @@ export default function SupplierDashboardScreen({ token, onBack }: Props) {
   };
 
   return (
-    <div className="min-h-screen bg-[#f2efe7] text-[#183c33] sm:max-w-md sm:mx-auto">
+    <div className="min-h-screen bg-gray-50 text-gray-900 sm:max-w-md sm:mx-auto">
       <header className="flex items-center justify-between px-5 pb-4 pt-6">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#b46b3f]">Кабинет поставщика</p>
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-sky-500">Кабинет поставщика</p>
           <h1 className="mt-1 text-3xl font-black">Мои точки</h1>
         </div>
         <button
@@ -109,7 +109,7 @@ export default function SupplierDashboardScreen({ token, onBack }: Props) {
             await logoutCurrentSession();
             onBack();
           }}
-          className="rounded-full bg-white p-3 shadow-sm"
+          className="rounded-full bg-white p-3 text-gray-700 shadow-sm hover:bg-gray-100"
           aria-label="Выйти"
         >
           <LogOut className="h-5 w-5" />
@@ -117,39 +117,39 @@ export default function SupplierDashboardScreen({ token, onBack }: Props) {
       </header>
 
       <main className="px-5 pb-12">
-        <button onClick={() => setShowCreatePoint(true)} className="mt-5 flex w-full items-center justify-center gap-3 rounded-[1.5rem] bg-[#183c33] px-5 py-5 text-lg font-black text-white shadow-[0_16px_40px_rgba(24,60,51,0.2)]">
+        <button onClick={() => setShowCreatePoint(true)} className="mt-5 flex w-full items-center justify-center gap-3 rounded-xl bg-sky-500 px-5 py-5 text-lg font-black text-white shadow-sm hover:bg-sky-600">
           <Plus className="h-6 w-6" /> Добавить точку забора
         </button>
 
         {isLoading ? (
-          <Loader2 className="mx-auto mt-16 h-8 w-8 animate-spin text-[#b46b3f]" />
+          <Loader2 className="mx-auto mt-16 h-8 w-8 animate-spin text-sky-500" />
         ) : points.length === 0 ? (
-          <section className="mt-8 rounded-[2rem] border border-dashed border-stone-300 bg-white/60 px-6 py-14 text-center">
-            <Building2 className="mx-auto h-12 w-12 text-stone-300" />
+          <section className="mt-8 rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-14 text-center">
+            <Building2 className="mx-auto h-12 w-12 text-gray-300" />
             <h2 className="mt-5 text-xl font-black">Точек пока нет</h2>
-            <p className="mt-2 text-sm text-stone-500">Добавьте первый карьер, накопитель или базу. Каждая точка проходит модерацию отдельно.</p>
+            <p className="mt-2 text-sm text-gray-500">Добавьте первый карьер или накопитель. Каждая точка проходит модерацию отдельно.</p>
           </section>
         ) : (
           <div className="mt-8 space-y-4">
             {points.map((point) => (
-              <article key={point.id} className="overflow-hidden rounded-[1.75rem] bg-white shadow-sm">
+              <article key={point.id} className="overflow-hidden rounded-2xl bg-white shadow-sm">
                 {point.primary_image_url ? <img src={point.primary_image_url} alt="" className="h-36 w-full object-cover" /> : null}
                 <div className="p-5">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-xs font-bold uppercase tracking-wider text-[#b46b3f]">{TYPE_LABELS[point.point_type] || point.point_type}</p>
+                      <p className="text-xs font-bold uppercase tracking-wider text-sky-500">{TYPE_LABELS[point.point_type] || point.point_type}</p>
                       <h2 className="mt-1 text-xl font-black">{point.name}</h2>
                     </div>
-                    <span className="rounded-full bg-stone-100 px-3 py-2 text-xs font-bold text-stone-600">{STATUS_LABELS[point.moderation_status] || point.moderation_status}</span>
+                    <span className="rounded-full bg-gray-100 px-3 py-2 text-xs font-bold text-gray-600">{STATUS_LABELS[point.moderation_status] || point.moderation_status}</span>
                   </div>
-                  <p className="mt-3 flex items-start gap-2 text-sm text-stone-500"><MapPin className="mt-0.5 h-4 w-4 shrink-0" />{point.address}</p>
+                  <p className="mt-3 flex items-start gap-2 text-sm text-gray-500"><MapPin className="mt-0.5 h-4 w-4 shrink-0" />{point.address || `${point.lat}, ${point.lon}`}</p>
                   {point.moderation_comment ? <p className="mt-4 rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{point.moderation_comment}</p> : null}
                   <div className="mt-5 flex gap-2">
-                    <label className="flex flex-1 cursor-pointer items-center justify-center rounded-xl border border-stone-200 py-3 text-sm font-bold">
+                    <label className="flex flex-1 cursor-pointer items-center justify-center rounded-xl border border-gray-200 py-3 text-sm font-bold hover:bg-gray-50">
                       <Upload className="mr-2 h-4 w-4" /> Фото
                       <input type="file" accept="image/*" className="hidden" onChange={(event) => event.target.files?.[0] && void uploadPhoto(point.id, event.target.files[0])} />
                     </label>
-                    <button disabled={isBusy || point.moderation_status === "pending_moderation"} onClick={() => void submitPoint(point.id)} className="flex-1 rounded-xl bg-[#b46b3f] px-3 py-3 text-sm font-bold text-white disabled:opacity-40">
+                    <button disabled={isBusy || point.moderation_status === "pending_moderation"} onClick={() => void submitPoint(point.id)} className="flex-1 rounded-xl bg-sky-500 px-3 py-3 text-sm font-bold text-white hover:bg-sky-600 disabled:opacity-40">
                       На модерацию
                     </button>
                   </div>

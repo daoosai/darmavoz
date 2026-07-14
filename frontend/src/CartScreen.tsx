@@ -409,7 +409,7 @@ export default function CartScreen({
                             </span>
                           </div>
                           <div className="flex justify-between items-start">
-                            <span>Ближайший карьер:</span>
+                            <span>Выбранная точка:</span>
                             <span className="font-medium text-slate-800 text-right max-w-[65%] leading-tight">
                               {loadingPoint}
                             </span>

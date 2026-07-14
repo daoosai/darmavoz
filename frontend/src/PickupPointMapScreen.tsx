@@ -30,6 +30,32 @@ interface Props {
   onSelect: (point: PickupPointSelection) => void;
 }
 
+interface UserLocation {
+  lat: number;
+  lon: number;
+}
+
+export function calculateDistance(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+) {
+  const earthRadiusKm = 6371;
+  const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
+  const latitudeDelta = toRadians(lat2 - lat1);
+  const longitudeDelta = toRadians(lon2 - lon1);
+  const startLatitude = toRadians(lat1);
+  const endLatitude = toRadians(lat2);
+  const haversine =
+    Math.sin(latitudeDelta / 2) ** 2
+    + Math.cos(startLatitude)
+      * Math.cos(endLatitude)
+      * Math.sin(longitudeDelta / 2) ** 2;
+
+  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+}
+
 const TYPE_LABELS: Record<string, string> = {
   quarry: "Карьер",
   accumulator: "Накопитель",
@@ -44,8 +70,31 @@ export default function PickupPointMapScreen({ material, onClose, onSelect }: Pr
   const [points, setPoints] = useState<PickupPointMarker[]>([]);
   const [selected, setSelected] = useState<PickupPointSelection | null>(null);
   const [filter, setFilter] = useState<"all" | "quarry" | "accumulator">("all");
+  const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
+  const [activePointId, setActivePointId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!("geolocation" in navigator)) return;
+
+    let mounted = true;
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        if (mounted) {
+          setUserLocation({ lat: coords.latitude, lon: coords.longitude });
+        }
+      },
+      () => {
+        // The map remains usable when location access is unavailable or denied.
+      },
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 },
+    );
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -98,7 +147,7 @@ export default function PickupPointMapScreen({ material, onClose, onSelect }: Pr
     markerRefs.current = visible.map((point) => {
       const element = document.createElement("button");
       element.type = "button";
-      element.className = "pickup-point-marker";
+      element.className = `pickup-point-marker${point.id === activePointId ? " pickup-point-marker--active" : ""}`;
       element.setAttribute("aria-label", `Выбрать точку ${point.short_name || point.name}`);
 
       const icon = document.createElement("span");
@@ -124,10 +173,19 @@ export default function PickupPointMapScreen({ material, onClose, onSelect }: Pr
         html: element,
       });
     });
-  }, [points, filter]);
+  }, [points, filter, activePointId]);
 
   const openPoint = async (point: PickupPointMarker) => {
-    mapRef.current?.setCenter([point.lon, point.lat]);
+    setActivePointId(point.id);
+    mapRef.current?.setCenter([point.lon, point.lat], {
+      easing: "easeOutCubic",
+      duration: 700,
+    });
+    mapRef.current?.setZoom(13, {
+      easing: "easeOutCubic",
+      useHeightForAnimation: true,
+      duration: 700,
+    });
     try {
       const response = await fetch(
         `${baseURL}/catalog/pickup-points/${point.id}?material_id=${material.id}`,
@@ -140,6 +198,19 @@ export default function PickupPointMapScreen({ material, onClose, onSelect }: Pr
       setError(reason.message);
     }
   };
+
+  const carouselPoints = points
+    .filter((point) => filter === "all" || point.point_type === filter)
+    .map((point) => ({
+      point,
+      distance: userLocation
+        ? calculateDistance(userLocation.lat, userLocation.lon, point.lat, point.lon)
+        : null,
+    }));
+
+  if (userLocation) {
+    carouselPoints.sort((first, second) => (first.distance ?? 0) - (second.distance ?? 0));
+  }
 
   return (
     <div className="fixed inset-0 z-[90] overflow-hidden bg-gray-50 sm:mx-auto sm:max-w-md sm:rounded-[32px]">
@@ -171,6 +242,46 @@ export default function PickupPointMapScreen({ material, onClose, onSelect }: Pr
         <div className="absolute inset-x-4 top-36 bg-white rounded-2xl shadow-xl p-4 flex items-center gap-3">
           {isLoading ? <Loader2 className="animate-spin" /> : <MapPin />}
           <span className="text-sm font-medium">{isLoading ? "Загружаем точки…" : error || "Для материала пока нет точек"}</span>
+        </div>
+      )}
+
+      {!selected && !isLoading && !error && carouselPoints.length > 0 && (
+        <div className="hide-scrollbar absolute bottom-6 left-0 right-0 z-10 flex snap-x gap-4 overflow-x-auto px-4 pb-4">
+          {carouselPoints.map(({ point, distance }) => (
+            <button
+              key={point.id}
+              type="button"
+              onClick={() => void openPoint(point)}
+              className={`flex w-64 shrink-0 snap-center gap-3 rounded-2xl border bg-white p-3 text-left shadow-xl transition ${activePointId === point.id ? "border-sky-500 ring-2 ring-sky-200" : "border-gray-100 hover:border-sky-200"}`}
+            >
+              <div className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-xl bg-gray-100 text-gray-400">
+                {point.primary_image_url ? (
+                  <img
+                    src={point.primary_image_url}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
+                ) : point.point_type === "quarry" ? (
+                  <Mountain className="h-7 w-7" />
+                ) : (
+                  <Warehouse className="h-7 w-7" />
+                )}
+              </div>
+              <div className="min-w-0 py-0.5">
+                <h2 className="truncate font-bold text-gray-900">
+                  {point.short_name || point.name}
+                </h2>
+                <p className="mt-1 text-sm font-bold text-sky-500">
+                  {Number(point.price).toLocaleString("ru-RU")} ₽/{point.unit}
+                </p>
+                {distance !== null && (
+                  <p className="mt-2 text-xs text-gray-500">
+                    {distance < 10 ? distance.toFixed(1) : Math.round(distance)} км от вас
+                  </p>
+                )}
+              </div>
+            </button>
+          ))}
         </div>
       )}
 

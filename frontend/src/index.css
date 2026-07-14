@@ -22,6 +22,18 @@
   transform: translateY(-54%);
 }
 
+.pickup-point-marker--active {
+  border-color: #0284c7;
+  background: #f0f9ff;
+  box-shadow: 0 0 0 4px rgb(14 165 233 / 24%), 0 16px 36px rgb(15 23 42 / 28%);
+  transform: translateY(-56%) scale(1.06);
+}
+
+.pickup-point-marker--active .pickup-point-marker__icon {
+  background: #0ea5e9;
+  color: #fff;
+}
+
 .pickup-point-marker__icon {
   display: grid;
   width: 28px;

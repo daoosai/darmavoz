@@ -23,6 +23,10 @@ def normalize_sms_phone(phone_number: str) -> str:
 
 
 async def send_auth_sms_code(*, phone_number: str, code: str, log_prefix: str) -> str:
+    if not settings.USE_REAL_SMS:
+        logger.info("%s_sandbox_sms phone=%s code=%s", log_prefix, phone_number, FALLBACK_OTP_CODE)
+        return FALLBACK_OTP_CODE
+
     login = settings.SMSC_LOGIN
     password = settings.SMSC_PASSWORD
     if not login or not password:

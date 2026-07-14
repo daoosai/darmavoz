@@ -62,6 +62,7 @@ services:
       S3_ENDPOINT: http://minio-test:9000
       S3_PUBLIC_BASE_URL: https://test.darmavoz.ru/s3
       S3_PRESIGN_ENDPOINT: https://test.darmavoz.ru
+      USE_REAL_SMS: "false"
     depends_on:
       db_test:
         condition: service_healthy

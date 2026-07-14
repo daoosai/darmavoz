@@ -75,6 +75,21 @@
   line-height: 1.25;
 }
 
+.pickup-point-sheet {
+  animation: pickup-point-sheet-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes pickup-point-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
 }

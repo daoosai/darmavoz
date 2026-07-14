@@ -1,9 +1,10 @@
+import logging
 from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.admin import DeleteResult
@@ -28,6 +29,7 @@ from app.services.pickup_points import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 async def _get_point_or_404(db: AsyncSession, point_id: UUID) -> Quarry:
@@ -213,32 +215,43 @@ async def approve_pickup_point(
     current_user: User = Depends(get_current_logist_user),
 ) -> dict:
     point = await _get_point_or_404(db, point_id)
-    if point.min_delivery_price is None:
-        point.min_delivery_price = default_min_delivery_price(point.point_type)
-
-    point_payload = await pickup_point_payload(db, point)
-    if not point_payload["delivery_option_ids"]:
-        await sync_delivery_options(
-            db,
-            quarry_id=point.id,
-            delivery_option_ids=await default_delivery_option_ids(db, point.point_type),
-        )
-
-    await validate_point_can_be_approved(db, point)
-    point.moderation_status = ModerationStatus.approved.value
-    point.moderation_comment = payload.comment
-    point.moderated_at = datetime.now(timezone.utc)
-    point.moderated_by_user_id = current_user.id
-    point.is_active = True
     try:
+        if point.min_delivery_price is None:
+            point.min_delivery_price = default_min_delivery_price(point.point_type)
+
+        point_payload = await pickup_point_payload(db, point)
+        if not point_payload["delivery_option_ids"]:
+            await sync_delivery_options(
+                db,
+                quarry_id=point.id,
+                delivery_option_ids=await default_delivery_option_ids(db, point.point_type),
+            )
+
+        await validate_point_can_be_approved(db, point)
+        point.moderation_status = ModerationStatus.approved.value
+        point.moderation_comment = payload.comment
+        point.moderated_at = datetime.now(timezone.utc)
+        point.moderated_by_user_id = current_user.id
+        point.is_active = True
         await db.commit()
-    except IntegrityError as exc:
+        return await pickup_point_payload(db, point)
+    except HTTPException:
         await db.rollback()
+        raise
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        logger.warning(
+            "pickup_point_approval_failed",
+            extra={"pickup_point_id": str(point_id)},
+            exc_info=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Точку нельзя одобрить: проверьте обязательные поля и связанные данные",
+            detail=(
+                "Точку нельзя одобрить: проверьте материал и цену, фотографию, "
+                "координаты и параметры доставки"
+            ),
         ) from exc
-    return await pickup_point_payload(db, point)
 
 
 @router.post("/pickup-points/{point_id}/reject", response_model=QuarryOut)

@@ -11,10 +11,30 @@ interface Material {
   unit: string;
 }
 
+export interface SupplierPoint {
+  id: string;
+  point_type: "quarry" | "accumulator";
+  name: string;
+  short_name?: string | null;
+  address: string;
+  description?: string | null;
+  lat: number;
+  lon: number;
+  moderation_status: string;
+  moderation_comment?: string | null;
+  primary_image_url?: string | null;
+  material_offers?: Array<{
+    material_id: string;
+    price: number;
+    is_active: boolean;
+  }>;
+}
+
 interface Props {
   token: string;
+  point?: SupplierPoint | null;
   onClose: () => void;
-  onCreated: (point: any) => void;
+  onSaved: (point: SupplierPoint) => void;
 }
 
 const TYUMEN_CENTER: [number, number] = [65.534328, 57.152286];
@@ -32,10 +52,29 @@ const initialForm = {
 const suggestionLabel = (item: any): string =>
   item.full_name || item.address_name || item.name || item.search_attributes?.suggested_text || "";
 
-export default function SupplierCreatePointModal({ token, onClose, onCreated }: Props) {
-  const [form, setForm] = useState(initialForm);
+export default function SupplierCreatePointModal({ token, point, onClose, onSaved }: Props) {
+  const isEditing = Boolean(point);
+  const [form, setForm] = useState(() =>
+    point
+      ? {
+          point_type: point.point_type,
+          name: point.name,
+          short_name: point.short_name || "",
+          address: point.address || "",
+          description: point.description || "",
+          lat: String(point.lat),
+          lon: String(point.lon),
+        }
+      : initialForm,
+  );
   const [materials, setMaterials] = useState<Material[]>([]);
-  const [offerPrices, setOfferPrices] = useState<Record<string, string>>({});
+  const [offerPrices, setOfferPrices] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      (point?.material_offers || [])
+        .filter((offer) => offer.is_active)
+        .map((offer) => [offer.material_id, String(offer.price)]),
+    ),
+  );
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
@@ -199,25 +238,38 @@ export default function SupplierCreatePointModal({ token, onClose, onCreated }: 
       if (!hasCoordinates) {
         [lon, lat] = await geocodeAddress(form.address);
       }
-      const response = await fetch(`${baseURL}/supplier/points`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          ...form,
-          address: form.address.trim(),
-          short_name: form.short_name || null,
-          description: form.description || null,
-          lat,
-          lon,
-          material_offers: materialOffers,
-        }),
-      });
+      const response = await fetch(
+        isEditing ? `${baseURL}/supplier/points/${point!.id}` : `${baseURL}/supplier/points`,
+        {
+          method: isEditing ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            ...form,
+            address: form.address.trim(),
+            short_name: form.short_name || null,
+            description: form.description || null,
+            lat,
+            lon,
+            material_offers: materialOffers,
+          }),
+        },
+      );
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось создать точку"));
-      onCreated(data);
-      toast.success("Точка добавлена в черновики");
+      if (!response.ok) {
+        throw new Error(
+          extractApiErrorMessage(data, isEditing ? "Не удалось сохранить изменения" : "Не удалось создать точку"),
+        );
+      }
+      onSaved(data);
+      toast.success(isEditing ? "Изменения отправлены на модерацию" : "Точка добавлена в черновики");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось создать точку");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : isEditing
+            ? "Не удалось сохранить изменения"
+            : "Не удалось создать точку",
+      );
     } finally {
       setIsBusy(false);
     }
@@ -228,8 +280,12 @@ export default function SupplierCreatePointModal({ token, onClose, onCreated }: 
       <div className="min-h-screen bg-gray-50 sm:mx-auto sm:my-6 sm:min-h-0 sm:max-w-xl sm:rounded-2xl">
         <header className="sticky top-0 z-20 flex items-center justify-between border-b border-gray-200 bg-white/95 px-5 py-4 backdrop-blur sm:rounded-t-2xl">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-500">Новая карточка</p>
-            <h2 className="text-2xl font-black text-gray-900">Точка забора</h2>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-500">
+              {isEditing ? "Редактирование" : "Новая карточка"}
+            </p>
+            <h2 className="text-2xl font-black text-gray-900">
+              {isEditing ? point!.name : "Точка забора"}
+            </h2>
           </div>
           <button onClick={onClose} className="rounded-full bg-gray-100 p-3 text-gray-700 hover:bg-gray-200" aria-label="Закрыть">
             <X className="h-5 w-5" />
@@ -315,7 +371,7 @@ export default function SupplierCreatePointModal({ token, onClose, onCreated }: 
           </section>
 
           <button disabled={isBusy} className="flex w-full items-center justify-center rounded-xl bg-sky-500 py-4 text-lg font-black text-white hover:bg-sky-600 disabled:opacity-50">
-            {isBusy ? <Loader2 className="h-5 w-5 animate-spin" /> : "Сохранить точку"}
+            {isBusy ? <Loader2 className="h-5 w-5 animate-spin" /> : isEditing ? "Сохранить изменения" : "Сохранить точку"}
           </button>
         </form>
       </div>

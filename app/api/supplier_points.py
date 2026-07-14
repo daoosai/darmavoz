@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_db
 from app.models.models import ModerationStatus, Quarry, User
 from app.schemas.quarry import QuarryCreate, QuarryMaterialOfferIn, QuarryOut, QuarryUpdate
+from app.schemas.supplier import SupplierProfileOut, SupplierProfileUpdate
 from app.security.auth import get_current_supplier_user
 from app.services.pickup_points import (
     default_delivery_option_ids,
@@ -28,6 +29,31 @@ async def _owned_point(db: AsyncSession, user: User, point_id: UUID) -> Quarry:
     if point is None:
         raise HTTPException(status_code=404, detail="Pickup point not found")
     return point
+
+
+@router.get("/me", response_model=SupplierProfileOut)
+async def get_supplier_profile(
+    current_user: User = Depends(get_current_supplier_user),
+) -> SupplierProfileOut:
+    return SupplierProfileOut(
+        phone=current_user.username,
+        display_name=current_user.display_name,
+    )
+
+
+@router.patch("/me", response_model=SupplierProfileOut)
+async def update_supplier_profile(
+    payload: SupplierProfileUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_supplier_user),
+) -> SupplierProfileOut:
+    current_user.display_name = payload.display_name
+    await db.commit()
+    await db.refresh(current_user)
+    return SupplierProfileOut(
+        phone=current_user.username,
+        display_name=current_user.display_name,
+    )
 
 
 @router.get("/points", response_model=list[QuarryOut])

@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
-import { Building2, Loader2, LogOut, MapPin, Plus, Upload } from "lucide-react";
+import { Building2, Loader2, MapPin, Pencil, Plus, Upload } from "lucide-react";
 import toast from "react-hot-toast";
 
-import { logoutCurrentSession } from "./pushAuth";
-import SupplierCreatePointModal from "./SupplierCreatePointModal";
+import SupplierCreatePointModal, { type SupplierPoint } from "./SupplierCreatePointModal";
 import { baseURL, extractApiErrorMessage } from "./utils";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -23,14 +22,14 @@ const TYPE_LABELS: Record<string, string> = {
 
 interface Props {
   token: string;
-  onBack: () => void;
 }
 
-export default function SupplierDashboardScreen({ token, onBack }: Props) {
-  const [points, setPoints] = useState<any[]>([]);
+export default function SupplierDashboardScreen({ token }: Props) {
+  const [points, setPoints] = useState<SupplierPoint[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isBusy, setIsBusy] = useState(false);
   const [showCreatePoint, setShowCreatePoint] = useState(false);
+  const [editingPoint, setEditingPoint] = useState<SupplierPoint | null>(null);
 
   const fetchPoints = async () => {
     try {
@@ -98,25 +97,15 @@ export default function SupplierDashboardScreen({ token, onBack }: Props) {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900 sm:max-w-md sm:mx-auto">
-      <header className="flex items-center justify-between px-5 pb-4 pt-6">
+    <div className="text-gray-900">
+      <header className="px-5 pb-4 pt-6">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-sky-500">Кабинет поставщика</p>
           <h1 className="mt-1 text-3xl font-black">Мои точки</h1>
         </div>
-        <button
-          onClick={async () => {
-            await logoutCurrentSession();
-            onBack();
-          }}
-          className="rounded-full bg-white p-3 text-gray-700 shadow-sm hover:bg-gray-100"
-          aria-label="Выйти"
-        >
-          <LogOut className="h-5 w-5" />
-        </button>
       </header>
 
-      <main className="px-5 pb-12">
+      <main className="px-5 pb-8">
         <button onClick={() => setShowCreatePoint(true)} className="mt-5 flex w-full items-center justify-center gap-3 rounded-xl bg-sky-500 px-5 py-5 text-lg font-black text-white shadow-sm hover:bg-sky-600">
           <Plus className="h-6 w-6" /> Добавить точку забора
         </button>
@@ -149,9 +138,15 @@ export default function SupplierDashboardScreen({ token, onBack }: Props) {
                       <Upload className="mr-2 h-4 w-4" /> Фото
                       <input type="file" accept="image/*" className="hidden" onChange={(event) => event.target.files?.[0] && void uploadPhoto(point.id, event.target.files[0])} />
                     </label>
-                    <button disabled={isBusy || point.moderation_status === "pending_moderation"} onClick={() => void submitPoint(point.id)} className="flex-1 rounded-xl bg-sky-500 px-3 py-3 text-sm font-bold text-white hover:bg-sky-600 disabled:opacity-40">
-                      На модерацию
-                    </button>
+                    {point.moderation_status === "approved" ? (
+                      <button onClick={() => setEditingPoint(point)} className="flex flex-1 items-center justify-center rounded-xl border border-sky-200 bg-sky-50 px-3 py-3 text-sm font-bold text-sky-700 hover:bg-sky-100">
+                        <Pencil className="mr-2 h-4 w-4" /> Изменить
+                      </button>
+                    ) : (
+                      <button disabled={isBusy || point.moderation_status === "pending_moderation"} onClick={() => void submitPoint(point.id)} className="flex-1 rounded-xl bg-sky-500 px-3 py-3 text-sm font-bold text-white hover:bg-sky-600 disabled:opacity-40">
+                        {point.moderation_status === "pending_moderation" ? "На модерации" : "На модерацию"}
+                      </button>
+                    )}
                   </div>
                 </div>
               </article>
@@ -164,9 +159,21 @@ export default function SupplierDashboardScreen({ token, onBack }: Props) {
         <SupplierCreatePointModal
           token={token}
           onClose={() => setShowCreatePoint(false)}
-          onCreated={(point) => {
+          onSaved={(point) => {
             setPoints((current) => [point, ...current]);
             setShowCreatePoint(false);
+          }}
+        />
+      ) : null}
+
+      {editingPoint ? (
+        <SupplierCreatePointModal
+          token={token}
+          point={editingPoint}
+          onClose={() => setEditingPoint(null)}
+          onSaved={(savedPoint) => {
+            setPoints((current) => current.map((point) => point.id === savedPoint.id ? savedPoint : point));
+            setEditingPoint(null);
           }}
         />
       ) : null}

@@ -13,6 +13,7 @@ jobs:
       RELEASE_VERSION: "2.4.5"
       RELEASE_VERSION_CODE: "245"
       APK_REMOTE_PATH: /opt/darmavoz/static/darmavoz.apk
+      VITE_2GIS_KEY: ${{ secrets.VITE_2GIS_KEY }}
 
     steps:
       - name: Checkout repository

@@ -6,13 +6,20 @@ import { useAuthStore } from "./store";
 import { baseURL } from "./utils";
 
 export interface Quarry {
-  id?: number;
+  id?: string;
   name: string;
+  short_name?: string;
+  point_type: "quarry" | "accumulator" | "warehouse" | "supplier";
   address: string;
+  description?: string;
   lat: number;
   lon: number;
+  min_delivery_price?: number;
+  moderation_status?: string;
   is_active: boolean;
-  material_ids?: number[];
+  material_ids?: string[];
+  material_offers?: { material_id: string; price: number; is_active: boolean }[];
+  delivery_option_ids?: string[];
   materials?: any[];
 }
 
@@ -28,11 +35,16 @@ export default function AdminQuarriesScreen({
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingQuarry, setEditingQuarry] = useState<Quarry | null>(null);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
 
   const fetchQuarries = async () => {
     try {
       setIsLoading(true);
-      const res = await fetch(`${baseURL}/admin/quarries`, {
+      const params = new URLSearchParams();
+      if (statusFilter) params.set("moderation_status", statusFilter);
+      if (typeFilter) params.set("point_type", typeFilter);
+      const res = await fetch(`${baseURL}/admin/pickup-points?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -56,11 +68,15 @@ export default function AdminQuarriesScreen({
     } else {
       setEditingQuarry({
         name: "",
+        point_type: "quarry",
         address: "",
         lat: 0,
         lon: 0,
         is_active: true,
         material_ids: [],
+        material_offers: [],
+        delivery_option_ids: [],
+        min_delivery_price: 5000,
       });
     }
     setIsModalOpen(true);
@@ -92,6 +108,23 @@ export default function AdminQuarriesScreen({
           <Plus className="w-4 h-4" />
           Добавить
         </button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 bg-white p-3 rounded-2xl border border-slate-100">
+        <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
+          <option value="">Все статусы</option>
+          <option value="pending_moderation">На модерации</option>
+          <option value="approved">Одобрено</option>
+          <option value="rejected">Отклонено</option>
+          <option value="suspended">Приостановлено</option>
+        </select>
+        <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
+          <option value="">Все типы</option>
+          <option value="quarry">Карьеры</option>
+          <option value="accumulator">Накопители</option>
+          <option value="warehouse">Склады</option>
+          <option value="supplier">Поставщики</option>
+        </select>
       </div>
 
       {/* Desktop View */}
@@ -147,6 +180,12 @@ export default function AdminQuarriesScreen({
                       >
                         <Edit2 className="w-5 h-5" />
                       </button>
+                      {quarry.moderation_status === "pending_moderation" && quarry.id && (
+                        <>
+                          <button onClick={() => void moderatePoint(quarry.id!, "approve")} className="ml-2 px-3 py-2 text-xs font-bold text-emerald-700 bg-emerald-50 rounded-xl">Одобрить</button>
+                          <button onClick={() => void moderatePoint(quarry.id!, "reject")} className="ml-2 px-3 py-2 text-xs font-bold text-rose-700 bg-rose-50 rounded-xl">Отклонить</button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))
@@ -173,7 +212,7 @@ export default function AdminQuarriesScreen({
                   {quarry.name}
                 </h3>
                 <span className="text-xs text-gray-400 shrink-0 font-mono">
-                  ID: {quarry.id.slice(0, 8)}...
+                  ID: {quarry.id?.slice(0, 8)}...
                 </span>
               </div>
               <div className="text-sm text-gray-600">
@@ -235,9 +274,34 @@ function EditQuarryModal({
   const [formData, setFormData] = useState<Quarry>(quarry);
   const [isSaving, setIsSaving] = useState(false);
   const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [deliveryOptions, setDeliveryOptions] = useState<any[]>([]);
 
   const mapRef = React.useRef<any>(null);
   const markerRef = React.useRef<any>(null);
+
+  React.useEffect(() => {
+    fetch(`${baseURL}/catalog/delivery-options/`)
+      .then((response) => (response.ok ? response.json() : []))
+      .then((data) => setDeliveryOptions(Array.isArray(data) ? data : []))
+      .catch(() => setDeliveryOptions([]));
+  }, [statusFilter, typeFilter]);
+
+  const moderatePoint = async (pointId: string, action: "approve" | "reject") => {
+    const comment = action === "reject" ? window.prompt("Причина отклонения") : "";
+    if (action === "reject" && !comment) return;
+    const response = await fetch(`${baseURL}/admin/pickup-points/${pointId}/${action}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ comment }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      toast.error(typeof data.detail === "string" ? data.detail : "Не удалось изменить статус");
+      return;
+    }
+    toast.success(action === "approve" ? "Точка одобрена" : "Заявка отклонена");
+    fetchQuarries();
+  };
 
   React.useEffect(() => {
     let mapInstance: any = null;
@@ -251,7 +315,7 @@ function EditQuarryModal({
         mapInstance = new (window as any).mapgl.Map("quarry-map", {
           center: [initialLon, initialLat],
           zoom: 12,
-          key: import.meta.env.VITE_2GIS_KEY || "6990476e-6c34-4049-9f9c-a1333924bce4",
+          key: import.meta.env.VITE_2GIS_KEY,
         });
 
         mapRef.current = mapInstance;
@@ -350,13 +414,31 @@ function EditQuarryModal({
     }
   };
 
-  const toggleMaterial = (id: number) => {
+  const toggleMaterial = (id: string) => {
     setFormData((prev) => {
       const ids = prev.material_ids || [];
       if (ids.includes(id)) {
-        return { ...prev, material_ids: ids.filter((m) => m !== id) };
+        return {
+          ...prev,
+          material_ids: ids.filter((m) => m !== id),
+          material_offers: (prev.material_offers || []).filter(
+            (offer) => offer.material_id !== id,
+          ),
+        };
       } else {
-        return { ...prev, material_ids: [...ids, id] };
+        const material = materials.find((item) => item.id === id);
+        return {
+          ...prev,
+          material_ids: [...ids, id],
+          material_offers: [
+            ...(prev.material_offers || []),
+            {
+              material_id: id,
+              price: Number(material?.price || 0),
+              is_active: true,
+            },
+          ],
+        };
       }
     });
   };
@@ -418,6 +500,34 @@ function EditQuarryModal({
     }
   };
 
+  const uploadPointPhoto = async (file: File) => {
+    if (!formData.id) return;
+    setIsSaving(true);
+    try {
+      const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+      const presignResponse = await fetch(`${baseURL}/media/presign-upload`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ file_name: file.name, content_type: file.type, file_size: file.size, entity_type: "quarry", entity_id: formData.id, is_primary: true }),
+      });
+      const presign = await presignResponse.json();
+      if (!presignResponse.ok) throw new Error("presign failed");
+      const uploadResponse = await fetch(presign.upload_url, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
+      if (!uploadResponse.ok) throw new Error("upload failed");
+      const confirmResponse = await fetch(`${baseURL}/media/confirm`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ entity_type: "quarry", entity_id: formData.id, object_key: presign.object_key, file_name: file.name, content_type: file.type, file_size: file.size, is_primary: true }),
+      });
+      if (!confirmResponse.ok) throw new Error("confirm failed");
+      toast.success("Фотография добавлена");
+    } catch {
+      toast.error("Не удалось загрузить фотографию");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
       <div className="bg-white rounded-3xl w-full max-w-xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
@@ -450,6 +560,39 @@ function EditQuarryModal({
               }
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
             />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Тип точки</label>
+              <select
+                value={formData.point_type}
+                onChange={(event) => {
+                  const pointType = event.target.value as Quarry["point_type"];
+                  const defaultMinimum = pointType === "quarry" ? 5000 : pointType === "accumulator" ? 3000 : 0;
+                  const defaultOptions = deliveryOptions
+                    .filter((option) => pointType === "quarry" ? option.capacity_m3 >= 10 : pointType === "accumulator" ? option.capacity_m3 === 5 : false)
+                    .map((option) => option.id);
+                  setFormData({ ...formData, point_type: pointType, min_delivery_price: defaultMinimum, delivery_option_ids: defaultOptions });
+                }}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3"
+              >
+                <option value="quarry">Карьер</option>
+                <option value="accumulator">Накопитель</option>
+                <option value="warehouse">Склад</option>
+                <option value="supplier">Поставщик</option>
+              </select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Доставка от, ₽</label>
+              <input
+                type="number"
+                min="0"
+                value={formData.min_delivery_price || ""}
+                onChange={(event) => setFormData({ ...formData, min_delivery_price: Number(event.target.value) })}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3"
+              />
+            </div>
           </div>
 
           <div className="flex flex-col gap-1.5 relative">
@@ -518,10 +661,12 @@ function EditQuarryModal({
               Материалы карьера
             </label>
             <div className="max-h-40 overflow-y-auto bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col gap-2">
-              {materials.map((m) => (
-                <label
+              {materials.map((m) => {
+                const offer = (formData.material_offers || []).find((item) => item.material_id === m.id);
+                return (
+                <div
                   key={m.id}
-                  className="flex items-center gap-3 p-1 cursor-pointer"
+                  className="flex items-center gap-3 p-1"
                 >
                   <input
                     type="checkbox"
@@ -532,12 +677,53 @@ function EditQuarryModal({
                   <span className="text-sm font-medium text-slate-700">
                     {m.name}
                   </span>
+                  {offer && (
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      value={offer.price || ""}
+                      onChange={(event) => setFormData({
+                        ...formData,
+                        material_offers: (formData.material_offers || []).map((item) => item.material_id === m.id ? { ...item, price: Number(event.target.value) } : item),
+                      })}
+                      className="ml-auto w-28 bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-sm"
+                      placeholder="Цена"
+                    />
+                  )}
+                </div>
+              )})}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Доступные машины</label>
+            <div className="grid grid-cols-2 gap-2 bg-slate-50 border border-slate-200 rounded-xl p-3">
+              {deliveryOptions.map((option) => (
+                <label key={option.id} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={(formData.delivery_option_ids || []).includes(option.id)}
+                    onChange={() => setFormData({
+                      ...formData,
+                      delivery_option_ids: (formData.delivery_option_ids || []).includes(option.id)
+                        ? (formData.delivery_option_ids || []).filter((id) => id !== option.id)
+                        : [...(formData.delivery_option_ids || []), option.id],
+                    })}
+                  />
+                  {option.capacity_m3} м³
                 </label>
               ))}
             </div>
           </div>
 
           <div className="flex items-center gap-3 pt-2">
+            {formData.id && (
+              <label className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-semibold cursor-pointer">
+                Добавить фото
+                <input type="file" accept="image/*" className="hidden" onChange={(event) => event.target.files?.[0] && void uploadPointPhoto(event.target.files[0])} />
+              </label>
+            )}
             <label className="relative inline-flex items-center cursor-pointer">
               <input
                 type="checkbox"

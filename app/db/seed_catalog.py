@@ -65,7 +65,7 @@ MATERIALS = {
 DEFAULT_DELIVERY_OPTIONS = [
     {
         "capacity_m3": 5.0,
-        "min_delivery_price": 3500.0,
+        "min_delivery_price": 3000.0,
         "title": "Зил 5 м3",
         "description": "Компактная машина для небольших доставок.",
         "sort_order": 10,

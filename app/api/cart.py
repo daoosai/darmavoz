@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.database import get_db
-from app.models.models import CartItem, Material
+from app.models.models import CartItem, Material, ModerationStatus, Quarry, quarry_materials
 from app.schemas.catalog import CartItemCreate, CartItemUpdate, CartItemOut
 
 router = APIRouter()
@@ -22,7 +22,7 @@ async def get_cart_items(
     stmt = (
         select(CartItem)
         .where(CartItem.session_key == session_key)
-        .options(selectinload(CartItem.material))
+        .options(selectinload(CartItem.material), selectinload(CartItem.quarry))
     )
     result = await db.execute(stmt)
     return result.scalars().all()
@@ -41,6 +41,26 @@ async def add_cart_item(
     if not material or not material.is_active:
         raise HTTPException(status_code=400, detail="Material not found or not active")
 
+    unit_price = material.price
+    quarry = None
+    if item.quarry_id is not None:
+        quarry = await db.get(Quarry, item.quarry_id)
+        if (
+            quarry is None
+            or not quarry.is_active
+            or quarry.moderation_status != ModerationStatus.approved.value
+        ):
+            raise HTTPException(status_code=409, detail="POINT_NOT_AVAILABLE")
+        unit_price = await db.scalar(
+            select(quarry_materials.c.price).where(
+                quarry_materials.c.quarry_id == item.quarry_id,
+                quarry_materials.c.material_id == item.material_id,
+                quarry_materials.c.is_active.is_(True),
+            )
+        )
+        if unit_price is None:
+            raise HTTPException(status_code=409, detail="MATERIAL_NOT_AVAILABLE_AT_POINT")
+
     # Check min_volume
     if item.volume < material.min_volume:
         raise HTTPException(status_code=400, detail=f"Volume must be at least {material.min_volume}")
@@ -48,28 +68,31 @@ async def add_cart_item(
     # Check if item already in cart
     cart_item_stmt = select(CartItem).where(
         CartItem.session_key == session_key,
-        CartItem.material_id == item.material_id
+        CartItem.material_id == item.material_id,
+        CartItem.quarry_id == item.quarry_id,
     )
     existing_item = (await db.execute(cart_item_stmt)).scalars().first()
 
     if existing_item:
         existing_item.volume += item.volume
-        if material.price:
-            existing_item.amount = existing_item.volume * material.price
+        if unit_price:
+            existing_item.unit_price = unit_price
+            existing_item.amount = existing_item.volume * float(unit_price)
         cart_item = existing_item
     else:
         amount = item.volume * material.price if material.price else None
         cart_item = CartItem(
             session_key=session_key,
             material_id=item.material_id,
+            quarry_id=item.quarry_id,
             volume=item.volume,
-            unit_price=material.price,
-            amount=amount
+            unit_price=unit_price,
+            amount=item.volume * float(unit_price) if unit_price else amount,
         )
         db.add(cart_item)
 
     await db.commit()
-    await db.refresh(cart_item, attribute_names=["id", "material"])
+    await db.refresh(cart_item, attribute_names=["id", "material", "quarry"])
     return cart_item
 
 
@@ -80,7 +103,9 @@ async def update_cart_item(
     db: AsyncSession = Depends(get_db)
 ):
     """Updates the volume of a cart item."""
-    cart_item = await db.get(CartItem, id, options=[selectinload(CartItem.material)])
+    cart_item = await db.get(
+        CartItem, id, options=[selectinload(CartItem.material), selectinload(CartItem.quarry)]
+    )
     if not cart_item:
         raise HTTPException(status_code=404, detail="Cart item not found")
 
@@ -89,8 +114,8 @@ async def update_cart_item(
         raise HTTPException(status_code=400, detail=f"Volume must be at least {material.min_volume}")
 
     cart_item.volume = item_update.volume
-    if material.price:
-        cart_item.amount = item_update.volume * material.price
+    if cart_item.unit_price:
+        cart_item.amount = item_update.volume * float(cart_item.unit_price)
 
     await db.commit()
     await db.refresh(cart_item)

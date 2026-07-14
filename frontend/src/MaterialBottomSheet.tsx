@@ -5,15 +5,18 @@ import { MaterialProps, DeliveryOption } from "./MaterialDetailScreen";
 import { useCartStore } from "./store";
 import { getImageUrl, baseURL } from "./utils";
 import toast from "react-hot-toast";
+import { PickupPointSelection } from "./PickupPointMapScreen";
 
 interface MaterialBottomSheetProps {
   material: MaterialProps | null;
   onClose: () => void;
+  pickupPoint?: PickupPointSelection | null;
 }
 
 export default function MaterialBottomSheet({
   material,
   onClose,
+  pickupPoint,
 }: MaterialBottomSheetProps) {
   const [deliveryOptions, setDeliveryOptions] = useState<DeliveryOption[]>([]);
   const [selectedOption, setSelectedOption] = useState<DeliveryOption | null>(
@@ -34,6 +37,10 @@ export default function MaterialBottomSheet({
     setActiveImageIndex(0);
 
     const fetchOptions = async () => {
+      if (pickupPoint?.delivery_options?.length) {
+        setDeliveryOptions(pickupPoint.delivery_options);
+        return;
+      }
       try {
         setIsLoadingOptions(true);
         const res = await fetch(`${baseURL}/catalog/delivery-options/`);
@@ -49,26 +56,34 @@ export default function MaterialBottomSheet({
       }
     };
     fetchOptions();
-  }, [material]);
+  }, [material, pickupPoint]);
 
   if (!material) return null;
 
-  const images = material.media_files?.length
-    ? material.media_files.map((m) => m.public_url)
+  const pointImages = pickupPoint?.media_files?.length
+    ? pickupPoint.media_files.map((media) => media.public_url)
+    : pickupPoint?.primary_image_url
+      ? [pickupPoint.primary_image_url]
+      : [];
+  const images = pointImages.length
+    ? pointImages
+    : material.media_files?.length
+      ? material.media_files.map((m) => m.public_url)
     : [
         getImageUrl(material),
         "https://placehold.co/400x300/e2e8f0/64748b?text=Photo+2",
         "https://placehold.co/400x300/e2e8f0/64748b?text=Photo+3",
       ];
 
+  const materialPrice = pickupPoint?.price ?? material.price;
   const totalPrice = selectedOption
-    ? material.price * selectedOption.capacity_m3
+    ? materialPrice * selectedOption.capacity_m3
     : 0;
   const isSubmitDisabled = !selectedOption;
 
   const handleSubmit = () => {
     if (!selectedOption) return;
-    addToCart(material, selectedOption, comment);
+    addToCart({ ...material, price: materialPrice }, selectedOption, comment, pickupPoint || undefined);
     toast.success("Товар добавлен в корзину");
     onClose();
   };
@@ -147,6 +162,13 @@ export default function MaterialBottomSheet({
               </div>
 
               {/* Delivery Options */}
+              {pickupPoint && (
+                <div className="rounded-2xl bg-[#f4f1e8] p-4">
+                  <span className="text-xs uppercase tracking-wider text-stone-500">Точка забора</span>
+                  <p className="font-bold text-stone-900">{pickupPoint.name}</p>
+                  <p className="text-sm text-stone-600">Доставка от {Number(pickupPoint.min_delivery_price).toLocaleString("ru-RU")} ₽</p>
+                </div>
+              )}
               <div>
                 <h3 className="font-semibold text-slate-800 mb-3">
                   Выберите кубатуру
@@ -211,6 +233,14 @@ export default function MaterialBottomSheet({
                   </h3>
                   <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">
                     {material.description}
+                  </p>
+                </div>
+              )}
+              {pickupPoint?.description && (
+                <div>
+                  <h3 className="font-semibold text-slate-800 mb-2">О точке</h3>
+                  <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">
+                    {pickupPoint.description}
                   </p>
                 </div>
               )}

@@ -27,6 +27,7 @@ ALLOWED_ENTITY_TYPES = {
     "delivery_option",
     "order",
     "vehicle",
+    "quarry",
 }
 UPLOAD_CORS_CONFIGURATION = {
     "CORSRules": [

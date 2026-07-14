@@ -11,6 +11,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    Numeric,
     String,
     Table,
     Text,
@@ -30,6 +31,24 @@ quarry_materials = Table(
     Base.metadata,
     Column("quarry_id", UUID(as_uuid=True), ForeignKey("quarries.id"), primary_key=True),
     Column("material_id", UUID(as_uuid=True), ForeignKey("materials.id"), primary_key=True),
+    Column("price", Numeric(12, 2), nullable=True),
+    Column("is_active", Boolean, nullable=False, default=True, server_default="true"),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+)
+
+
+quarry_delivery_options = Table(
+    "quarry_delivery_options",
+    Base.metadata,
+    Column("quarry_id", UUID(as_uuid=True), ForeignKey("quarries.id"), primary_key=True),
+    Column(
+        "delivery_option_id",
+        UUID(as_uuid=True),
+        ForeignKey("delivery_options.id"),
+        primary_key=True,
+    ),
+    Column("is_active", Boolean, nullable=False, default=True, server_default="true"),
 )
 
 
@@ -60,6 +79,11 @@ class User(Base):
         back_populates="user",
         uselist=False,
         foreign_keys="Driver.user_id",
+    )
+    pickup_points: Mapped[List["Quarry"]] = relationship(
+        "Quarry",
+        back_populates="owner",
+        foreign_keys="Quarry.owner_user_id",
     )
 
 
@@ -240,20 +264,76 @@ class Material(Base):
     cart_items: Mapped[List["CartItem"]] = relationship("CartItem", back_populates="material")
 
 
+class PickupPointType(str, Enum):
+    quarry = "quarry"
+    accumulator = "accumulator"
+    warehouse = "warehouse"
+    supplier = "supplier"
+
+
 class Quarry(Base):
     __tablename__ = "quarries"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    short_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    point_type: Mapped[str] = mapped_column(
+        SQLEnum(
+            "quarry",
+            "accumulator",
+            "warehouse",
+            "supplier",
+            name="pickup_point_type",
+        ),
+        default=PickupPointType.quarry.value,
+        nullable=False,
+    )
     address: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     lat: Mapped[float] = mapped_column(Float, nullable=False)
     lon: Mapped[float] = mapped_column(Float, nullable=False)
+    min_delivery_price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
+    owner_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("users.id"), nullable=True, index=True
+    )
+    moderation_status: Mapped[str] = mapped_column(
+        SQLEnum(
+            "incomplete",
+            "pending_moderation",
+            "approved",
+            "rejected",
+            "suspended",
+            name="moderation_status",
+        ),
+        default="incomplete",
+        nullable=False,
+    )
+    moderation_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    moderated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    moderated_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
     materials: Mapped[List["Material"]] = relationship(
         "Material",
         secondary=quarry_materials,
         back_populates="quarries",
+    )
+    delivery_options: Mapped[List["DeliveryOption"]] = relationship(
+        "DeliveryOption",
+        secondary=quarry_delivery_options,
+        back_populates="quarries",
+    )
+    owner: Mapped[Optional["User"]] = relationship(
+        "User", back_populates="pickup_points", foreign_keys=[owner_user_id]
+    )
+    moderated_by: Mapped[Optional["User"]] = relationship(
+        "User", foreign_keys=[moderated_by_user_id]
     )
     orders: Mapped[List["Order"]] = relationship("Order", back_populates="quarry")
 
@@ -264,6 +344,9 @@ class CartItem(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     session_key: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
     material_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("materials.id"))
+    quarry_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("quarries.id"), nullable=True
+    )
     volume: Mapped[float] = mapped_column(Float, nullable=False)
     unit_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     amount: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
@@ -273,6 +356,15 @@ class CartItem(Base):
     )
 
     material: Mapped["Material"] = relationship("Material", back_populates="cart_items")
+    quarry: Mapped[Optional["Quarry"]] = relationship("Quarry")
+
+    @property
+    def pickup_point_name(self) -> str | None:
+        return self.quarry.name if self.quarry is not None else None
+
+    @property
+    def pickup_point_type(self) -> str | None:
+        return self.quarry.point_type if self.quarry is not None else None
 
 
 class DeliveryOption(Base):
@@ -291,6 +383,11 @@ class DeliveryOption(Base):
 
     orders: Mapped[List["Order"]] = relationship("Order", back_populates="delivery_option")
     vehicles: Mapped[List["Vehicle"]] = relationship("Vehicle", back_populates="delivery_option")
+    quarries: Mapped[List["Quarry"]] = relationship(
+        "Quarry",
+        secondary=quarry_delivery_options,
+        back_populates="delivery_options",
+    )
 
 
 class MediaFile(Base):
@@ -437,6 +534,10 @@ class Order(Base):
     @property
     def quarry_name(self) -> str | None:
         return self.quarry.name if self.quarry is not None else None
+
+    @property
+    def pickup_point_type(self) -> str | None:
+        return self.quarry.point_type if self.quarry is not None else None
 
 
 class OrderItem(Base):

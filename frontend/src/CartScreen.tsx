@@ -36,6 +36,7 @@ export default function CartScreen({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [globalAddress, setGlobalAddress] = useState(selectedAddress);
   const [calcResults, setCalcResults] = useState<Record<string, any>>({});
+  const [deliveryCoords, setDeliveryCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
 
   useEffect(() => {
@@ -74,6 +75,7 @@ export default function CartScreen({
 
         const geoData = await geoRes.json();
         const { lat, lon } = geoData;
+        setDeliveryCoords({ lat, lon });
 
         // Fetch calculation for each item
         const newResults: Record<string, any> = {};
@@ -86,6 +88,7 @@ export default function CartScreen({
             },
             body: JSON.stringify({
               material_id: item.material.id,
+              quarry_id: item.pickupPoint?.id,
               delivery_option_id: item.deliveryOption.id,
               delivery_lat: lat,
               delivery_lon: lon,
@@ -99,6 +102,7 @@ export default function CartScreen({
         }
         setCalcResults(newResults);
       } catch (e) {
+        setDeliveryCoords(null);
         console.error("Calculation error", e);
         // If geocode fails or network fails, we can also set error state
         const errResults: Record<string, any> = {};
@@ -145,8 +149,11 @@ export default function CartScreen({
             notes: item.comment || "",
             source: "web",
             quantity: item.quantity,
-            quarry_id: calcResults[item.id]?.quarry_id,
+            quarry_id: item.pickupPoint?.id || calcResults[item.id]?.quarry_id,
             mileage_km: calcResults[item.id]?.mileage_km,
+            delivery_lat: deliveryCoords?.lat,
+            delivery_lon: deliveryCoords?.lon,
+            expected_material_unit_price: item.pickupPoint?.price,
           }),
         }),
       );

@@ -10,7 +10,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
-from app.models.models import DeliveryOption, Material, Quarry
+from app.models.models import (
+    DeliveryOption,
+    Material,
+    ModerationStatus,
+    Quarry,
+    quarry_delivery_options,
+    quarry_materials,
+)
+from app.services.pickup_points import default_min_delivery_price
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +33,8 @@ class ClientOrderPricing:
     delivery_option: DeliveryOption
     quarry: Quarry
     quantity: int
+    material_unit_price: float
+    minimum_delivery_price: float
     material_cost: float
     mileage_km: float
     delivery_cost: float
@@ -144,9 +154,6 @@ async def calculate_client_order_pricing(
     material = await session.get(Material, material_id)
     if material is None or not material.is_active:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Material not found")
-    if material.price is None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Material price is not configured")
-
     delivery_option = await session.get(DeliveryOption, delivery_option_id)
     if delivery_option is None or not delivery_option.is_active:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Delivery option not found")
@@ -154,13 +161,18 @@ async def calculate_client_order_pricing(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Delivery rate is not configured")
 
     result = await session.execute(
-        select(Quarry)
-        .options(selectinload(Quarry.materials))
-        .join(Quarry.materials)
-        .where(Quarry.is_active.is_(True), Material.id == material_id)
+        select(Quarry, quarry_materials.c.price)
+        .join(quarry_materials, quarry_materials.c.quarry_id == Quarry.id)
+        .where(
+            Quarry.is_active.is_(True),
+            Quarry.moderation_status == ModerationStatus.approved.value,
+            quarry_materials.c.material_id == material_id,
+            quarry_materials.c.is_active.is_(True),
+        )
         .order_by(Quarry.name.asc())
     )
-    quarries = list(result.scalars().unique().all())
+    quarry_rows = list(result.unique().all())
+    quarries = [row[0] for row in quarry_rows]
     if not quarries:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active quarry found for material")
 
@@ -178,6 +190,33 @@ async def calculate_client_order_pricing(
             key=lambda quarry: get_straight_distance_km(quarry.lat, quarry.lon, delivery_lat, delivery_lon),
         )
 
+    offer_price = next(
+        (row[1] for row in quarry_rows if row[0].id == selected_quarry.id),
+        None,
+    )
+    material_unit_price = float(offer_price if offer_price is not None else material.price or 0)
+    if material_unit_price <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Material price is not configured for pickup point",
+        )
+
+    configured_delivery_options = list(
+        (
+            await session.execute(
+                select(quarry_delivery_options.c.delivery_option_id).where(
+                    quarry_delivery_options.c.quarry_id == selected_quarry.id,
+                    quarry_delivery_options.c.is_active.is_(True),
+                )
+            )
+        ).scalars().all()
+    )
+    if configured_delivery_options and delivery_option_id not in configured_delivery_options:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="DELIVERY_OPTION_NOT_AVAILABLE_AT_POINT",
+        )
+
     mileage_km = await get_2gis_route_distance(
         selected_quarry.lat,
         selected_quarry.lon,
@@ -185,10 +224,17 @@ async def calculate_client_order_pricing(
         delivery_lon,
     )
     rate = round(float(delivery_option.delivery_rate_per_km), 2)
-    material_cost = round(float(material.price) * float(delivery_option.capacity_m3) * quantity, 2)
+    material_cost = round(material_unit_price * float(delivery_option.capacity_m3) * quantity, 2)
+    point_minimum = selected_quarry.min_delivery_price
+    if point_minimum is None:
+        point_minimum = default_min_delivery_price(selected_quarry.point_type) or 0
+    minimum_delivery_price = max(
+        resolve_min_delivery_price(delivery_option),
+        round(float(point_minimum), 2),
+    )
     delivery_cost = max(
         round(mileage_km * rate, 2),
-        resolve_min_delivery_price(delivery_option),
+        minimum_delivery_price,
     )
     total_amount = round(material_cost + delivery_cost, 2)
 
@@ -197,6 +243,8 @@ async def calculate_client_order_pricing(
         delivery_option=delivery_option,
         quarry=selected_quarry,
         quantity=quantity,
+        material_unit_price=material_unit_price,
+        minimum_delivery_price=minimum_delivery_price,
         material_cost=material_cost,
         mileage_km=mileage_km,
         delivery_cost=delivery_cost,

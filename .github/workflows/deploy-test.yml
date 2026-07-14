@@ -23,6 +23,8 @@ jobs:
 
       - name: Build frontend on runner
         working-directory: frontend
+        env:
+          VITE_2GIS_KEY: ${{ secrets.VITE_2GIS_KEY }}
         run: |
           set -euo pipefail
           npm ci

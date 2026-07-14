@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import admin, admin_quarries, auth, catalog, client_addresses, client_auth, client_orders, clients, driver_dispatch, drivers, geo, logist_orders, media, orders, system, telemetry, webhooks
+from app.api import admin, admin_quarries, auth, catalog, client_addresses, client_auth, client_orders, clients, driver_dispatch, drivers, geo, logist_orders, media, orders, pickup_points, supplier_auth, supplier_points, system, telemetry, webhooks
 from app.core.config import settings
 from app.core.error_handling import register_exception_handlers
 from app.db.seed import seed_data
@@ -61,11 +61,14 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(auth.driver_auth_router, tags=["driver-auth"])
 app.include_router(client_auth.router, prefix="/api/v1/auth", tags=["client-auth"])
+app.include_router(supplier_auth.router, prefix="/api/v1/auth/supplier", tags=["supplier-auth"])
 app.include_router(client_addresses.router, prefix="/api/v1")
 app.include_router(client_orders.router, prefix="/api/v1", tags=["client-orders"])
 app.include_router(admin.router, prefix="/api/v1/admin", tags=["admin"])
 app.include_router(admin_quarries.router, prefix="/api/v1/admin", tags=["admin-quarries"])
 app.include_router(catalog.router, prefix="/api/v1/catalog", tags=["catalog"])
+app.include_router(pickup_points.router, prefix="/api/v1/catalog/pickup-points", tags=["pickup-points"])
+app.include_router(supplier_points.router, prefix="/api/v1/supplier", tags=["supplier-points"])
 app.include_router(clients.router, prefix="/api/v1/clients", tags=["clients"])
 app.include_router(drivers.router, prefix="/api/v1/drivers", tags=["drivers"])
 app.include_router(logist_orders.router, prefix="/api/v1/logist", tags=["logist"])

@@ -8,7 +8,7 @@ from sqlalchemy import and_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
-from app.models.models import DeliveryOption, Driver, Material, MediaFile, ModerationStatus, Order, User, Vehicle
+from app.models.models import DeliveryOption, Driver, Material, MediaFile, ModerationStatus, Order, Quarry, User, Vehicle
 from app.schemas.media import (
     ConfirmUploadRequest,
     ConfirmUploadResponse,
@@ -37,6 +37,7 @@ def _get_entity_model(entity_type: str):
         "delivery_option": DeliveryOption,
         "order": Order,
         "vehicle": Vehicle,
+        "quarry": Quarry,
     }
     return model_map[entity_type]
 
@@ -90,6 +91,17 @@ async def _resolve_media_entity_context(
             raise HTTPException(status_code=400, detail="entity_id is required")
         entity = await _ensure_entity_exists(entity_type, entity_id, db)
         return entity_type, entity_id, entity if entity_type == "vehicle" else None
+
+    if role_name == "supplier":
+        if entity_type != "quarry" or entity_id is None:
+            raise HTTPException(
+                status_code=403,
+                detail="Suppliers can upload media only for their pickup points",
+            )
+        point = await db.get(Quarry, entity_id)
+        if point is None or point.owner_user_id != current_user.id:
+            raise HTTPException(status_code=404, detail="Pickup point not found")
+        return "quarry", entity_id, None
 
     if role_name != "driver":
         raise HTTPException(status_code=403, detail="Not enough permissions to manage media")

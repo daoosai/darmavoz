@@ -48,6 +48,11 @@ class CheckoutRequest(BaseModel):
     delivery_lon: float | None = Field(default=None, validation_alias=AliasChoices("delivery_lon", "deliveryLon"))
     quarry_id: UUID | None = Field(default=None, validation_alias=AliasChoices("quarry_id", "quarryId"))
     mileage_km: float | None = Field(default=None, validation_alias=AliasChoices("mileage_km", "mileageKm"))
+    expected_material_unit_price: float | None = Field(
+        default=None,
+        gt=0,
+        validation_alias=AliasChoices("expected_material_unit_price", "expectedMaterialUnitPrice"),
+    )
     notes: str | None = None
     source: str | None = "mobile"
     quantity: int = Field(default=1, ge=1)
@@ -117,6 +122,7 @@ class CheckoutRequest(BaseModel):
 
 class ClientOrderCalculationRequest(BaseModel):
     material_id: UUID
+    quarry_id: UUID | None = None
     delivery_option_id: UUID
     delivery_lat: float
     delivery_lon: float
@@ -142,6 +148,10 @@ class ClientOrderCalculationRequest(BaseModel):
 class ClientOrderCalculationOut(BaseModel):
     quarry_id: UUID
     quarry_name: str
+    pickup_point_type: str = "quarry"
+    material_unit_price: float = 0
+    minimum_delivery_price: float = 0
+    delivery_option_id: UUID | None = None
     mileage_km: float
     material_cost: float
     delivery_cost: float
@@ -450,6 +460,7 @@ class OrderOut(BaseModel):
     driver_id: UUID | None = None
     delivery_option_id: UUID | None = None
     quarry_id: UUID | None = None
+    pickup_point_type: str | None = None
     current_offer_id: UUID | None = None
     address: str | None = None
     pickup_address: str | None = None

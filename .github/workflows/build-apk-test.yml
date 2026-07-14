@@ -13,6 +13,7 @@ jobs:
       RELEASE_VERSION_CODE: "245"
       APK_REMOTE_DIR: /opt/darmavoz_test/backend/static
       APK_REMOTE_NAME: darmavoz-test.apk
+      VITE_2GIS_KEY: ${{ secrets.VITE_2GIS_KEY }}
 
     steps:
       - name: Checkout code

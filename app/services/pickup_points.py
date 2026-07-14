@@ -1,0 +1,259 @@
+from __future__ import annotations
+
+from collections.abc import Iterable
+from decimal import Decimal
+from uuid import UUID
+
+from fastapi import HTTPException, status
+from sqlalchemy import select, update
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.models import (
+    DeliveryOption,
+    Material,
+    MediaFile,
+    PickupPointType,
+    Quarry,
+    quarry_delivery_options,
+    quarry_materials,
+)
+from app.schemas.quarry import QuarryMaterialOfferIn
+
+
+DEFAULT_MIN_DELIVERY_PRICE = {
+    PickupPointType.quarry.value: Decimal("5000.00"),
+    PickupPointType.accumulator.value: Decimal("3000.00"),
+}
+
+
+def default_min_delivery_price(point_type: str) -> Decimal | None:
+    return DEFAULT_MIN_DELIVERY_PRICE.get(point_type)
+
+
+async def default_delivery_option_ids(db: AsyncSession, point_type: str) -> list[UUID]:
+    stmt = select(DeliveryOption.id).where(DeliveryOption.is_active.is_(True))
+    if point_type == PickupPointType.quarry.value:
+        stmt = stmt.where(DeliveryOption.capacity_m3 >= 10)
+    elif point_type == PickupPointType.accumulator.value:
+        stmt = stmt.where(DeliveryOption.capacity_m3 == 5)
+    else:
+        return []
+    result = await db.execute(stmt.order_by(DeliveryOption.capacity_m3.asc()))
+    return list(result.scalars().all())
+
+
+async def sync_material_offers(
+    db: AsyncSession,
+    *,
+    quarry_id: UUID,
+    offers: list[QuarryMaterialOfferIn] | None = None,
+    legacy_material_ids: list[UUID] | None = None,
+) -> None:
+    if offers is None and legacy_material_ids is None:
+        return
+
+    normalized_offers = list(offers or [])
+    if not normalized_offers and legacy_material_ids:
+        result = await db.execute(
+            select(Material).where(Material.id.in_(list(dict.fromkeys(legacy_material_ids))))
+        )
+        materials = list(result.scalars().all())
+        if len(materials) != len(set(legacy_material_ids)):
+            raise HTTPException(status_code=404, detail="One or more materials not found")
+        normalized_offers = [
+            QuarryMaterialOfferIn(
+                material_id=material.id,
+                price=float(material.price),
+                is_active=True,
+            )
+            for material in materials
+            if material.price is not None and float(material.price) > 0
+        ]
+
+    material_ids = [offer.material_id for offer in normalized_offers]
+    if material_ids:
+        count = len(
+            list(
+                (
+                    await db.execute(select(Material.id).where(Material.id.in_(material_ids)))
+                ).scalars().all()
+            )
+        )
+        if count != len(set(material_ids)):
+            raise HTTPException(status_code=404, detail="One or more materials not found")
+
+    await db.execute(
+        update(quarry_materials)
+        .where(quarry_materials.c.quarry_id == quarry_id)
+        .values(is_active=False)
+    )
+    for offer in normalized_offers:
+        stmt = insert(quarry_materials).values(
+            quarry_id=quarry_id,
+            material_id=offer.material_id,
+            price=offer.price,
+            is_active=offer.is_active,
+        )
+        await db.execute(
+            stmt.on_conflict_do_update(
+                index_elements=[quarry_materials.c.quarry_id, quarry_materials.c.material_id],
+                set_={
+                    "price": offer.price,
+                    "is_active": offer.is_active,
+                    "updated_at": stmt.excluded.updated_at,
+                },
+            )
+        )
+
+
+async def sync_delivery_options(
+    db: AsyncSession,
+    *,
+    quarry_id: UUID,
+    delivery_option_ids: Iterable[UUID],
+) -> None:
+    normalized_ids = list(dict.fromkeys(delivery_option_ids))
+    if normalized_ids:
+        result = await db.execute(
+            select(DeliveryOption.id).where(DeliveryOption.id.in_(normalized_ids))
+        )
+        if len(list(result.scalars().all())) != len(normalized_ids):
+            raise HTTPException(status_code=404, detail="One or more delivery options not found")
+
+    await db.execute(
+        update(quarry_delivery_options)
+        .where(quarry_delivery_options.c.quarry_id == quarry_id)
+        .values(is_active=False)
+    )
+    for delivery_option_id in normalized_ids:
+        stmt = insert(quarry_delivery_options).values(
+            quarry_id=quarry_id,
+            delivery_option_id=delivery_option_id,
+            is_active=True,
+        )
+        await db.execute(
+            stmt.on_conflict_do_update(
+                index_elements=[
+                    quarry_delivery_options.c.quarry_id,
+                    quarry_delivery_options.c.delivery_option_id,
+                ],
+                set_={"is_active": True},
+            )
+        )
+
+
+async def pickup_point_payload(db: AsyncSession, point: Quarry) -> dict:
+    offer_rows = (
+        await db.execute(
+            select(
+                quarry_materials.c.material_id,
+                quarry_materials.c.price,
+                quarry_materials.c.is_active,
+                Material.name,
+                Material.unit,
+            )
+            .join(Material, Material.id == quarry_materials.c.material_id)
+            .where(quarry_materials.c.quarry_id == point.id)
+            .order_by(Material.name.asc())
+        )
+    ).all()
+    delivery_options = list(
+        (
+            await db.execute(
+                select(DeliveryOption)
+                .join(
+                    quarry_delivery_options,
+                    quarry_delivery_options.c.delivery_option_id == DeliveryOption.id,
+                )
+                .where(
+                    quarry_delivery_options.c.quarry_id == point.id,
+                    quarry_delivery_options.c.is_active.is_(True),
+                )
+                .order_by(DeliveryOption.capacity_m3.asc())
+            )
+        ).scalars().all()
+    )
+    media_files = list(
+        (
+            await db.execute(
+                select(MediaFile)
+                .where(MediaFile.entity_type == "quarry", MediaFile.entity_id == point.id)
+                .order_by(
+                    MediaFile.is_primary.desc(),
+                    MediaFile.sort_order.asc(),
+                    MediaFile.created_at.asc(),
+                )
+            )
+        ).scalars().all()
+    )
+
+    active_offers = [row for row in offer_rows if row.is_active]
+    material_by_id = {
+        row.material_id: Material(id=row.material_id, name=row.name, unit=row.unit, price=row.price)
+        for row in active_offers
+    }
+    for option in delivery_options:
+        option.media_files = []
+        option.primary_image_url = option.image_url
+
+    return {
+        "id": point.id,
+        "name": point.name,
+        "short_name": point.short_name,
+        "point_type": point.point_type,
+        "address": point.address,
+        "description": point.description,
+        "lat": point.lat,
+        "lon": point.lon,
+        "min_delivery_price": point.min_delivery_price,
+        "is_active": point.is_active,
+        "moderation_status": point.moderation_status,
+        "moderation_comment": point.moderation_comment,
+        "owner_user_id": point.owner_user_id,
+        "material_ids": list(material_by_id),
+        "materials": list(material_by_id.values()),
+        "material_offers": [
+            {
+                "material_id": row.material_id,
+                "material_name": row.name,
+                "unit": row.unit,
+                "price": row.price,
+                "is_active": row.is_active,
+            }
+            for row in offer_rows
+        ],
+        "delivery_option_ids": [option.id for option in delivery_options],
+        "delivery_options": delivery_options,
+        "media_files": media_files,
+        "primary_image_url": media_files[0].public_url if media_files else None,
+        "created_at": point.created_at,
+        "updated_at": point.updated_at,
+    }
+
+
+async def validate_point_can_be_approved(db: AsyncSession, point: Quarry) -> None:
+    payload = await pickup_point_payload(db, point)
+    if not payload["material_offers"] or not any(
+        offer["is_active"] and offer["price"] is not None and float(offer["price"]) > 0
+        for offer in payload["material_offers"]
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Pickup point must have at least one active material offer",
+        )
+    if not payload["delivery_option_ids"]:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Pickup point must have at least one delivery option",
+        )
+    if point.min_delivery_price is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Pickup point minimum delivery price is not configured",
+        )
+    if not payload["media_files"]:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Pickup point must have at least one photo",
+        )

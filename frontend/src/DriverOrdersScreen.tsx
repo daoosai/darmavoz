@@ -51,6 +51,7 @@ export interface DriverOrder {
   delivery_lon?: number;
   client_name?: string;
   quarry_name?: string;
+  pickup_point_type?: string;
   quarry?: { name: string };
 }
 
@@ -271,6 +272,7 @@ export default function DriverOrdersScreen({
                   delivery_address: detail.delivery_address,
                   client_name: detail.client_name,
                   quarry_name: detail.quarry_name,
+                  pickup_point_type: detail.pickup_point_type,
                 };
                 setOrders([currentOrder]);
                 return;
@@ -482,7 +484,7 @@ export default function DriverOrdersScreen({
     offerOrder?.delivery_option?.capacity_m3 ||
     offerOrder?.volume_m3 ||
     "?";
-  const offerPickupAddress = offerOrder?.pickup_address || "Карьер уточняется";
+  const offerPickupAddress = offerOrder?.pickup_address || "Точка забора уточняется";
   const offerDeliveryAddress =
     offerOrder?.delivery_address || offerOrder?.address || "Адрес не указан";
   const offerDeliveryCost = Number(offerOrder?.delivery_cost ?? 0);
@@ -857,7 +859,11 @@ export const DriverOrderCard: React.FC<{
     const lat = isToClient ? order.delivery_lat : order.pickup_lat;
     const lon = isToClient ? order.delivery_lon : order.pickup_lon;
     const address = isToClient ? order.delivery_address : order.pickup_address;
-    const label = isToClient ? "Клиент" : "Карьер";
+    const label = isToClient
+      ? "Клиент"
+      : order.pickup_point_type === "accumulator"
+        ? "Накопитель"
+        : "Карьер";
 
     const isIOS = /iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent);
     if (isToClient && address) {

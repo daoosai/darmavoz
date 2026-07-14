@@ -112,6 +112,7 @@ class MaterialOut(BaseModel):
 
 class CartItemCreate(BaseModel):
     material_id: UUID
+    quarry_id: UUID | None = None
     volume: float
 
 
@@ -122,6 +123,9 @@ class CartItemUpdate(BaseModel):
 class CartItemOut(BaseModel):
     id: UUID
     material_id: UUID
+    quarry_id: UUID | None = None
+    pickup_point_name: str | None = None
+    pickup_point_type: str | None = None
     volume: float
     unit_price: float | None = None
     amount: float | None = None

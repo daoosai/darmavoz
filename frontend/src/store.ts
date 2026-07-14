@@ -1,11 +1,13 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { MaterialProps, DeliveryOption } from "./MaterialDetailScreen";
+import { PickupPointSelection } from "./PickupPointMapScreen";
 
 export interface CartItem {
   id: string; // unique id for the cart item
   material: MaterialProps;
   deliveryOption: DeliveryOption;
+  pickupPoint?: PickupPointSelection;
   comment?: string;
   quantity: number;
 }
@@ -16,6 +18,7 @@ interface CartState {
     material: MaterialProps,
     deliveryOption: DeliveryOption,
     comment?: string,
+    pickupPoint?: PickupPointSelection,
   ) => void;
   removeFromCart: (id: string) => void;
   increaseQuantity: (id: string) => void;
@@ -24,7 +27,7 @@ interface CartState {
   getTotalPrice: () => number;
 }
 
-export type UserRole = "driver" | "logist" | "admin" | "client" | null;
+export type UserRole = "driver" | "logist" | "admin" | "client" | "supplier" | null;
 
 interface AuthState {
   token: string | null;
@@ -72,7 +75,7 @@ export const useAddressStore = create<AddressState>()(
 
 export const useCartStore = create<CartState>((set, get) => ({
   cartItems: [],
-  addToCart: (material, deliveryOption, comment) => {
+  addToCart: (material, deliveryOption, comment, pickupPoint) => {
     set((state) => ({
       cartItems: [
         ...state.cartItems,
@@ -80,6 +83,7 @@ export const useCartStore = create<CartState>((set, get) => ({
           id: Math.random().toString(36).substring(7),
           material,
           deliveryOption,
+          pickupPoint,
           comment,
           quantity: 1,
         },
@@ -114,7 +118,7 @@ export const useCartStore = create<CartState>((set, get) => ({
     return get().cartItems.reduce(
       (total, item) =>
         total +
-        item.material.price * item.deliveryOption.capacity_m3 * item.quantity,
+        (item.pickupPoint?.price ?? item.material.price) * item.deliveryOption.capacity_m3 * item.quantity,
       0,
     );
   },

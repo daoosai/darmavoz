@@ -1,5 +1,33 @@
 @import "tailwindcss";
 
+.pickup-point-marker {
+  display: grid;
+  gap: 1px;
+  min-width: 108px;
+  padding: 8px 11px;
+  border: 2px solid #fff;
+  border-radius: 14px 14px 14px 3px;
+  background: #163f35;
+  color: #fff;
+  box-shadow: 0 8px 24px rgb(23 39 34 / 28%);
+  text-align: left;
+  transform: translateY(-50%);
+}
+
+.pickup-point-marker span {
+  max-width: 130px;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pickup-point-marker strong {
+  color: #f2c078;
+  font-size: 11px;
+}
+
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
 }

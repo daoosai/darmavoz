@@ -19,6 +19,7 @@ import CartScreen from "./CartScreen";
 import ProfileScreen from "./ProfileScreen";
 import PromosScreen from "./PromosScreen";
 import MaterialBottomSheet from "./MaterialBottomSheet";
+import PickupPointMapScreen, { PickupPointSelection } from "./PickupPointMapScreen";
 
 import { Toaster } from "react-hot-toast";
 
@@ -42,6 +43,7 @@ import ClientAddressBottomSheet from "./ClientAddressBottomSheet";
 import ClientProfileScreen from "./ClientProfileScreen";
 import InstallPWA from "./InstallPWA";
 import { usePushNotifications } from "./usePushNotifications";
+import SupplierPortalScreen from "./SupplierPortalScreen";
 
 // Reuse Material type as MaterialProps by exporting it from MaterialDetailScreen or type matching
 export default function App() {
@@ -57,6 +59,8 @@ export default function App() {
     | "driver"
     | "logist"
     | "admin"
+    | "supplier"
+    | "supplier_register"
     | "driver_register"
   >(
     role === "driver"
@@ -65,6 +69,8 @@ export default function App() {
         ? "logist"
         : role === "admin"
           ? "admin"
+          : role === "supplier"
+            ? "supplier"
           : "welcome",
   );
 
@@ -218,6 +224,7 @@ export default function App() {
           }}
           onSelectEmployee={() => setCurrentRoute("login")}
           onSelectDriverRegister={() => setCurrentRoute("driver_register")}
+          onSelectSupplier={() => setCurrentRoute("supplier_register")}
         />
       );
     }
@@ -233,6 +240,10 @@ export default function App() {
       );
     }
 
+    if (currentRoute === "supplier_register" || currentRoute === "supplier") {
+      return <SupplierPortalScreen onBack={() => setCurrentRoute("welcome")} />;
+    }
+
     if (currentRoute === "login") {
       return (
         <LoginScreen
@@ -244,6 +255,8 @@ export default function App() {
                   ? "logist"
                   : r === "admin"
                     ? "admin"
+                    : r === "supplier"
+                      ? "supplier"
                     : "main",
             )
           }
@@ -378,6 +391,9 @@ function MainContent({
 }: any) {
   const { selectedAddress } = useAddressStore();
   const { token } = useAuthStore();
+  const [mapMaterial, setMapMaterial] = useState<MaterialProps | null>(null);
+  const [selectedPickupPoint, setSelectedPickupPoint] =
+    useState<PickupPointSelection | null>(null);
   const tabs = [
     { id: "home", label: "Главная", icon: Home },
     { id: "orders", label: "Заказы", icon: List },
@@ -500,7 +516,7 @@ function MainContent({
                       <ProductCard
                         key={material.id}
                         material={material}
-                        onClick={() => setSelectedMaterial(material)}
+                        onClick={() => setMapMaterial(material)}
                       />
                     ))
                 )}
@@ -572,9 +588,24 @@ function MainContent({
         </nav>
 
         {/* Bottom Sheet */}
+        {mapMaterial && (
+          <PickupPointMapScreen
+            material={mapMaterial}
+            onClose={() => setMapMaterial(null)}
+            onSelect={(point) => {
+              setSelectedPickupPoint(point);
+              setSelectedMaterial(mapMaterial);
+              setMapMaterial(null);
+            }}
+          />
+        )}
         <MaterialBottomSheet
           material={selectedMaterial}
-          onClose={() => setSelectedMaterial(null)}
+          pickupPoint={selectedPickupPoint}
+          onClose={() => {
+            setSelectedMaterial(null);
+            setSelectedPickupPoint(null);
+          }}
         />
 
         {/* Auth Bottom Sheet */}

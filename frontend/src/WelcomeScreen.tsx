@@ -4,10 +4,12 @@ export default function WelcomeScreen({
   onSelectClient,
   onSelectEmployee,
   onSelectDriverRegister,
+  onSelectSupplier,
 }: {
   onSelectClient: () => void;
   onSelectEmployee: () => void;
   onSelectDriverRegister: () => void;
+  onSelectSupplier: () => void;
 }) {
   const [showToast, setShowToast] = useState(false);
 
@@ -49,6 +51,13 @@ export default function WelcomeScreen({
           className="w-full bg-[#2DB0E6] text-white border-2 border-[#2DB0E6] py-4 rounded-2xl font-bold text-lg shadow-sm active:bg-blue-700 transition-colors mt-2"
         >
           Регистрация водителя
+        </button>
+
+        <button
+          onClick={onSelectSupplier}
+          className="w-full bg-[#163f35] text-white py-4 rounded-2xl font-bold text-lg shadow-sm"
+        >
+          Добавить карьер или накопитель
         </button>
       </div>
     </div>

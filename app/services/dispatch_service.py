@@ -27,6 +27,8 @@ from app.models.models import (
     OrderOfferStatus,
     OrderStatus,
     Vehicle,
+    quarry_delivery_options,
+    quarry_materials,
 )
 from app.schemas.order import (
     DispatchHistoryAttemptOut,
@@ -49,6 +51,7 @@ from app.services.notifications import (
     schedule_logist_no_driver_found_notification,
     schedule_logist_timeout_notification,
 )
+from app.services.pickup_points import default_min_delivery_price
 from app.services.order_pricing import calculate_client_order_pricing, resolve_min_delivery_price
 from app.services.redis_client import enqueue_dispatch_order
 from app.utils.phones import normalize_phone
@@ -448,6 +451,7 @@ async def create_checkout_order(
     delivery_lat: float | None = None,
     delivery_lon: float | None = None,
     mileage_km: float | None = None,
+    expected_material_unit_price: float | None = None,
 ) -> Order:
     if client_id is None:
         client = await get_or_create_guest_client(session)
@@ -496,19 +500,20 @@ async def create_checkout_order(
     delivery_cost: float | None = None
     route_calculated_at: datetime | None = None
     calculation_source: str | None = None
+    pricing = None
+    point_material_total: float | None = None
+    point_unit_price: float | None = None
 
     if quarry_id is not None:
         selected_quarry = await session.get(Quarry, quarry_id)
-        if selected_quarry is None or not selected_quarry.is_active:
+        if (
+            selected_quarry is None
+            or not selected_quarry.is_active
+            or selected_quarry.moderation_status != ModerationStatus.approved.value
+        ):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Quarry not found")
 
-        if resolved_mileage_km is None:
-            if resolved_delivery_lat is None or resolved_delivery_lon is None:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail="mileage_km or delivery coordinates are required when quarry_id is provided",
-                )
-
+        if resolved_delivery_lat is not None and resolved_delivery_lon is not None:
             pricing = await calculate_client_order_pricing(
                 session,
                 material_id=material_id,
@@ -520,6 +525,12 @@ async def create_checkout_order(
             )
             selected_quarry = pricing.quarry
             resolved_mileage_km = pricing.mileage_km
+        elif resolved_mileage_km is None:
+            if resolved_delivery_lat is None or resolved_delivery_lon is None:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="mileage_km or delivery coordinates are required when quarry_id is provided",
+                )
 
         if delivery_option.delivery_rate_per_km is None:
             raise HTTPException(
@@ -528,10 +539,52 @@ async def create_checkout_order(
             )
 
         delivery_rate_per_km_snapshot = round(float(delivery_option.delivery_rate_per_km), 2)
-        delivery_cost = max(
-            round(resolved_mileage_km * delivery_rate_per_km_snapshot, 2),
-            resolve_min_delivery_price(delivery_option),
-        )
+        if pricing is not None:
+            delivery_cost = pricing.delivery_cost
+            point_material_total = pricing.material_cost
+            point_unit_price = pricing.material_unit_price
+        else:
+            offer_price = await session.scalar(
+                select(quarry_materials.c.price).where(
+                    quarry_materials.c.quarry_id == selected_quarry.id,
+                    quarry_materials.c.material_id == material_id,
+                    quarry_materials.c.is_active.is_(True),
+                )
+            )
+            configured_options = list(
+                (
+                    await session.execute(
+                        select(quarry_delivery_options.c.delivery_option_id).where(
+                            quarry_delivery_options.c.quarry_id == selected_quarry.id,
+                            quarry_delivery_options.c.is_active.is_(True),
+                        )
+                    )
+                ).scalars().all()
+            )
+            if configured_options and delivery_option_id not in configured_options:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="DELIVERY_OPTION_NOT_AVAILABLE_AT_POINT",
+                )
+            unit_price = float(offer_price if offer_price is not None else material.price or 0)
+            if unit_price <= 0:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="MATERIAL_NOT_AVAILABLE_AT_POINT",
+                )
+            point_material_total = round(
+                unit_price * float(delivery_option.capacity_m3) * quantity,
+                2,
+            )
+            point_unit_price = unit_price
+            point_minimum = selected_quarry.min_delivery_price
+            if point_minimum is None:
+                point_minimum = default_min_delivery_price(selected_quarry.point_type) or 0
+            delivery_cost = max(
+                round(resolved_mileage_km * delivery_rate_per_km_snapshot, 2),
+                resolve_min_delivery_price(delivery_option),
+                round(float(point_minimum), 2),
+            )
         route_calculated_at = utcnow()
         calculation_source = "yandex_auto"
     elif (
@@ -549,14 +602,23 @@ async def create_checkout_order(
         )
         selected_quarry = pricing.quarry
         resolved_mileage_km = pricing.mileage_km
+        point_material_total = pricing.material_cost
+        point_unit_price = pricing.material_unit_price
         if pricing.delivery_option.delivery_rate_per_km is not None:
             delivery_rate_per_km_snapshot = round(float(pricing.delivery_option.delivery_rate_per_km), 2)
-            delivery_cost = max(
-                round(resolved_mileage_km * delivery_rate_per_km_snapshot, 2),
-                resolve_min_delivery_price(pricing.delivery_option),
-            )
+            delivery_cost = pricing.delivery_cost
         route_calculated_at = utcnow()
         calculation_source = "yandex_auto"
+
+    if (
+        expected_material_unit_price is not None
+        and point_unit_price is not None
+        and abs(point_unit_price - expected_material_unit_price) > 0.005
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="PRICE_CHANGED",
+        )
 
     order = await build_order(
         session,
@@ -578,6 +640,7 @@ async def create_checkout_order(
         mileage_km=resolved_mileage_km,
         delivery_rate_per_km_snapshot=delivery_rate_per_km_snapshot,
         delivery_cost=delivery_cost,
+        total_amount=point_material_total,
         calculation_source=calculation_source,
         route_calculated_at=route_calculated_at,
         quarry_id=selected_quarry.id if selected_quarry is not None else None,
@@ -597,8 +660,13 @@ async def _resolve_logist_order_quarry(
 ) -> Quarry | None:
     result = await session.execute(
         select(Quarry)
-        .join(Quarry.materials)
-        .where(Quarry.is_active.is_(True), Material.id == material_id)
+        .join(quarry_materials, quarry_materials.c.quarry_id == Quarry.id)
+        .where(
+            Quarry.is_active.is_(True),
+            Quarry.moderation_status == ModerationStatus.approved.value,
+            quarry_materials.c.material_id == material_id,
+            quarry_materials.c.is_active.is_(True),
+        )
         .order_by(Quarry.name.asc())
     )
     quarries = list(result.scalars().unique().all())

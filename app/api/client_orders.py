@@ -28,10 +28,15 @@ async def calculate_order(
         delivery_lat=payload.delivery_lat,
         delivery_lon=payload.delivery_lon,
         quantity=payload.quantity,
+        quarry_id=payload.quarry_id,
     )
     return ClientOrderCalculationOut(
         quarry_id=pricing.quarry.id,
         quarry_name=pricing.quarry.name,
+        pickup_point_type=pricing.quarry.point_type,
+        material_unit_price=pricing.material_unit_price,
+        minimum_delivery_price=pricing.minimum_delivery_price,
+        delivery_option_id=pricing.delivery_option.id,
         mileage_km=pricing.mileage_km,
         material_cost=pricing.material_cost,
         delivery_cost=pricing.delivery_cost,
@@ -59,4 +64,5 @@ async def checkout_order(
         delivery_lat=payload.delivery_lat,
         delivery_lon=payload.delivery_lon,
         mileage_km=payload.mileage_km,
+        expected_material_unit_price=payload.expected_material_unit_price,
     )

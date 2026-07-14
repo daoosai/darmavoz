@@ -181,11 +181,7 @@ export default function MaterialBottomSheet({
                       .map((option) => {
                         const isSelected = selectedOption?.id === option.id;
                         const fallbackImage = getTruckFallback(option.capacity_m3 || 0);
-                        const imgSrc =
-                          option.media_files?.[0]?.public_url ||
-                          option.primary_image_url ||
-                          option.image_url ||
-                          fallbackImage;
+                        const imgSrc = option.image_url || fallbackImage;
 
                         return (
                           <button

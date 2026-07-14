@@ -13,10 +13,21 @@ interface MaterialBottomSheetProps {
   pickupPoint?: PickupPointSelection | null;
 }
 
+const resolveApiImageUrl = (imageUrl: string) => {
+  try {
+    const apiOrigin = new URL(baseURL, window.location.origin).origin;
+    return new URL(imageUrl, apiOrigin).toString();
+  } catch {
+    return imageUrl;
+  }
+};
+
 const getTruckFallback = (capacity: number) =>
-  capacity <= 5
-    ? "/static/vehicles/zil-dump-truck.svg"
-    : "/static/vehicles/kamaz-dump-truck.svg";
+  resolveApiImageUrl(
+    capacity <= 5
+      ? "/static/vehicles/zil-dump-truck.svg"
+      : "/static/vehicles/kamaz-dump-truck.svg",
+  );
 
 export default function MaterialBottomSheet({
   material,
@@ -181,7 +192,9 @@ export default function MaterialBottomSheet({
                       .map((option) => {
                         const isSelected = selectedOption?.id === option.id;
                         const fallbackImage = getTruckFallback(option.capacity_m3 || 0);
-                        const imgSrc = option.image_url || fallbackImage;
+                        const imgSrc = option.image_url
+                          ? resolveApiImageUrl(option.image_url)
+                          : fallbackImage;
 
                         return (
                           <button

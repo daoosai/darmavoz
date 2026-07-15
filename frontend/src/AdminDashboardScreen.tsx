@@ -27,8 +27,6 @@ import {
   Search,
   Clock,
   Filter,
-  Wrench,
-  Headphones,
 } from "lucide-react";
 import AdminProfileScreen from "./AdminProfileScreen";
 import AdminQuarriesScreen from "./AdminQuarriesScreen";
@@ -1538,28 +1536,6 @@ export default function AdminDashboardScreen({
               Модерация
             </button>
             <button
-              onClick={() => setActiveTab("equipment")}
-              className={`flex-1 sm:w-auto flex-shrink-0 whitespace-nowrap py-2 px-3 text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2 ${
-                activeTab === "equipment"
-                  ? "bg-white text-[#209ccf] shadow-sm"
-                  : "text-slate-500 hover:text-slate-700"
-              }`}
-            >
-              <Wrench className="w-4 h-4" />
-              Спецтехника
-            </button>
-            <button
-              onClick={() => setActiveTab("support")}
-              className={`flex-1 sm:w-auto flex-shrink-0 whitespace-nowrap py-2 px-3 text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2 ${
-                activeTab === "support"
-                  ? "bg-white text-[#209ccf] shadow-sm"
-                  : "text-slate-500 hover:text-slate-700"
-              }`}
-            >
-              <Headphones className="w-4 h-4" />
-              Поддержка
-            </button>
-            <button
               onClick={() => setActiveTab("profile")}
               className={`flex-1 sm:w-auto flex-shrink-0 whitespace-nowrap py-2 px-3 text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2 ${
                 activeTab === "profile"
@@ -2965,7 +2941,11 @@ export default function AdminDashboardScreen({
           ) : activeTab === "support" ? (
             <SupportScreen operatorMode />
           ) : activeTab === "profile" ? (
-            <AdminProfileScreen onLogout={handleLogout} />
+            <AdminProfileScreen
+              onLogout={handleLogout}
+              onOpenEquipment={() => setActiveTab("equipment")}
+              onOpenSupport={() => setActiveTab("support")}
+            />
           ) : null}
         </div>
       </div>
@@ -3056,20 +3036,6 @@ export default function AdminDashboardScreen({
             )}
           </div>
           <span className="text-[10px] font-bold">Модерация</span>
-        </button>
-        <button
-          onClick={() => setActiveTab("equipment")}
-          className={`min-w-[72px] flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${activeTab === "equipment" ? "text-[#2DB0E6]" : "text-slate-400"}`}
-        >
-          <div className={`p-1.5 rounded-xl ${activeTab === "equipment" ? "bg-[#2DB0E6]/10" : ""}`}><Wrench className="w-6 h-6" /></div>
-          <span className="text-[10px] font-bold">Техника</span>
-        </button>
-        <button
-          onClick={() => setActiveTab("support")}
-          className={`min-w-[72px] flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${activeTab === "support" ? "text-[#2DB0E6]" : "text-slate-400"}`}
-        >
-          <div className={`p-1.5 rounded-xl ${activeTab === "support" ? "bg-[#2DB0E6]/10" : ""}`}><Headphones className="w-6 h-6" /></div>
-          <span className="text-[10px] font-bold">Поддержка</span>
         </button>
         <button
           onClick={() => setActiveTab("profile")}

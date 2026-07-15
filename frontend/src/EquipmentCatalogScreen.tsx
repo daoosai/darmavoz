@@ -71,8 +71,8 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
     setLoading(true);
     try {
       const [typesResponse, listingsResponse] = await Promise.all([
-        fetch(`${baseURL}/catalog/equipment-types`),
-        fetch(`${baseURL}/catalog/equipment`),
+        fetch(`${baseURL}/equipment/types`),
+        fetch(`${baseURL}/equipment`),
       ]);
       if (!typesResponse.ok || !listingsResponse.ok) throw new Error("catalog");
       setTypes(await typesResponse.json());

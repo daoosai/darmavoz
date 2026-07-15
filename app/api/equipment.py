@@ -130,7 +130,12 @@ async def _get_listing(db: AsyncSession, listing_id: UUID) -> SpecialEquipmentLi
     return listing
 
 
-@router.get("/catalog/equipment-types", response_model=list[EquipmentTypeOut])
+@router.get("/equipment/types", response_model=list[EquipmentTypeOut])
+@router.get(
+    "/catalog/equipment-types",
+    response_model=list[EquipmentTypeOut],
+    include_in_schema=False,
+)
 async def list_public_equipment_types(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(SpecialEquipmentType)
@@ -140,7 +145,12 @@ async def list_public_equipment_types(db: AsyncSession = Depends(get_db)):
     return list(result.scalars().all())
 
 
-@router.get("/catalog/equipment", response_model=list[EquipmentListingOut])
+@router.get("/equipment", response_model=list[EquipmentListingOut])
+@router.get(
+    "/catalog/equipment",
+    response_model=list[EquipmentListingOut],
+    include_in_schema=False,
+)
 async def list_public_equipment(
     equipment_type_id: UUID | None = None,
     city: str | None = Query(default=None, max_length=255),
@@ -178,7 +188,12 @@ async def list_public_equipment(
     return [await _listing_payload(db, item) for item in result.scalars().unique().all()]
 
 
-@router.get("/catalog/equipment/{listing_id}", response_model=EquipmentListingOut)
+@router.get("/equipment/{listing_id}", response_model=EquipmentListingOut)
+@router.get(
+    "/catalog/equipment/{listing_id}",
+    response_model=EquipmentListingOut,
+    include_in_schema=False,
+)
 async def get_public_equipment(listing_id: UUID, db: AsyncSession = Depends(get_db)):
     listing = await _get_listing(db, listing_id)
     if not listing.is_active or not listing.equipment_type.is_active:

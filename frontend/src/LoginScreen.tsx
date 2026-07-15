@@ -149,10 +149,11 @@ export default function LoginScreen({ onLogin, onBack, onSelectSupplier }: Login
         ) : (
           <form onSubmit={handleLogin} className="w-full max-w-sm flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-slate-700">
+              <label htmlFor="employee-login" className="text-sm font-medium text-slate-700">
                 Логин или Телефон
               </label>
               <input
+                id="employee-login"
                 type="text"
                 name="username"
                 value={username}
@@ -163,9 +164,10 @@ export default function LoginScreen({ onLogin, onBack, onSelectSupplier }: Login
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-slate-700">Пароль</label>
+              <label htmlFor="employee-password" className="text-sm font-medium text-slate-700">Пароль</label>
               <div className="relative w-full">
                 <input
+                  id="employee-password"
                   type={showPassword ? "text" : "password"}
                   name="password"
                   value={password}

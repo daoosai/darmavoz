@@ -53,7 +53,7 @@ export default function AdminEquipmentScreen({ applicationsOnly = false }: { app
       const requests: Promise<Response>[] = [
         fetch(
           applicationsOnly
-            ? `${baseURL}/catalog/equipment-types`
+            ? `${baseURL}/equipment/types`
             : `${baseURL}/admin/equipment-types`,
           { headers },
         ),

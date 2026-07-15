@@ -40,6 +40,12 @@ from app.services.notifications import (
 router = APIRouter()
 
 
+@router.get("/support", response_model=dict[str, str])
+async def support_service_status() -> dict[str, str]:
+    """Lightweight route used to verify that the support router is mounted."""
+    return {"status": "ok", "service": "support"}
+
+
 @dataclass
 class SupportActor:
     role: str

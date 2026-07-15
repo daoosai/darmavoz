@@ -122,10 +122,37 @@ async def test_supplier_auth_creates_only_user_and_allows_multiple_points(
         },
         headers=headers,
     )
+    warehouse_point = await client.post(
+        "/api/v1/supplier/points",
+        json={
+            **point_payload,
+            "name": "Test warehouse",
+            "short_name": "Warehouse",
+            "point_type": "warehouse",
+        },
+        headers=headers,
+    )
+    supplier_point = await client.post(
+        "/api/v1/supplier/points",
+        json={
+            **point_payload,
+            "name": "Test supplier",
+            "short_name": "Supplier",
+            "point_type": "supplier",
+        },
+        headers=headers,
+    )
 
     assert first_point.status_code == 201
     assert second_point.status_code == 201
-    assert first_point.json()["owner_user_id"] == second_point.json()["owner_user_id"]
+    assert warehouse_point.status_code == 201
+    assert supplier_point.status_code == 201
+    assert {
+        first_point.json()["owner_user_id"],
+        second_point.json()["owner_user_id"],
+        warehouse_point.json()["owner_user_id"],
+        supplier_point.json()["owner_user_id"],
+    } == {first_point.json()["owner_user_id"]}
 
     async with session_factory() as session:
         stored_point = await session.get(Quarry, UUID(first_point.json()["id"]))
@@ -144,7 +171,52 @@ async def test_supplier_auth_creates_only_user_and_allows_multiple_points(
 
     points = await client.get("/api/v1/supplier/points", headers=headers)
     assert points.status_code == 200
-    assert {point["name"] for point in points.json()} == {"Updated test point", "Test accumulator"}
+    assert {point["name"] for point in points.json()} == {
+        "Updated test point",
+        "Test accumulator",
+        "Test warehouse",
+        "Test supplier",
+    }
+
+    async with session_factory() as session:
+        primary_media = MediaFile(
+            entity_type="quarry",
+            entity_id=UUID(first_point.json()["id"]),
+            bucket="test-media",
+            object_key=f"supplier/{uuid4().hex}-primary.jpg",
+            public_url="https://cdn.example/supplier-primary.jpg",
+            content_type="image/jpeg",
+            file_name="primary.jpg",
+            file_size=1024,
+            is_primary=True,
+        )
+        secondary_media = MediaFile(
+            entity_type="quarry",
+            entity_id=UUID(first_point.json()["id"]),
+            bucket="test-media",
+            object_key=f"supplier/{uuid4().hex}-secondary.jpg",
+            public_url="https://cdn.example/supplier-secondary.jpg",
+            content_type="image/jpeg",
+            file_name="secondary.jpg",
+            file_size=1024,
+            is_primary=False,
+        )
+        session.add_all([primary_media, secondary_media])
+        await session.commit()
+        primary_media_id = primary_media.id
+        secondary_media_id = secondary_media.id
+
+    make_primary = await client.post(
+        f"/api/v1/media/{secondary_media_id}/make-primary",
+        headers=headers,
+    )
+    assert make_primary.status_code == 200
+
+    async with session_factory() as session:
+        stored_primary = await session.get(MediaFile, primary_media_id)
+        stored_secondary = await session.get(MediaFile, secondary_media_id)
+        assert stored_primary is not None and stored_primary.is_primary is False
+        assert stored_secondary is not None and stored_secondary.is_primary is True
 
     second_challenge = await client.post(
         "/api/v1/auth/supplier/register",
@@ -189,6 +261,45 @@ async def test_admin_approve_returns_clear_400_for_incomplete_point(
     assert response.status_code == 400
     assert "активный материал" in response.json()["detail"]
     assert "фотография" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_admin_cannot_activate_incomplete_pickup_point(
+    client,
+    session_factory,
+    admin_token,
+):
+    async with session_factory() as session:
+        point = Quarry(
+            name="Inactive incomplete quarry",
+            point_type="quarry",
+            address="Test address",
+            lat=57.15,
+            lon=65.53,
+            min_delivery_price=5000,
+            moderation_status=ModerationStatus.incomplete.value,
+            is_active=False,
+        )
+        session.add(point)
+        await session.commit()
+        await session.refresh(point)
+        point_id = point.id
+
+    response = await client.patch(
+        f"/api/v1/admin/pickup-points/{point_id}",
+        json={"is_active": True},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "Невозможно активировать точку: отсутствуют материалы, цены или фото"
+    )
+
+    async with session_factory() as session:
+        stored_point = await session.get(Quarry, point_id)
+        assert stored_point is not None
+        assert stored_point.is_active is False
 
 
 @pytest.mark.asyncio

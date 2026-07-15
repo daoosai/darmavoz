@@ -41,6 +41,22 @@ class CategoryOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class CategoryCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    is_active: bool = True
+    sort_order: int = 0
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+
+class CategoryUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    is_active: bool | None = None
+    sort_order: int | None = None
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+
 class MaterialCreate(BaseModel):
     name: str
     description: str | None = None

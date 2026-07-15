@@ -1,4 +1,4 @@
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import select
@@ -46,6 +46,66 @@ async def create_delivery_option(session, *, capacity_m3: float, title: str) -> 
     session.add(delivery_option)
     await session.flush()
     return delivery_option
+
+
+@pytest.mark.asyncio
+async def test_admin_category_crud_and_safe_delete(client, session_factory, admin_token):
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    unique = uuid4().hex[:8]
+
+    created = await client.post(
+        "/api/v1/admin/categories/",
+        headers=headers,
+        json={"name": f"Новая категория {unique}", "is_active": True},
+    )
+    assert created.status_code == 201
+    category_id = created.json()["id"]
+    assert created.json()["slug"]
+
+    updated = await client.patch(
+        f"/api/v1/admin/categories/{category_id}",
+        headers=headers,
+        json={"name": f"Обновленная категория {unique}", "is_active": False},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["name"] == f"Обновленная категория {unique}"
+    assert updated.json()["is_active"] is False
+
+    categories = await client.get("/api/v1/admin/categories/", headers=headers)
+    assert categories.status_code == 200
+    assert any(item["id"] == category_id for item in categories.json())
+
+    async with session_factory() as session:
+        session.add(
+            Material(
+                category_id=UUID(category_id),
+                name=f"Материал {unique}",
+                price=1000,
+                unit="m3",
+                min_volume=1,
+                is_active=True,
+            )
+        )
+        await session.commit()
+
+    hidden = await client.delete(
+        f"/api/v1/admin/categories/{category_id}",
+        headers=headers,
+    )
+    assert hidden.status_code == 200
+    assert hidden.json()["action"] == "hidden"
+
+    empty = await client.post(
+        "/api/v1/admin/categories/",
+        headers=headers,
+        json={"name": f"Пустая категория {unique}", "is_active": True},
+    )
+    deleted = await client.delete(
+        f"/api/v1/admin/categories/{empty.json()['id']}",
+        headers=headers,
+    )
+    assert deleted.status_code == 200
+    assert deleted.json()["action"] == "deleted"
 
 
 @pytest.mark.asyncio

@@ -20,7 +20,7 @@ from app.services.pickup_points import (
 )
 
 router = APIRouter()
-SUPPLIER_POINT_TYPES = {"quarry", "accumulator"}
+SUPPLIER_POINT_TYPES = {"quarry", "accumulator", "warehouse", "supplier"}
 
 
 async def _owned_point(db: AsyncSession, user: User, point_id: UUID) -> Quarry:

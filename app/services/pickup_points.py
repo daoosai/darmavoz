@@ -25,6 +25,8 @@ from app.schemas.quarry import QuarryMaterialOfferIn
 DEFAULT_MIN_DELIVERY_PRICE = {
     PickupPointType.quarry.value: Decimal("5000.00"),
     PickupPointType.accumulator.value: Decimal("3000.00"),
+    PickupPointType.warehouse.value: Decimal("3000.00"),
+    PickupPointType.supplier.value: Decimal("3000.00"),
 }
 
 
@@ -38,7 +40,10 @@ async def default_delivery_option_ids(db: AsyncSession, point_type: str) -> list
         stmt = stmt.where(DeliveryOption.capacity_m3 >= 10)
     elif point_type == PickupPointType.accumulator.value:
         stmt = stmt.where(DeliveryOption.capacity_m3 == 5)
-    else:
+    elif point_type not in {
+        PickupPointType.warehouse.value,
+        PickupPointType.supplier.value,
+    }:
         return []
     result = await db.execute(stmt.order_by(DeliveryOption.capacity_m3.asc()))
     return list(result.scalars().all())

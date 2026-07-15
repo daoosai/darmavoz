@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Plus, Edit2, ImagePlus, Trash2 } from "lucide-react";
+import { Plus, Edit2, ImagePlus, Star, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { fetch2gisAddressSuggestions, withTyumenBias } from "./addressSearch";
 import { useAuthStore } from "./store";
@@ -37,6 +37,17 @@ const getQuarryAddress = (quarry: Quarry) =>
   (quarry.lat && quarry.lon
     ? `По координатам: ${quarry.lat}, ${quarry.lon}`
     : "Адрес не указан");
+
+const MODERATION_BADGES: Record<string, { label: string; className: string }> = {
+  incomplete: { label: "Черновик", className: "bg-slate-100 text-slate-600" },
+  pending_moderation: { label: "На модерации", className: "bg-amber-100 text-amber-800" },
+  approved: { label: "Одобрен", className: "bg-emerald-100 text-emerald-700" },
+  rejected: { label: "Отклонен", className: "bg-rose-100 text-rose-700" },
+  suspended: { label: "Приостановлен", className: "bg-orange-100 text-orange-700" },
+};
+
+const moderationBadge = (status?: string) =>
+  MODERATION_BADGES[status || "incomplete"] || MODERATION_BADGES.incomplete;
 
 interface AdminQuarriesScreenProps {
   materials: any[];
@@ -123,7 +134,7 @@ export default function AdminQuarriesScreen({
         description: "",
         lat: 0,
         lon: 0,
-        is_active: true,
+        is_active: false,
         material_ids: [],
         material_offers: [],
         delivery_option_ids: [],
@@ -189,13 +200,14 @@ export default function AdminQuarriesScreen({
                 <th className="p-4 border-b border-slate-100">Название</th>
                 <th className="p-4 border-b border-slate-100">Адрес</th>
                 <th className="p-4 border-b border-slate-100">Статус</th>
+                <th className="p-4 border-b border-slate-100">Модерация</th>
                 <th className="p-4 border-b border-slate-100">Действия</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {quarries.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-slate-500">
+                  <td colSpan={6} className="p-8 text-center text-slate-500">
                     Нет карьеров
                   </td>
                 </tr>
@@ -230,6 +242,11 @@ export default function AdminQuarriesScreen({
                           Скрыт
                         </span>
                       )}
+                    </td>
+                    <td className="p-4">
+                      <span className={`inline-flex items-center rounded-lg px-2 py-1 text-xs font-bold ${moderationBadge(quarry.moderation_status).className}`}>
+                        {moderationBadge(quarry.moderation_status).label}
+                      </span>
                     </td>
                     <td className="p-4">
                       <div className="flex items-center gap-3">
@@ -284,8 +301,8 @@ export default function AdminQuarriesScreen({
                   {quarry.owner_phone ? `, ${quarry.owner_phone}` : ""}
                 </div>
               )}
-              <div className="flex items-center justify-between mt-1">
-                <div>
+              <div className="flex items-center justify-between gap-2 mt-1">
+                <div className="flex flex-wrap gap-2">
                   {quarry.is_active ? (
                     <span className="inline-flex items-center px-2 py-1 rounded-lg bg-emerald-100 text-emerald-700 text-xs font-bold">
                       Активен
@@ -295,6 +312,9 @@ export default function AdminQuarriesScreen({
                       Скрыт
                     </span>
                   )}
+                  <span className={`inline-flex items-center rounded-lg px-2 py-1 text-xs font-bold ${moderationBadge(quarry.moderation_status).className}`}>
+                    {moderationBadge(quarry.moderation_status).label}
+                  </span>
                 </div>
                 <div className="flex items-center justify-end gap-2">
                   <button
@@ -555,11 +575,18 @@ function EditQuarryModal({
         body: JSON.stringify(payload),
       });
 
-      if (!res.ok) throw new Error("Failed to save");
+      const responseData = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof responseData.detail === "string"
+            ? responseData.detail
+            : "Ошибка при сохранении",
+        );
+      }
       toast.success("Карьер сохранен");
       onSave();
     } catch (e) {
-      toast.error("Ошибка при сохранении");
+      toast.error(e instanceof Error ? e.message : "Ошибка при сохранении");
     } finally {
       setIsSaving(false);
     }
@@ -624,6 +651,33 @@ function EditQuarryModal({
       toast.success("Фотография удалена");
     } catch {
       toast.error("Не удалось удалить фотографию");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const makePointPhotoPrimary = async (mediaId: string) => {
+    setIsSaving(true);
+    try {
+      const response = await fetch(`${baseURL}/media/${mediaId}/make-primary`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error("make primary failed");
+      setFormData((previous) => {
+        const mediaFiles = (previous.media_files || []).map((media) => ({
+          ...media,
+          is_primary: media.id === mediaId,
+        }));
+        return {
+          ...previous,
+          media_files: mediaFiles,
+          primary_image_url: mediaFiles.find((media) => media.id === mediaId)?.public_url || null,
+        };
+      });
+      toast.success("Главная фотография обновлена");
+    } catch {
+      toast.error("Не удалось выбрать главную фотографию");
     } finally {
       setIsSaving(false);
     }
@@ -863,6 +917,16 @@ function EditQuarryModal({
                       {media.is_primary && (
                         <span className="absolute left-2 top-2 rounded-full bg-slate-900/75 px-2 py-1 text-[10px] font-bold text-white">Основное</span>
                       )}
+                      <button
+                        type="button"
+                        aria-label={media.is_primary ? "Главная фотография" : "Сделать главной"}
+                        title={media.is_primary ? "Главная фотография" : "Сделать главной"}
+                        disabled={media.is_primary || isSaving}
+                        onClick={() => void makePointPhotoPrimary(media.id)}
+                        className="absolute bottom-2 left-2 grid h-9 w-9 place-items-center rounded-full bg-white/90 text-amber-500 shadow hover:bg-white disabled:cursor-default disabled:bg-amber-100"
+                      >
+                        <Star className={`h-4 w-4 ${media.is_primary ? "fill-current" : ""}`} />
+                      </button>
                       <button
                         type="button"
                         aria-label="Удалить фотографию"

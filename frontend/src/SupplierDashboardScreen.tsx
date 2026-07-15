@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Building2, Loader2, MapPin, Pencil, Plus, Upload } from "lucide-react";
+import { Building2, Loader2, MapPin, Pencil, Plus, Star, Upload } from "lucide-react";
 import toast from "react-hot-toast";
 
 import SupplierCreatePointModal, { type SupplierPoint } from "./SupplierCreatePointModal";
@@ -50,14 +50,15 @@ export default function SupplierDashboardScreen({ token }: Props) {
     void fetchPoints();
   }, [token]);
 
-  const uploadPhoto = async (pointId: string, file: File) => {
+  const uploadPhoto = async (point: SupplierPoint, file: File) => {
     setIsBusy(true);
     try {
+      const isPrimary = !point.media_files?.length;
       const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
       const presignResponse = await fetch(`${baseURL}/media/presign-upload`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ file_name: file.name, content_type: file.type, file_size: file.size, entity_type: "quarry", entity_id: pointId, is_primary: true }),
+        body: JSON.stringify({ file_name: file.name, content_type: file.type, file_size: file.size, entity_type: "quarry", entity_id: point.id, is_primary: isPrimary }),
       });
       const presign = await presignResponse.json().catch(() => ({}));
       if (!presignResponse.ok) throw new Error(extractApiErrorMessage(presign, "Не удалось подготовить загрузку"));
@@ -66,13 +67,31 @@ export default function SupplierDashboardScreen({ token }: Props) {
       const confirmResponse = await fetch(`${baseURL}/media/confirm`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ entity_type: "quarry", entity_id: pointId, object_key: presign.object_key, file_name: file.name, content_type: file.type, file_size: file.size, is_primary: true }),
+        body: JSON.stringify({ entity_type: "quarry", entity_id: point.id, object_key: presign.object_key, file_name: file.name, content_type: file.type, file_size: file.size, is_primary: isPrimary }),
       });
       if (!confirmResponse.ok) throw new Error("Не удалось подтвердить фотографию");
       await fetchPoints();
       toast.success("Фотография добавлена");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Не удалось загрузить фотографию");
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const makePrimaryPhoto = async (mediaId: string) => {
+    setIsBusy(true);
+    try {
+      const response = await fetch(`${baseURL}/media/${mediaId}/make-primary`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось выбрать главную фотографию"));
+      await fetchPoints();
+      toast.success("Главная фотография обновлена");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось выбрать главную фотографию");
     } finally {
       setIsBusy(false);
     }
@@ -133,10 +152,29 @@ export default function SupplierDashboardScreen({ token }: Props) {
                   </div>
                   <p className="mt-3 flex items-start gap-2 text-sm text-gray-500"><MapPin className="mt-0.5 h-4 w-4 shrink-0" />{point.address || `${point.lat}, ${point.lon}`}</p>
                   {point.moderation_comment ? <p className="mt-4 rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{point.moderation_comment}</p> : null}
+                  {(point.media_files || []).length > 0 ? (
+                    <div className="mt-4 grid grid-cols-3 gap-2">
+                      {(point.media_files || []).map((media) => (
+                        <div key={media.id} className="relative aspect-square overflow-hidden rounded-xl bg-gray-100">
+                          <img src={media.public_url} alt="Фотография точки" className="h-full w-full object-cover" />
+                          <button
+                            type="button"
+                            title={media.is_primary ? "Главная фотография" : "Сделать главной"}
+                            aria-label={media.is_primary ? "Главная фотография" : "Сделать главной"}
+                            disabled={media.is_primary || isBusy}
+                            onClick={() => void makePrimaryPhoto(media.id)}
+                            className="absolute bottom-1.5 left-1.5 grid h-8 w-8 place-items-center rounded-full bg-white/90 text-amber-500 shadow disabled:bg-amber-100"
+                          >
+                            <Star className={`h-4 w-4 ${media.is_primary ? "fill-current" : ""}`} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                   <div className="mt-5 flex gap-2">
                     <label className="flex flex-1 cursor-pointer items-center justify-center rounded-xl border border-gray-200 py-3 text-sm font-bold hover:bg-gray-50">
                       <Upload className="mr-2 h-4 w-4" /> Фото
-                      <input type="file" accept="image/*" className="hidden" onChange={(event) => event.target.files?.[0] && void uploadPhoto(point.id, event.target.files[0])} />
+                      <input type="file" accept="image/*" className="hidden" onChange={(event) => event.target.files?.[0] && void uploadPhoto(point, event.target.files[0])} />
                     </label>
                     {point.moderation_status === "approved" ? (
                       <button onClick={() => setEditingPoint(point)} className="flex flex-1 items-center justify-center rounded-xl border border-sky-200 bg-sky-50 px-3 py-3 text-sm font-bold text-sky-700 hover:bg-sky-100">

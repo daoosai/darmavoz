@@ -20,14 +20,14 @@ from app.models.models import (
     quarry_materials,
 )
 logger = logging.getLogger(__name__)
-MARKETPLACE_POINT_TYPES = ("quarry", "accumulator", "warehouse")
+MARKETPLACE_POINT_TYPES = ("quarry", "accumulator", "warehouse", "supplier")
 
 
 def resolve_min_delivery_price(
     delivery_option: DeliveryOption,
     point_type: str,
 ) -> float:
-    if point_type in {"accumulator", "warehouse"}:
+    if point_type in {"accumulator", "warehouse", "supplier"}:
         return round(float(delivery_option.min_price_warehouse), 2)
     return round(float(delivery_option.min_price_quarry), 2)
 

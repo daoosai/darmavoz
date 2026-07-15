@@ -30,6 +30,7 @@ from app.services.pickup_points import (
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+ACTIVATION_ERROR = "Невозможно активировать точку: отсутствуют материалы, цены или фото"
 
 
 async def _admin_pickup_point_payload(db: AsyncSession, point: Quarry) -> dict:
@@ -41,6 +42,18 @@ async def _get_point_or_404(db: AsyncSession, point_id: UUID) -> Quarry:
     if point is None:
         raise HTTPException(status_code=404, detail="Pickup point not found")
     return point
+
+
+async def _validate_point_activation(db: AsyncSession, point: Quarry) -> None:
+    try:
+        await validate_point_can_be_approved(db, point)
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_400_BAD_REQUEST:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=ACTIVATION_ERROR,
+            ) from exc
+        raise
 
 
 @router.get("/quarries", response_model=list[AdminPickupPointOut])
@@ -103,11 +116,7 @@ async def create_pickup_point(
         lon=payload.lon,
         min_delivery_price=min_price,
         is_active=payload.is_active,
-        moderation_status=(
-            ModerationStatus.approved.value
-            if min_price is not None
-            else ModerationStatus.incomplete.value
-        ),
+        moderation_status=ModerationStatus.incomplete.value,
         moderated_by_user_id=current_admin.id,
         moderated_at=datetime.now(timezone.utc),
     )
@@ -125,6 +134,13 @@ async def create_pickup_point(
     await sync_delivery_options(
         db, quarry_id=point.id, delivery_option_ids=delivery_option_ids
     )
+    if point.is_active:
+        try:
+            await _validate_point_activation(db, point)
+            point.moderation_status = ModerationStatus.approved.value
+        except HTTPException:
+            await db.rollback()
+            raise
     await db.commit()
     await db.refresh(point)
     return await _admin_pickup_point_payload(db, point)
@@ -138,7 +154,6 @@ async def update_pickup_point(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_logist_user),
 ) -> dict:
-    del current_user
     point = await _get_point_or_404(db, point_id)
     changed = payload.model_fields_set
     for field in (
@@ -176,6 +191,24 @@ async def update_pickup_point(
             quarry_id=point.id,
             delivery_option_ids=await default_delivery_option_ids(db, point.point_type),
         )
+    publication_fields = {
+        "is_active",
+        "point_type",
+        "min_delivery_price",
+        "material_offers",
+        "material_ids",
+        "delivery_option_ids",
+    }
+    if point.is_active and changed.intersection(publication_fields):
+        try:
+            await _validate_point_activation(db, point)
+            point.moderation_status = ModerationStatus.approved.value
+            point.moderation_comment = None
+            point.moderated_at = datetime.now(timezone.utc)
+            point.moderated_by_user_id = current_user.id
+        except HTTPException:
+            await db.rollback()
+            raise
     await db.commit()
     await db.refresh(point)
     return await _admin_pickup_point_payload(db, point)
@@ -191,6 +224,12 @@ async def replace_pickup_point_offers(
     del current_user
     point = await _get_point_or_404(db, point_id)
     await sync_material_offers(db, quarry_id=point.id, offers=offers)
+    if point.is_active:
+        try:
+            await _validate_point_activation(db, point)
+        except HTTPException:
+            await db.rollback()
+            raise
     await db.commit()
     return await _admin_pickup_point_payload(db, point)
 
@@ -207,6 +246,12 @@ async def replace_pickup_point_delivery_options(
     await sync_delivery_options(
         db, quarry_id=point.id, delivery_option_ids=delivery_option_ids
     )
+    if point.is_active:
+        try:
+            await _validate_point_activation(db, point)
+        except HTTPException:
+            await db.rollback()
+            raise
     await db.commit()
     return await _admin_pickup_point_payload(db, point)
 

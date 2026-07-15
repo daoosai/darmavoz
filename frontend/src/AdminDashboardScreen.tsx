@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import AdminProfileScreen from "./AdminProfileScreen";
 import AdminQuarriesScreen from "./AdminQuarriesScreen";
+import AdminCategoriesPanel from "./AdminCategoriesPanel";
 import { DriverHistoryModal } from "./components/admin/DriverHistoryModal";
 import toast from "react-hot-toast";
 import { logoutCurrentSession } from "./pushAuth";
@@ -37,6 +38,9 @@ import { logoutCurrentSession } from "./pushAuth";
 interface AdminCategory {
   id: string;
   name: string;
+  slug: string;
+  sort_order: number;
+  is_active: boolean;
 }
 
 interface AdminMediaFile {
@@ -48,6 +52,7 @@ interface AdminMediaFile {
 
 interface AdminMaterial {
   id: string;
+  category_id: string;
   name: string;
   description: string;
   price: number;
@@ -453,7 +458,9 @@ export default function AdminDashboardScreen({
   const fetchCategories = async () => {
     if (!token) return;
     try {
-      const res = await fetch(`${baseURL}/catalog/categories/`);
+      const res = await fetch(`${baseURL}/admin/categories/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (res.ok) {
         const data = await res.json();
         setCategories(Array.isArray(data) ? data : data.results || []);
@@ -871,10 +878,11 @@ export default function AdminDashboardScreen({
         unit: editingMaterial.unit || "м3",
         min_volume: Number(editingMaterial.min_volume || 1),
         is_active: editingMaterial.is_active ?? true,
+        category_id: editingMaterial.category_id || categories[0]?.id || null,
       };
 
-      if (!isEdit) {
-        payload.category_id = categories.length > 0 ? categories[0].id : null;
+      if (!payload.category_id) {
+        throw new Error("Сначала создайте категорию материалов");
       }
 
       const res = await fetch(url, {
@@ -1302,6 +1310,7 @@ export default function AdminDashboardScreen({
         unit: "м3",
         min_volume: 1,
         price: 0,
+        category_id: categories[0]?.id,
       });
       setIsMaterialModalOpen(true);
     }
@@ -1552,6 +1561,11 @@ export default function AdminDashboardScreen({
         <div className="max-w-6xl mx-auto flex flex-col gap-6">
           {activeTab === "materials" ? (
             <>
+              <AdminCategoriesPanel
+                token={token || ""}
+                categories={categories}
+                onChanged={fetchCategories}
+              />
               <div className="flex justify-between items-center bg-white p-5 rounded-2xl shadow-sm border border-slate-100 mb-2">
                 <h2 className="text-xl font-bold text-slate-800">Материалы</h2>
                 <div className="flex items-center gap-3">
@@ -3068,6 +3082,30 @@ export default function AdminDashboardScreen({
                   }
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
                 />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Категория
+                </label>
+                <select
+                  required
+                  value={editingMaterial.category_id || ""}
+                  onChange={(event) =>
+                    setEditingMaterial({
+                      ...editingMaterial,
+                      category_id: event.target.value,
+                    })
+                  }
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 font-medium outline-none focus:border-[#2DB0E6] focus:ring-2 focus:ring-[#2DB0E6]/20"
+                >
+                  <option value="" disabled>Выберите категорию</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}{category.is_active ? "" : " (скрыта)"}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="flex flex-col gap-1.5">

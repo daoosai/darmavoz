@@ -13,7 +13,7 @@ interface Material {
 
 export interface SupplierPoint {
   id: string;
-  point_type: "quarry" | "accumulator";
+  point_type: "quarry" | "accumulator" | "warehouse" | "supplier";
   name: string;
   short_name?: string | null;
   address: string;
@@ -23,6 +23,11 @@ export interface SupplierPoint {
   moderation_status: string;
   moderation_comment?: string | null;
   primary_image_url?: string | null;
+  media_files?: Array<{
+    id: string;
+    public_url: string;
+    is_primary?: boolean;
+  }>;
   material_offers?: Array<{
     material_id: string;
     price: number;
@@ -294,7 +299,7 @@ export default function SupplierCreatePointModal({ token, point, onClose, onSave
 
         <form onSubmit={submit} className="space-y-5 p-5 pb-12">
           <section className="grid grid-cols-2 gap-2 rounded-xl bg-white p-2 shadow-sm">
-            {[["quarry", "Карьер"], ["accumulator", "Накопитель"]].map(([value, label]) => (
+            {[["quarry", "Карьер"], ["accumulator", "Накопитель"], ["warehouse", "Склад"], ["supplier", "Поставщик"]].map(([value, label]) => (
               <button key={value} type="button" onClick={() => setForm({ ...form, point_type: value })} className={`rounded-xl px-3 py-3 text-sm font-bold transition-colors ${form.point_type === value ? "bg-sky-500 text-white" : "text-gray-500 hover:bg-gray-50"}`}>
                 {label}
               </button>

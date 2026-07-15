@@ -487,7 +487,7 @@ function MainContent({
               </div>
 
               {/* Delivery direction */}
-              <section className="mx-4 mb-6 overflow-hidden rounded-3xl bg-gradient-to-br from-sky-50 to-white shadow-sm">
+              <section className="mx-4 mb-6 overflow-hidden">
                 <div className="px-4 pb-3 pt-4">
                   <h2 className="text-xl font-black text-slate-900">
                     Доставка материалов

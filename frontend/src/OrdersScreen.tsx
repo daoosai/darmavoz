@@ -432,9 +432,9 @@ export default function OrdersScreen({
   }
 
   return (
-    <div className="min-h-[calc(100vh-68px)] bg-slate-50 flex flex-col">
+    <div className="min-h-[calc(100vh-68px)] bg-gray-50 flex flex-col">
       {/* Tabs / focused order navigation */}
-      <div className="px-4 pt-4 pb-2 bg-slate-50 relative z-10">
+      <div className="px-4 pt-4 pb-2 bg-gray-50 relative z-10">
         {focusedOrderId ? (
           <button
             type="button"
@@ -472,7 +472,7 @@ export default function OrdersScreen({
 
       <div className="flex-1 overflow-hidden relative">
         <PullToRefresh onRefresh={handleRefresh} pullingContent={""} refreshingContent={<div className="p-4 text-center text-slate-500 text-sm">Обновление...</div>}>
-          <div className="px-4 pb-24 pt-4 min-h-screen">
+          <div className="min-h-screen bg-gray-50 px-4 pb-24 pt-4">
             <AnimatePresence mode="wait">
               {activeTab === 'current' ? (
                 <motion.div

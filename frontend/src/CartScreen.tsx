@@ -394,7 +394,7 @@ export default function CartScreen({
   }
 
   return (
-    <div className="flex flex-col bg-slate-50 pb-56 min-h-[calc(100vh-68px)]">
+    <div className="flex flex-col bg-slate-50 pb-28 min-h-[calc(100vh-68px)]">
       <div className="flex-1 p-4 space-y-4">
         <h2 className="text-2xl font-bold text-slate-900 mb-4 pt-2">Корзина</h2>
 
@@ -629,12 +629,12 @@ export default function CartScreen({
                   {groupAlternatives.length > 0 && (
                     <div className="mt-4">
                       <h4 className="mb-2 px-1 text-sm font-bold text-slate-800">Другие варианты</h4>
-                      <div className="hide-scrollbar -mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-1">
+                      <div className="hide-scrollbar -mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-4">
                         {groupAlternatives.map(({ item, option }) => {
                           const optionImageUrl = getMarketplaceImageUrl(option);
 
                           return (
-                            <article key={`${item.id}-${option.quarry_id}`} className="w-[230px] shrink-0 snap-start rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                            <article key={`${item.id}-${option.quarry_id}`} className="w-72 shrink-0 snap-start rounded-2xl border border-gray-100 bg-white p-4 shadow-sm flex flex-col justify-between">
                               <div className="flex items-center gap-3">
                                 <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-slate-200">
                                   {optionImageUrl ? (

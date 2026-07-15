@@ -487,12 +487,9 @@ function MainContent({
               </div>
 
               {/* Delivery direction */}
-              <section className="mx-4 mb-6 overflow-hidden rounded-3xl border border-sky-100 bg-gradient-to-br from-sky-50 to-white shadow-sm">
+              <section className="mx-4 mb-6 overflow-hidden rounded-3xl bg-gradient-to-br from-sky-50 to-white shadow-sm">
                 <div className="px-4 pb-3 pt-4">
-                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#2DB0E6]">
-                    Направление сервиса
-                  </p>
-                  <h2 className="mt-1 text-xl font-black text-slate-900">
+                  <h2 className="text-xl font-black text-slate-900">
                     Доставка материалов
                   </h2>
                   <p className="mt-1 text-sm text-slate-500">
@@ -506,10 +503,10 @@ function MainContent({
                   <div className="flex gap-2">
                     <button
                       onClick={() => setSelectedCategoryId(null)}
-                      className={`px-5 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all duration-200 border ${
+                      className={`px-5 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all duration-200 ${
                         selectedCategoryId === null
-                          ? "bg-white border-black text-black"
-                          : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
+                          ? "bg-white text-black shadow-sm"
+                          : "bg-slate-50 text-slate-500 hover:bg-slate-100"
                       }`}
                     >
                       Все
@@ -518,10 +515,10 @@ function MainContent({
                       <button
                         key={cat.id}
                         onClick={() => setSelectedCategoryId(cat.id)}
-                        className={`px-5 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all duration-200 border ${
+                        className={`px-5 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all duration-200 ${
                           selectedCategoryId === cat.id
-                            ? "bg-white border-black text-black"
-                            : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
+                            ? "bg-white text-black shadow-sm"
+                            : "bg-slate-50 text-slate-500 hover:bg-slate-100"
                         }`}
                       >
                         {cat?.name}
@@ -679,7 +676,7 @@ function ProductCard({ material, onClick }: ProductCardProps) {
   return (
     <div
       onClick={onClick}
-      className="bg-white rounded-3xl overflow-hidden flex flex-col border border-slate-100 shadow-sm cursor-pointer hover:shadow-md transition-shadow relative"
+      className="bg-white rounded-3xl overflow-hidden flex flex-col shadow-sm cursor-pointer hover:shadow-md transition-shadow relative"
     >
       <div className="relative w-full aspect-[4/3] bg-slate-100 group">
         <div

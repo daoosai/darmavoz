@@ -584,7 +584,7 @@ export default function CartScreen({
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border-2 border-sky-500 bg-white p-4 text-slate-900 shadow-sm">
+                  <div className="rounded-2xl bg-white p-4 text-slate-900 shadow-sm">
                     <div className="mb-3 inline-flex rounded-full bg-sky-100 px-3 py-1 text-xs font-bold uppercase tracking-wide text-sky-700">
                       Выгодный вариант
                     </div>

@@ -128,7 +128,7 @@ export default function ClientProfileScreen({
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-68px)] bg-slate-50 pb-4 overflow-hidden">
+    <div className="flex min-h-[calc(100vh-68px)] flex-col bg-slate-50 pb-24">
       {/* Gradient Header */}
       <div className="bg-gradient-to-r from-[#2DB0E6] to-[#1D99D4] text-white p-6 pb-10 rounded-b-[32px] shadow-md relative z-10 flex items-center gap-4">
         <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center shrink-0 backdrop-blur-sm">
@@ -204,10 +204,8 @@ export default function ClientProfileScreen({
         <NotificationToggle role="client" />
       </div>
 
-      <div className="flex-1"></div>
-
       {/* Footer Area */}
-      <div className="px-4 mt-8 mt-auto pt-6 flex flex-col items-center">
+      <div className="px-4 mt-8 pt-6 flex flex-col items-center">
         <button
           onClick={async () => await logoutCurrentSession()}
           className="w-full bg-white border border-slate-200 text-slate-600 font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 active:bg-slate-50 transition-colors"

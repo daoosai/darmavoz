@@ -432,7 +432,7 @@ export default function OrdersScreen({
   }
 
   return (
-    <div className="h-full bg-slate-50 flex flex-col">
+    <div className="min-h-[calc(100vh-68px)] bg-slate-50 flex flex-col">
       {/* Tabs / focused order navigation */}
       <div className="px-4 pt-4 pb-2 bg-slate-50 relative z-10">
         {focusedOrderId ? (

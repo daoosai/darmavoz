@@ -72,6 +72,18 @@ function getMinDeliveryPrice(point: PickupPointMarker) {
   return point.point_type === "accumulator" ? 3000 : 5000;
 }
 
+function getClientFacingAddress(address: string | null | undefined) {
+  const normalizedAddress = address?.trim();
+  if (!normalizedAddress || /^по координатам\s*:/i.test(normalizedAddress)) {
+    return null;
+  }
+  return normalizedAddress;
+}
+
+function formatDistance(distance: number) {
+  return distance < 10 ? distance.toFixed(1) : Math.round(distance).toString();
+}
+
 const TYPE_LABELS: Record<string, string> = {
   quarry: "Карьер",
   accumulator: "Накопитель",
@@ -120,6 +132,10 @@ export default function PickupPointMapScreen({ material, onClose, onSelect }: Pr
         ? [selected.primary_image_url]
         : [],
   ));
+  const selectedAddress = getClientFacingAddress(selected?.address);
+  const selectedDistance = selected && userLocation
+    ? calculateDistance(userLocation.lat, userLocation.lon, selected.lat, selected.lon)
+    : null;
 
   useEffect(() => {
     if (!("geolocation" in navigator)) {
@@ -432,7 +448,7 @@ export default function PickupPointMapScreen({ material, onClose, onSelect }: Pr
       )}
 
       {selected && (
-        <div className="pickup-point-sheet absolute bottom-0 inset-x-0 z-[110] max-h-[72vh] overflow-y-auto bg-white rounded-t-[28px] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl">
+        <div className="pickup-point-sheet hide-scrollbar absolute bottom-0 inset-x-0 z-[110] max-h-[72vh] overflow-y-auto bg-white rounded-t-[28px] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           <button
             type="button"
             aria-label="Свернуть подробности"
@@ -467,7 +483,13 @@ export default function PickupPointMapScreen({ material, onClose, onSelect }: Pr
           <div className="mt-4 min-w-0">
             <span className="text-xs font-bold uppercase tracking-wide text-sky-500">{TYPE_LABELS[selected.point_type]}</span>
             <h2 className="text-xl font-bold text-gray-900">{selected.name}</h2>
-            <p className="mt-1 text-sm text-gray-500">{selected.address || "Адрес не указан"}</p>
+            {selectedAddress && <p className="mt-1 text-sm text-gray-500">{selectedAddress}</p>}
+            {selectedDistance !== null && (
+              <p className="mt-1 flex items-center gap-1 text-xs font-medium text-gray-400">
+                <MapPin className="h-3.5 w-3.5" />
+                Примерно {formatDistance(selectedDistance)} км от вас
+              </p>
+            )}
           </div>
           <div className="my-4 space-y-3 rounded-xl bg-gray-50 p-4">
             <div>
@@ -476,10 +498,7 @@ export default function PickupPointMapScreen({ material, onClose, onSelect }: Pr
             </div>
             <div>
               <span className="block text-xs text-gray-500">Точный адрес</span>
-              <p className="mt-1 text-sm font-medium text-gray-900">{selected.address || "Ориентируйтесь по точке на карте"}</p>
-              <p className="mt-1 text-xs text-gray-500">
-                Координаты: {Number(selected.lat).toFixed(6)}, {Number(selected.lon).toFixed(6)}
-              </p>
+              <p className="mt-1 text-sm font-medium text-gray-900">{selectedAddress || "Адрес не указан"}</p>
             </div>
             <div className="flex items-end justify-between gap-3 border-t border-gray-200 pt-3">
               <div>

@@ -13,7 +13,7 @@ interface MaterialBottomSheetProps {
   pickupPoint?: PickupPointSelection | null;
 }
 
-const resolveApiImageUrl = (imageUrl: string) => {
+const resolveAppImageUrl = (imageUrl: string) => {
   try {
     const apiOrigin = new URL(baseURL, window.location.origin).origin;
     return new URL(imageUrl, apiOrigin).toString();
@@ -22,8 +22,35 @@ const resolveApiImageUrl = (imageUrl: string) => {
   }
 };
 
+const resolveMediaImageUrl = (imageUrl: string) => {
+  if (/^(https?:|data:|blob:)/i.test(imageUrl)) {
+    return imageUrl;
+  }
+  try {
+    const configuredMediaBase =
+      import.meta.env.VITE_S3_URL ||
+      import.meta.env.VITE_API_BASE_URL ||
+      baseURL;
+    const mediaBaseUrl = new URL(configuredMediaBase, window.location.origin);
+    if (!mediaBaseUrl.pathname.endsWith("/")) {
+      mediaBaseUrl.pathname += "/";
+    }
+    return new URL(imageUrl, mediaBaseUrl).toString();
+  } catch {
+    return imageUrl;
+  }
+};
+
+const getDeliveryOptionImage = (option: DeliveryOption) => {
+  const imageUrl =
+    option.primary_image_url ||
+    option.media_files?.[0]?.public_url ||
+    option.image_url;
+  return imageUrl ? resolveMediaImageUrl(imageUrl) : null;
+};
+
 const getTruckFallback = (capacity: number) =>
-  resolveApiImageUrl(
+  resolveAppImageUrl(
     capacity <= 5
       ? "/static/vehicles/zil-dump-truck.svg"
       : "/static/vehicles/kamaz-dump-truck.svg",
@@ -73,6 +100,12 @@ export default function MaterialBottomSheet({
     };
     fetchOptions();
   }, [material, pickupPoint]);
+
+  useEffect(() => {
+    deliveryOptions.forEach((deliveryOption) => {
+      console.log("delivery_option", deliveryOption);
+    });
+  }, [deliveryOptions]);
 
   if (!material) return null;
 
@@ -192,9 +225,7 @@ export default function MaterialBottomSheet({
                       .map((option) => {
                         const isSelected = selectedOption?.id === option.id;
                         const fallbackImage = getTruckFallback(option.capacity_m3 || 0);
-                        const imgSrc = option.image_url
-                          ? resolveApiImageUrl(option.image_url)
-                          : fallbackImage;
+                        const imgSrc = getDeliveryOptionImage(option) || fallbackImage;
 
                         return (
                           <button
@@ -211,10 +242,6 @@ export default function MaterialBottomSheet({
                                 src={imgSrc}
                                 alt={option.title}
                                 className="max-w-full max-h-full object-contain"
-                                onError={(event) => {
-                                  event.currentTarget.onerror = null;
-                                  event.currentTarget.src = fallbackImage;
-                                }}
                               />
                             </div>
                             <span

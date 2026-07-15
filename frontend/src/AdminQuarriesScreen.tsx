@@ -32,6 +32,12 @@ export interface Quarry {
   }[];
 }
 
+const getQuarryAddress = (quarry: Quarry) =>
+  quarry.address?.trim() ||
+  (quarry.lat && quarry.lon
+    ? `По координатам: ${quarry.lat}, ${quarry.lon}`
+    : "Адрес не указан");
+
 interface AdminQuarriesScreenProps {
   materials: any[];
 }
@@ -212,7 +218,7 @@ export default function AdminQuarriesScreen({
                       )}
                     </td>
                     <td className="p-4 text-sm text-slate-600 max-w-[250px] truncate">
-                      {quarry.address}
+                      {getQuarryAddress(quarry)}
                     </td>
                     <td className="p-4">
                       {quarry.is_active ? (
@@ -270,7 +276,7 @@ export default function AdminQuarriesScreen({
                 </span>
               </div>
               <div className="text-sm text-gray-600">
-                {quarry.address || `${quarry.lat}, ${quarry.lon}`}
+                {getQuarryAddress(quarry)}
               </div>
               {(quarry.owner_name || quarry.owner_phone) && (
                 <div className="text-xs font-medium text-slate-500">

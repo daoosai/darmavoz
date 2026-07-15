@@ -31,6 +31,7 @@ interface MarketplaceOption {
   total_amount: number;
   primary_image_url?: string | null;
   image_url?: string | null;
+  media_files?: Array<{ public_url?: string | null }>;
 }
 
 interface MarketplaceCalculation {
@@ -56,19 +57,23 @@ const VOLUME_STEP_M3 = 1;
 const getCartItemVolume = (item: ReturnType<typeof useCartStore.getState>["cartItems"][number]) =>
   Number(item.volume ?? item.deliveryOption.capacity_m3 * item.quantity);
 
-const getImg = (url?: string | null) => {
+const getImageUrl = (url?: string | null) => {
   if (!url) return null;
   if (/^https?:\/\//i.test(url)) return url;
 
-  const mediaBaseUrl = import.meta.env.VITE_S3_URL;
-  if (mediaBaseUrl) {
-    return `${mediaBaseUrl.replace(/\/$/, "")}/${url.replace(/^\//, "")}`;
+  const baseUrl = import.meta.env.VITE_S3_URL || import.meta.env.VITE_API_BASE_URL;
+  if (baseUrl) {
+    return `${baseUrl.replace(/\/$/, "")}/${url.replace(/^\//, "")}`;
   }
   return resolveMediaUrl(url);
 };
 
 const getMarketplaceImageUrl = (option: MarketplaceOption) =>
-  getImg(option.primary_image_url ?? option.image_url);
+  getImageUrl(
+    option.primary_image_url
+      ?? option.media_files?.find((media) => Boolean(media.public_url))?.public_url
+      ?? option.image_url,
+  );
 
 export default function CartScreen({
   onGoToHome,

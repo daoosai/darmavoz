@@ -12,7 +12,7 @@ from pydantic import (
     model_validator,
 )
 
-from app.schemas.catalog import DeliveryOptionOut, MaterialOut
+from app.schemas.catalog import DeliveryOptionOut, MaterialOut, MediaFileOut
 from app.schemas.driver import DriverResponse
 from app.services.storage import normalize_public_url
 
@@ -156,6 +156,7 @@ class ClientOrderCalculationOptionOut(BaseModel):
     delivery_cost: float
     total_amount: float
     primary_image_url: str | None = None
+    media_files: list[MediaFileOut] = Field(default_factory=list)
 
     @field_validator("primary_image_url")
     @classmethod

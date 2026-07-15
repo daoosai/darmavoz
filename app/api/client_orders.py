@@ -42,6 +42,7 @@ async def calculate_order(
             delivery_cost=pricing.delivery_cost,
             total_amount=pricing.total_amount,
             primary_image_url=pricing.primary_image_url,
+            media_files=pricing.media_files,
         )
 
     best_pricing = pricing_options[0]

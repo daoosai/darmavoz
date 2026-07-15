@@ -45,18 +45,19 @@ class ClientOrderPricing:
     delivery_cost: float
     total_amount: float
     primary_image_url: str | None
+    media_files: list[MediaFile]
 
 
-async def load_primary_pickup_point_images(
+async def load_pickup_point_media_files(
     session: AsyncSession,
     point_ids: list[UUID],
-) -> dict[UUID, str]:
+) -> dict[UUID, list[MediaFile]]:
     if not point_ids:
         return {}
 
-    rows = (
+    media_files = (
         await session.execute(
-            select(MediaFile.entity_id, MediaFile.public_url)
+            select(MediaFile)
             .where(
                 MediaFile.entity_type == "quarry",
                 MediaFile.entity_id.in_(point_ids),
@@ -68,11 +69,11 @@ async def load_primary_pickup_point_images(
                 MediaFile.created_at.asc(),
             )
         )
-    ).all()
-    primary_images: dict[UUID, str] = {}
-    for entity_id, public_url in rows:
-        primary_images.setdefault(entity_id, public_url)
-    return primary_images
+    ).scalars().all()
+    media_by_point: dict[UUID, list[MediaFile]] = {}
+    for media_file in media_files:
+        media_by_point.setdefault(media_file.entity_id, []).append(media_file)
+    return media_by_point
 
 
 def get_straight_distance_km(lat_a: float, lon_a: float, lat_b: float, lon_b: float) -> float:
@@ -280,7 +281,7 @@ async def calculate_client_order_options(
         .order_by(Quarry.name.asc())
     )
     quarry_rows = list(result.unique().all())
-    primary_images = await load_primary_pickup_point_images(
+    media_by_point = await load_pickup_point_media_files(
         session,
         [quarry.id for quarry, _price in quarry_rows],
     )
@@ -288,7 +289,7 @@ async def calculate_client_order_options(
         (
             quarry,
             float(price if price is not None else material.price or 0),
-            primary_images.get(quarry.id),
+            media_by_point.get(quarry.id, []),
         )
         for quarry, price in quarry_rows
         if float(price if price is not None else material.price or 0) > 0
@@ -307,15 +308,16 @@ async def calculate_client_order_options(
                 delivery_lat,
                 delivery_lon,
             )
-            for quarry, _price, _primary_image_url in priced_rows
+            for quarry, _price, _media_files in priced_rows
         )
     )
     rate = round(float(delivery_option.delivery_rate_per_km), 2)
     options: list[ClientOrderPricing] = []
-    for (quarry, material_unit_price, primary_image_url), mileage_km in zip(
+    for (quarry, material_unit_price, media_files), mileage_km in zip(
         priced_rows,
         distances,
     ):
+        primary_image_url = media_files[0].public_url if media_files else None
         minimum_delivery_price = resolve_min_delivery_price(delivery_option, quarry.point_type)
         material_cost = round(
             material_unit_price * float(delivery_option.capacity_m3) * quantity,
@@ -338,6 +340,7 @@ async def calculate_client_order_options(
                 delivery_cost=delivery_cost,
                 total_amount=round(material_cost + delivery_cost, 2),
                 primary_image_url=primary_image_url,
+                media_files=media_files,
             )
         )
 

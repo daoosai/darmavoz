@@ -295,6 +295,10 @@ async def test_calculate_returns_best_option_and_sorted_alternatives(
 
     assert response.status_code == 200
     payload = response.json()
+    best_media_files = payload["best_option"].pop("media_files")
+    assert [media["public_url"] for media in best_media_files] == [
+        "https://cdn.example/quarry.jpg"
+    ]
     assert payload["best_option"] == {
         "quarry_id": str(accumulator_id),
         "quarry_name": accumulator.name,
@@ -309,6 +313,9 @@ async def test_calculate_returns_best_option_and_sorted_alternatives(
     assert [option["quarry_id"] for option in payload["alternatives"]] == [str(quarry_id)]
     assert payload["alternatives"][0]["total_amount"] == 8000.0
     assert payload["alternatives"][0]["primary_image_url"] == "https://cdn.example/alternative-quarry.jpg"
+    assert [media["public_url"] for media in payload["alternatives"][0]["media_files"]] == [
+        "https://cdn.example/alternative-quarry.jpg"
+    ]
 
     selected_response = await client.post(
         "/api/v1/client/orders/calculate",
@@ -326,6 +333,10 @@ async def test_calculate_returns_best_option_and_sorted_alternatives(
     selected_payload = selected_response.json()
     assert selected_payload["best_option"]["quarry_id"] == str(quarry_id)
     assert selected_payload["best_option"]["total_amount"] == 8000.0
+    assert selected_payload["best_option"]["primary_image_url"] == "https://cdn.example/alternative-quarry.jpg"
+    assert selected_payload["best_option"]["media_files"][0]["public_url"] == (
+        "https://cdn.example/alternative-quarry.jpg"
+    )
     assert [option["quarry_id"] for option in selected_payload["alternatives"]] == [
         str(accumulator_id)
     ]

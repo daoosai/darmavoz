@@ -15,6 +15,7 @@ from app.models.models import (
     MediaFile,
     PickupPointType,
     Quarry,
+    User,
     quarry_delivery_options,
     quarry_materials,
 )
@@ -143,7 +144,12 @@ async def sync_delivery_options(
         )
 
 
-async def pickup_point_payload(db: AsyncSession, point: Quarry) -> dict:
+async def pickup_point_payload(
+    db: AsyncSession,
+    point: Quarry,
+    *,
+    include_owner_contacts: bool = False,
+) -> dict:
     offer_rows = (
         await db.execute(
             select(
@@ -197,7 +203,7 @@ async def pickup_point_payload(db: AsyncSession, point: Quarry) -> dict:
         option.media_files = []
         option.primary_image_url = option.image_url
 
-    return {
+    payload = {
         "id": point.id,
         "name": point.name,
         "short_name": point.short_name,
@@ -230,6 +236,11 @@ async def pickup_point_payload(db: AsyncSession, point: Quarry) -> dict:
         "created_at": point.created_at,
         "updated_at": point.updated_at,
     }
+    if include_owner_contacts:
+        owner = await db.get(User, point.owner_user_id) if point.owner_user_id else None
+        payload["owner_name"] = owner.display_name if owner else None
+        payload["owner_phone"] = owner.username if owner else None
+    return payload
 
 
 async def validate_point_can_be_approved(db: AsyncSession, point: Quarry) -> None:

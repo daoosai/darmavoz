@@ -11,10 +11,10 @@ from app.api.admin import DeleteResult
 from app.db.database import get_db
 from app.models.models import ModerationStatus, Quarry, User, quarry_materials
 from app.schemas.quarry import (
+    AdminPickupPointOut,
     ModerationDecision,
     QuarryCreate,
     QuarryMaterialOfferIn,
-    QuarryOut,
     QuarryUpdate,
     RejectionDecision,
 )
@@ -32,6 +32,10 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+async def _admin_pickup_point_payload(db: AsyncSession, point: Quarry) -> dict:
+    return await pickup_point_payload(db, point, include_owner_contacts=True)
+
+
 async def _get_point_or_404(db: AsyncSession, point_id: UUID) -> Quarry:
     point = await db.get(Quarry, point_id)
     if point is None:
@@ -39,8 +43,8 @@ async def _get_point_or_404(db: AsyncSession, point_id: UUID) -> Quarry:
     return point
 
 
-@router.get("/quarries", response_model=list[QuarryOut])
-@router.get("/pickup-points", response_model=list[QuarryOut])
+@router.get("/quarries", response_model=list[AdminPickupPointOut])
+@router.get("/pickup-points", response_model=list[AdminPickupPointOut])
 async def list_pickup_points(
     moderation_status: str | None = None,
     point_type: str | None = None,
@@ -65,22 +69,22 @@ async def list_pickup_points(
     if search:
         stmt = stmt.where(Quarry.name.ilike(f"%{search.strip()}%"))
     points = list((await db.execute(stmt.order_by(Quarry.name.asc()))).scalars().all())
-    return [await pickup_point_payload(db, point) for point in points]
+    return [await _admin_pickup_point_payload(db, point) for point in points]
 
 
-@router.get("/quarries/{point_id}", response_model=QuarryOut)
-@router.get("/pickup-points/{point_id}", response_model=QuarryOut)
+@router.get("/quarries/{point_id}", response_model=AdminPickupPointOut)
+@router.get("/pickup-points/{point_id}", response_model=AdminPickupPointOut)
 async def get_pickup_point(
     point_id: UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_logist_user),
 ) -> dict:
     del current_user
-    return await pickup_point_payload(db, await _get_point_or_404(db, point_id))
+    return await _admin_pickup_point_payload(db, await _get_point_or_404(db, point_id))
 
 
-@router.post("/quarries", response_model=QuarryOut, status_code=status.HTTP_201_CREATED)
-@router.post("/pickup-points", response_model=QuarryOut, status_code=status.HTTP_201_CREATED)
+@router.post("/quarries", response_model=AdminPickupPointOut, status_code=status.HTTP_201_CREATED)
+@router.post("/pickup-points", response_model=AdminPickupPointOut, status_code=status.HTTP_201_CREATED)
 async def create_pickup_point(
     payload: QuarryCreate,
     db: AsyncSession = Depends(get_db),
@@ -123,11 +127,11 @@ async def create_pickup_point(
     )
     await db.commit()
     await db.refresh(point)
-    return await pickup_point_payload(db, point)
+    return await _admin_pickup_point_payload(db, point)
 
 
-@router.patch("/quarries/{point_id}", response_model=QuarryOut)
-@router.patch("/pickup-points/{point_id}", response_model=QuarryOut)
+@router.patch("/quarries/{point_id}", response_model=AdminPickupPointOut)
+@router.patch("/pickup-points/{point_id}", response_model=AdminPickupPointOut)
 async def update_pickup_point(
     point_id: UUID,
     payload: QuarryUpdate,
@@ -174,10 +178,10 @@ async def update_pickup_point(
         )
     await db.commit()
     await db.refresh(point)
-    return await pickup_point_payload(db, point)
+    return await _admin_pickup_point_payload(db, point)
 
 
-@router.put("/pickup-points/{point_id}/offers", response_model=QuarryOut)
+@router.put("/pickup-points/{point_id}/offers", response_model=AdminPickupPointOut)
 async def replace_pickup_point_offers(
     point_id: UUID,
     offers: list[QuarryMaterialOfferIn],
@@ -188,10 +192,10 @@ async def replace_pickup_point_offers(
     point = await _get_point_or_404(db, point_id)
     await sync_material_offers(db, quarry_id=point.id, offers=offers)
     await db.commit()
-    return await pickup_point_payload(db, point)
+    return await _admin_pickup_point_payload(db, point)
 
 
-@router.put("/pickup-points/{point_id}/delivery-options", response_model=QuarryOut)
+@router.put("/pickup-points/{point_id}/delivery-options", response_model=AdminPickupPointOut)
 async def replace_pickup_point_delivery_options(
     point_id: UUID,
     delivery_option_ids: list[UUID],
@@ -204,10 +208,10 @@ async def replace_pickup_point_delivery_options(
         db, quarry_id=point.id, delivery_option_ids=delivery_option_ids
     )
     await db.commit()
-    return await pickup_point_payload(db, point)
+    return await _admin_pickup_point_payload(db, point)
 
 
-@router.post("/pickup-points/{point_id}/approve", response_model=QuarryOut)
+@router.post("/pickup-points/{point_id}/approve", response_model=AdminPickupPointOut)
 async def approve_pickup_point(
     point_id: UUID,
     payload: ModerationDecision,
@@ -234,7 +238,7 @@ async def approve_pickup_point(
         point.moderated_by_user_id = current_user.id
         point.is_active = True
         await db.commit()
-        return await pickup_point_payload(db, point)
+        return await _admin_pickup_point_payload(db, point)
     except HTTPException:
         await db.rollback()
         raise
@@ -254,7 +258,7 @@ async def approve_pickup_point(
         ) from exc
 
 
-@router.post("/pickup-points/{point_id}/reject", response_model=QuarryOut)
+@router.post("/pickup-points/{point_id}/reject", response_model=AdminPickupPointOut)
 async def reject_pickup_point(
     point_id: UUID,
     payload: RejectionDecision,
@@ -267,10 +271,10 @@ async def reject_pickup_point(
     point.moderated_at = datetime.now(timezone.utc)
     point.moderated_by_user_id = current_user.id
     await db.commit()
-    return await pickup_point_payload(db, point)
+    return await _admin_pickup_point_payload(db, point)
 
 
-@router.post("/pickup-points/{point_id}/suspend", response_model=QuarryOut)
+@router.post("/pickup-points/{point_id}/suspend", response_model=AdminPickupPointOut)
 async def suspend_pickup_point(
     point_id: UUID,
     payload: ModerationDecision,
@@ -283,7 +287,7 @@ async def suspend_pickup_point(
     point.moderated_at = datetime.now(timezone.utc)
     point.moderated_by_user_id = current_user.id
     await db.commit()
-    return await pickup_point_payload(db, point)
+    return await _admin_pickup_point_payload(db, point)
 
 
 @router.delete("/quarries/{point_id}", response_model=DeleteResult)

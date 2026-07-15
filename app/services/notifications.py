@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from uuid import UUID
 
-from app.models.models import Order
+from app.models.models import Order, Quarry
 from app.services.push_service import (
     schedule_push_to_client,
     schedule_push_to_driver,
@@ -203,5 +203,25 @@ def schedule_logist_no_driver_found_notification(order: Order) -> None:
         {
             **_order_push_data(order),
             "event": "no_driver_found",
+        },
+    )
+
+
+def schedule_pickup_point_moderation_notification(point: Quarry) -> None:
+    logger.info(
+        "pickup_point_moderation_push_scheduled",
+        extra={
+            "event": "pickup_point_pending_moderation",
+            "pickup_point_id": str(point.id),
+            "owner_user_id": str(point.owner_user_id) if point.owner_user_id else None,
+        },
+    )
+    _safe_schedule(
+        schedule_push_to_logists,
+        "Новая заявка на модерацию",
+        "Поставщик добавил новую точку забора и ожидает проверки",
+        {
+            "event": "pickup_point_pending_moderation",
+            "pickup_point_id": str(point.id),
         },
     )

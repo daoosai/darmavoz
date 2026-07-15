@@ -130,6 +130,11 @@ class QuarryOut(QuarryBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class AdminPickupPointOut(QuarryOut):
+    owner_name: str | None = None
+    owner_phone: str | None = None
+
+
 class PickupPointMarkerOut(BaseModel):
     id: UUID
     name: str

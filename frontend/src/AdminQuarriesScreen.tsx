@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Plus, Edit2, Map, Mountain } from "lucide-react";
+import { Plus, Edit2, ImagePlus, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { fetch2gisAddressSuggestions, withTyumenBias } from "./addressSearch";
 import { useAuthStore } from "./store";
@@ -21,6 +21,15 @@ export interface Quarry {
   material_offers?: { material_id: string; price: number; is_active: boolean }[];
   delivery_option_ids?: string[];
   materials?: any[];
+  owner_name?: string | null;
+  owner_phone?: string | null;
+  primary_image_url?: string | null;
+  media_files?: {
+    id: string;
+    public_url: string;
+    file_name?: string;
+    is_primary?: boolean;
+  }[];
 }
 
 interface AdminQuarriesScreenProps {
@@ -105,6 +114,7 @@ export default function AdminQuarriesScreen({
         name: "",
         point_type: "quarry",
         address: "",
+        description: "",
         lat: 0,
         lon: 0,
         is_active: true,
@@ -112,6 +122,7 @@ export default function AdminQuarriesScreen({
         material_offers: [],
         delivery_option_ids: [],
         min_delivery_price: 5000,
+        media_files: [],
       });
     }
     setIsModalOpen(true);
@@ -191,8 +202,14 @@ export default function AdminQuarriesScreen({
                     <td className="p-4 text-sm font-medium text-slate-600">
                       #{quarry.id}
                     </td>
-                    <td className="p-4 font-bold text-slate-800">
-                      {quarry.name}
+                    <td className="p-4 text-slate-800">
+                      <div className="font-bold">{quarry.name}</div>
+                      {(quarry.owner_name || quarry.owner_phone) && (
+                        <div className="mt-1 text-xs font-medium text-slate-500">
+                          Владелец: {quarry.owner_name || "Имя не указано"}
+                          {quarry.owner_phone ? `, ${quarry.owner_phone}` : ""}
+                        </div>
+                      )}
                     </td>
                     <td className="p-4 text-sm text-slate-600 max-w-[250px] truncate">
                       {quarry.address}
@@ -255,6 +272,12 @@ export default function AdminQuarriesScreen({
               <div className="text-sm text-gray-600">
                 {quarry.address || `${quarry.lat}, ${quarry.lon}`}
               </div>
+              {(quarry.owner_name || quarry.owner_phone) && (
+                <div className="text-xs font-medium text-slate-500">
+                  Владелец: {quarry.owner_name || "Имя не указано"}
+                  {quarry.owner_phone ? `, ${quarry.owner_phone}` : ""}
+                </div>
+              )}
               <div className="flex items-center justify-between mt-1">
                 <div>
                   {quarry.is_active ? (
@@ -503,9 +526,18 @@ function EditQuarryModal({
         : `${baseURL}/admin/quarries`;
 
       const payload = {
-        ...formData,
         name: nameTrimmed,
+        short_name: formData.short_name || null,
+        point_type: formData.point_type,
         address: finalAddress,
+        description: formData.description?.trim() || null,
+        lat: formData.lat,
+        lon: formData.lon,
+        min_delivery_price: formData.min_delivery_price,
+        is_active: formData.is_active,
+        material_ids: formData.material_ids || [],
+        material_offers: formData.material_offers || [],
+        delivery_option_ids: formData.delivery_option_ids || [],
       };
 
       const res = await fetch(url, {
@@ -527,29 +559,65 @@ function EditQuarryModal({
     }
   };
 
-  const uploadPointPhoto = async (file: File) => {
-    if (!formData.id) return;
+  const uploadPointPhotos = async (files: File[]) => {
+    if (!formData.id || files.length === 0) return;
     setIsSaving(true);
+    let nextMedia = [...(formData.media_files || [])];
     try {
       const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
-      const presignResponse = await fetch(`${baseURL}/media/presign-upload`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ file_name: file.name, content_type: file.type, file_size: file.size, entity_type: "quarry", entity_id: formData.id, is_primary: true }),
-      });
-      const presign = await presignResponse.json();
-      if (!presignResponse.ok) throw new Error("presign failed");
-      const uploadResponse = await fetch(presign.upload_url, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
-      if (!uploadResponse.ok) throw new Error("upload failed");
-      const confirmResponse = await fetch(`${baseURL}/media/confirm`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ entity_type: "quarry", entity_id: formData.id, object_key: presign.object_key, file_name: file.name, content_type: file.type, file_size: file.size, is_primary: true }),
-      });
-      if (!confirmResponse.ok) throw new Error("confirm failed");
-      toast.success("Фотография добавлена");
+      for (const file of files) {
+        const isPrimary = nextMedia.length === 0;
+        const presignResponse = await fetch(`${baseURL}/media/presign-upload`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ file_name: file.name, content_type: file.type, file_size: file.size, entity_type: "quarry", entity_id: formData.id, is_primary: isPrimary }),
+        });
+        const presign = await presignResponse.json();
+        if (!presignResponse.ok) throw new Error("presign failed");
+        const uploadResponse = await fetch(presign.upload_url, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
+        if (!uploadResponse.ok) throw new Error("upload failed");
+        const confirmResponse = await fetch(`${baseURL}/media/confirm`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ entity_type: "quarry", entity_id: formData.id, object_key: presign.object_key, file_name: file.name, content_type: file.type, file_size: file.size, is_primary: isPrimary }),
+        });
+        const confirmed = await confirmResponse.json();
+        if (!confirmResponse.ok) throw new Error("confirm failed");
+        nextMedia = [...nextMedia, confirmed.media_file];
+        setFormData((previous) => ({
+          ...previous,
+          media_files: nextMedia,
+          primary_image_url: previous.primary_image_url || confirmed.media_file.public_url,
+        }));
+      }
+      toast.success(files.length === 1 ? "Фотография добавлена" : `Добавлено фотографий: ${files.length}`);
     } catch {
-      toast.error("Не удалось загрузить фотографию");
+      toast.error("Не удалось загрузить одну или несколько фотографий");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const deletePointPhoto = async (mediaId: string) => {
+    if (!window.confirm("Удалить эту фотографию?")) return;
+    setIsSaving(true);
+    try {
+      const response = await fetch(`${baseURL}/media/${mediaId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error("delete failed");
+      setFormData((previous) => {
+        const mediaFiles = (previous.media_files || []).filter((media) => media.id !== mediaId);
+        return {
+          ...previous,
+          media_files: mediaFiles,
+          primary_image_url: mediaFiles.find((media) => media.is_primary)?.public_url || mediaFiles[0]?.public_url || null,
+        };
+      });
+      toast.success("Фотография удалена");
+    } catch {
+      toast.error("Не удалось удалить фотографию");
     } finally {
       setIsSaving(false);
     }
@@ -645,6 +713,20 @@ function EditQuarryModal({
                 ))}
               </ul>
             )}
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              Описание
+            </label>
+            <textarea
+              rows={4}
+              maxLength={5000}
+              value={formData.description || ""}
+              onChange={(event) => setFormData({ ...formData, description: event.target.value })}
+              placeholder="Опишите точку, условия погрузки и ориентиры"
+              className="w-full resize-y bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all"
+            />
           </div>
 
           {/* Контейнер для карты 2ГИС */}
@@ -744,13 +826,57 @@ function EditQuarryModal({
             </div>
           </div>
 
+          {formData.id && (
+            <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-bold text-slate-700">Фотографии</div>
+                  <div className="text-xs text-slate-500">Можно выбрать несколько файлов</div>
+                </div>
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:border-[#2DB0E6] hover:text-[#2DB0E6]">
+                  <ImagePlus className="h-4 w-4" />
+                  Добавить
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={(event) => {
+                      const files = Array.from(event.target.files || []) as File[];
+                      event.target.value = "";
+                      void uploadPointPhotos(files);
+                    }}
+                  />
+                </label>
+              </div>
+              {(formData.media_files || []).length > 0 ? (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  {(formData.media_files || []).map((media) => (
+                    <div key={media.id} className="group relative aspect-square overflow-hidden rounded-xl bg-slate-200">
+                      <img src={media.public_url} alt={media.file_name || "Фотография точки"} className="h-full w-full object-cover" />
+                      {media.is_primary && (
+                        <span className="absolute left-2 top-2 rounded-full bg-slate-900/75 px-2 py-1 text-[10px] font-bold text-white">Основное</span>
+                      )}
+                      <button
+                        type="button"
+                        aria-label="Удалить фотографию"
+                        onClick={() => void deletePointPhoto(media.id)}
+                        className="absolute bottom-2 right-2 grid h-9 w-9 place-items-center rounded-full bg-white/90 text-rose-600 shadow hover:bg-white"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500">
+                  Фотографии пока не добавлены
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="flex items-center gap-3 pt-2">
-            {formData.id && (
-              <label className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-semibold cursor-pointer">
-                Добавить фото
-                <input type="file" accept="image/*" className="hidden" onChange={(event) => event.target.files?.[0] && void uploadPointPhoto(event.target.files[0])} />
-              </label>
-            )}
             <label className="relative inline-flex items-center cursor-pointer">
               <input
                 type="checkbox"

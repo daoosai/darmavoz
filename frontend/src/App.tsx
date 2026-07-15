@@ -460,37 +460,50 @@ function MainContent({
                 </div>
               </div>
 
-              {/* Horizontal Categories List */}
-              <div
-                className="pl-4 mb-6 overflow-x-auto"
-                style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-              >
-                <div className="flex gap-2 pr-4">
-                  <button
-                    onClick={() => setSelectedCategoryId(null)}
-                    className={`px-5 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all duration-200 border ${
-                      selectedCategoryId === null
-                        ? "bg-white border-black text-black"
-                        : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
-                    }`}
-                  >
-                    Все
-                  </button>
-                  {categories.map((cat) => (
+              {/* Delivery direction */}
+              <section className="mx-4 mb-6 overflow-hidden rounded-3xl border border-sky-100 bg-gradient-to-br from-sky-50 to-white shadow-sm">
+                <div className="px-4 pb-3 pt-4">
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#2DB0E6]">
+                    Направление сервиса
+                  </p>
+                  <h2 className="mt-1 text-xl font-black text-slate-900">
+                    Доставка материалов
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Выберите категорию сыпучих материалов
+                  </p>
+                </div>
+                <div
+                  className="overflow-x-auto px-4 pb-4"
+                  style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+                >
+                  <div className="flex gap-2">
                     <button
-                      key={cat.id}
-                      onClick={() => setSelectedCategoryId(cat.id)}
+                      onClick={() => setSelectedCategoryId(null)}
                       className={`px-5 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all duration-200 border ${
-                        selectedCategoryId === cat.id
+                        selectedCategoryId === null
                           ? "bg-white border-black text-black"
                           : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
                       }`}
                     >
-                      {cat?.name}
+                      Все
                     </button>
-                  ))}
+                    {categories.map((cat) => (
+                      <button
+                        key={cat.id}
+                        onClick={() => setSelectedCategoryId(cat.id)}
+                        className={`px-5 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all duration-200 border ${
+                          selectedCategoryId === cat.id
+                            ? "bg-white border-black text-black"
+                            : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
+                        }`}
+                      >
+                        {cat?.name}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              </section>
 
               {/* Product Grid Area */}
               <div className="px-4 flex flex-col gap-6 pb-6">

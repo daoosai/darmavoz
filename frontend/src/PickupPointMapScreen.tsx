@@ -110,6 +110,17 @@ export default function PickupPointMapScreen({ material, onClose, onSelect }: Pr
     carouselPoints.sort((first, second) => (first.distance ?? 0) - (second.distance ?? 0));
   }
 
+  const selectedMediaImages = selected?.media_files
+    ?.map((media) => media.public_url)
+    .filter(Boolean) || [];
+  const selectedImageUrls = Array.from(new Set(
+    selectedMediaImages.length > 0
+      ? selectedMediaImages
+      : selected?.primary_image_url
+        ? [selected.primary_image_url]
+        : [],
+  ));
+
   useEffect(() => {
     if (!("geolocation" in navigator)) {
       setIsLocationResolved(true);
@@ -430,17 +441,33 @@ export default function PickupPointMapScreen({ material, onClose, onSelect }: Pr
           >
             <ChevronDown className="h-5 w-5" />
           </button>
-          <div className="flex gap-4">
-            <div className="grid h-24 w-24 shrink-0 place-items-center overflow-hidden rounded-2xl bg-gray-100 text-gray-400">
-              {selected.primary_image_url ? (
-                <img src={selected.primary_image_url} alt="" className="w-full h-full object-cover" />
-              ) : selected.point_type === "quarry" ? <Mountain /> : <Warehouse />}
-            </div>
-            <div className="min-w-0">
-              <span className="text-xs font-bold uppercase tracking-wide text-sky-500">{TYPE_LABELS[selected.point_type]}</span>
-              <h2 className="truncate text-xl font-bold text-gray-900">{selected.name}</h2>
-              <p className="mt-1 text-sm text-gray-500">{selected.address || "Адрес не указан"}</p>
-            </div>
+          <div className="relative overflow-hidden rounded-2xl bg-gray-100">
+            {selectedImageUrls.length > 0 ? (
+              <div className="hide-scrollbar flex snap-x snap-mandatory overflow-x-auto">
+                {selectedImageUrls.map((imageUrl, index) => (
+                  <img
+                    key={imageUrl}
+                    src={imageUrl}
+                    alt={`${selected.name}, фотография ${index + 1}`}
+                    className="aspect-[16/9] w-full shrink-0 snap-center object-cover"
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="grid aspect-[16/9] place-items-center text-gray-400">
+                {selected.point_type === "quarry" ? <Mountain className="h-12 w-12" /> : <Warehouse className="h-12 w-12" />}
+              </div>
+            )}
+            {selectedImageUrls.length > 1 && (
+              <span className="absolute bottom-3 right-3 rounded-full bg-slate-900/70 px-2.5 py-1 text-xs font-bold text-white">
+                {selectedImageUrls.length} фото
+              </span>
+            )}
+          </div>
+          <div className="mt-4 min-w-0">
+            <span className="text-xs font-bold uppercase tracking-wide text-sky-500">{TYPE_LABELS[selected.point_type]}</span>
+            <h2 className="text-xl font-bold text-gray-900">{selected.name}</h2>
+            <p className="mt-1 text-sm text-gray-500">{selected.address || "Адрес не указан"}</p>
           </div>
           <div className="my-4 space-y-3 rounded-xl bg-gray-50 p-4">
             <div>
@@ -450,6 +477,9 @@ export default function PickupPointMapScreen({ material, onClose, onSelect }: Pr
             <div>
               <span className="block text-xs text-gray-500">Точный адрес</span>
               <p className="mt-1 text-sm font-medium text-gray-900">{selected.address || "Ориентируйтесь по точке на карте"}</p>
+              <p className="mt-1 text-xs text-gray-500">
+                Координаты: {Number(selected.lat).toFixed(6)}, {Number(selected.lon).toFixed(6)}
+              </p>
             </div>
             <div className="flex items-end justify-between gap-3 border-t border-gray-200 pt-3">
               <div>

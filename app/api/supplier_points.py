@@ -9,6 +9,7 @@ from app.models.models import ModerationStatus, Quarry, User
 from app.schemas.quarry import QuarryCreate, QuarryMaterialOfferIn, QuarryOut, QuarryUpdate
 from app.schemas.supplier import SupplierProfileOut, SupplierProfileUpdate
 from app.security.auth import get_current_supplier_user
+from app.services.notifications import schedule_pickup_point_moderation_notification
 from app.services.pickup_points import (
     default_delivery_option_ids,
     default_min_delivery_price,
@@ -178,4 +179,5 @@ async def submit_supplier_point(
     point.moderation_status = ModerationStatus.pending_moderation.value
     point.moderation_comment = None
     await db.commit()
+    schedule_pickup_point_moderation_notification(point)
     return await pickup_point_payload(db, point)

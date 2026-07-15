@@ -23,7 +23,6 @@ export interface PickupPointMarker {
   material_id: string;
   price: number;
   unit: string;
-  min_delivery_price: number;
   primary_image_url?: string | null;
 }
 
@@ -64,12 +63,6 @@ export function calculateDistance(
       * Math.sin(longitudeDelta / 2) ** 2;
 
   return earthRadiusKm * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
-}
-
-function getMinDeliveryPrice(point: PickupPointMarker) {
-  const configuredPrice = Number(point.min_delivery_price);
-  if (configuredPrice > 0) return configuredPrice;
-  return point.point_type === "accumulator" ? 3000 : 5000;
 }
 
 function getClientFacingAddress(address: string | null | undefined) {
@@ -419,7 +412,7 @@ export default function PickupPointMapScreen({ material, onClose, onSelect }: Pr
                     </p>
                   )}
                   <p className="mt-1 text-xs font-medium text-gray-600">
-                    Доставка от: {getMinDeliveryPrice(point).toLocaleString("ru-RU")} ₽
+                    Тариф доставки зависит от машины
                   </p>
                   <button
                     type="button"
@@ -506,7 +499,7 @@ export default function PickupPointMapScreen({ material, onClose, onSelect }: Pr
                 <strong className="text-gray-900">{Number(selected.price).toLocaleString("ru-RU")} ₽/{selected.unit}</strong>
               </div>
               <span className="text-right text-sm font-semibold text-gray-700">
-                Доставка от {getMinDeliveryPrice(selected).toLocaleString("ru-RU")} ₽
+                Итоговая цена — после выбора машины
               </span>
             </div>
           </div>

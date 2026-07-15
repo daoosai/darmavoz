@@ -218,7 +218,8 @@ async def test_admin_approve_applies_quarry_defaults(
         delivery_option = DeliveryOption(
             capacity_m3=10,
             title=f"Approval truck {unique}",
-            min_delivery_price=5000,
+            min_price_quarry=5000,
+            min_price_warehouse=3000,
             is_active=True,
             sort_order=0,
         )

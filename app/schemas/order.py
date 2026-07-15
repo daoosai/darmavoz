@@ -145,27 +145,20 @@ class ClientOrderCalculationRequest(BaseModel):
         return value
 
 
-class ClientOrderCalculationOut(BaseModel):
+class ClientOrderCalculationOptionOut(BaseModel):
     quarry_id: UUID
     quarry_name: str
-    pickup_point_type: str = "quarry"
-    material_unit_price: float = 0
-    minimum_delivery_price: float = 0
-    delivery_option_id: UUID | None = None
-    mileage_km: float
+    point_type: str
+    rating: float = 5.0
+    distance: float
     material_cost: float
     delivery_cost: float
     total_amount: float
 
-    @computed_field(return_type=float)
-    @property
-    def estimated_total_amount(self) -> float:
-        return round((self.total_amount or 0.0) + (self.delivery_cost or 0.0), 2)
 
-    @computed_field(return_type=float)
-    @property
-    def distance(self) -> float:
-        return round(self.mileage_km, 2)
+class ClientOrderCalculationOut(BaseModel):
+    best_option: ClientOrderCalculationOptionOut
+    alternatives: list[ClientOrderCalculationOptionOut] = Field(default_factory=list)
 
 
 class LogistOrderCreate(BaseModel):

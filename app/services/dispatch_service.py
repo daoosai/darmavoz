@@ -51,7 +51,6 @@ from app.services.notifications import (
     schedule_logist_no_driver_found_notification,
     schedule_logist_timeout_notification,
 )
-from app.services.pickup_points import default_min_delivery_price
 from app.services.order_pricing import calculate_client_order_pricing, resolve_min_delivery_price
 from app.services.redis_client import enqueue_dispatch_order
 from app.utils.phones import normalize_phone
@@ -577,13 +576,9 @@ async def create_checkout_order(
                 2,
             )
             point_unit_price = unit_price
-            point_minimum = selected_quarry.min_delivery_price
-            if point_minimum is None:
-                point_minimum = default_min_delivery_price(selected_quarry.point_type) or 0
             delivery_cost = max(
                 round(resolved_mileage_km * delivery_rate_per_km_snapshot, 2),
-                resolve_min_delivery_price(delivery_option),
-                round(float(point_minimum), 2),
+                resolve_min_delivery_price(delivery_option, selected_quarry.point_type),
             )
         route_calculated_at = utcnow()
         calculation_source = "yandex_auto"
@@ -703,6 +698,11 @@ async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate)
     resolved_delivery_cost = 0.0
     resolved_total_amount = round(payload.total_amount, 2) if payload.total_amount is not None else None
     resolved_calculation_source: str | None = None
+    selected_quarry = (
+        await session.get(Quarry, resolved_quarry_id)
+        if resolved_quarry_id is not None
+        else None
+    )
 
     if payload.calculation_source == "manual":
         resolved_calculation_source = "manual"
@@ -721,7 +721,10 @@ async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate)
         if resolved_mileage_km is not None and raw_delivery_rate is not None:
             resolved_delivery_cost = max(
                 round(resolved_mileage_km * delivery_rate_per_km, 2),
-                resolve_min_delivery_price(delivery_option),
+                resolve_min_delivery_price(
+                    delivery_option,
+                    selected_quarry.point_type if selected_quarry is not None else "quarry",
+                ),
             )
     elif resolved_delivery_lat is not None and resolved_delivery_lon is not None:
         pricing = await calculate_client_order_pricing(

@@ -113,6 +113,7 @@ class QuarryUpdate(BaseModel):
 class QuarryOut(QuarryBase):
     id: UUID
     min_delivery_price: float | None = None
+    rating: float = 5.0
     is_active: bool
     moderation_status: ModerationStatusValue
     moderation_comment: str | None = None

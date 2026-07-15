@@ -16,7 +16,13 @@ from app.models.models import (
 from app.services.order_pricing import calculate_client_order_pricing
 
 
-async def _catalog_entities(session, *, capacity: float, vehicle_minimum: float):
+async def _catalog_entities(
+    session,
+    *,
+    capacity: float,
+    quarry_minimum: float = 5000,
+    warehouse_minimum: float = 3000,
+):
     category = Category(
         name=f"Category {uuid.uuid4().hex[:8]}",
         slug=f"category-{uuid.uuid4().hex}",
@@ -37,7 +43,8 @@ async def _catalog_entities(session, *, capacity: float, vehicle_minimum: float)
         capacity_m3=capacity,
         title=f"Truck {capacity}",
         delivery_rate_per_km=100,
-        min_delivery_price=vehicle_minimum,
+        min_price_quarry=quarry_minimum,
+        min_price_warehouse=warehouse_minimum,
         is_active=True,
         sort_order=0,
     )
@@ -91,7 +98,7 @@ async def _point_with_offer(
 async def test_public_map_returns_only_approved_configured_points(client, session_factory):
     async with session_factory() as session:
         material, delivery_option = await _catalog_entities(
-            session, capacity=5, vehicle_minimum=3000
+            session, capacity=5
         )
         approved = await _point_with_offer(
             session,
@@ -124,10 +131,10 @@ async def test_public_map_returns_only_approved_configured_points(client, sessio
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("point_type", "capacity", "vehicle_minimum", "point_minimum", "expected"),
+    ("point_type", "capacity", "point_minimum", "expected"),
     [
-        ("accumulator", 5, 3000, 3000, 3000),
-        ("quarry", 10, 4000, 5000, 5000),
+        ("accumulator", 5, 3000, 3000),
+        ("quarry", 10, 5000, 5000),
     ],
 )
 async def test_point_type_minimum_and_offer_price_are_used(
@@ -135,7 +142,6 @@ async def test_point_type_minimum_and_offer_price_are_used(
     session_factory,
     point_type,
     capacity,
-    vehicle_minimum,
     point_minimum,
     expected,
 ):
@@ -145,7 +151,7 @@ async def test_point_type_minimum_and_offer_price_are_used(
     monkeypatch.setattr("app.services.order_pricing.get_2gis_route_distance", fixed_distance)
     async with session_factory() as session:
         material, delivery_option = await _catalog_entities(
-            session, capacity=capacity, vehicle_minimum=vehicle_minimum
+            session, capacity=capacity
         )
         point = await _point_with_offer(
             session,
@@ -177,13 +183,14 @@ async def test_delivery_option_must_be_allowed_for_point(monkeypatch, session_fa
     monkeypatch.setattr("app.services.order_pricing.get_2gis_route_distance", fixed_distance)
     async with session_factory() as session:
         material, small_truck = await _catalog_entities(
-            session, capacity=5, vehicle_minimum=3000
+            session, capacity=5
         )
         large_truck = DeliveryOption(
             capacity_m3=20,
             title="Large truck",
             delivery_rate_per_km=100,
-            min_delivery_price=5000,
+            min_price_quarry=5000,
+            min_price_warehouse=3000,
             is_active=True,
             sort_order=1,
         )
@@ -209,3 +216,67 @@ async def test_delivery_option_must_be_allowed_for_point(monkeypatch, session_fa
             )
 
     assert exc_info.value.detail == "DELIVERY_OPTION_NOT_AVAILABLE_AT_POINT"
+
+
+@pytest.mark.asyncio
+async def test_calculate_returns_best_option_and_sorted_alternatives(
+    client,
+    session_factory,
+    monkeypatch,
+):
+    async def fixed_distance(lat_a, *_args):
+        return 10.0 if lat_a == 57.15 else 2.0
+
+    monkeypatch.setattr("app.services.order_pricing.get_2gis_route_distance", fixed_distance)
+    async with session_factory() as session:
+        material, delivery_option = await _catalog_entities(session, capacity=5)
+        quarry = await _point_with_offer(
+            session,
+            material=material,
+            delivery_option=delivery_option,
+            point_type="quarry",
+            point_minimum=100,
+            offer_price=600,
+        )
+        accumulator = await _point_with_offer(
+            session,
+            material=material,
+            delivery_option=delivery_option,
+            point_type="accumulator",
+            point_minimum=9000,
+            offer_price=700,
+        )
+        accumulator.lat = 58.0
+        accumulator.rating = 4.8
+        await session.commit()
+
+        material_id = material.id
+        delivery_option_id = delivery_option.id
+        quarry_id = quarry.id
+        accumulator_id = accumulator.id
+
+    response = await client.post(
+        "/api/v1/client/orders/calculate",
+        json={
+            "material_id": str(material_id),
+            "delivery_option_id": str(delivery_option_id),
+            "delivery_lat": 57.2,
+            "delivery_lon": 65.6,
+            "quantity": 1,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["best_option"] == {
+        "quarry_id": str(accumulator_id),
+        "quarry_name": accumulator.name,
+        "point_type": "accumulator",
+        "rating": 4.8,
+        "distance": 2.0,
+        "delivery_cost": 3000.0,
+        "material_cost": 3500.0,
+        "total_amount": 6500.0,
+    }
+    assert [option["quarry_id"] for option in payload["alternatives"]] == [str(quarry_id)]
+    assert payload["alternatives"][0]["total_amount"] == 8000.0

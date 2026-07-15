@@ -294,6 +294,7 @@ class Quarry(Base):
     lat: Mapped[float] = mapped_column(Float, nullable=False)
     lon: Mapped[float] = mapped_column(Float, nullable=False)
     min_delivery_price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
+    rating: Mapped[float] = mapped_column(Float, default=5.0, server_default="5.0", nullable=False)
     owner_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         ForeignKey("users.id"), nullable=True, index=True
     )
@@ -377,7 +378,12 @@ class DeliveryOption(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     base_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     delivery_rate_per_km: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    min_delivery_price: Mapped[float] = mapped_column(Float, default=5000.0, nullable=False)
+    min_price_quarry: Mapped[float] = mapped_column(
+        Float, default=5000.0, server_default="5000", nullable=False
+    )
+    min_price_warehouse: Mapped[float] = mapped_column(
+        Float, default=3000.0, server_default="3000", nullable=False
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     image_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)

@@ -12,6 +12,28 @@ import { useAuthStore, useCartStore, useAddressStore } from "./store";
 import { getImageUrl, baseURL } from "./utils";
 import toast from "react-hot-toast";
 
+interface MarketplaceOption {
+  quarry_id: string;
+  quarry_name: string;
+  point_type: string;
+  rating: number;
+  distance: number;
+  delivery_cost: number;
+  material_cost: number;
+  total_amount: number;
+}
+
+interface MarketplaceCalculation {
+  best_option: MarketplaceOption;
+  alternatives: MarketplaceOption[];
+}
+
+type CalculationResult = MarketplaceCalculation | { error: true };
+
+const isMarketplaceCalculation = (
+  result: CalculationResult | undefined,
+): result is MarketplaceCalculation => Boolean(result && "best_option" in result);
+
 export default function CartScreen({
   onGoToHome,
   onGoToOrders,
@@ -35,7 +57,7 @@ export default function CartScreen({
   const { selectedAddress, setSelectedAddress } = useAddressStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [globalAddress, setGlobalAddress] = useState(selectedAddress);
-  const [calcResults, setCalcResults] = useState<Record<string, any>>({});
+  const [calcResults, setCalcResults] = useState<Record<string, CalculationResult>>({});
   const [deliveryCoords, setDeliveryCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
 
@@ -78,7 +100,7 @@ export default function CartScreen({
         setDeliveryCoords({ lat, lon });
 
         // Fetch calculation for each item
-        const newResults: Record<string, any> = {};
+        const newResults: Record<string, CalculationResult> = {};
         for (const item of cartItems) {
           const res = await fetch(`${baseURL}/client/orders/calculate`, {
             method: "POST",
@@ -88,10 +110,10 @@ export default function CartScreen({
             },
             body: JSON.stringify({
               material_id: item.material.id,
-              quarry_id: item.pickupPoint?.id,
               delivery_option_id: item.deliveryOption.id,
               delivery_lat: lat,
               delivery_lon: lon,
+              quantity: item.quantity,
             }),
           });
           if (res.ok) {
@@ -105,7 +127,7 @@ export default function CartScreen({
         setDeliveryCoords(null);
         console.error("Calculation error", e);
         // If geocode fails or network fails, we can also set error state
-        const errResults: Record<string, any> = {};
+        const errResults: Record<string, CalculationResult> = {};
         for (const item of cartItems) {
           errResults[item.id] = { error: true };
         }
@@ -124,6 +146,21 @@ export default function CartScreen({
     setSelectedAddress(e.target.value);
   };
 
+  const selectMarketplaceOption = (itemId: string, selected: MarketplaceOption) => {
+    setCalcResults((currentResults) => {
+      const current = currentResults[itemId];
+      if (!isMarketplaceCalculation(current)) return currentResults;
+      const allOptions = [current.best_option, ...current.alternatives];
+      return {
+        ...currentResults,
+        [itemId]: {
+          best_option: selected,
+          alternatives: allOptions.filter((option) => option.quarry_id !== selected.quarry_id),
+        },
+      };
+    });
+  };
+
   const handleCheckout = async () => {
     if (cartItems.length === 0 || !globalAddress.trim()) return;
 
@@ -135,8 +172,16 @@ export default function CartScreen({
     try {
       setIsSubmitting(true);
 
-      const requests = cartItems.map((item) =>
-        fetch(`${baseURL}/orders/checkout`, {
+      const requests = cartItems.map((item) => {
+        const calculation = calcResults[item.id];
+        const selectedOption = isMarketplaceCalculation(calculation)
+          ? calculation.best_option
+          : null;
+        const orderedVolume = item.deliveryOption.capacity_m3 * item.quantity;
+        const expectedMaterialUnitPrice = selectedOption && orderedVolume > 0
+          ? selectedOption.material_cost / orderedVolume
+          : item.pickupPoint?.price;
+        return fetch(`${baseURL}/orders/checkout`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -149,14 +194,14 @@ export default function CartScreen({
             notes: item.comment || "",
             source: "web",
             quantity: item.quantity,
-            quarry_id: item.pickupPoint?.id || calcResults[item.id]?.quarry_id,
-            mileage_km: calcResults[item.id]?.mileage_km,
+            quarry_id: selectedOption?.quarry_id || item.pickupPoint?.id,
+            mileage_km: selectedOption?.distance,
             delivery_lat: deliveryCoords?.lat,
             delivery_lon: deliveryCoords?.lon,
-            expected_material_unit_price: item.pickupPoint?.price,
+            expected_material_unit_price: expectedMaterialUnitPrice,
           }),
-        }),
-      );
+        });
+      });
 
       const responses = await Promise.all(requests);
       const hasErrors = responses.some((res) => !res.ok);
@@ -181,28 +226,21 @@ export default function CartScreen({
 
   const totalMaterialCost = getTotalPrice();
   const hasCalculations = Object.keys(calcResults).length > 0;
-  const hasCalculationError = cartItems.some(
-    (item) => calcResults[item.id]?.error,
+  const hasCalculationError = hasCalculations && cartItems.some(
+    (item) => !isMarketplaceCalculation(calcResults[item.id]),
   );
 
   const totalDeliveryCost = cartItems.reduce((acc, item) => {
     const res = calcResults[item.id];
-    const safeDeliveryPrice = Number(res?.delivery_cost) || 0;
-    return acc + safeDeliveryPrice * item.quantity;
+    return acc + (isMarketplaceCalculation(res) ? Number(res.best_option.delivery_cost) || 0 : 0);
   }, 0);
 
   const finalTotal = Math.round(
     hasCalculations && !isCalculating && !hasCalculationError
       ? cartItems.reduce((acc, item) => {
           const res = calcResults[item.id];
-          if (!res || res.error) return acc;
-          const safeMaterialPrice =
-            Number(res.material_cost ?? res.total_amount) || 0;
-          const safeDeliveryPrice = Number(res.delivery_cost) || 0;
-          const safeEstimated =
-            Number(res.estimated_total_amount) ||
-            safeMaterialPrice + safeDeliveryPrice;
-          return acc + safeEstimated * item.quantity;
+          if (!isMarketplaceCalculation(res)) return acc;
+          return acc + (Number(res.best_option.total_amount) || 0);
         }, 0)
       : totalMaterialCost,
   );
@@ -337,110 +375,104 @@ export default function CartScreen({
           </button>
         </div>
 
-        {/* Calculation Result / Receipt */}
+        {/* Marketplace calculation result */}
         {!globalAddress.trim() ? (
           <div className="p-4 bg-blue-50 text-blue-700 rounded-xl text-sm mt-4">
-            💡 Укажите адрес доставки, чтобы мы рассчитали стоимость и подобрали ближайший карьер.
+            💡 Укажите адрес доставки, чтобы мы сравнили цены всех доступных точек.
+          </div>
+        ) : isCalculating ? (
+          <div className="flex flex-col items-center justify-center gap-3 rounded-[24px] border border-slate-100 bg-white py-10 shadow-sm">
+            <Loader2 className="h-7 w-7 animate-spin text-[#2DB0E6]" />
+            <span className="text-sm font-medium text-slate-500">
+              Сравниваем доступные варианты...
+            </span>
           </div>
         ) : hasCalculationError ? (
           <div className="p-4 bg-orange-50 text-orange-700 rounded-xl text-sm mt-4">
-            Доставка этого материала по вашему адресу временно невозможна (нет активных карьеров).
+            Доставка этого материала по вашему адресу временно невозможна: подходящие точки не найдены.
           </div>
-        ) : (
-          (hasCalculations || isCalculating) && (
-            <div className="bg-white rounded-[24px] p-5 shadow-sm border border-slate-100 flex flex-col gap-4 mt-2">
-              <h3 className="font-semibold text-slate-800 text-[16px]">
-                Заказ
-              </h3>
+        ) : hasCalculations ? (
+          <div className="flex flex-col gap-5">
+            {cartItems.map((item) => {
+              const calculation = calcResults[item.id];
+              if (!isMarketplaceCalculation(calculation)) return null;
+              const best = calculation.best_option;
+              const volume = item.deliveryOption.capacity_m3 * item.quantity;
 
-              {isCalculating ? (
-                <div className="flex justify-center items-center py-6 flex-col gap-3">
-                  <Loader2 className="w-6 h-6 animate-spin text-[#2DB0E6]" />
-                  <span className="text-sm text-slate-500 font-medium">
-                    Вычисляем стоимость...
-                  </span>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-4">
-                  {cartItems.map((item) => {
-                    const res = calcResults[item.id];
-                    if (!res || res.error) return null;
+              return (
+                <section key={item.id} className="rounded-[24px] border border-slate-100 bg-white p-4 shadow-sm">
+                  <div className="mb-3 flex items-start justify-between gap-3 px-1">
+                    <div>
+                      <h3 className="font-bold text-slate-900">{item.material.name}</h3>
+                      <p className="text-xs text-slate-500">{volume} м³ · {item.deliveryOption.title}</p>
+                    </div>
+                  </div>
 
-                    const distanceKm = res.distance_km || res.mileage_km;
-                    const safeMaterialPrice =
-                      Number(res.material_cost ?? res.total_amount) || 0;
-                    const safeDeliveryPrice = Number(res.delivery_cost) || 0;
-                    const safeEstimated =
-                      Number(res.estimated_total_amount) ||
-                      safeMaterialPrice + safeDeliveryPrice;
-
-                    const deliveryCost = Math.round(
-                      safeDeliveryPrice * item.quantity,
-                    );
-                    const totalAmount = Math.round(
-                      safeMaterialPrice * item.quantity,
-                    );
-                    const estimatedTotalAmount = Math.round(
-                      safeEstimated * item.quantity,
-                    );
-                    const loadingPoint = res.loading_point || res.quarry_name;
-                    const volume =
-                      item.deliveryOption.capacity_m3 * item.quantity;
-
-                    return (
-                      <div
-                        key={item.id}
-                        className="flex flex-col gap-2 pb-5 border-b border-slate-100 last:border-0 last:pb-0"
-                      >
-                        <div className="flex justify-between items-start text-slate-900 mb-1">
-                          <span className="font-bold text-[16px] leading-tight pr-2">
-                            {item.material.name}
-                          </span>
-                          <span className="font-bold text-[16px] whitespace-nowrap">
-                            {totalAmount.toLocaleString("ru-RU")} ₽
-                          </span>
-                        </div>
-
-                        <div className="flex flex-col gap-2 text-[14px] text-slate-600 bg-slate-50/50 p-3 rounded-xl border border-slate-50">
-                          <div className="flex justify-between items-start">
-                            <span>Объем машины:</span>
-                            <span className="font-medium text-slate-800">
-                              {volume} м³
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-start">
-                            <span>Выбранная точка:</span>
-                            <span className="font-medium text-slate-800 text-right max-w-[65%] leading-tight">
-                              {loadingPoint}
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-start">
-                            <span>
-                              Доставка:{" "}
-                              <span className="text-slate-500 text-[13px]">
-                                ({distanceKm} км)
-                              </span>
-                            </span>
-                            <span className="font-medium text-slate-800">
-                              {deliveryCost.toLocaleString("ru-RU")} ₽
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex justify-between text-[16px] font-bold text-slate-900 mt-1 pl-1 pr-1">
-                          <span>К оплате:</span>
-                          <span className="text-[#2DB0E6] text-[18px]">
-                            {estimatedTotalAmount.toLocaleString("ru-RU")} ₽
-                          </span>
-                        </div>
+                  <div className="rounded-2xl bg-gradient-to-br from-emerald-500 to-sky-500 p-4 text-white shadow-lg shadow-sky-100">
+                    <div className="mb-3 inline-flex rounded-full bg-white/20 px-3 py-1 text-xs font-bold uppercase tracking-wide">
+                      Самый выгодный вариант
+                    </div>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h4 className="text-lg font-black leading-tight">{best.quarry_name}</h4>
+                        <p className="mt-1 text-sm text-white/85">
+                          ⭐ {Number(best.rating).toFixed(1)} · {Number(best.distance).toFixed(1)} км
+                        </p>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )
-        )}
+                      <span className="rounded-full bg-white/15 px-2 py-1 text-[11px] font-semibold">
+                        {best.point_type === "quarry" ? "Карьер" : "Накопитель"}
+                      </span>
+                    </div>
+                    <div className="mt-4 grid grid-cols-3 gap-2 border-t border-white/20 pt-3 text-center">
+                      <div>
+                        <span className="block text-[10px] text-white/70">Материал</span>
+                        <strong className="text-sm">{Math.round(best.material_cost).toLocaleString("ru-RU")} ₽</strong>
+                      </div>
+                      <div>
+                        <span className="block text-[10px] text-white/70">Доставка</span>
+                        <strong className="text-sm">{Math.round(best.delivery_cost).toLocaleString("ru-RU")} ₽</strong>
+                      </div>
+                      <div>
+                        <span className="block text-[10px] text-white/70">Итого</span>
+                        <strong className="text-base">{Math.round(best.total_amount).toLocaleString("ru-RU")} ₽</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  {calculation.alternatives.length > 0 && (
+                    <div className="mt-4">
+                      <h4 className="mb-2 px-1 text-sm font-bold text-slate-800">Другие варианты</h4>
+                      <div className="hide-scrollbar -mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-1">
+                        {calculation.alternatives.map((option) => (
+                          <article key={option.quarry_id} className="w-[230px] shrink-0 snap-start rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                            <div className="flex items-start justify-between gap-2">
+                              <h5 className="line-clamp-2 text-sm font-bold text-slate-900">{option.quarry_name}</h5>
+                              <span className="shrink-0 text-xs text-amber-500">⭐ {Number(option.rating).toFixed(1)}</span>
+                            </div>
+                            <p className="mt-1 text-xs text-slate-500">{Number(option.distance).toFixed(1)} км от адреса</p>
+                            <div className="mt-3 flex items-end justify-between gap-3">
+                              <div>
+                                <span className="block text-[10px] uppercase text-slate-400">Итого</span>
+                                <strong className="text-base text-slate-900">{Math.round(option.total_amount).toLocaleString("ru-RU")} ₽</strong>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => selectMarketplaceOption(item.id, option)}
+                                className="rounded-xl bg-[#2DB0E6] px-3 py-2 text-xs font-bold text-white hover:bg-[#209ccf]"
+                              >
+                                Выбрать
+                              </button>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </section>
+              );
+            })}
+          </div>
+        ) : null}
       </div>
 
       {/* Sticky Bottom Bar */}

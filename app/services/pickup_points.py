@@ -213,6 +213,7 @@ async def pickup_point_payload(
         "lat": point.lat,
         "lon": point.lon,
         "min_delivery_price": point.min_delivery_price,
+        "rating": point.rating,
         "is_active": point.is_active,
         "moderation_status": point.moderation_status,
         "moderation_comment": point.moderation_comment,

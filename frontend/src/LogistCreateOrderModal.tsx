@@ -364,14 +364,15 @@ export default function LogistCreateOrderModal({
         }
 
         if (!cancelled) {
+          const bestOption = data.best_option;
           const materialCost =
             computedMaterialCost ||
-            Number(data.material_cost ?? data.total_amount ?? 0);
-          const deliveryCost = Number(data.delivery_cost ?? 0);
+            Number(bestOption?.material_cost ?? 0);
+          const deliveryCost = Number(bestOption?.delivery_cost ?? 0);
           setCalculationResult({
-            quarry_id: data.quarry_id,
-            quarry_name: data.quarry_name,
-            mileage_km: Number(data.mileage_km ?? data.distance ?? 0),
+            quarry_id: bestOption?.quarry_id,
+            quarry_name: bestOption?.quarry_name,
+            mileage_km: Number(bestOption?.distance ?? 0),
             material_cost: materialCost,
             delivery_cost: deliveryCost,
             estimated_total_amount: materialCost + deliveryCost,

@@ -6,12 +6,13 @@ from app.models.models import Client, Order
 from app.schemas.order import (
     CheckoutRequest,
     ClientOrderCalculationOut,
+    ClientOrderCalculationOptionOut,
     ClientOrderCalculationRequest,
     OrderOut,
 )
 from app.security.auth import get_optional_current_client
 from app.services.dispatch_service import create_checkout_order
-from app.services.order_pricing import calculate_client_order_pricing
+from app.services.order_pricing import ClientOrderPricing, calculate_client_order_options
 
 router = APIRouter(prefix="/client/orders")
 
@@ -21,26 +22,30 @@ async def calculate_order(
     payload: ClientOrderCalculationRequest,
     db: AsyncSession = Depends(get_db),
 ) -> ClientOrderCalculationOut:
-    pricing = await calculate_client_order_pricing(
+    pricing_options = await calculate_client_order_options(
         db,
         material_id=payload.material_id,
         delivery_option_id=payload.delivery_option_id,
         delivery_lat=payload.delivery_lat,
         delivery_lon=payload.delivery_lon,
         quantity=payload.quantity,
-        quarry_id=payload.quarry_id,
     )
+
+    def serialize_option(pricing: ClientOrderPricing) -> ClientOrderCalculationOptionOut:
+        return ClientOrderCalculationOptionOut(
+            quarry_id=pricing.quarry.id,
+            quarry_name=pricing.quarry.name,
+            point_type=pricing.quarry.point_type,
+            rating=float(pricing.quarry.rating),
+            distance=pricing.mileage_km,
+            material_cost=pricing.material_cost,
+            delivery_cost=pricing.delivery_cost,
+            total_amount=pricing.total_amount,
+        )
+
     return ClientOrderCalculationOut(
-        quarry_id=pricing.quarry.id,
-        quarry_name=pricing.quarry.name,
-        pickup_point_type=pricing.quarry.point_type,
-        material_unit_price=pricing.material_unit_price,
-        minimum_delivery_price=pricing.minimum_delivery_price,
-        delivery_option_id=pricing.delivery_option.id,
-        mileage_km=pricing.mileage_km,
-        material_cost=pricing.material_cost,
-        delivery_cost=pricing.delivery_cost,
-        total_amount=pricing.material_cost,
+        best_option=serialize_option(pricing_options[0]),
+        alternatives=[serialize_option(pricing) for pricing in pricing_options[1:]],
     )
 
 

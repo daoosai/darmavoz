@@ -65,7 +65,8 @@ interface AdminDeliveryOption {
   capacity_m3: number;
   base_price: number;
   delivery_rate_per_km?: number;
-  min_delivery_price?: number;
+  min_price_quarry?: number;
+  min_price_warehouse?: number;
   is_active: boolean;
   media_files?: AdminMediaFile[];
   primary_image_url?: string;
@@ -920,7 +921,8 @@ export default function AdminDashboardScreen({
         delivery_rate_per_km: editingDelivery.delivery_rate_per_km
           ? Number(editingDelivery.delivery_rate_per_km)
           : null,
-        min_delivery_price: Number(editingDelivery.min_delivery_price || 5000),
+        min_price_quarry: Number(editingDelivery.min_price_quarry ?? 5000),
+        min_price_warehouse: Number(editingDelivery.min_price_warehouse ?? 3000),
         is_active: editingDelivery.is_active ?? true,
         sort_order: 10,
       };
@@ -1327,7 +1329,8 @@ export default function AdminDashboardScreen({
       setEditingDelivery({
         is_active: true,
         capacity_m3: 0,
-        min_delivery_price: 5000,
+        min_price_quarry: 5000,
+        min_price_warehouse: 3000,
       });
       setIsDeliveryModalOpen(true);
     }
@@ -2134,7 +2137,8 @@ export default function AdminDashboardScreen({
                               <th className="px-6 py-4">Фото</th>
                               <th className="px-6 py-4">Название</th>
                               <th className="px-6 py-4">Кубатура (м³)</th>
-                              <th className="px-6 py-4">Минимальная доставка</th>
+                              <th className="px-6 py-4">Минималка с карьера</th>
+                              <th className="px-6 py-4">Минималка с накопителя</th>
                               <th className="px-6 py-4">Ставка за км</th>
                               <th className="px-6 py-4">Статус</th>
                               <th className="px-6 py-4 text-right">Действия</th>
@@ -2174,7 +2178,10 @@ export default function AdminDashboardScreen({
                                     {opt.capacity_m3} м³
                                   </td>
                                   <td className="px-6 py-4 text-sm font-medium">
-                                    {opt.min_delivery_price ?? 5000} ₽
+                                    {opt.min_price_quarry ?? 5000} ₽
+                                  </td>
+                                  <td className="px-6 py-4 text-sm font-medium">
+                                    {opt.min_price_warehouse ?? 3000} ₽
                                   </td>
                                   <td className="px-6 py-4 text-sm font-medium whitespace-nowrap">
                                     {opt.delivery_rate_per_km
@@ -2277,8 +2284,10 @@ export default function AdminDashboardScreen({
                                       Кубатура: {opt.capacity_m3} м³
                                     </span>
                                     <span className="text-sm text-slate-500">
-                                      Минимальная доставка:{" "}
-                                      {opt.min_delivery_price ?? 5000} ₽
+                                      Минималка с карьера: {opt.min_price_quarry ?? 5000} ₽
+                                    </span>
+                                    <span className="text-sm text-slate-500">
+                                      Минималка с накопителя: {opt.min_price_warehouse ?? 3000} ₽
                                     </span>
                                     <span className="text-sm text-slate-500">
                                       Ставка за км:{" "}
@@ -3300,18 +3309,39 @@ export default function AdminDashboardScreen({
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                    Минимальная доставка (₽)
+                    Минималка с карьера (₽)
                   </label>
                   <input
                     type="number"
                     step="0.01"
                     min="0"
                     placeholder="Например, 5000"
-                    value={editingDelivery.min_delivery_price ?? ""}
+                    value={editingDelivery.min_price_quarry ?? ""}
                     onChange={(e) =>
                       setEditingDelivery({
                         ...editingDelivery,
-                        min_delivery_price: e.target.value
+                        min_price_quarry: e.target.value
+                          ? parseFloat(e.target.value)
+                          : undefined,
+                      })
+                    }
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    Минималка с накопителя (₽)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="Например, 3000"
+                    value={editingDelivery.min_price_warehouse ?? ""}
+                    onChange={(e) =>
+                      setEditingDelivery({
+                        ...editingDelivery,
+                        min_price_warehouse: e.target.value
                           ? parseFloat(e.target.value)
                           : undefined,
                       })

@@ -5,9 +5,18 @@ import {
   ImageIcon,
   Loader2,
   MapPin,
+  Minus,
+  Plus,
+  Truck,
 } from "lucide-react";
-import { useAuthStore, useCartStore, useAddressStore } from "./store";
-import { getImageUrl, baseURL, resolveMediaUrl } from "./utils";
+import {
+  findDeliveryOptionForVolume,
+  getDeliveryOptionsForVolume,
+  useAuthStore,
+  useCartStore,
+  useAddressStore,
+} from "./store";
+import { baseURL, resolveMediaUrl } from "./utils";
 import toast from "react-hot-toast";
 import { MaterialProps } from "./MaterialDetailScreen";
 import PickupPointMapScreen, { PickupPointSelection } from "./PickupPointMapScreen";
@@ -40,6 +49,12 @@ const isMarketplaceCalculation = (
   result: CalculationResult | undefined,
 ): result is MarketplaceCalculation => Boolean(result && "best_option" in result);
 
+const MIN_VOLUME_M3 = 5;
+const VOLUME_STEP_M3 = 1;
+
+const getCartItemVolume = (item: ReturnType<typeof useCartStore.getState>["cartItems"][number]) =>
+  Number(item.volume ?? item.deliveryOption.capacity_m3 * item.quantity);
+
 export default function CartScreen({
   onGoToHome,
   onGoToOrders,
@@ -56,6 +71,7 @@ export default function CartScreen({
     removeFromCart,
     getTotalPrice,
     clearCart,
+    updateItemVolume,
   } = useCartStore();
   const { role, token } = useAuthStore();
   const { selectedAddress, setSelectedAddress } = useAddressStore();
@@ -66,6 +82,7 @@ export default function CartScreen({
   const [isCalculating, setIsCalculating] = useState(false);
   const [preferredPointIds, setPreferredPointIds] = useState<Record<string, string>>({});
   const [mapContext, setMapContext] = useState<MapContext | null>(null);
+  const [draftVolumes, setDraftVolumes] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (!token || role !== "client") {
@@ -77,6 +94,55 @@ export default function CartScreen({
   useEffect(() => {
     setGlobalAddress(selectedAddress);
   }, [selectedAddress]);
+
+  useEffect(() => {
+    setDraftVolumes((current) => {
+      const next: Record<string, number> = {};
+      cartItems.forEach((item) => {
+        next[item.id] = current[item.id] ?? getCartItemVolume(item);
+      });
+      const currentKeys = Object.keys(current);
+      const nextKeys = Object.keys(next);
+      const isUnchanged =
+        currentKeys.length === nextKeys.length &&
+        nextKeys.every((key) => current[key] === next[key]);
+      return isUnchanged ? current : next;
+    });
+  }, [cartItems]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      cartItems.forEach((item) => {
+        const draftVolume = draftVolumes[item.id];
+        if (draftVolume == null || draftVolume === getCartItemVolume(item)) return;
+        updateItemVolume(item.id, draftVolume);
+      });
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [cartItems, draftVolumes, updateItemVolume]);
+
+  const changeDraftVolume = (
+    item: ReturnType<typeof useCartStore.getState>["cartItems"][number],
+    direction: number,
+  ) => {
+    const deliveryOptions = getDeliveryOptionsForVolume([
+      item.deliveryOption,
+      ...(item.material.delivery_options || []),
+    ]);
+    const maxVolume = Number(deliveryOptions.at(-1)?.capacity_m3 || MIN_VOLUME_M3);
+    const currentVolume = draftVolumes[item.id] ?? getCartItemVolume(item);
+    const nextVolume = Math.min(
+      maxVolume,
+      Math.max(MIN_VOLUME_M3, currentVolume + direction * VOLUME_STEP_M3),
+    );
+    if (
+      nextVolume === currentVolume ||
+      !findDeliveryOptionForVolume(deliveryOptions, nextVolume)
+    ) {
+      return;
+    }
+    setDraftVolumes((current) => ({ ...current, [item.id]: nextVolume }));
+  };
 
   useEffect(() => {
     const calculateDelivery = async () => {
@@ -314,53 +380,88 @@ export default function CartScreen({
 
         {/* List of items */}
         <div className="flex flex-col gap-4 mb-6">
-          {cartItems.map((item) => (
-            <div
-              key={item.id}
-              className="bg-white p-3 rounded-[24px] flex flex-row items-start shadow-sm border border-slate-100"
-            >
-              <div className="w-[80px] h-[80px] bg-slate-100 rounded-[16px] overflow-hidden shrink-0 flex items-center justify-center">
-                {getImageUrl(item.material) !== "/placeholder.jpg" ? (
-                  <img
-                    src={getImageUrl(item.material)}
-                    alt={item.material?.name}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <ImageIcon className="w-6 h-6 text-slate-300" />
-                )}
-              </div>
-              <div className="flex flex-col justify-between flex-1 ml-3 h-[80px]">
-                <div className="flex justify-between items-start">
-                  <h3 className="font-bold text-[16px] text-slate-900 leading-tight line-clamp-1">
-                    {item.material?.name}
-                  </h3>
-                  <button
-                    onClick={() => removeFromCart(item.id)}
-                    className="p-1 -mt-1 -mr-1 text-slate-400 hover:text-red-500 hover:bg-slate-50 transition-colors rounded-full"
-                  >
-                    <X className="w-4 h-4" strokeWidth={2.5} />
-                  </button>
-                </div>
+          {cartItems.map((item) => {
+            const draftVolume = draftVolumes[item.id] ?? getCartItemVolume(item);
+            const deliveryOptions = getDeliveryOptionsForVolume([
+              item.deliveryOption,
+              ...(item.material.delivery_options || []),
+            ]);
+            const displayedOption = findDeliveryOptionForVolume(deliveryOptions, draftVolume) || item.deliveryOption;
+            const maxVolume = Number(deliveryOptions.at(-1)?.capacity_m3 || displayedOption.capacity_m3);
+            const vehicleImageUrl = resolveMediaUrl(
+              displayedOption.primary_image_url
+                || displayedOption.media_files?.[0]?.public_url
+                || displayedOption.image_url,
+            );
 
-                <div className="text-[14px] text-slate-500 line-clamp-1">
-                  {item.deliveryOption.title} (машина до {item.deliveryOption.capacity_m3} м³)
+            return (
+              <div
+                key={item.id}
+                className="flex flex-row items-start rounded-[24px] border border-slate-100 bg-white p-3 shadow-sm"
+              >
+                <div className="flex h-[80px] w-[80px] shrink-0 items-center justify-center overflow-hidden rounded-[16px] bg-slate-100">
+                  {vehicleImageUrl ? (
+                    <img
+                      src={vehicleImageUrl}
+                      alt={displayedOption.title}
+                      className="h-full w-full object-contain p-1"
+                    />
+                  ) : (
+                    <Truck className="h-8 w-8 text-slate-300" />
+                  )}
                 </div>
-
-                {item.comment && (
-                  <div className="text-[13px] italic text-slate-400 line-clamp-1 mt-0.5">
-                    {item.comment}
+                <div className="ml-3 flex min-h-[80px] flex-1 flex-col justify-between">
+                  <div className="flex items-start justify-between">
+                    <h3 className="line-clamp-1 text-[16px] font-bold leading-tight text-slate-900">
+                      {item.material?.name}
+                    </h3>
+                    <button
+                      onClick={() => removeFromCart(item.id)}
+                      className="-mr-1 -mt-1 rounded-full p-1 text-slate-400 transition-colors hover:bg-slate-50 hover:text-red-500"
+                    >
+                      <X className="h-4 w-4" strokeWidth={2.5} />
+                    </button>
                   </div>
-                )}
 
-                <div className="flex justify-end items-end mt-auto">
-                  <div className="mb-1 rounded-full border border-sky-100 bg-sky-50 px-3 py-1 text-xs font-bold text-sky-700">
-                    Объём: {Number(item.volume ?? item.deliveryOption.capacity_m3 * item.quantity)} м³
+                  <div className="line-clamp-1 text-[14px] text-slate-500">
+                    {displayedOption.title} (машина до {displayedOption.capacity_m3} м³)
+                  </div>
+
+                  {item.comment && (
+                    <div className="mt-0.5 line-clamp-1 text-[13px] italic text-slate-400">
+                      {item.comment}
+                    </div>
+                  )}
+
+                  <div className="mt-2 flex justify-end">
+                    <div className="inline-flex items-center rounded-full border border-sky-100 bg-sky-50 p-1">
+                      <button
+                        type="button"
+                        onClick={() => changeDraftVolume(item, -VOLUME_STEP_M3)}
+                        disabled={draftVolume <= MIN_VOLUME_M3}
+                        aria-label={`Уменьшить объём ${item.material.name}`}
+                        className="grid h-7 w-7 place-items-center rounded-full bg-white text-sky-700 shadow-sm transition-colors disabled:cursor-not-allowed disabled:text-slate-300"
+                      >
+                        <Minus className="h-4 w-4" />
+                      </button>
+                      <span className="min-w-[68px] px-2 text-center text-sm font-bold text-sky-700">
+                        {draftVolume} м³
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => changeDraftVolume(item, VOLUME_STEP_M3)}
+                        disabled={draftVolume >= maxVolume}
+                        aria-label={`Увеличить объём ${item.material.name}`}
+                        className="grid h-7 w-7 place-items-center rounded-full bg-white text-sky-700 shadow-sm transition-colors disabled:cursor-not-allowed disabled:text-slate-300"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Global Address Field */}
@@ -463,22 +564,22 @@ export default function CartScreen({
                     </div>
                   </div>
 
-                  <div className="rounded-2xl bg-gradient-to-br from-emerald-500 to-sky-500 p-4 text-white shadow-lg shadow-sky-100">
-                    <div className="mb-3 inline-flex rounded-full bg-white/20 px-3 py-1 text-xs font-bold uppercase tracking-wide">
+                  <div className="rounded-2xl border-2 border-sky-500 bg-white p-4 text-slate-900 shadow-sm">
+                    <div className="mb-3 inline-flex rounded-full bg-sky-100 px-3 py-1 text-xs font-bold uppercase tracking-wide text-sky-700">
                       Выгодный вариант
                     </div>
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <h4 className="truncate text-lg font-black leading-tight">{pointTitle}</h4>
-                        <p className="mt-1 text-sm text-white/85">{pointSubtitle}</p>
+                        <p className="mt-1 text-sm text-slate-500">{pointSubtitle}</p>
                       </div>
                       {pointIds.size === 1 && (
-                        <span className="rounded-full bg-white/15 px-2 py-1 text-[11px] font-semibold">
+                        <span className="rounded-full bg-sky-50 px-2 py-1 text-[11px] font-semibold text-sky-700">
                           {best.point_type === "quarry" ? "Карьер" : "Накопитель"}
                         </span>
                       )}
                     </div>
-                    <div className="mt-4 grid h-32 w-full place-items-center overflow-hidden rounded-xl bg-white/15">
+                    <div className="mt-4 grid h-32 w-full place-items-center overflow-hidden rounded-xl bg-slate-100">
                       {bestImageUrl ? (
                         <img
                           src={bestImageUrl}
@@ -486,21 +587,21 @@ export default function CartScreen({
                           className="h-32 w-full object-cover"
                         />
                       ) : (
-                        <ImageIcon className="h-8 w-8 text-white/70" />
+                        <ImageIcon className="h-8 w-8 text-slate-400" />
                       )}
                     </div>
-                    <div className="mt-4 grid grid-cols-3 gap-2 border-t border-white/20 pt-3 text-center">
+                    <div className="mt-4 grid grid-cols-3 gap-2 border-t border-sky-100 pt-3 text-center">
                       <div>
-                        <span className="block text-[10px] text-white/70">Материал</span>
-                        <strong className="text-sm">{Math.round(aggregate.materialCost).toLocaleString("ru-RU")} ₽</strong>
+                        <span className="block text-[10px] text-slate-500">Материал</span>
+                        <strong className="text-sm text-slate-900">{Math.round(aggregate.materialCost).toLocaleString("ru-RU")} ₽</strong>
                       </div>
                       <div>
-                        <span className="block text-[10px] text-white/70">Доставка</span>
-                        <strong className="text-sm">{Math.round(aggregate.deliveryCost).toLocaleString("ru-RU")} ₽</strong>
+                        <span className="block text-[10px] text-slate-500">Доставка</span>
+                        <strong className="text-sm text-slate-900">{Math.round(aggregate.deliveryCost).toLocaleString("ru-RU")} ₽</strong>
                       </div>
                       <div>
-                        <span className="block text-[10px] text-white/70">Итого</span>
-                        <strong className="text-base">{Math.round(aggregate.totalAmount).toLocaleString("ru-RU")} ₽</strong>
+                        <span className="block text-[10px] text-slate-500">Итого</span>
+                        <strong className="text-base text-sky-600">{Math.round(aggregate.totalAmount).toLocaleString("ru-RU")} ₽</strong>
                       </div>
                     </div>
                   </div>

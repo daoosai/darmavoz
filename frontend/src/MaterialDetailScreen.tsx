@@ -12,6 +12,7 @@ export interface MaterialProps {
   primary_image_url?: string;
   image_url?: string;
   media_files?: MediaFile[];
+  delivery_options?: DeliveryOption[];
 }
 
 export interface DeliveryOption {
@@ -25,4 +26,5 @@ export interface DeliveryOption {
   primary_image_url?: string;
   image_url?: string;
   media_files?: MediaFile[];
+  is_active?: boolean;
 }

@@ -450,9 +450,6 @@ export default function PickupPointMapScreen({
                       ~ {distance < 10 ? distance.toFixed(1) : Math.round(distance)} км от вас
                     </p>
                   )}
-                  <p className="mt-1 text-xs font-medium text-gray-600">
-                    Тариф доставки зависит от машины
-                  </p>
                   <button
                     type="button"
                     onClick={(event) => {
@@ -527,10 +524,6 @@ export default function PickupPointMapScreen({
             <div>
               <span className="block text-xs text-gray-500">Описание</span>
               <p className="mt-1 text-sm text-gray-900">{selected.description || "Описание пока не добавлено"}</p>
-            </div>
-            <div>
-              <span className="block text-xs text-gray-500">Точный адрес</span>
-              <p className="mt-1 text-sm font-medium text-gray-900">{selectedAddress || "Адрес не указан"}</p>
             </div>
             <div className="flex items-end justify-between gap-3 border-t border-gray-200 pt-3">
               <div>

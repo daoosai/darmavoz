@@ -124,7 +124,7 @@ export default function MaterialBottomSheet({
   const handleSubmit = () => {
     if (!selectedOption) return;
     const wasAdded = addToCart(
-      { ...material, price: materialPrice },
+      { ...material, price: materialPrice, delivery_options: deliveryOptions },
       selectedOption,
       comment,
       pickupPoint || undefined,

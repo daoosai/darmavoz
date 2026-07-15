@@ -19,7 +19,6 @@ import CartScreen from "./CartScreen";
 import ProfileScreen from "./ProfileScreen";
 import PromosScreen from "./PromosScreen";
 import MaterialBottomSheet from "./MaterialBottomSheet";
-import PickupPointMapScreen, { PickupPointSelection } from "./PickupPointMapScreen";
 
 import { Toaster } from "react-hot-toast";
 
@@ -391,9 +390,6 @@ function MainContent({
 }: any) {
   const { selectedAddress } = useAddressStore();
   const { token } = useAuthStore();
-  const [mapMaterial, setMapMaterial] = useState<MaterialProps | null>(null);
-  const [selectedPickupPoint, setSelectedPickupPoint] =
-    useState<PickupPointSelection | null>(null);
   const tabs = [
     { id: "home", label: "Главная", icon: Home },
     { id: "orders", label: "Заказы", icon: List },
@@ -529,7 +525,7 @@ function MainContent({
                       <ProductCard
                         key={material.id}
                         material={material}
-                        onClick={() => setMapMaterial(material)}
+                        onClick={() => setSelectedMaterial(material)}
                       />
                     ))
                 )}
@@ -601,24 +597,9 @@ function MainContent({
         </nav>
 
         {/* Bottom Sheet */}
-        {mapMaterial && (
-          <PickupPointMapScreen
-            material={mapMaterial}
-            onClose={() => setMapMaterial(null)}
-            onSelect={(point) => {
-              setSelectedPickupPoint(point);
-              setSelectedMaterial(mapMaterial);
-              setMapMaterial(null);
-            }}
-          />
-        )}
         <MaterialBottomSheet
           material={selectedMaterial}
-          pickupPoint={selectedPickupPoint}
-          onClose={() => {
-            setSelectedMaterial(null);
-            setSelectedPickupPoint(null);
-          }}
+          onClose={() => setSelectedMaterial(null)}
         />
 
         {/* Auth Bottom Sheet */}

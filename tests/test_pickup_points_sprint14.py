@@ -8,6 +8,7 @@ from app.models.models import (
     Category,
     DeliveryOption,
     Material,
+    MediaFile,
     ModerationStatus,
     Quarry,
     quarry_delivery_options,
@@ -248,6 +249,19 @@ async def test_calculate_returns_best_option_and_sorted_alternatives(
         )
         accumulator.lat = 58.0
         accumulator.rating = 4.8
+        session.add(
+            MediaFile(
+                entity_type="quarry",
+                entity_id=accumulator.id,
+                bucket="test-media",
+                object_key=f"quarries/{accumulator.id}/primary.jpg",
+                public_url="https://cdn.example/quarry.jpg",
+                content_type="image/jpeg",
+                file_name="primary.jpg",
+                file_size=1024,
+                is_primary=True,
+            )
+        )
         await session.commit()
 
         material_id = material.id
@@ -277,6 +291,28 @@ async def test_calculate_returns_best_option_and_sorted_alternatives(
         "delivery_cost": 3000.0,
         "material_cost": 3500.0,
         "total_amount": 6500.0,
+        "primary_image_url": "https://cdn.example/quarry.jpg",
     }
     assert [option["quarry_id"] for option in payload["alternatives"]] == [str(quarry_id)]
     assert payload["alternatives"][0]["total_amount"] == 8000.0
+    assert payload["alternatives"][0]["primary_image_url"] is None
+
+    selected_response = await client.post(
+        "/api/v1/client/orders/calculate",
+        json={
+            "material_id": str(material_id),
+            "quarry_id": str(quarry_id),
+            "delivery_option_id": str(delivery_option_id),
+            "delivery_lat": 57.2,
+            "delivery_lon": 65.6,
+            "quantity": 1,
+        },
+    )
+
+    assert selected_response.status_code == 200
+    selected_payload = selected_response.json()
+    assert selected_payload["best_option"]["quarry_id"] == str(quarry_id)
+    assert selected_payload["best_option"]["total_amount"] == 8000.0
+    assert [option["quarry_id"] for option in selected_payload["alternatives"]] == [
+        str(accumulator_id)
+    ]

@@ -221,3 +221,24 @@ export const getImageUrl = (item: MaterialProps | DeliveryOption) => {
   );
 };
 
+export const resolveMediaUrl = (imageUrl?: string | null) => {
+  if (!imageUrl) return null;
+  if (/^(https?:|data:|blob:)/i.test(imageUrl)) return imageUrl;
+
+  try {
+    const runtimeOrigin =
+      typeof window === "undefined" ? "http://localhost" : window.location.origin;
+    const configuredMediaBase =
+      import.meta.env.VITE_S3_URL ||
+      import.meta.env.VITE_API_BASE_URL ||
+      baseURL;
+    const mediaBaseUrl = new URL(configuredMediaBase, runtimeOrigin);
+    if (!mediaBaseUrl.pathname.endsWith("/")) {
+      mediaBaseUrl.pathname += "/";
+    }
+    return new URL(imageUrl, mediaBaseUrl).toString();
+  } catch {
+    return imageUrl;
+  }
+};
+

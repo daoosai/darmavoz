@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.models.models import (
     DeliveryOption,
     Material,
+    MediaFile,
     ModerationStatus,
     Quarry,
     quarry_delivery_options,
@@ -44,6 +45,7 @@ class ClientOrderPricing:
     mileage_km: float
     delivery_cost: float
     total_amount: float
+    primary_image_url: str | None
 
 
 def get_straight_distance_km(lat_a: float, lon_a: float, lat_b: float, lon_b: float) -> float:
@@ -227,8 +229,23 @@ async def calculate_client_order_options(
     if delivery_option.delivery_rate_per_km is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Delivery rate is not configured")
 
+    primary_image = (
+        select(MediaFile.public_url)
+        .where(MediaFile.entity_type == "quarry", MediaFile.entity_id == Quarry.id)
+        .order_by(
+            MediaFile.is_primary.desc(),
+            MediaFile.sort_order.asc(),
+            MediaFile.created_at.asc(),
+        )
+        .limit(1)
+        .scalar_subquery()
+    )
     result = await session.execute(
-        select(Quarry, quarry_materials.c.price)
+        select(
+            Quarry,
+            quarry_materials.c.price,
+            primary_image.label("primary_image_url"),
+        )
         .join(quarry_materials, quarry_materials.c.quarry_id == Quarry.id)
         .join(
             quarry_delivery_options,
@@ -249,8 +266,12 @@ async def calculate_client_order_options(
     )
     quarry_rows = list(result.unique().all())
     priced_rows = [
-        (quarry, float(price if price is not None else material.price or 0))
-        for quarry, price in quarry_rows
+        (
+            quarry,
+            float(price if price is not None else material.price or 0),
+            primary_image_url,
+        )
+        for quarry, price, primary_image_url in quarry_rows
         if float(price if price is not None else material.price or 0) > 0
     ]
     if not priced_rows:
@@ -267,12 +288,15 @@ async def calculate_client_order_options(
                 delivery_lat,
                 delivery_lon,
             )
-            for quarry, _price in priced_rows
+            for quarry, _price, _primary_image_url in priced_rows
         )
     )
     rate = round(float(delivery_option.delivery_rate_per_km), 2)
     options: list[ClientOrderPricing] = []
-    for (quarry, material_unit_price), mileage_km in zip(priced_rows, distances):
+    for (quarry, material_unit_price, primary_image_url), mileage_km in zip(
+        priced_rows,
+        distances,
+    ):
         minimum_delivery_price = resolve_min_delivery_price(delivery_option, quarry.point_type)
         material_cost = round(
             material_unit_price * float(delivery_option.capacity_m3) * quantity,
@@ -294,6 +318,7 @@ async def calculate_client_order_options(
                 mileage_km=mileage_km,
                 delivery_cost=delivery_cost,
                 total_amount=round(material_cost + delivery_cost, 2),
+                primary_image_url=primary_image_url,
             )
         )
 

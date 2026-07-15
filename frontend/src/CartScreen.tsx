@@ -9,18 +9,20 @@ import {
   Plus,
 } from "lucide-react";
 import { useAuthStore, useCartStore, useAddressStore } from "./store";
-import { getImageUrl, baseURL } from "./utils";
+import { getImageUrl, baseURL, resolveMediaUrl } from "./utils";
 import toast from "react-hot-toast";
+import { MaterialProps } from "./MaterialDetailScreen";
+import PickupPointMapScreen, { PickupPointSelection } from "./PickupPointMapScreen";
 
 interface MarketplaceOption {
   quarry_id: string;
   quarry_name: string;
   point_type: string;
-  rating: number;
   distance: number;
   delivery_cost: number;
   material_cost: number;
   total_amount: number;
+  primary_image_url?: string | null;
 }
 
 interface MarketplaceCalculation {
@@ -29,6 +31,12 @@ interface MarketplaceCalculation {
 }
 
 type CalculationResult = MarketplaceCalculation | { error: true };
+
+interface MapContext {
+  itemId: string;
+  material: MaterialProps;
+  deliveryOptionId: string;
+}
 
 const isMarketplaceCalculation = (
   result: CalculationResult | undefined,
@@ -60,6 +68,8 @@ export default function CartScreen({
   const [calcResults, setCalcResults] = useState<Record<string, CalculationResult>>({});
   const [deliveryCoords, setDeliveryCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
+  const [preferredPointIds, setPreferredPointIds] = useState<Record<string, string>>({});
+  const [mapContext, setMapContext] = useState<MapContext | null>(null);
 
   useEffect(() => {
     if (!token || role !== "client") {
@@ -114,6 +124,7 @@ export default function CartScreen({
               delivery_lat: lat,
               delivery_lon: lon,
               quantity: item.quantity,
+              quarry_id: preferredPointIds[item.id] || item.pickupPoint?.id || undefined,
             }),
           });
           if (res.ok) {
@@ -139,7 +150,7 @@ export default function CartScreen({
 
     const timer = setTimeout(calculateDelivery, 800);
     return () => clearTimeout(timer);
-  }, [globalAddress, cartItems, token, role]);
+  }, [globalAddress, cartItems, token, role, preferredPointIds]);
 
   const handleAddressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setGlobalAddress(e.target.value);
@@ -147,6 +158,10 @@ export default function CartScreen({
   };
 
   const selectMarketplaceOption = (itemId: string, selected: MarketplaceOption) => {
+    setPreferredPointIds((current) => ({
+      ...current,
+      [itemId]: selected.quarry_id,
+    }));
     setCalcResults((currentResults) => {
       const current = currentResults[itemId];
       if (!isMarketplaceCalculation(current)) return currentResults;
@@ -159,6 +174,23 @@ export default function CartScreen({
         },
       };
     });
+  };
+
+  const selectPointFromMap = (point: PickupPointSelection) => {
+    if (!mapContext) return;
+    const supportsSelectedVehicle = point.delivery_options?.some(
+      (option) => option.id === mapContext.deliveryOptionId,
+    );
+    if (!supportsSelectedVehicle) {
+      toast.error("Для этой точки выбранная машина недоступна");
+      return;
+    }
+    setPreferredPointIds((current) => ({
+      ...current,
+      [mapContext.itemId]: point.id,
+    }));
+    setMapContext(null);
+    toast.success("Точка выбрана, пересчитываем стоимость");
   };
 
   const handleCheckout = async () => {
@@ -410,14 +442,27 @@ export default function CartScreen({
 
                   <div className="rounded-2xl bg-gradient-to-br from-emerald-500 to-sky-500 p-4 text-white shadow-lg shadow-sky-100">
                     <div className="mb-3 inline-flex rounded-full bg-white/20 px-3 py-1 text-xs font-bold uppercase tracking-wide">
-                      Самый выгодный вариант
+                      Выгодный вариант
                     </div>
                     <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <h4 className="text-lg font-black leading-tight">{best.quarry_name}</h4>
-                        <p className="mt-1 text-sm text-white/85">
-                          ⭐ {Number(best.rating).toFixed(1)} · {Number(best.distance).toFixed(1)} км
-                        </p>
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-white/15">
+                          {resolveMediaUrl(best.primary_image_url) ? (
+                            <img
+                              src={resolveMediaUrl(best.primary_image_url) || undefined}
+                              alt={best.quarry_name}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <ImageIcon className="h-5 w-5 text-white/70" />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="truncate text-lg font-black leading-tight">{best.quarry_name}</h4>
+                          <p className="mt-1 text-sm text-white/85">
+                            {Number(best.distance).toFixed(1)} км от адреса
+                          </p>
+                        </div>
                       </div>
                       <span className="rounded-full bg-white/15 px-2 py-1 text-[11px] font-semibold">
                         {best.point_type === "quarry" ? "Карьер" : "Накопитель"}
@@ -445,11 +490,23 @@ export default function CartScreen({
                       <div className="hide-scrollbar -mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-1">
                         {calculation.alternatives.map((option) => (
                           <article key={option.quarry_id} className="w-[230px] shrink-0 snap-start rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                            <div className="flex items-start justify-between gap-2">
-                              <h5 className="line-clamp-2 text-sm font-bold text-slate-900">{option.quarry_name}</h5>
-                              <span className="shrink-0 text-xs text-amber-500">⭐ {Number(option.rating).toFixed(1)}</span>
+                            <div className="flex items-center gap-3">
+                              <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-slate-200">
+                                {resolveMediaUrl(option.primary_image_url) ? (
+                                  <img
+                                    src={resolveMediaUrl(option.primary_image_url) || undefined}
+                                    alt={option.quarry_name}
+                                    className="h-full w-full object-cover"
+                                  />
+                                ) : (
+                                  <ImageIcon className="h-5 w-5 text-slate-400" />
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <h5 className="line-clamp-2 text-sm font-bold text-slate-900">{option.quarry_name}</h5>
+                                <p className="mt-1 text-xs text-slate-500">{Number(option.distance).toFixed(1)} км от адреса</p>
+                              </div>
                             </div>
-                            <p className="mt-1 text-xs text-slate-500">{Number(option.distance).toFixed(1)} км от адреса</p>
                             <div className="mt-3 flex items-end justify-between gap-3">
                               <div>
                                 <span className="block text-[10px] uppercase text-slate-400">Итого</span>
@@ -468,6 +525,20 @@ export default function CartScreen({
                       </div>
                     </div>
                   )}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setMapContext({
+                        itemId: item.id,
+                        material: item.material,
+                        deliveryOptionId: item.deliveryOption.id,
+                      })
+                    }
+                    className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-bold text-sky-700 transition-colors hover:bg-sky-100"
+                  >
+                    <MapPin className="h-4 w-4" />
+                    Посмотреть все точки на карте
+                  </button>
                 </section>
               );
             })}
@@ -514,6 +585,14 @@ export default function CartScreen({
           </>
         )}
       </div>
+
+      {mapContext && (
+        <PickupPointMapScreen
+          material={mapContext.material}
+          onClose={() => setMapContext(null)}
+          onSelect={selectPointFromMap}
+        />
+      )}
     </div>
   );
 }

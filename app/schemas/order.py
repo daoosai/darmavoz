@@ -14,6 +14,7 @@ from pydantic import (
 
 from app.schemas.catalog import DeliveryOptionOut, MaterialOut
 from app.schemas.driver import DriverResponse
+from app.services.storage import normalize_public_url
 
 
 CalculationSource = Literal["yandex_auto", "manual", "osrm_auto"]
@@ -154,6 +155,12 @@ class ClientOrderCalculationOptionOut(BaseModel):
     material_cost: float
     delivery_cost: float
     total_amount: float
+    primary_image_url: str | None = None
+
+    @field_validator("primary_image_url")
+    @classmethod
+    def normalize_pickup_point_image_url(cls, value: str | None) -> str | None:
+        return normalize_public_url(value)
 
 
 class ClientOrderCalculationOut(BaseModel):

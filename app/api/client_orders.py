@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
@@ -41,11 +41,29 @@ async def calculate_order(
             material_cost=pricing.material_cost,
             delivery_cost=pricing.delivery_cost,
             total_amount=pricing.total_amount,
+            primary_image_url=pricing.primary_image_url,
         )
 
+    best_pricing = pricing_options[0]
+    if payload.quarry_id is not None:
+        selected_pricing = next(
+            (pricing for pricing in pricing_options if pricing.quarry.id == payload.quarry_id),
+            None,
+        )
+        if selected_pricing is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Selected pickup point is not available for this material and vehicle",
+            )
+        best_pricing = selected_pricing
+
     return ClientOrderCalculationOut(
-        best_option=serialize_option(pricing_options[0]),
-        alternatives=[serialize_option(pricing) for pricing in pricing_options[1:]],
+        best_option=serialize_option(best_pricing),
+        alternatives=[
+            serialize_option(pricing)
+            for pricing in pricing_options
+            if pricing.quarry.id != best_pricing.quarry.id
+        ],
     )
 
 

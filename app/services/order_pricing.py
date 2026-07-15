@@ -238,6 +238,7 @@ async def calculate_client_order_options(
             MediaFile.created_at.asc(),
         )
         .limit(1)
+        .correlate(Quarry)
         .scalar_subquery()
     )
     result = await session.execute(

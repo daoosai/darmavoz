@@ -30,6 +30,7 @@ interface MarketplaceOption {
   material_cost: number;
   total_amount: number;
   primary_image_url?: string | null;
+  image_url?: string | null;
 }
 
 interface MarketplaceCalculation {
@@ -54,6 +55,9 @@ const VOLUME_STEP_M3 = 1;
 
 const getCartItemVolume = (item: ReturnType<typeof useCartStore.getState>["cartItems"][number]) =>
   Number(item.volume ?? item.deliveryOption.capacity_m3 * item.quantity);
+
+const getMarketplaceImageUrl = (option: MarketplaceOption) =>
+  resolveMediaUrl(option.primary_image_url ?? option.image_url);
 
 export default function CartScreen({
   onGoToHome,
@@ -551,7 +555,7 @@ export default function CartScreen({
               const pointSubtitle = pointIds.size === 1
                 ? `${Number(best.distance).toFixed(1)} км от адреса`
                 : "Маршрут рассчитан отдельно для каждой машины";
-              const bestImageUrl = resolveMediaUrl(best.primary_image_url);
+              const bestImageUrl = getMarketplaceImageUrl(best);
 
               return (
                 <section key={representativeItem.material.id} className="rounded-[24px] border border-slate-100 bg-white p-4 shadow-sm">
@@ -610,41 +614,45 @@ export default function CartScreen({
                     <div className="mt-4">
                       <h4 className="mb-2 px-1 text-sm font-bold text-slate-800">Другие варианты</h4>
                       <div className="hide-scrollbar -mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-1">
-                        {groupAlternatives.map(({ item, option }) => (
-                          <article key={`${item.id}-${option.quarry_id}`} className="w-[230px] shrink-0 snap-start rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                            <div className="flex items-center gap-3">
-                              <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-slate-200">
-                                {resolveMediaUrl(option.primary_image_url) ? (
-                                  <img
-                                    src={resolveMediaUrl(option.primary_image_url) || undefined}
-                                    alt={option.quarry_name}
-                                    className="h-full w-full object-cover"
-                                  />
-                                ) : (
-                                  <ImageIcon className="h-5 w-5 text-slate-400" />
-                                )}
+                        {groupAlternatives.map(({ item, option }) => {
+                          const optionImageUrl = getMarketplaceImageUrl(option);
+
+                          return (
+                            <article key={`${item.id}-${option.quarry_id}`} className="w-[230px] shrink-0 snap-start rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                              <div className="flex items-center gap-3">
+                                <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-slate-200">
+                                  {optionImageUrl ? (
+                                    <img
+                                      src={optionImageUrl}
+                                      alt={option.quarry_name}
+                                      className="h-full w-full object-cover"
+                                    />
+                                  ) : (
+                                    <ImageIcon className="h-5 w-5 text-slate-400" />
+                                  )}
+                                </div>
+                                <div className="min-w-0">
+                                  <h5 className="line-clamp-2 text-sm font-bold text-slate-900">{option.quarry_name}</h5>
+                                  <p className="mt-1 text-xs text-slate-500">{Number(option.distance).toFixed(1)} км от адреса</p>
+                                  <p className="mt-1 truncate text-[10px] font-semibold text-sky-600">{item.deliveryOption.title}</p>
+                                </div>
                               </div>
-                              <div className="min-w-0">
-                                <h5 className="line-clamp-2 text-sm font-bold text-slate-900">{option.quarry_name}</h5>
-                                <p className="mt-1 text-xs text-slate-500">{Number(option.distance).toFixed(1)} км от адреса</p>
-                                <p className="mt-1 truncate text-[10px] font-semibold text-sky-600">{item.deliveryOption.title}</p>
+                              <div className="mt-3 flex items-end justify-between gap-3">
+                                <div>
+                                  <span className="block text-[10px] uppercase text-slate-400">Итого</span>
+                                  <strong className="text-base text-slate-900">{Math.round(option.total_amount).toLocaleString("ru-RU")} ₽</strong>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => selectMarketplaceOption(item.id, option)}
+                                  className="rounded-xl bg-[#2DB0E6] px-3 py-2 text-xs font-bold text-white hover:bg-[#209ccf]"
+                                >
+                                  Выбрать
+                                </button>
                               </div>
-                            </div>
-                            <div className="mt-3 flex items-end justify-between gap-3">
-                              <div>
-                                <span className="block text-[10px] uppercase text-slate-400">Итого</span>
-                                <strong className="text-base text-slate-900">{Math.round(option.total_amount).toLocaleString("ru-RU")} ₽</strong>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => selectMarketplaceOption(item.id, option)}
-                                className="rounded-xl bg-[#2DB0E6] px-3 py-2 text-xs font-bold text-white hover:bg-[#209ccf]"
-                              >
-                                Выбрать
-                              </button>
-                            </div>
-                          </article>
-                        ))}
+                            </article>
+                          );
+                        })}
                       </div>
                     </div>
                   )}

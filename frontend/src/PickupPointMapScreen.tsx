@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 import { baseURL } from "./utils";
 import { MaterialProps } from "./MaterialDetailScreen";
-import { useCartStore } from "./store";
 
 export interface PickupPointMarker {
   id: string;
@@ -109,8 +108,6 @@ export default function PickupPointMapScreen({
   const [detailsLoadingId, setDetailsLoadingId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const cartItems = useCartStore((state) => state.cartItems);
-  const cartItem = cartItems.find((item) => item.material.id === material.id);
   const distanceLocation = deliveryLocation || userLocation;
 
   const carouselPoints = points
@@ -140,24 +137,6 @@ export default function PickupPointMapScreen({
   const selectedDistance = selected && distanceLocation
     ? calculateDistance(distanceLocation.lat, distanceLocation.lon, selected.lat, selected.lon)
     : null;
-  const selectedVehicle = cartItem?.deliveryOption;
-  const selectedPricing = selected && selectedDistance !== null && selectedVehicle?.delivery_rate_per_km != null
-    ? (() => {
-        const deliveryCost = Math.max(
-          selectedDistance * Number(selectedVehicle.delivery_rate_per_km),
-          Number(selected.min_delivery_price || 0),
-        );
-        const materialCost =
-          Number(selected.price) *
-          Number(selectedVehicle.capacity_m3) *
-          Number(cartItem?.quantity || 1);
-        return {
-          deliveryCost: Math.round(deliveryCost),
-          totalAmount: Math.round(materialCost + deliveryCost),
-        };
-      })()
-    : null;
-
   useEffect(() => {
     if (deliveryLocation) {
       setIsLocationResolved(true);
@@ -381,7 +360,7 @@ export default function PickupPointMapScreen({
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div className="flex-1 rounded-2xl bg-white/95 px-4 py-3 shadow-lg backdrop-blur">
-            <p className="text-xs uppercase tracking-[0.16em] text-gray-500">Точки забора</p>
+            <p className="text-xs uppercase tracking-[0.16em] text-gray-500">Материал</p>
             <h1 className="truncate font-bold text-gray-900">{material.name}</h1>
           </div>
         </div>
@@ -525,16 +504,9 @@ export default function PickupPointMapScreen({
               <span className="block text-xs text-gray-500">Описание</span>
               <p className="mt-1 text-sm text-gray-900">{selected.description || "Описание пока не добавлено"}</p>
             </div>
-            <div className="flex items-end justify-between gap-3 border-t border-gray-200 pt-3">
-              <div>
-                <span className="block text-xs text-gray-500">Материал</span>
-                <strong className="text-gray-900">{Number(selected.price).toLocaleString("ru-RU")} ₽/{selected.unit}</strong>
-              </div>
-              <span className="text-right text-sm font-semibold text-gray-700">
-                {selectedPricing
-                  ? `Доставка: ${selectedPricing.deliveryCost.toLocaleString("ru-RU")} ₽ | Итого: ${selectedPricing.totalAmount.toLocaleString("ru-RU")} ₽`
-                  : "Итоговая цена — после выбора машины"}
-              </span>
+            <div className="border-t border-gray-200 pt-3">
+              <span className="block text-xs text-gray-500">Материал</span>
+              <strong className="text-gray-900">{Number(selected.price).toLocaleString("ru-RU")} ₽/{selected.unit}</strong>
             </div>
           </div>
           <button onClick={() => onSelect(selected)} className="w-full rounded-xl bg-sky-500 py-4 font-bold text-white hover:bg-sky-600">

@@ -262,6 +262,19 @@ async def test_calculate_returns_best_option_and_sorted_alternatives(
                 is_primary=True,
             )
         )
+        session.add(
+            MediaFile(
+                entity_type="quarry",
+                entity_id=quarry.id,
+                bucket="test-media",
+                object_key=f"quarries/{quarry.id}/primary.jpg",
+                public_url="https://cdn.example/alternative-quarry.jpg",
+                content_type="image/jpeg",
+                file_name="primary.jpg",
+                file_size=1024,
+                is_primary=True,
+            )
+        )
         await session.commit()
 
         material_id = material.id
@@ -295,7 +308,7 @@ async def test_calculate_returns_best_option_and_sorted_alternatives(
     }
     assert [option["quarry_id"] for option in payload["alternatives"]] == [str(quarry_id)]
     assert payload["alternatives"][0]["total_amount"] == 8000.0
-    assert payload["alternatives"][0]["primary_image_url"] is None
+    assert payload["alternatives"][0]["primary_image_url"] == "https://cdn.example/alternative-quarry.jpg"
 
     selected_response = await client.post(
         "/api/v1/client/orders/calculate",

@@ -29,6 +29,39 @@ export interface CartItem {
   volume: number;
 }
 
+export interface ClientOrderSummary {
+  id: string;
+  status: string;
+  address?: string | null;
+  total_amount?: number | null;
+  created_at: string;
+  items?: {
+    material?: { name?: string | null } | null;
+    quantity?: number;
+  }[];
+  driver?: {
+    name: string;
+    phone: string;
+    vehicle?: {
+      brand?: string;
+      plate_number?: string;
+      title?: string;
+    };
+  };
+  delivery_option?: {
+    capacity_m3: number;
+    title: string;
+  };
+}
+
+interface ClientOrdersState {
+  orders: ClientOrderSummary[];
+  isLoading: boolean;
+  setOrders: (orders: ClientOrderSummary[]) => void;
+  setIsLoading: (isLoading: boolean) => void;
+  clearOrders: () => void;
+}
+
 interface CartState {
   cartItems: CartItem[];
   addToCart: (
@@ -64,6 +97,7 @@ export const useAuthStore = create<AuthState>()(
       logout: () => {
         set({ token: null, role: null, driverId: null });
         useAddressStore.getState().setSelectedAddress("");
+        useClientOrdersStore.getState().clearOrders();
         localStorage.removeItem('address-storage');
       },
     }),
@@ -89,6 +123,14 @@ export const useAddressStore = create<AddressState>()(
     }
   )
 );
+
+export const useClientOrdersStore = create<ClientOrdersState>((set) => ({
+  orders: [],
+  isLoading: true,
+  setOrders: (orders) => set({ orders, isLoading: false }),
+  setIsLoading: (isLoading) => set({ isLoading }),
+  clearOrders: () => set({ orders: [], isLoading: false }),
+}));
 
 export const useCartStore = create<CartState>((set, get) => ({
   cartItems: [],

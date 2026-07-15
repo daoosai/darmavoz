@@ -56,8 +56,19 @@ const VOLUME_STEP_M3 = 1;
 const getCartItemVolume = (item: ReturnType<typeof useCartStore.getState>["cartItems"][number]) =>
   Number(item.volume ?? item.deliveryOption.capacity_m3 * item.quantity);
 
+const getImg = (url?: string | null) => {
+  if (!url) return null;
+  if (/^https?:\/\//i.test(url)) return url;
+
+  const mediaBaseUrl = import.meta.env.VITE_S3_URL;
+  if (mediaBaseUrl) {
+    return `${mediaBaseUrl.replace(/\/$/, "")}/${url.replace(/^\//, "")}`;
+  }
+  return resolveMediaUrl(url);
+};
+
 const getMarketplaceImageUrl = (option: MarketplaceOption) =>
-  resolveMediaUrl(option.primary_image_url ?? option.image_url);
+  getImg(option.primary_image_url ?? option.image_url);
 
 export default function CartScreen({
   onGoToHome,

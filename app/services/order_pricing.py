@@ -8,7 +8,6 @@ import httpx
 from fastapi import HTTPException, status
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.models.models import (
@@ -46,6 +45,34 @@ class ClientOrderPricing:
     delivery_cost: float
     total_amount: float
     primary_image_url: str | None
+
+
+async def load_primary_pickup_point_images(
+    session: AsyncSession,
+    point_ids: list[UUID],
+) -> dict[UUID, str]:
+    if not point_ids:
+        return {}
+
+    rows = (
+        await session.execute(
+            select(MediaFile.entity_id, MediaFile.public_url)
+            .where(
+                MediaFile.entity_type == "quarry",
+                MediaFile.entity_id.in_(point_ids),
+            )
+            .order_by(
+                MediaFile.entity_id.asc(),
+                MediaFile.is_primary.desc(),
+                MediaFile.sort_order.asc(),
+                MediaFile.created_at.asc(),
+            )
+        )
+    ).all()
+    primary_images: dict[UUID, str] = {}
+    for entity_id, public_url in rows:
+        primary_images.setdefault(entity_id, public_url)
+    return primary_images
 
 
 def get_straight_distance_km(lat_a: float, lon_a: float, lat_b: float, lon_b: float) -> float:
@@ -229,23 +256,10 @@ async def calculate_client_order_options(
     if delivery_option.delivery_rate_per_km is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Delivery rate is not configured")
 
-    primary_image = (
-        select(MediaFile.public_url)
-        .where(MediaFile.entity_type == "quarry", MediaFile.entity_id == Quarry.id)
-        .order_by(
-            MediaFile.is_primary.desc(),
-            MediaFile.sort_order.asc(),
-            MediaFile.created_at.asc(),
-        )
-        .limit(1)
-        .correlate(Quarry)
-        .scalar_subquery()
-    )
     result = await session.execute(
         select(
             Quarry,
             quarry_materials.c.price,
-            primary_image.label("primary_image_url"),
         )
         .join(quarry_materials, quarry_materials.c.quarry_id == Quarry.id)
         .join(
@@ -266,13 +280,17 @@ async def calculate_client_order_options(
         .order_by(Quarry.name.asc())
     )
     quarry_rows = list(result.unique().all())
+    primary_images = await load_primary_pickup_point_images(
+        session,
+        [quarry.id for quarry, _price in quarry_rows],
+    )
     priced_rows = [
         (
             quarry,
             float(price if price is not None else material.price or 0),
-            primary_image_url,
+            primary_images.get(quarry.id),
         )
-        for quarry, price, primary_image_url in quarry_rows
+        for quarry, price in quarry_rows
         if float(price if price is not None else material.price or 0) > 0
     ]
     if not priced_rows:

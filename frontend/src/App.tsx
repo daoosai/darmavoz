@@ -43,6 +43,7 @@ import ClientProfileScreen from "./ClientProfileScreen";
 import InstallPWA from "./InstallPWA";
 import { usePushNotifications } from "./usePushNotifications";
 import SupplierPortalScreen from "./SupplierPortalScreen";
+import FloatingOrderTracker from "./FloatingOrderTracker";
 
 // Reuse Material type as MaterialProps by exporting it from MaterialDetailScreen or type matching
 export default function App() {
@@ -62,7 +63,9 @@ export default function App() {
     | "supplier_register"
     | "driver_register"
   >(
-    role === "driver"
+    role === "client" && currentPath.startsWith("/client/orders/")
+      ? "main"
+      : role === "driver"
       ? "driver"
       : role === "logist"
         ? "logist"
@@ -130,6 +133,27 @@ export default function App() {
   }, []);
 
   const cartItemsCount = useCartStore((state) => state.cartItems.length);
+  const focusedClientOrderId = currentPath.match(/^\/client\/orders\/([^/]+)\/?$/)?.[1] || null;
+
+  useEffect(() => {
+    if (focusedClientOrderId && role === "client") {
+      setCurrentRoute("main");
+      setActiveTab("orders");
+    }
+  }, [focusedClientOrderId, role]);
+
+  const openClientOrder = (orderId: string) => {
+    const nextPath = `/client/orders/${orderId}`;
+    window.history.pushState({}, "", nextPath);
+    setCurrentPath(nextPath);
+    setActiveTab("orders");
+  };
+
+  const clearFocusedClientOrder = () => {
+    if (!focusedClientOrderId) return;
+    window.history.pushState({}, "", "/");
+    setCurrentPath("/");
+  };
 
   const renderContent = () => {
     if (currentPath === "/admin/orders") {
@@ -346,6 +370,9 @@ export default function App() {
         showAuthSheet={showAuthSheet}
         setShowAuthSheet={setShowAuthSheet}
         role={role}
+        focusedOrderId={focusedClientOrderId}
+        onOpenOrder={openClientOrder}
+        onClearFocusedOrder={clearFocusedClientOrder}
       />
     );
   };
@@ -387,6 +414,9 @@ function MainContent({
   showAuthSheet,
   setShowAuthSheet,
   role,
+  focusedOrderId,
+  onOpenOrder,
+  onClearFocusedOrder,
 }: any) {
   const { selectedAddress } = useAddressStore();
   const { token } = useAuthStore();
@@ -534,7 +564,11 @@ function MainContent({
           )}
 
           {activeTab === "orders" && (
-            <OrdersScreen onOpenAuth={() => setShowAuthSheet(true)} />
+            <OrdersScreen
+              onOpenAuth={() => setShowAuthSheet(true)}
+              focusedOrderId={focusedOrderId}
+              onBackToOrders={onClearFocusedOrder}
+            />
           )}
 
           {activeTab === "cart" && (
@@ -558,6 +592,10 @@ function MainContent({
             ))}
         </main>
 
+        {role === "client" && (
+          <FloatingOrderTracker onOpenOrder={onOpenOrder} />
+        )}
+
         {/* Bottom Navigation */}
         <nav className="fixed bottom-0 left-0 right-0 z-50 w-full max-w-md mx-auto bg-white border-t border-gray-200 pb-[env(safe-area-inset-bottom)] flex flex-col sm:rounded-b-[32px]">
           <div className="flex justify-around items-center h-16 px-2">
@@ -567,7 +605,10 @@ function MainContent({
               return (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => {
+                    onClearFocusedOrder();
+                    setActiveTab(tab.id);
+                  }}
                   className={`flex flex-col items-center gap-1 transition-opacity cursor-pointer relative ${
                     isActive ? "opacity-100" : "opacity-40 hover:opacity-70"
                   }`}

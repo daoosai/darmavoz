@@ -1,35 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
 import PullToRefresh from "react-simple-pull-to-refresh";
-import { Package, MapPin, Calendar, Truck, List, Info, User as UserIcon, Phone, Search, UserCheck, CheckCircle, ChevronDown } from "lucide-react";
+import { Package, MapPin, Calendar, Truck, List, Info, User as UserIcon, Phone, Search, UserCheck, CheckCircle, ChevronDown, ArrowLeft } from "lucide-react";
 import {  clientOrderStatusColors, baseURL } from "./utils";
 import { getOrderStatusText } from "./utils/statusMapper";
-import { useAuthStore } from "./store";
+import { ClientOrderSummary, useAuthStore, useClientOrdersStore } from "./store";
 import { motion, AnimatePresence } from "motion/react";
 
-interface ClientOrder {
-  id: string;
-  status: string;
-  address: string;
-  total_amount: number;
-  created_at: string;
-  driver?: {
-    name: string;
-    phone: string;
-    vehicle?: {
-      brand?: string;
-      plate_number?: string;
-      title?: string;
-    };
-  };
-  items?: {
-    material: { name: string };
-    quantity: number;
-  }[];
-  delivery_option?: {
-    capacity_m3: number;
-    title: string;
-  };
-}
+type ClientOrder = ClientOrderSummary;
 
 const activeStatuses = [
   "created", "searching_driver", "offered_to_driver", "no_driver_found",
@@ -307,10 +284,23 @@ const HistoryOrderCard = ({ order }: { order: ClientOrder }) => {
   );
 };
 
-export default function OrdersScreen({ onOpenAuth }: { onOpenAuth?: () => void }) {
+export default function OrdersScreen({
+  onOpenAuth,
+  focusedOrderId,
+  onBackToOrders,
+}: {
+  onOpenAuth?: () => void;
+  focusedOrderId?: string | null;
+  onBackToOrders?: () => void;
+}) {
   const { role, token } = useAuthStore();
-  const [orders, setOrders] = useState<ClientOrder[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const {
+    orders,
+    isLoading,
+    setOrders,
+    setIsLoading,
+    clearOrders,
+  } = useClientOrdersStore();
 
   const [activeTab, setActiveTab] = useState<'current' | 'history'>('current');
   const [recentlyCompletedIds, setRecentlyCompletedIds] = useState<string[]>([]);
@@ -341,12 +331,16 @@ export default function OrdersScreen({ onOpenAuth }: { onOpenAuth?: () => void }
   };
 
   useEffect(() => {
-    fetchOrders();
-    const intervalId = setInterval(() => {
-        fetchOrders();
-    }, 5000);
-    return () => clearInterval(intervalId);
+    if (role !== "client") {
+      clearOrders();
+      return;
+    }
+    if (orders.length === 0) void fetchOrders();
   }, [role, token]);
+
+  useEffect(() => {
+    if (focusedOrderId) setActiveTab("current");
+  }, [focusedOrderId]);
 
   useEffect(() => {
     const prevOrders = prevOrdersRef.current;
@@ -410,9 +404,9 @@ export default function OrdersScreen({ onOpenAuth }: { onOpenAuth?: () => void }
     );
   }
 
-  const displayActiveOrders = orders.filter(o => 
-     activeStatuses.includes(o.status) || recentlyCompletedIds.includes(o.id)
-  );
+  const displayActiveOrders = focusedOrderId
+    ? orders.filter((order) => order.id === focusedOrderId)
+    : orders.filter(o => activeStatuses.includes(o.status) || recentlyCompletedIds.includes(o.id));
   const displayHistoryOrders = orders.filter(o => 
      !activeStatuses.includes(o.status) && !recentlyCompletedIds.includes(o.id)
   );
@@ -439,8 +433,18 @@ export default function OrdersScreen({ onOpenAuth }: { onOpenAuth?: () => void }
 
   return (
     <div className="h-full bg-slate-50 flex flex-col">
-      {/* Tabs */}
+      {/* Tabs / focused order navigation */}
       <div className="px-4 pt-4 pb-2 bg-slate-50 relative z-10">
+        {focusedOrderId ? (
+          <button
+            type="button"
+            onClick={onBackToOrders}
+            className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Все заказы
+          </button>
+        ) : (
         <div className="flex bg-slate-200/50 p-1 rounded-2xl">
           <button
             onClick={() => setActiveTab('current')}
@@ -463,6 +467,7 @@ export default function OrdersScreen({ onOpenAuth }: { onOpenAuth?: () => void }
             История
           </button>
         </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-hidden relative">

@@ -19,6 +19,7 @@ export interface DeliveryOption {
   capacity_m3: number;
   title: string;
   base_price: number;
+  delivery_rate_per_km?: number;
   min_price_quarry?: number;
   min_price_warehouse?: number;
   primary_image_url?: string;

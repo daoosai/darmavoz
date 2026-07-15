@@ -2163,11 +2163,11 @@ export default function AdminDashboardScreen({
                                       <img
                                         src={imgUrl}
                                         alt={opt.title}
-                                        className="w-24 h-16 object-contain rounded-md border border-slate-200 bg-slate-50 p-1"
+                                        className="w-28 h-20 object-contain rounded-lg border border-slate-200 bg-slate-50 p-1"
                                       />
                                     ) : (
-                                      <div className="w-24 h-16 rounded-md border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-300">
-                                        <ImageIcon className="w-5 h-5" />
+                                      <div className="w-28 h-20 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-300">
+                                        <ImageIcon className="w-7 h-7" />
                                       </div>
                                     )}
                                   </td>
@@ -2268,11 +2268,11 @@ export default function AdminDashboardScreen({
                                   <img
                                     src={imgUrl}
                                     alt={opt.title}
-                                    className="shrink-0 w-24 h-16 object-contain rounded-md border border-slate-200 bg-slate-50 p-1"
+                                    className="shrink-0 w-28 h-20 object-contain rounded-lg border border-slate-200 bg-slate-50 p-1"
                                   />
                                 ) : (
-                                  <div className="shrink-0 w-24 h-16 rounded-md border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-300">
-                                    <ImageIcon className="w-5 h-5" />
+                                  <div className="shrink-0 w-28 h-20 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-300">
+                                    <ImageIcon className="w-7 h-7" />
                                   </div>
                                 )}
                                 <div className="flex flex-col gap-1 min-w-0">

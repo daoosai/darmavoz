@@ -276,6 +276,13 @@ export default function CartScreen({
         }, 0)
       : totalMaterialCost,
   );
+  const cartItemGroups = Object.values(
+    cartItems.reduce<Record<string, (typeof cartItems)[number][]>>((groups, item) => {
+      const materialId = item.material.id;
+      groups[materialId] = [...(groups[materialId] || []), item];
+      return groups;
+    }, {}),
+  );
 
   if (!token || role !== "client") {
     return null;
@@ -425,18 +432,51 @@ export default function CartScreen({
           </div>
         ) : hasCalculations ? (
           <div className="flex flex-col gap-5">
-            {cartItems.map((item) => {
-              const calculation = calcResults[item.id];
-              if (!isMarketplaceCalculation(calculation)) return null;
-              const best = calculation.best_option;
-              const volume = item.deliveryOption.capacity_m3 * item.quantity;
+            {cartItemGroups.map((group) => {
+              const representativeItem = group[0];
+              const calculatedItems = group.flatMap((item) => {
+                const calculation = calcResults[item.id];
+                return isMarketplaceCalculation(calculation)
+                  ? [{ item, calculation }]
+                  : [];
+              });
+              if (calculatedItems.length === 0) return null;
+
+              const best = calculatedItems[0].calculation.best_option;
+              const pointIds = new Set(
+                calculatedItems.map(({ calculation }) => calculation.best_option.quarry_id),
+              );
+              const totalVolume = group.reduce(
+                (sum, item) => sum + item.deliveryOption.capacity_m3 * item.quantity,
+                0,
+              );
+              const aggregate = calculatedItems.reduce(
+                (totals, { calculation }) => ({
+                  materialCost: totals.materialCost + calculation.best_option.material_cost,
+                  deliveryCost: totals.deliveryCost + calculation.best_option.delivery_cost,
+                  totalAmount: totals.totalAmount + calculation.best_option.total_amount,
+                }),
+                { materialCost: 0, deliveryCost: 0, totalAmount: 0 },
+              );
+              const groupAlternatives = calculatedItems.flatMap(({ item, calculation }) =>
+                calculation.alternatives.map((option) => ({ item, option })),
+              );
+              const pointTitle = pointIds.size === 1
+                ? best.quarry_name
+                : `Подобрано точек: ${pointIds.size}`;
+              const pointSubtitle = pointIds.size === 1
+                ? `${Number(best.distance).toFixed(1)} км от адреса`
+                : "Маршрут рассчитан отдельно для каждой машины";
+              const bestImageUrl = resolveMediaUrl(best.primary_image_url);
 
               return (
-                <section key={item.id} className="rounded-[24px] border border-slate-100 bg-white p-4 shadow-sm">
+                <section key={representativeItem.material.id} className="rounded-[24px] border border-slate-100 bg-white p-4 shadow-sm">
                   <div className="mb-3 flex items-start justify-between gap-3 px-1">
                     <div>
-                      <h3 className="font-bold text-slate-900">{item.material.name}</h3>
-                      <p className="text-xs text-slate-500">{volume} м³ · {item.deliveryOption.title}</p>
+                      <h3 className="font-bold text-slate-900">{representativeItem.material.name}</h3>
+                      <p className="text-xs text-slate-500">
+                        {totalVolume} м³ · {group.map((item) => `${item.deliveryOption.title} × ${item.quantity}`).join(", ")}
+                      </p>
                     </div>
                   </div>
 
@@ -445,51 +485,49 @@ export default function CartScreen({
                       Выгодный вариант
                     </div>
                     <div className="flex items-start justify-between gap-3">
-                      <div className="flex min-w-0 items-center gap-3">
-                        <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-white/15">
-                          {resolveMediaUrl(best.primary_image_url) ? (
-                            <img
-                              src={resolveMediaUrl(best.primary_image_url) || undefined}
-                              alt={best.quarry_name}
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            <ImageIcon className="h-5 w-5 text-white/70" />
-                          )}
-                        </div>
-                        <div className="min-w-0">
-                          <h4 className="truncate text-lg font-black leading-tight">{best.quarry_name}</h4>
-                          <p className="mt-1 text-sm text-white/85">
-                            {Number(best.distance).toFixed(1)} км от адреса
-                          </p>
-                        </div>
+                      <div className="min-w-0">
+                        <h4 className="truncate text-lg font-black leading-tight">{pointTitle}</h4>
+                        <p className="mt-1 text-sm text-white/85">{pointSubtitle}</p>
                       </div>
-                      <span className="rounded-full bg-white/15 px-2 py-1 text-[11px] font-semibold">
-                        {best.point_type === "quarry" ? "Карьер" : "Накопитель"}
-                      </span>
+                      {pointIds.size === 1 && (
+                        <span className="rounded-full bg-white/15 px-2 py-1 text-[11px] font-semibold">
+                          {best.point_type === "quarry" ? "Карьер" : "Накопитель"}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-4 grid h-32 w-full place-items-center overflow-hidden rounded-xl bg-white/15">
+                      {bestImageUrl ? (
+                        <img
+                          src={bestImageUrl}
+                          alt={best.quarry_name}
+                          className="h-32 w-full object-cover"
+                        />
+                      ) : (
+                        <ImageIcon className="h-8 w-8 text-white/70" />
+                      )}
                     </div>
                     <div className="mt-4 grid grid-cols-3 gap-2 border-t border-white/20 pt-3 text-center">
                       <div>
                         <span className="block text-[10px] text-white/70">Материал</span>
-                        <strong className="text-sm">{Math.round(best.material_cost).toLocaleString("ru-RU")} ₽</strong>
+                        <strong className="text-sm">{Math.round(aggregate.materialCost).toLocaleString("ru-RU")} ₽</strong>
                       </div>
                       <div>
                         <span className="block text-[10px] text-white/70">Доставка</span>
-                        <strong className="text-sm">{Math.round(best.delivery_cost).toLocaleString("ru-RU")} ₽</strong>
+                        <strong className="text-sm">{Math.round(aggregate.deliveryCost).toLocaleString("ru-RU")} ₽</strong>
                       </div>
                       <div>
                         <span className="block text-[10px] text-white/70">Итого</span>
-                        <strong className="text-base">{Math.round(best.total_amount).toLocaleString("ru-RU")} ₽</strong>
+                        <strong className="text-base">{Math.round(aggregate.totalAmount).toLocaleString("ru-RU")} ₽</strong>
                       </div>
                     </div>
                   </div>
 
-                  {calculation.alternatives.length > 0 && (
+                  {groupAlternatives.length > 0 && (
                     <div className="mt-4">
                       <h4 className="mb-2 px-1 text-sm font-bold text-slate-800">Другие варианты</h4>
                       <div className="hide-scrollbar -mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-1">
-                        {calculation.alternatives.map((option) => (
-                          <article key={option.quarry_id} className="w-[230px] shrink-0 snap-start rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                        {groupAlternatives.map(({ item, option }) => (
+                          <article key={`${item.id}-${option.quarry_id}`} className="w-[230px] shrink-0 snap-start rounded-2xl border border-slate-200 bg-slate-50 p-3">
                             <div className="flex items-center gap-3">
                               <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-slate-200">
                                 {resolveMediaUrl(option.primary_image_url) ? (
@@ -505,6 +543,7 @@ export default function CartScreen({
                               <div className="min-w-0">
                                 <h5 className="line-clamp-2 text-sm font-bold text-slate-900">{option.quarry_name}</h5>
                                 <p className="mt-1 text-xs text-slate-500">{Number(option.distance).toFixed(1)} км от адреса</p>
+                                <p className="mt-1 truncate text-[10px] font-semibold text-sky-600">{item.deliveryOption.title}</p>
                               </div>
                             </div>
                             <div className="mt-3 flex items-end justify-between gap-3">
@@ -529,9 +568,9 @@ export default function CartScreen({
                     type="button"
                     onClick={() =>
                       setMapContext({
-                        itemId: item.id,
-                        material: item.material,
-                        deliveryOptionId: item.deliveryOption.id,
+                        itemId: representativeItem.id,
+                        material: representativeItem.material,
+                        deliveryOptionId: representativeItem.deliveryOption.id,
                       })
                     }
                     className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-bold text-sky-700 transition-colors hover:bg-sky-100"
@@ -589,6 +628,7 @@ export default function CartScreen({
       {mapContext && (
         <PickupPointMapScreen
           material={mapContext.material}
+          deliveryLocation={deliveryCoords}
           onClose={() => setMapContext(null)}
           onSelect={selectPointFromMap}
         />

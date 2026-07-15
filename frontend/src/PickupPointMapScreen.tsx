@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { baseURL } from "./utils";
 import { MaterialProps } from "./MaterialDetailScreen";
+import { useCartStore } from "./store";
 
 export interface PickupPointMarker {
   id: string;
@@ -23,6 +24,7 @@ export interface PickupPointMarker {
   material_id: string;
   price: number;
   unit: string;
+  min_delivery_price: number;
   primary_image_url?: string | null;
 }
 
@@ -37,6 +39,7 @@ interface Props {
   material: MaterialProps;
   onClose: () => void;
   onSelect: (point: PickupPointSelection) => void;
+  deliveryLocation?: UserLocation | null;
 }
 
 interface UserLocation {
@@ -84,7 +87,12 @@ const TYPE_LABELS: Record<string, string> = {
   supplier: "Поставщик",
 };
 
-export default function PickupPointMapScreen({ material, onClose, onSelect }: Props) {
+export default function PickupPointMapScreen({
+  material,
+  onClose,
+  onSelect,
+  deliveryLocation,
+}: Props) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const markerRefs = useRef<any[]>([]);
@@ -101,17 +109,20 @@ export default function PickupPointMapScreen({ material, onClose, onSelect }: Pr
   const [detailsLoadingId, setDetailsLoadingId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const cartItems = useCartStore((state) => state.cartItems);
+  const cartItem = cartItems.find((item) => item.material.id === material.id);
+  const distanceLocation = deliveryLocation || userLocation;
 
   const carouselPoints = points
     .filter((point) => filter === "all" || point.point_type === filter)
     .map((point) => ({
       point,
-      distance: userLocation
-        ? calculateDistance(userLocation.lat, userLocation.lon, point.lat, point.lon)
+      distance: distanceLocation
+        ? calculateDistance(distanceLocation.lat, distanceLocation.lon, point.lat, point.lon)
         : null,
     }));
 
-  if (userLocation) {
+  if (distanceLocation) {
     carouselPoints.sort((first, second) => (first.distance ?? 0) - (second.distance ?? 0));
   }
 
@@ -126,11 +137,32 @@ export default function PickupPointMapScreen({ material, onClose, onSelect }: Pr
         : [],
   ));
   const selectedAddress = getClientFacingAddress(selected?.address);
-  const selectedDistance = selected && userLocation
-    ? calculateDistance(userLocation.lat, userLocation.lon, selected.lat, selected.lon)
+  const selectedDistance = selected && distanceLocation
+    ? calculateDistance(distanceLocation.lat, distanceLocation.lon, selected.lat, selected.lon)
+    : null;
+  const selectedVehicle = cartItem?.deliveryOption;
+  const selectedPricing = selected && selectedDistance !== null && selectedVehicle?.delivery_rate_per_km != null
+    ? (() => {
+        const deliveryCost = Math.max(
+          selectedDistance * Number(selectedVehicle.delivery_rate_per_km),
+          Number(selected.min_delivery_price || 0),
+        );
+        const materialCost =
+          Number(selected.price) *
+          Number(selectedVehicle.capacity_m3) *
+          Number(cartItem?.quantity || 1);
+        return {
+          deliveryCost: Math.round(deliveryCost),
+          totalAmount: Math.round(materialCost + deliveryCost),
+        };
+      })()
     : null;
 
   useEffect(() => {
+    if (deliveryLocation) {
+      setIsLocationResolved(true);
+      return;
+    }
     if (!("geolocation" in navigator)) {
       setIsLocationResolved(true);
       return;
@@ -154,7 +186,7 @@ export default function PickupPointMapScreen({ material, onClose, onSelect }: Pr
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [deliveryLocation]);
 
   useEffect(() => {
     let cancelled = false;
@@ -230,7 +262,7 @@ export default function PickupPointMapScreen({ material, onClose, onSelect }: Pr
       price.textContent = `${Number(point.price).toLocaleString("ru-RU")} ₽/${point.unit}`;
       content.append(title, price);
       element.append(icon, content);
-      element.addEventListener("click", () => activatePoint(point, true, true));
+      element.addEventListener("click", () => void openPointDetails(point));
 
       return new mapgl.HtmlMarker(mapRef.current, {
         coordinates: [point.lon, point.lat],
@@ -267,6 +299,13 @@ export default function PickupPointMapScreen({ material, onClose, onSelect }: Pr
 
   const openPointDetails = async (point: PickupPointMarker) => {
     activatePoint(point, true, true);
+    setSelected({
+      ...point,
+      address: "",
+      description: null,
+      delivery_options: [],
+      media_files: [],
+    });
     detailsAbortRef.current?.abort();
     const controller = new AbortController();
     detailsAbortRef.current = controller;
@@ -389,7 +428,7 @@ export default function PickupPointMapScreen({ material, onClose, onSelect }: Pr
                   else pointCardRefs.current.delete(point.id);
                 }}
                 data-point-id={point.id}
-                onClick={() => activatePoint(point, true, true)}
+                onClick={() => void openPointDetails(point)}
                 className={`flex w-[280px] shrink-0 snap-center cursor-pointer gap-3 rounded-2xl border bg-white p-3 text-left shadow-xl transition ${activePointId === point.id ? "border-sky-500 ring-2 ring-sky-200" : "border-gray-100 hover:border-sky-200"}`}
               >
                 <div className="grid h-24 w-24 shrink-0 place-items-center overflow-hidden rounded-xl bg-gray-100 text-gray-400">
@@ -499,7 +538,9 @@ export default function PickupPointMapScreen({ material, onClose, onSelect }: Pr
                 <strong className="text-gray-900">{Number(selected.price).toLocaleString("ru-RU")} ₽/{selected.unit}</strong>
               </div>
               <span className="text-right text-sm font-semibold text-gray-700">
-                Итоговая цена — после выбора машины
+                {selectedPricing
+                  ? `Доставка: ${selectedPricing.deliveryCost.toLocaleString("ru-RU")} ₽ | Итого: ${selectedPricing.totalAmount.toLocaleString("ru-RU")} ₽`
+                  : "Итоговая цена — после выбора машины"}
               </span>
             </div>
           </div>

@@ -123,7 +123,14 @@ export default function MaterialBottomSheet({
 
   const handleSubmit = () => {
     if (!selectedOption) return;
-    addToCart({ ...material, price: materialPrice }, selectedOption, comment, pickupPoint || undefined);
+    const wasAdded = addToCart(
+      { ...material, price: materialPrice },
+      selectedOption,
+      comment,
+      pickupPoint || undefined,
+      deliveryOptions,
+    );
+    if (!wasAdded) return;
     toast.success("Товар добавлен в корзину");
     onClose();
   };

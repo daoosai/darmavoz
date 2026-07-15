@@ -5,8 +5,6 @@ import {
   ImageIcon,
   Loader2,
   MapPin,
-  Minus,
-  Plus,
 } from "lucide-react";
 import { useAuthStore, useCartStore, useAddressStore } from "./store";
 import { getImageUrl, baseURL, resolveMediaUrl } from "./utils";
@@ -58,8 +56,6 @@ export default function CartScreen({
     removeFromCart,
     getTotalPrice,
     clearCart,
-    increaseQuantity,
-    decreaseQuantity,
   } = useCartStore();
   const { role, token } = useAuthStore();
   const { selectedAddress, setSelectedAddress } = useAddressStore();
@@ -348,8 +344,7 @@ export default function CartScreen({
                 </div>
 
                 <div className="text-[14px] text-slate-500 line-clamp-1">
-                  {item.deliveryOption.title} ({item.deliveryOption.capacity_m3}{" "}
-                  м³)
+                  {item.deliveryOption.title} (машина до {item.deliveryOption.capacity_m3} м³)
                 </div>
 
                 {item.comment && (
@@ -359,24 +354,8 @@ export default function CartScreen({
                 )}
 
                 <div className="flex justify-end items-end mt-auto">
-                  <div className="flex items-center gap-2.5 bg-slate-50 rounded-full px-2 py-0.5 border border-slate-100 mb-1">
-                    <button
-                      onClick={() => decreaseQuantity(item.id)}
-                      disabled={item.quantity <= 1}
-                      className="p-0.5 text-slate-400 hover:text-[#2DB0E6] disabled:opacity-50 disabled:hover:text-slate-400 transition-colors"
-                    >
-                      <Minus className="w-4 h-4" />
-                    </button>
-                    <span className="text-sm font-semibold text-slate-700 w-4 text-center">
-                      {item.quantity}
-                    </span>
-                    <button
-                      onClick={() => increaseQuantity(item.id)}
-                      disabled={item.quantity >= 10}
-                      className="p-0.5 text-slate-400 hover:text-[#2DB0E6] disabled:opacity-50 disabled:hover:text-slate-400 transition-colors"
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
+                  <div className="mb-1 rounded-full border border-sky-100 bg-sky-50 px-3 py-1 text-xs font-bold text-sky-700">
+                    Объём: {Number(item.volume ?? item.deliveryOption.capacity_m3 * item.quantity)} м³
                   </div>
                 </div>
               </div>
@@ -447,7 +426,11 @@ export default function CartScreen({
                 calculatedItems.map(({ calculation }) => calculation.best_option.quarry_id),
               );
               const totalVolume = group.reduce(
-                (sum, item) => sum + item.deliveryOption.capacity_m3 * item.quantity,
+                (sum, item) =>
+                  sum +
+                  Number(
+                    item.volume ?? item.deliveryOption.capacity_m3 * item.quantity,
+                  ),
                 0,
               );
               const aggregate = calculatedItems.reduce(
@@ -475,7 +458,7 @@ export default function CartScreen({
                     <div>
                       <h3 className="font-bold text-slate-900">{representativeItem.material.name}</h3>
                       <p className="text-xs text-slate-500">
-                        {totalVolume} м³ · {group.map((item) => `${item.deliveryOption.title} × ${item.quantity}`).join(", ")}
+                        {totalVolume} м³ · {group.map((item) => item.deliveryOption.title).join(", ")}
                       </p>
                     </div>
                   </div>

@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { MaterialProps, DeliveryOption } from "./MaterialDetailScreen";
 import { PickupPointSelection } from "./PickupPointMapScreen";
+import toast from "react-hot-toast";
 
 export interface CartItem {
   id: string; // unique id for the cart item
@@ -10,6 +11,7 @@ export interface CartItem {
   pickupPoint?: PickupPointSelection;
   comment?: string;
   quantity: number;
+  volume: number;
 }
 
 interface CartState {
@@ -19,10 +21,9 @@ interface CartState {
     deliveryOption: DeliveryOption,
     comment?: string,
     pickupPoint?: PickupPointSelection,
-  ) => void;
+    availableDeliveryOptions?: DeliveryOption[],
+  ) => boolean;
   removeFromCart: (id: string) => void;
-  increaseQuantity: (id: string) => void;
-  decreaseQuantity: (id: string) => void;
   clearCart: () => void;
   getTotalPrice: () => number;
 }
@@ -75,7 +76,67 @@ export const useAddressStore = create<AddressState>()(
 
 export const useCartStore = create<CartState>((set, get) => ({
   cartItems: [],
-  addToCart: (material, deliveryOption, comment, pickupPoint) => {
+  addToCart: (
+    material,
+    deliveryOption,
+    comment,
+    pickupPoint,
+    availableDeliveryOptions = [],
+  ) => {
+    const existingItems = get().cartItems.filter(
+      (item) => item.material.id === material.id,
+    );
+    const uniqueOptions = Array.from(
+      new Map(
+        [deliveryOption, ...availableDeliveryOptions].map((option) => [option.id, option]),
+      ).values(),
+    ).sort((first, second) => Number(first.capacity_m3) - Number(second.capacity_m3));
+
+    if (existingItems.length > 0) {
+      const existingVolume = existingItems.reduce(
+        (sum, item) =>
+          sum +
+          Number(
+            item.volume ?? item.deliveryOption.capacity_m3 * item.quantity,
+          ),
+        0,
+      );
+      const newVolume = existingVolume + Number(deliveryOption.capacity_m3);
+      const upgradedOption = uniqueOptions.find(
+        (option) => Number(option.capacity_m3) >= newVolume,
+      );
+
+      if (!upgradedOption) {
+        toast.error(
+          "Максимальный объем одной машины превышен. Пожалуйста, оформите второй заказ.",
+        );
+        return false;
+      }
+
+      const targetItem = existingItems[0];
+      set((state) => ({
+        cartItems: state.cartItems
+          .filter(
+            (item) =>
+              item.material.id !== material.id || item.id === targetItem.id,
+          )
+          .map((item) =>
+            item.id === targetItem.id
+              ? {
+                  ...item,
+                  material: { ...item.material, ...material },
+                  deliveryOption: upgradedOption,
+                  pickupPoint: undefined,
+                  comment: item.comment || comment,
+                  quantity: 1,
+                  volume: newVolume,
+                }
+              : item,
+          ),
+      }));
+      return true;
+    }
+
     set((state) => ({
       cartItems: [
         ...state.cartItems,
@@ -86,30 +147,14 @@ export const useCartStore = create<CartState>((set, get) => ({
           pickupPoint,
           comment,
           quantity: 1,
+          volume: Number(deliveryOption.capacity_m3),
         },
       ],
     }));
+    return true;
   },
   removeFromCart: (id) => {
     set((state) => ({ cartItems: state.cartItems.filter((i) => i.id !== id) }));
-  },
-  increaseQuantity: (id) => {
-    set((state) => ({
-      cartItems: state.cartItems.map((item) =>
-        item.id === id && item.quantity < 10
-          ? { ...item, quantity: item.quantity + 1 }
-          : item,
-      ),
-    }));
-  },
-  decreaseQuantity: (id) => {
-    set((state) => ({
-      cartItems: state.cartItems.map((item) =>
-        item.id === id && item.quantity > 1
-          ? { ...item, quantity: item.quantity - 1 }
-          : item,
-      ),
-    }));
   },
   clearCart: () => {
     set({ cartItems: [] });
@@ -118,7 +163,8 @@ export const useCartStore = create<CartState>((set, get) => ({
     return get().cartItems.reduce(
       (total, item) =>
         total +
-        (item.pickupPoint?.price ?? item.material.price) * item.deliveryOption.capacity_m3 * item.quantity,
+        (item.pickupPoint?.price ?? item.material.price) *
+          Number(item.volume ?? item.deliveryOption.capacity_m3 * item.quantity),
       0,
     );
   },

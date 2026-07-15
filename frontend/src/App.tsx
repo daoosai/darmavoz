@@ -9,6 +9,8 @@ import {
   Search,
   ImageIcon,
   RefreshCw,
+  Truck,
+  Wrench,
 } from "lucide-react";
 import { MaterialProps } from "./MaterialDetailScreen";
 import OrdersScreen from "./OrdersScreen";
@@ -44,6 +46,8 @@ import InstallPWA from "./InstallPWA";
 import { usePushNotifications } from "./usePushNotifications";
 import SupplierPortalScreen from "./SupplierPortalScreen";
 import FloatingOrderTracker from "./FloatingOrderTracker";
+import EquipmentCatalogScreen from "./EquipmentCatalogScreen";
+import SupportScreen from "./SupportScreen";
 
 // Reuse Material type as MaterialProps by exporting it from MaterialDetailScreen or type matching
 export default function App() {
@@ -434,6 +438,7 @@ function MainContent({
   ];
 
   const [showAddressSheet, setShowAddressSheet] = useState(false);
+  const [serviceDirection, setServiceDirection] = useState<"delivery" | "equipment">("delivery");
 
   const handleCartClick = () => {
     setActiveTab("cart");
@@ -472,8 +477,23 @@ function MainContent({
                 </button>
               </div>
 
+              <div className="mx-4 mb-5 grid grid-cols-2 gap-3 rounded-2xl bg-slate-100 p-1.5">
+                <button
+                  onClick={() => setServiceDirection("delivery")}
+                  className={`flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-bold transition ${serviceDirection === "delivery" ? "bg-white text-sky-600 shadow-sm" : "text-slate-500"}`}
+                >
+                  <Truck className="h-4 w-4" /> Доставка
+                </button>
+                <button
+                  onClick={() => setServiceDirection("equipment")}
+                  className={`flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-bold transition ${serviceDirection === "equipment" ? "bg-white text-sky-600 shadow-sm" : "text-slate-500"}`}
+                >
+                  <Wrench className="h-4 w-4" /> Спецтехника
+                </button>
+              </div>
+
               {/* Search Bar */}
-              <div className="px-4 mb-6">
+              {serviceDirection === "delivery" && <div className="px-4 mb-6">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-[18px] h-[18px]" />
                   <input
@@ -484,8 +504,9 @@ function MainContent({
                     className="w-full bg-slate-100 border-none rounded-xl py-3 pl-10 pr-4 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-brand-blue/20 transition-all text-sm"
                   />
                 </div>
-              </div>
+              </div>}
 
+              {serviceDirection === "delivery" ? <>
               {/* Delivery direction */}
               <section className="mx-4 mb-6 overflow-hidden">
                 <div className="px-4 pb-3 pt-4">
@@ -557,6 +578,7 @@ function MainContent({
                     ))
                 )}
               </div>
+              </> : <EquipmentCatalogScreen onOpenAuth={() => setShowAuthSheet(true)} />}
             </>
           )}
 
@@ -583,10 +605,15 @@ function MainContent({
             (role === "client" ? (
               <ClientProfileScreen
                 onOpenAddresses={() => setShowAddressSheet(true)}
+                onOpenSupport={() => setActiveTab("support")}
               />
             ) : (
               <ProfileScreen onOpenAuth={() => setShowAuthSheet(true)} />
             ))}
+
+          {activeTab === "support" && (
+            <SupportScreen onBack={() => setActiveTab("profile")} />
+          )}
         </main>
 
         {role === "client" && (

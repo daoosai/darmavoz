@@ -24,9 +24,11 @@ import {
   Phone,
   Ban,
   Navigation,
+  Headphones,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { logoutCurrentSession } from "./pushAuth";
+import SupportScreen from "./SupportScreen";
 
 export interface DriverOrder {
   id: string;
@@ -79,7 +81,7 @@ export default function DriverOrdersScreen({
   const { token } = useAuthStore();
   const [status, setStatus] = useState<DriverStatus>("offline");
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
-  const [activeTab, setActiveTab] = useState<"orders" | "profile">("orders");
+  const [activeTab, setActiveTab] = useState<"orders" | "profile" | "support">("orders");
 
   const [orders, setOrders] = useState<DriverOrder[]>([]);
 
@@ -614,12 +616,14 @@ export default function DriverOrdersScreen({
             </PullToRefresh>
           )}
         </div>
-      ) : (
+      ) : activeTab === "profile" ? (
         <DriverProfileScreen
           onLogout={handleLogout}
           onProfileUpdate={fetchProfile}
           hasActiveOrder={orders.length > 0}
         />
+      ) : (
+        <SupportScreen />
       )}
 
       {/* Bottom Navigation */}
@@ -639,6 +643,20 @@ export default function DriverOrdersScreen({
               <ClipboardList className="w-6 h-6" />
             </div>
             <span className="text-[10px] font-bold">Заказы</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("support")}
+            className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${
+              activeTab === "support"
+                ? "text-[#2DB0E6]"
+                : "text-slate-400 hover:text-slate-600"
+            }`}
+          >
+            <div className={`p-1.5 rounded-xl transition-colors ${activeTab === "support" ? "bg-[#2DB0E6]/10" : ""}`}>
+              <Headphones className="w-6 h-6" />
+            </div>
+            <span className="text-[10px] font-bold">Поддержка</span>
           </button>
 
           <button

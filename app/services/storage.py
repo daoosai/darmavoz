@@ -28,6 +28,7 @@ ALLOWED_ENTITY_TYPES = {
     "order",
     "vehicle",
     "quarry",
+    "equipment_listing",
 }
 UPLOAD_CORS_CONFIGURATION = {
     "CORSRules": [

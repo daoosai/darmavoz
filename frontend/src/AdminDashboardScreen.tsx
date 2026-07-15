@@ -27,6 +27,8 @@ import {
   Search,
   Clock,
   Filter,
+  Wrench,
+  Headphones,
 } from "lucide-react";
 import AdminProfileScreen from "./AdminProfileScreen";
 import AdminQuarriesScreen from "./AdminQuarriesScreen";
@@ -34,6 +36,8 @@ import AdminCategoriesPanel from "./AdminCategoriesPanel";
 import { DriverHistoryModal } from "./components/admin/DriverHistoryModal";
 import toast from "react-hot-toast";
 import { logoutCurrentSession } from "./pushAuth";
+import AdminEquipmentScreen from "./AdminEquipmentScreen";
+import SupportScreen from "./SupportScreen";
 
 interface AdminCategory {
   id: string;
@@ -153,7 +157,7 @@ export default function AdminDashboardScreen({
 }: AdminDashboardScreenProps) {
   const { token } = useAuthStore();
   const [activeTab, setActiveTab] = useState<
-    "materials" | "quarries" | "delivery" | "drivers" | "moderation" | "profile"
+    "materials" | "quarries" | "delivery" | "drivers" | "moderation" | "equipment" | "support" | "profile"
   >("materials");
 
   const [materials, setMaterials] = useState<AdminMaterial[]>([]);
@@ -1464,7 +1468,7 @@ export default function AdminDashboardScreen({
         </div>
 
         <div className="hidden sm:flex flex-1 sm:justify-center">
-          <div className="bg-slate-100 p-1 rounded-xl flex w-full sm:w-auto">
+          <div className="bg-slate-100 p-1 rounded-xl flex w-full sm:w-auto overflow-x-auto">
             <button
               onClick={() => setActiveTab("materials")}
               className={`flex-1 sm:w-auto flex-shrink-0 whitespace-nowrap py-2 px-3 text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2 ${
@@ -1532,6 +1536,28 @@ export default function AdminDashboardScreen({
                 )}
               </div>
               Модерация
+            </button>
+            <button
+              onClick={() => setActiveTab("equipment")}
+              className={`flex-1 sm:w-auto flex-shrink-0 whitespace-nowrap py-2 px-3 text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2 ${
+                activeTab === "equipment"
+                  ? "bg-white text-[#209ccf] shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              <Wrench className="w-4 h-4" />
+              Спецтехника
+            </button>
+            <button
+              onClick={() => setActiveTab("support")}
+              className={`flex-1 sm:w-auto flex-shrink-0 whitespace-nowrap py-2 px-3 text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2 ${
+                activeTab === "support"
+                  ? "bg-white text-[#209ccf] shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              <Headphones className="w-4 h-4" />
+              Поддержка
             </button>
             <button
               onClick={() => setActiveTab("profile")}
@@ -2934,6 +2960,10 @@ export default function AdminDashboardScreen({
             </>
           ) : activeTab === "quarries" ? (
             <AdminQuarriesScreen materials={materials} />
+          ) : activeTab === "equipment" ? (
+            <AdminEquipmentScreen />
+          ) : activeTab === "support" ? (
+            <SupportScreen operatorMode />
           ) : activeTab === "profile" ? (
             <AdminProfileScreen onLogout={handleLogout} />
           ) : null}
@@ -2941,7 +2971,7 @@ export default function AdminDashboardScreen({
       </div>
 
       {/* Mobile Bottom Navigation Menu */}
-      <div className="sm:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex z-50 h-[68px] justify-around items-center px-2 pb-safe">
+      <div className="sm:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex z-50 h-[68px] justify-start items-center px-2 pb-safe overflow-x-auto">
         <button
           onClick={() => setActiveTab("materials")}
           className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${
@@ -3026,6 +3056,20 @@ export default function AdminDashboardScreen({
             )}
           </div>
           <span className="text-[10px] font-bold">Модерация</span>
+        </button>
+        <button
+          onClick={() => setActiveTab("equipment")}
+          className={`min-w-[72px] flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${activeTab === "equipment" ? "text-[#2DB0E6]" : "text-slate-400"}`}
+        >
+          <div className={`p-1.5 rounded-xl ${activeTab === "equipment" ? "bg-[#2DB0E6]/10" : ""}`}><Wrench className="w-6 h-6" /></div>
+          <span className="text-[10px] font-bold">Техника</span>
+        </button>
+        <button
+          onClick={() => setActiveTab("support")}
+          className={`min-w-[72px] flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${activeTab === "support" ? "text-[#2DB0E6]" : "text-slate-400"}`}
+        >
+          <div className={`p-1.5 rounded-xl ${activeTab === "support" ? "bg-[#2DB0E6]/10" : ""}`}><Headphones className="w-6 h-6" /></div>
+          <span className="text-[10px] font-bold">Поддержка</span>
         </button>
         <button
           onClick={() => setActiveTab("profile")}

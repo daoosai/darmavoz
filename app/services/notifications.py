@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from uuid import UUID
 
-from app.models.models import Order, Quarry
+from app.models.models import Order, Quarry, SpecialEquipmentApplication
 from app.services.push_service import (
     schedule_push_to_client,
     schedule_push_to_driver,
@@ -225,3 +225,55 @@ def schedule_pickup_point_moderation_notification(point: Quarry) -> None:
             "pickup_point_id": str(point.id),
         },
     )
+
+
+def schedule_equipment_application_notification(
+    application: SpecialEquipmentApplication,
+) -> None:
+    _safe_schedule(
+        schedule_push_to_logists,
+        "Новая заявка на спецтехнику",
+        f"Клиент оставил заявку на {application.listing_title_snapshot}",
+        {
+            "event": "equipment_application_created",
+            "application_id": str(application.id),
+            "listing_id": str(application.listing_id),
+        },
+    )
+
+
+def schedule_support_operator_notification(ticket_id: UUID, *, is_new: bool) -> None:
+    _safe_schedule(
+        schedule_push_to_logists,
+        "Новое обращение в поддержку" if is_new else "Новое сообщение в поддержке",
+        "Пользователь ожидает ответа оператора",
+        {
+            "event": "support_ticket_created" if is_new else "support_message_created",
+            "ticket_id": str(ticket_id),
+        },
+    )
+
+
+def schedule_support_reply_notification(
+    *,
+    ticket_id: UUID,
+    client_id: UUID | None = None,
+    driver_id: UUID | None = None,
+) -> None:
+    data = {"event": "support_operator_reply", "ticket_id": str(ticket_id)}
+    if client_id is not None:
+        _safe_schedule(
+            schedule_push_to_client,
+            client_id,
+            "Ответ службы поддержки",
+            "Оператор ответил на ваше обращение",
+            data,
+        )
+    elif driver_id is not None:
+        _safe_schedule(
+            schedule_push_to_driver,
+            driver_id,
+            "Ответ службы поддержки",
+            "Оператор ответил на ваше обращение",
+            data,
+        )

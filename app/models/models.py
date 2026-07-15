@@ -1,11 +1,13 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime, time
 from enum import Enum
 from typing import List, Optional
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Column,
+    Date,
     DateTime,
     Enum as SQLEnum,
     Float,
@@ -15,6 +17,7 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+    Time,
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -413,6 +416,196 @@ class MediaFile(Base):
     slot_key: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     is_primary: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SpecialEquipmentType(Base):
+    __tablename__ = "special_equipment_types"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    slug: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    listings: Mapped[List["SpecialEquipmentListing"]] = relationship(
+        "SpecialEquipmentListing", back_populates="equipment_type"
+    )
+
+
+class SpecialEquipmentListing(Base):
+    __tablename__ = "special_equipment_listings"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    equipment_type_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("special_equipment_types.id"), nullable=False, index=True
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    price_amount: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
+    price_unit: Mapped[str] = mapped_column(String(20), nullable=False)
+    city: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    district: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "price_unit IN ('hour', 'shift', 'day', 'negotiable')",
+            name="ck_special_equipment_price_unit",
+        ),
+        CheckConstraint(
+            "(price_unit = 'negotiable' AND price_amount IS NULL) OR "
+            "(price_unit <> 'negotiable' AND price_amount IS NOT NULL AND price_amount > 0)",
+            name="ck_special_equipment_price",
+        ),
+    )
+
+    equipment_type: Mapped["SpecialEquipmentType"] = relationship(
+        "SpecialEquipmentType", back_populates="listings"
+    )
+    created_by: Mapped["User"] = relationship("User", foreign_keys=[created_by_user_id])
+    applications: Mapped[List["SpecialEquipmentApplication"]] = relationship(
+        "SpecialEquipmentApplication", back_populates="listing"
+    )
+
+
+class SpecialEquipmentApplication(Base):
+    __tablename__ = "special_equipment_applications"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    listing_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("special_equipment_listings.id"), nullable=False, index=True
+    )
+    client_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clients.id"), nullable=False, index=True)
+    listing_title_snapshot: Mapped[str] = mapped_column(String(255), nullable=False)
+    contact_phone: Mapped[str] = mapped_column(String(20), nullable=False)
+    object_address: Mapped[str] = mapped_column(String(1000), nullable=False)
+    requested_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    requested_time: Mapped[time] = mapped_column(Time, nullable=False)
+    duration_value: Mapped[float] = mapped_column(Float, nullable=False)
+    duration_unit: Mapped[str] = mapped_column(String(20), nullable=False)
+    comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="new", nullable=False, index=True)
+    processed_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    closed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("duration_value > 0", name="ck_special_equipment_application_duration"),
+        CheckConstraint(
+            "duration_unit IN ('hours', 'shifts')",
+            name="ck_special_equipment_application_duration_unit",
+        ),
+        CheckConstraint(
+            "status IN ('new', 'in_progress', 'closed')",
+            name="ck_special_equipment_application_status",
+        ),
+    )
+
+    listing: Mapped["SpecialEquipmentListing"] = relationship(
+        "SpecialEquipmentListing", back_populates="applications"
+    )
+    client: Mapped["Client"] = relationship("Client")
+    processed_by: Mapped[Optional["User"]] = relationship(
+        "User", foreign_keys=[processed_by_user_id]
+    )
+
+
+class SupportTicket(Base):
+    __tablename__ = "support_tickets"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    client_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("clients.id"), nullable=True, index=True
+    )
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("users.id"), nullable=True, index=True
+    )
+    subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    category: Mapped[str] = mapped_column(String(50), default="general", nullable=False, index=True)
+    context_type: Mapped[str] = mapped_column(String(50), default="general", nullable=False)
+    context_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="new", nullable=False, index=True)
+    assigned_to_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    closed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "(client_id IS NOT NULL AND user_id IS NULL) OR "
+            "(client_id IS NULL AND user_id IS NOT NULL)",
+            name="ck_support_ticket_single_author",
+        ),
+        CheckConstraint(
+            "status IN ('new', 'in_progress', 'closed')",
+            name="ck_support_ticket_status",
+        ),
+        CheckConstraint(
+            "context_type IN ('general', 'order', 'pickup_point', 'equipment_listing', 'user')",
+            name="ck_support_ticket_context_type",
+        ),
+    )
+
+    client: Mapped[Optional["Client"]] = relationship("Client", foreign_keys=[client_id])
+    user: Mapped[Optional["User"]] = relationship("User", foreign_keys=[user_id])
+    assigned_to: Mapped[Optional["User"]] = relationship(
+        "User", foreign_keys=[assigned_to_user_id]
+    )
+    messages: Mapped[List["SupportMessage"]] = relationship(
+        "SupportMessage", back_populates="ticket", cascade="all, delete-orphan"
+    )
+
+
+class SupportMessage(Base):
+    __tablename__ = "support_messages"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    ticket_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("support_tickets.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    author_client_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("clients.id"), nullable=True
+    )
+    author_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint(
+            "(author_client_id IS NOT NULL AND author_user_id IS NULL) OR "
+            "(author_client_id IS NULL AND author_user_id IS NOT NULL)",
+            name="ck_support_message_single_author",
+        ),
+    )
+
+    ticket: Mapped["SupportTicket"] = relationship("SupportTicket", back_populates="messages")
+    author_client: Mapped[Optional["Client"]] = relationship(
+        "Client", foreign_keys=[author_client_id]
+    )
+    author_user: Mapped[Optional["User"]] = relationship(
+        "User", foreign_keys=[author_user_id]
+    )
 
 
 class OrderStatus(str, Enum):

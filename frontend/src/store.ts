@@ -132,7 +132,8 @@ export const useClientOrdersStore = create<ClientOrdersState>((set) => ({
   clearOrders: () => set({ orders: [], isLoading: false }),
 }));
 
-export const useCartStore = create<CartState>((set, get) => ({
+export const useCartStore = create<CartState>()(
+  persist((set, get) => ({
   cartItems: [],
   addToCart: (
     material,
@@ -251,4 +252,7 @@ export const useCartStore = create<CartState>((set, get) => ({
       0,
     );
   },
-}));
+  }), {
+    name: "cart-storage",
+  })
+);

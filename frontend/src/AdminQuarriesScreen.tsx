@@ -3,7 +3,7 @@ import { Plus, Edit2, ImagePlus, Star, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { fetch2gisAddressSuggestions, withTyumenBias } from "./addressSearch";
 import { useAuthStore } from "./store";
-import { baseURL } from "./utils";
+import { baseURL, extractApiErrorMessage } from "./utils";
 
 export interface Quarry {
   id?: string;
@@ -64,6 +64,7 @@ export default function AdminQuarriesScreen({
   const [statusFilter, setStatusFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [isModerating, setIsModerating] = useState(false);
+  const [deletingPointId, setDeletingPointId] = useState<string | null>(null);
 
   const fetchQuarries = async () => {
     try {
@@ -123,6 +124,33 @@ export default function AdminQuarriesScreen({
     void moderatePoint(pointId, "reject", reason.trim());
   };
 
+  const deletePoint = async (point: Quarry) => {
+    if (!point.id) return;
+    if (!window.confirm("Удалить эту точку забора?")) return;
+    setDeletingPointId(point.id);
+    try {
+      const response = await fetch(`${baseURL}/admin/pickup-points/${point.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        toast.error(extractApiErrorMessage(data, "Не удалось удалить точку"));
+        return;
+      }
+      toast.success(
+        data.action === "deleted"
+          ? "Точка удалена"
+          : "Точка скрыта, так как уже связана с заказами",
+      );
+      await fetchQuarries();
+    } catch {
+      toast.error("Не удалось связаться с сервером");
+    } finally {
+      setDeletingPointId(null);
+    }
+  };
+
   const handleOpenModal = (quarry?: Quarry) => {
     if (quarry) {
       setEditingQuarry(quarry);
@@ -158,7 +186,7 @@ export default function AdminQuarriesScreen({
       <div className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
         <div className="flex items-center gap-3">
           <div>
-            <h2 className="text-lg font-bold text-slate-800">Карьеры</h2>
+            <h2 className="text-lg font-bold text-slate-800">Точки</h2>
             <p className="text-sm text-slate-500">
               Управление точками погрузки
             </p>
@@ -208,7 +236,7 @@ export default function AdminQuarriesScreen({
               {quarries.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="p-8 text-center text-slate-500">
-                    Нет карьеров
+                    Нет точек
                   </td>
                 </tr>
               ) : (
@@ -256,6 +284,15 @@ export default function AdminQuarriesScreen({
                         >
                           <Edit2 className="w-5 h-5" />
                         </button>
+                        <button
+                          type="button"
+                          disabled={deletingPointId === quarry.id}
+                          onClick={() => void deletePoint(quarry)}
+                          className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all disabled:opacity-50"
+                          title="Удалить точку"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
                         {quarry.moderation_status === "pending_moderation" && quarry.id && (
                           <div className="flex flex-col items-stretch gap-2">
                             <button disabled={isModerating} onClick={() => void moderatePoint(quarry.id!, "approve")} className="w-28 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50">Одобрить</button>
@@ -276,7 +313,7 @@ export default function AdminQuarriesScreen({
       <div className="flex flex-col gap-4 md:hidden">
         {quarries.length === 0 ? (
           <div className="p-8 text-center text-slate-500 bg-white rounded-2xl border border-slate-100 shadow-sm">
-            Нет карьеров
+            Нет точек
           </div>
         ) : (
           quarries.map((quarry) => (
@@ -322,6 +359,15 @@ export default function AdminQuarriesScreen({
                     className="p-2 text-slate-400 hover:text-[#2DB0E6] hover:bg-[#2DB0E6]/10 rounded-xl transition-all"
                   >
                     <Edit2 className="w-5 h-5" />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={deletingPointId === quarry.id}
+                    onClick={() => void deletePoint(quarry)}
+                    className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all disabled:opacity-50"
+                    title="Удалить точку"
+                  >
+                    <Trash2 className="w-5 h-5" />
                   </button>
                   {quarry.moderation_status === "pending_moderation" && quarry.id ? (
                     <div className="flex flex-col items-stretch gap-2">

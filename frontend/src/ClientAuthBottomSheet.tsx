@@ -20,36 +20,88 @@ export default function ClientAuthBottomSheet({ isOpen, onClose }: Props) {
   const [agree4, setAgree4] = useState(false);
 
   const [timer, setTimer] = useState(40);
+  const phoneInputRef = useRef<HTMLInputElement | null>(null);
 
-  const formatPhoneNumber = (value: string) => {
+  const normalizePhoneDigits = (value: string) => {
     let digits = value.replace(/\D/g, "");
     if (digits.startsWith("7") || digits.startsWith("8")) {
       digits = digits.substring(1);
     }
-    digits = digits.substring(0, 10);
-    
+    return digits.substring(0, 10);
+  };
+
+  const formatPhoneNumber = (value: string) => {
+    const digits = normalizePhoneDigits(value);
     let formatted = "+7";
     if (digits.length > 0) {
       formatted += " (" + digits.substring(0, 3);
     }
-    if (digits.length >= 3) {
+    if (digits.length >= 4) {
       formatted += ") " + digits.substring(3, 6);
     }
-    if (digits.length >= 6) {
+    if (digits.length >= 7) {
       formatted += "-" + digits.substring(6, 8);
     }
-    if (digits.length >= 8) {
+    if (digits.length >= 9) {
       formatted += "-" + digits.substring(8, 10);
     }
     return formatted;
   };
 
   const cleanPhoneNumber = (p: string) => {
-    return p.replace(/[\s()+-]/g, '');
+    return `7${normalizePhoneDigits(p)}`;
+  };
+
+  const getCaretPositionByDigits = (digitsCount: number) => {
+    const safeCount = Math.max(0, Math.min(10, digitsCount));
+    return formatPhoneNumber(`7${"0".repeat(safeCount)}`).length;
+  };
+
+  const applyPhoneValue = (rawValue: string, digitsBeforeCaret: number) => {
+    const formattedValue = formatPhoneNumber(rawValue);
+    setPhone(formattedValue);
+    requestAnimationFrame(() => {
+      const input = phoneInputRef.current;
+      if (!input) return;
+      const caretPosition = getCaretPositionByDigits(digitsBeforeCaret);
+      input.setSelectionRange(caretPosition, caretPosition);
+    });
   };
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setPhone(formatPhoneNumber(e.target.value));
+    const caretPosition = e.target.selectionStart ?? e.target.value.length;
+    const digitsBeforeCaret = normalizePhoneDigits(
+      e.target.value.slice(0, caretPosition),
+    ).length;
+    applyPhoneValue(e.target.value, digitsBeforeCaret);
+  };
+
+  const handlePhoneKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Backspace") return;
+    const input = phoneInputRef.current;
+    if (!input) return;
+
+    const selectionStart = input.selectionStart ?? 0;
+    const selectionEnd = input.selectionEnd ?? selectionStart;
+    if (selectionStart !== selectionEnd) return;
+
+    if (selectionStart <= 2) {
+      e.preventDefault();
+      applyPhoneValue("", 0);
+      return;
+    }
+
+    const previousChar = input.value[selectionStart - 1];
+    if (/\d/.test(previousChar)) return;
+
+    e.preventDefault();
+    const digits = normalizePhoneDigits(input.value);
+    const digitsBeforeCaret = normalizePhoneDigits(
+      input.value.slice(0, selectionStart),
+    ).length;
+    const removeIndex = Math.max(0, digitsBeforeCaret - 1);
+    const nextDigits = `${digits.slice(0, removeIndex)}${digits.slice(digitsBeforeCaret)}`;
+    applyPhoneValue(nextDigits, removeIndex);
   };
 
   const [code, setCode] = useState(["", "", "", ""]);
@@ -211,9 +263,13 @@ export default function ClientAuthBottomSheet({ isOpen, onClose }: Props) {
 
               <div className="relative mb-6">
                 <input
+                  ref={phoneInputRef}
                   type="tel"
                   value={phone}
                   onChange={handlePhoneChange}
+                  onKeyDown={handlePhoneKeyDown}
+                  inputMode="tel"
+                  maxLength={18}
                   className="w-full border border-[#2DB0E6] rounded-2xl p-4 text-lg font-medium text-slate-800 focus:outline-none"
                 />
                 <label className="absolute -top-2 left-4 bg-white px-1 text-xs font-semibold text-[#2DB0E6]">Номер телефона *</label>

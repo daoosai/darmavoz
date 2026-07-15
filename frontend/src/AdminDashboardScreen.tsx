@@ -1485,7 +1485,7 @@ export default function AdminDashboardScreen({
               }`}
             >
               <Map className="w-4 h-4" />
-              Карьеры
+              Точки
             </button>
             <button
               onClick={() => setActiveTab("delivery")}
@@ -2970,7 +2970,7 @@ export default function AdminDashboardScreen({
           >
             <Map className="w-6 h-6" />
           </div>
-          <span className="text-[10px] font-bold">Карьеры</span>
+          <span className="text-[10px] font-bold">Точки</span>
         </button>
         <button
           onClick={() => setActiveTab("delivery")}

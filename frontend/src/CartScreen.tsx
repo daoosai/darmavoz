@@ -569,7 +569,7 @@ export default function CartScreen({
                 ? best.quarry_name
                 : `Подобрано точек: ${pointIds.size}`;
               const pointSubtitle = pointIds.size === 1
-                ? `${Number(best.distance).toFixed(1)} км от адреса`
+                ? `${Number(best.distance).toFixed(1)} км от вашего адреса`
                 : "Маршрут рассчитан отдельно для каждой машины";
               const bestImageUrl = getMarketplaceImageUrl(best);
 
@@ -649,7 +649,7 @@ export default function CartScreen({
                                 </div>
                                 <div className="min-w-0">
                                   <h5 className="line-clamp-2 text-sm font-bold text-slate-900">{option.quarry_name}</h5>
-                                  <p className="mt-1 text-xs text-slate-500">{Number(option.distance).toFixed(1)} км от адреса</p>
+                                  <p className="mt-1 text-xs text-slate-500">{Number(option.distance).toFixed(1)} км от вашего адреса</p>
                                   <p className="mt-1 truncate text-[10px] font-semibold text-sky-600">{item.deliveryOption.title}</p>
                                 </div>
                               </div>

@@ -3,13 +3,22 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import delete, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.admin import DeleteResult
 from app.db.database import get_db
-from app.models.models import ModerationStatus, Quarry, User, quarry_materials
+from app.models.models import (
+    CartItem,
+    MediaFile,
+    ModerationStatus,
+    Order,
+    Quarry,
+    User,
+    quarry_delivery_options,
+    quarry_materials,
+)
 from app.schemas.quarry import (
     AdminPickupPointOut,
     ModerationDecision,
@@ -344,6 +353,34 @@ async def hide_pickup_point(
 ) -> DeleteResult:
     del current_admin
     point = await _get_point_or_404(db, point_id)
-    point.is_active = False
+    has_related_orders = await db.scalar(
+        select(Order.id).where(Order.quarry_id == point.id).limit(1)
+    )
+    if has_related_orders:
+        point.is_active = False
+        await db.commit()
+        return DeleteResult(
+            action="hidden",
+            detail="Pickup point was hidden because related orders exist",
+        )
+
+    await db.execute(
+        update(CartItem).where(CartItem.quarry_id == point.id).values(quarry_id=None)
+    )
+    await db.execute(
+        delete(quarry_materials).where(quarry_materials.c.quarry_id == point.id)
+    )
+    await db.execute(
+        delete(quarry_delivery_options).where(
+            quarry_delivery_options.c.quarry_id == point.id
+        )
+    )
+    await db.execute(
+        delete(MediaFile).where(
+            MediaFile.entity_type == "quarry",
+            MediaFile.entity_id == point.id,
+        )
+    )
+    await db.delete(point)
     await db.commit()
-    return DeleteResult(action="hidden", detail="Pickup point was hidden")
+    return DeleteResult(action="deleted", detail="Pickup point was deleted")

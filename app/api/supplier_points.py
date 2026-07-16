@@ -95,6 +95,7 @@ async def create_supplier_point(
         point_type=payload.point_type,
         address=payload.address,
         description=payload.description,
+        contact_phone=current_user.username,
         lat=payload.lat,
         lon=payload.lon,
         min_delivery_price=default_min_delivery_price(payload.point_type),

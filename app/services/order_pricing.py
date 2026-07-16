@@ -188,6 +188,36 @@ async def calculate_client_order_pricing(
     quantity: int = 1,
     quarry_id: UUID | None = None,
 ) -> ClientOrderPricing:
+    options = await calculate_client_order_options(
+        session,
+        material_id=material_id,
+        delivery_option_id=delivery_option_id,
+        delivery_lat=delivery_lat,
+        delivery_lon=delivery_lon,
+        quantity=quantity,
+        quarry_id=quarry_id,
+    )
+    return options[0]
+
+
+async def calculate_client_order_options(
+    session: AsyncSession,
+    *,
+    material_id: UUID,
+    delivery_option_id: UUID,
+    delivery_lat: float,
+    delivery_lon: float,
+    quantity: int = 1,
+    quarry_id: UUID | None = None,
+) -> list[ClientOrderPricing]:
+    material = await session.get(Material, material_id)
+    if material is None or not material.is_active:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Material not found")
+    delivery_option = await session.get(DeliveryOption, delivery_option_id)
+    if delivery_option is None or not delivery_option.is_active:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Delivery option not found")
+    if delivery_option.delivery_rate_per_km is None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Delivery rate is not configured")
     if quarry_id is not None:
         selected_point = await session.scalar(
             select(Quarry)
@@ -217,46 +247,6 @@ async def calculate_client_order_pricing(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="DELIVERY_OPTION_NOT_AVAILABLE_AT_POINT",
             )
-
-    options = await calculate_client_order_options(
-        session,
-        material_id=material_id,
-        delivery_option_id=delivery_option_id,
-        delivery_lat=delivery_lat,
-        delivery_lon=delivery_lon,
-        quantity=quantity,
-    )
-    if quarry_id is None:
-        return options[0]
-    selected_option = next(
-        (option for option in options if option.quarry.id == quarry_id),
-        None,
-    )
-    if selected_option is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Material price is not configured for pickup point",
-        )
-    return selected_option
-
-
-async def calculate_client_order_options(
-    session: AsyncSession,
-    *,
-    material_id: UUID,
-    delivery_option_id: UUID,
-    delivery_lat: float,
-    delivery_lon: float,
-    quantity: int = 1,
-) -> list[ClientOrderPricing]:
-    material = await session.get(Material, material_id)
-    if material is None or not material.is_active:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Material not found")
-    delivery_option = await session.get(DeliveryOption, delivery_option_id)
-    if delivery_option is None or not delivery_option.is_active:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Delivery option not found")
-    if delivery_option.delivery_rate_per_km is None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Delivery rate is not configured")
 
     result = await session.execute(
         select(
@@ -351,4 +341,16 @@ async def calculate_client_order_options(
             option.quarry.name.casefold(),
         )
     )
+    if quarry_id is not None:
+        selected_index = next(
+            (index for index, option in enumerate(options) if option.quarry.id == quarry_id),
+            None,
+        )
+        if selected_index is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Material price is not configured for pickup point",
+            )
+        selected_option = options.pop(selected_index)
+        options.insert(0, selected_option)
     return options

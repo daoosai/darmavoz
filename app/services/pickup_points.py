@@ -210,6 +210,24 @@ async def pickup_point_payload(
             )
         ).scalars().all()
     )
+    delivery_option_ids = [option.id for option in delivery_options]
+    delivery_option_media_files = list(
+        (
+            await db.execute(
+                select(MediaFile)
+                .where(
+                    MediaFile.entity_type == "delivery_option",
+                    MediaFile.entity_id.in_(delivery_option_ids),
+                )
+                .order_by(
+                    MediaFile.entity_id.asc(),
+                    MediaFile.is_primary.desc(),
+                    MediaFile.sort_order.asc(),
+                    MediaFile.created_at.asc(),
+                )
+            )
+        ).scalars().all()
+    ) if delivery_option_ids else []
     media_files = list(
         (
             await db.execute(
@@ -223,15 +241,21 @@ async def pickup_point_payload(
             )
         ).scalars().all()
     )
+    owner = await db.get(User, point.owner_user_id) if point.owner_user_id else None
 
     active_offers = [row for row in offer_rows if row.is_active]
     material_by_id = {
         row.material_id: Material(id=row.material_id, name=row.name, unit=row.unit, price=row.price)
         for row in active_offers
     }
+    media_by_delivery_option: dict = {}
+    for media_file in delivery_option_media_files:
+        media_by_delivery_option.setdefault(media_file.entity_id, []).append(media_file)
     for option in delivery_options:
-        option.media_files = []
-        option.primary_image_url = option.image_url
+        option.media_files = media_by_delivery_option.get(option.id, [])
+        option.primary_image_url = (
+            option.media_files[0].public_url if option.media_files else option.image_url
+        )
 
     payload = {
         "id": point.id,
@@ -240,7 +264,7 @@ async def pickup_point_payload(
         "point_type": point.point_type,
         "address": point.address,
         "description": point.description,
-        "contact_phone": point.contact_phone,
+        "contact_phone": point.contact_phone or (owner.username if owner else None),
         "subscription_end_date": point.subscription_end_date,
         "lat": point.lat,
         "lon": point.lon,
@@ -270,7 +294,6 @@ async def pickup_point_payload(
         "updated_at": point.updated_at,
     }
     if include_owner_contacts:
-        owner = await db.get(User, point.owner_user_id) if point.owner_user_id else None
         payload["owner_name"] = owner.display_name if owner else None
         payload["owner_phone"] = owner.username if owner else None
     return payload

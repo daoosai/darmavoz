@@ -559,9 +559,16 @@ export default function PickupPointMapScreen({
               )}
             </div>
           </div>
-          <button onClick={() => onSelect(selected)} className="w-full rounded-xl bg-sky-500 py-4 text-[0px] font-bold text-white hover:bg-sky-600">
-            <span className="text-base">Оформить доставку</span>
-            Выбрать точку
+          {selectedPhone && (
+            <a
+              href={`tel:${selectedPhone}`}
+              className="mb-3 flex w-full items-center justify-center rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-bold text-sky-700 transition-colors hover:bg-sky-100"
+            >
+              Позвонить: {formatPhoneNumber(selectedPhone)}
+            </a>
+          )}
+          <button type="button" onClick={() => onSelect(selected)} className="w-full rounded-xl bg-sky-500 py-4 text-base font-bold text-white hover:bg-sky-600">
+            Оформить доставку
           </button>
         </div>
       )}

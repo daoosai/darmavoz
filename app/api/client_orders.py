@@ -12,11 +12,7 @@ from app.schemas.order import (
 )
 from app.security.auth import get_optional_current_client
 from app.services.dispatch_service import create_checkout_order
-from app.services.order_pricing import (
-    ClientOrderPricing,
-    calculate_client_order_options,
-    calculate_client_order_pricing,
-)
+from app.services.order_pricing import ClientOrderPricing, calculate_client_order_options
 
 router = APIRouter(prefix="/client/orders")
 
@@ -40,21 +36,6 @@ async def calculate_order(
             media_files=pricing.media_files,
         )
 
-    if payload.quarry_id is not None:
-        selected_pricing = await calculate_client_order_pricing(
-            db,
-            material_id=payload.material_id,
-            delivery_option_id=payload.delivery_option_id,
-            delivery_lat=payload.delivery_lat,
-            delivery_lon=payload.delivery_lon,
-            quantity=payload.quantity,
-            quarry_id=payload.quarry_id,
-        )
-        return ClientOrderCalculationOut(
-            best_option=serialize_option(selected_pricing),
-            alternatives=[],
-        )
-
     pricing_options = await calculate_client_order_options(
         db,
         material_id=payload.material_id,
@@ -62,6 +43,7 @@ async def calculate_order(
         delivery_lat=payload.delivery_lat,
         delivery_lon=payload.delivery_lon,
         quantity=payload.quantity,
+        quarry_id=payload.quarry_id,
     )
     best_pricing = pricing_options[0]
 

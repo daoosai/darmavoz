@@ -565,6 +565,12 @@ export default function CartScreen({
               const groupAlternatives = calculatedItems.flatMap(({ item, calculation }) =>
                 calculation.alternatives.map((option) => ({ item, option })),
               );
+              const lockedPointId =
+                preferredPointIds[representativeItem.id] || representativeItem.pickupPoint?.id;
+              const isUserSelectedPoint =
+                pointIds.size === 1 &&
+                Boolean(lockedPointId) &&
+                best.quarry_id === lockedPointId;
               const pointTitle = pointIds.size === 1
                 ? best.quarry_name
                 : `Подобрано точек: ${pointIds.size}`;
@@ -586,7 +592,7 @@ export default function CartScreen({
 
                   <div className="rounded-2xl bg-white p-4 text-slate-900 shadow-sm">
                     <div className="mb-3 inline-flex rounded-full bg-sky-100 px-3 py-1 text-xs font-bold uppercase tracking-wide text-sky-700">
-                      Выгодный вариант
+                      {isUserSelectedPoint ? "ВЫ ВЫБРАЛИ" : "ВЫГОДНЫЙ ВАРИАНТ"}
                     </div>
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">

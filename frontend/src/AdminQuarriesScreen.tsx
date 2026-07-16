@@ -163,7 +163,10 @@ export default function AdminQuarriesScreen({
 
   const handleOpenModal = (quarry?: Quarry) => {
     if (quarry) {
-      setEditingQuarry(quarry);
+      setEditingQuarry({
+        ...quarry,
+        contact_phone: quarry.contact_phone || quarry.owner_phone || "",
+      });
     } else {
       setEditingQuarry({
         name: "",

@@ -2,7 +2,9 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from app.services.storage import normalize_public_url
 
 
 SupportStatus = Literal["new", "in_progress", "closed"]
@@ -17,6 +19,7 @@ class SupportTicketCreate(BaseModel):
     context_type: SupportContextType = "general"
     context_id: UUID | None = None
     message: str = Field(min_length=1, max_length=10000)
+    attachment_url: str | None = Field(default=None, max_length=2048)
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
@@ -30,9 +33,47 @@ class SupportTicketCreate(BaseModel):
 
 
 class SupportMessageCreate(BaseModel):
-    text: str = Field(min_length=1, max_length=10000)
+    text: str | None = Field(default=None, max_length=10000)
+    attachment_url: str | None = Field(default=None, max_length=2048)
 
     model_config = ConfigDict(str_strip_whitespace=True)
+
+    @model_validator(mode="after")
+    def validate_message_content(self):
+        if self.text or self.attachment_url:
+            return self
+        raise ValueError("text or attachment_url is required")
+
+
+class SupportAttachmentPresignRequest(BaseModel):
+    file_name: str
+    content_type: str
+    file_size: int = Field(gt=0)
+
+
+class SupportAttachmentPresignResponse(BaseModel):
+    bucket: str
+    object_key: str
+    upload_url: str
+    public_url: str
+    expires_in: int
+
+
+class SupportAttachmentConfirmRequest(BaseModel):
+    object_key: str
+    file_name: str | None = None
+    content_type: str | None = None
+    file_size: int | None = Field(default=None, gt=0)
+
+
+class SupportAttachmentConfirmResponse(BaseModel):
+    public_url: str
+
+    @field_validator("public_url")
+    @classmethod
+    def normalize_attachment_public_url(cls, value: str) -> str:
+        normalized = normalize_public_url(value)
+        return normalized or value
 
 
 class SupportStatusUpdate(BaseModel):
@@ -47,7 +88,13 @@ class SupportMessageOut(BaseModel):
     author_name: str
     author_role: str
     text: str
+    attachment_url: str | None = None
     created_at: datetime
+
+    @field_validator("attachment_url")
+    @classmethod
+    def normalize_attachment_url(cls, value: str | None) -> str | None:
+        return normalize_public_url(value)
 
 
 class SupportTicketOut(BaseModel):

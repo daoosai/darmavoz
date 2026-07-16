@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from uuid import UUID
 
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+
+from app.db.database import AsyncSessionLocal
 from app.models.models import Order, Quarry, SpecialEquipmentApplication
 from app.services.push_service import (
     schedule_push_to_client,
@@ -275,6 +280,98 @@ def schedule_equipment_application_cancelled_notification(
     )
 
 
+def _support_role_label(role: str | None) -> str:
+    mapping = {
+        "client": "Клиент",
+        "driver": "Водитель",
+        "admin": "Администратор",
+        "logist": "Логист",
+        "operator": "Оператор",
+    }
+    return mapping.get((role or "").strip().lower(), "Пользователь")
+
+
+def _support_message_preview(text: str | None, attachment_url: str | None = None) -> str:
+    normalized = (text or "").strip()
+    if not normalized:
+        normalized = "Фото во вложении" if attachment_url else "Новое сообщение"
+    if len(normalized) > 160:
+        return f"{normalized[:157].rstrip()}..."
+    return normalized
+
+
+async def _load_support_ticket(ticket_id: UUID):
+    from app.models.models import SupportMessage, SupportTicket, User
+
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(SupportTicket)
+            .options(
+                selectinload(SupportTicket.client),
+                selectinload(SupportTicket.user).selectinload(User.role),
+                selectinload(SupportTicket.user).selectinload(User.driver_profile),
+                selectinload(SupportTicket.messages).selectinload(SupportMessage.author_client),
+                selectinload(SupportTicket.messages)
+                .selectinload(SupportMessage.author_user)
+                .selectinload(User.role),
+            )
+            .where(SupportTicket.id == ticket_id)
+        )
+        return result.scalar_one_or_none()
+
+
+async def _send_support_operator_notification(ticket_id: UUID, *, is_new: bool) -> None:
+    ticket = await _load_support_ticket(ticket_id)
+    if ticket is None or not ticket.messages:
+        logger.warning("support_push_ticket_not_found", extra={"ticket_id": str(ticket_id)})
+        return
+
+    last_message = max(ticket.messages, key=lambda item: item.created_at)
+    sender_role = "client" if last_message.author_client_id else (
+        last_message.author_user.role.name
+        if last_message.author_user and last_message.author_user.role
+        else "driver"
+    )
+    role_label = _support_role_label(sender_role)
+    preview = _support_message_preview(last_message.text, last_message.attachment_url)
+    title = (
+        f"Новое обращение: {ticket.subject}. От: {role_label}"
+        if is_new
+        else f"Ответ от {role_label}: {ticket.subject}"
+    )
+    _safe_schedule(
+        schedule_push_to_logists,
+        title,
+        preview,
+        {
+            "event": "support_ticket_created" if is_new else "support_message_created",
+            "ticket_id": str(ticket_id),
+            "requester_role": sender_role,
+        },
+    )
+
+
+async def _send_support_reply_notification(
+    *,
+    ticket_id: UUID,
+    client_id: UUID | None = None,
+    driver_id: UUID | None = None,
+) -> None:
+    ticket = await _load_support_ticket(ticket_id)
+    if ticket is None or not ticket.messages:
+        logger.warning("support_reply_push_ticket_not_found", extra={"ticket_id": str(ticket_id)})
+        return
+
+    last_message = max(ticket.messages, key=lambda item: item.created_at)
+    preview = _support_message_preview(last_message.text, last_message.attachment_url)
+    data = {"event": "support_operator_reply", "ticket_id": str(ticket_id)}
+    title = f"Ответ от Поддержки: {ticket.subject}"
+    if client_id is not None:
+        _safe_schedule(schedule_push_to_client, client_id, title, preview, data)
+    elif driver_id is not None:
+        _safe_schedule(schedule_push_to_driver, driver_id, title, preview, data)
+
+
 def schedule_support_operator_notification(ticket_id: UUID, *, is_new: bool) -> None:
     _safe_schedule(
         schedule_push_to_logists,
@@ -310,3 +407,24 @@ def schedule_support_reply_notification(
             "Оператор ответил на ваше обращение",
             data,
         )
+def schedule_support_operator_notification(ticket_id: UUID, *, is_new: bool) -> None:
+    asyncio.create_task(
+        _send_support_operator_notification(ticket_id, is_new=is_new),
+        name=f"support-operator-push-{ticket_id}",
+    )
+
+
+def schedule_support_reply_notification(
+    *,
+    ticket_id: UUID,
+    client_id: UUID | None = None,
+    driver_id: UUID | None = None,
+) -> None:
+    asyncio.create_task(
+        _send_support_reply_notification(
+            ticket_id=ticket_id,
+            client_id=client_id,
+            driver_id=driver_id,
+        ),
+        name=f"support-reply-push-{ticket_id}",
+    )

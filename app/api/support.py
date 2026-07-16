@@ -1,7 +1,9 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from uuid import UUID
 
+from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from jose import JWTError, jwt
 from sqlalchemy import select
@@ -21,6 +23,10 @@ from app.models.models import (
     User,
 )
 from app.schemas.support import (
+    SupportAttachmentConfirmRequest,
+    SupportAttachmentConfirmResponse,
+    SupportAttachmentPresignRequest,
+    SupportAttachmentPresignResponse,
     SupportMessageCreate,
     SupportTicketCreate,
     SupportTicketOut,
@@ -35,6 +41,11 @@ from app.security.auth import (
 from app.services.notifications import (
     schedule_support_operator_notification,
     schedule_support_reply_notification,
+)
+from app.services.storage import (
+    StorageNotConfiguredError,
+    StorageValidationError,
+    get_storage_service,
 )
 
 router = APIRouter()
@@ -51,6 +62,10 @@ class SupportActor:
     role: str
     client: Client | None = None
     user: User | None = None
+
+    @property
+    def is_operator(self) -> bool:
+        return self.role in {"admin", "logist"}
 
 
 async def get_support_actor(
@@ -69,6 +84,27 @@ async def get_support_actor(
     if role_name != "driver":
         raise HTTPException(status_code=403, detail="Обращения доступны клиентам и водителям")
     return SupportActor(role="driver", user=user)
+
+
+async def get_support_session_actor(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> SupportActor:
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+    except JWTError as exc:
+        raise HTTPException(status_code=401, detail="Could not validate credentials") from exc
+    role = payload.get("role")
+    if role == "client":
+        return SupportActor(role="client", client=await get_current_client(token=token, db=db))
+    user = await get_current_user(token=token, db=db)
+    role_name = user.role.name if user.role else ""
+    if role_name not in {"driver", "admin", "logist"}:
+        raise HTTPException(
+            status_code=403,
+            detail="Обращения доступны клиентам, водителям, администраторам и логистам",
+        )
+    return SupportActor(role=role_name, user=user)
 
 
 def _ticket_load_options():
@@ -100,6 +136,15 @@ def _actor_owns_ticket(actor: SupportActor, ticket: SupportTicket) -> bool:
     return actor.user is not None and ticket.user_id == actor.user.id
 
 
+def _actor_can_access_ticket(actor: SupportActor, ticket: SupportTicket) -> bool:
+    return actor.is_operator or _actor_owns_ticket(actor, ticket)
+
+
+def _validate_ticket_open_for_message(ticket: SupportTicket) -> None:
+    if ticket.status == "closed":
+        raise HTTPException(status_code=409, detail="Обращение уже закрыто")
+
+
 def _message_payload(message: SupportMessage) -> dict:
     if message.author_client is not None:
         name = message.author_client.name
@@ -118,6 +163,7 @@ def _message_payload(message: SupportMessage) -> dict:
         "author_name": name,
         "author_role": role,
         "text": message.text,
+        "attachment_url": message.attachment_url,
         "created_at": message.created_at,
     }
 
@@ -206,6 +252,7 @@ async def create_support_ticket(
             author_client_id=actor.client.id if actor.client else None,
             author_user_id=actor.user.id if actor.user else None,
             text=payload.message,
+            attachment_url=payload.attachment_url,
         )
     )
     await db.commit()
@@ -257,7 +304,8 @@ async def add_own_support_message(
             ticket_id=ticket.id,
             author_client_id=actor.client.id if actor.client else None,
             author_user_id=actor.user.id if actor.user else None,
-            text=payload.text,
+            text=payload.text or "",
+            attachment_url=payload.attachment_url,
         )
     )
     ticket.updated_at = datetime.now(timezone.utc)
@@ -312,7 +360,8 @@ async def add_operator_support_message(
         SupportMessage(
             ticket_id=ticket.id,
             author_user_id=current_user.id,
-            text=payload.text,
+            text=payload.text or "",
+            attachment_url=payload.attachment_url,
         )
     )
     if ticket.status == "new":
@@ -328,6 +377,78 @@ async def add_operator_support_message(
         driver_id=driver_id,
     )
     return _ticket_payload(ticket)
+
+
+@router.post(
+    "/support/tickets/{ticket_id}/attachments/presign-upload",
+    response_model=SupportAttachmentPresignResponse,
+)
+async def presign_support_attachment_upload(
+    ticket_id: UUID,
+    payload: SupportAttachmentPresignRequest,
+    db: AsyncSession = Depends(get_db),
+    actor: SupportActor = Depends(get_support_session_actor),
+) -> SupportAttachmentPresignResponse:
+    ticket = await _get_ticket(db, ticket_id)
+    if not _actor_can_access_ticket(actor, ticket):
+        raise HTTPException(status_code=404, detail="Обращение не найдено")
+    _validate_ticket_open_for_message(ticket)
+
+    try:
+        storage = get_storage_service()
+        storage.assert_supported_image(payload.file_name, payload.content_type, payload.file_size)
+    except StorageNotConfiguredError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except StorageValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    object_key = storage.build_object_key("support_ticket", payload.file_name)
+    return SupportAttachmentPresignResponse(
+        bucket=storage.bucket,
+        object_key=object_key,
+        upload_url=storage.generate_presigned_put(object_key, payload.content_type),
+        public_url=storage.build_public_url(object_key),
+        expires_in=3600,
+    )
+
+
+@router.post(
+    "/support/tickets/{ticket_id}/attachments/confirm",
+    response_model=SupportAttachmentConfirmResponse,
+)
+async def confirm_support_attachment_upload(
+    ticket_id: UUID,
+    payload: SupportAttachmentConfirmRequest,
+    db: AsyncSession = Depends(get_db),
+    actor: SupportActor = Depends(get_support_session_actor),
+) -> SupportAttachmentConfirmResponse:
+    ticket = await _get_ticket(db, ticket_id)
+    if not _actor_can_access_ticket(actor, ticket):
+        raise HTTPException(status_code=404, detail="Обращение не найдено")
+    _validate_ticket_open_for_message(ticket)
+
+    try:
+        storage = get_storage_service()
+    except StorageNotConfiguredError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    try:
+        head_data = storage.head_object(payload.object_key)
+    except ClientError as exc:
+        raise HTTPException(status_code=404, detail="Загруженный файл не найден в хранилище") from exc
+
+    file_name = payload.file_name or Path(payload.object_key).name
+    content_type = payload.content_type or head_data.get("ContentType")
+    file_size = payload.file_size or head_data.get("ContentLength")
+    if not content_type or not file_size:
+        raise HTTPException(status_code=400, detail="Не удалось определить метаданные файла")
+
+    try:
+        storage.assert_supported_image(file_name, content_type, file_size)
+    except StorageValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return SupportAttachmentConfirmResponse(public_url=storage.build_public_url(payload.object_key))
 
 
 @router.patch("/admin/support/tickets/{ticket_id}/status", response_model=SupportTicketOut)

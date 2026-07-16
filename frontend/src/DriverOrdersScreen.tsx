@@ -5,7 +5,6 @@ import { getOrderStatusText } from "./utils/statusMapper";
 import {
   baseURL,
   extractApiErrorMessage,
-  
   orderStatusColors,
   handleApiError,
 } from "./utils";
@@ -24,7 +23,6 @@ import {
   Phone,
   Ban,
   Navigation,
-  Headphones,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { logoutCurrentSession } from "./pushAuth";
@@ -301,6 +299,10 @@ export default function DriverOrdersScreen({
         }
 
         if (!res.ok) {
+          if (res.status === 404 || res.status === 422) {
+            setOrders([]);
+            return;
+          }
           const errText = await res.text();
           console.error("Orders error text:", errText);
           throw new Error("Не удалось загрузить заказы");
@@ -313,7 +315,9 @@ export default function DriverOrdersScreen({
         setOrders(activeOrders);
       } catch (error) {
         console.error("Error fetching orders:", error);
-        toast.error("Ошибка при загрузке заказов");
+        if (!silent) {
+          toast.error("Ошибка при загрузке заказов");
+        }
       } finally {
         if (!silent) setIsLoading(false);
       }
@@ -621,9 +625,10 @@ export default function DriverOrdersScreen({
           onLogout={handleLogout}
           onProfileUpdate={fetchProfile}
           hasActiveOrder={orders.length > 0}
+          onOpenSupport={() => setActiveTab("support")}
         />
       ) : (
-        <SupportScreen />
+        <SupportScreen onBack={() => setActiveTab("profile")} />
       )}
 
       {/* Bottom Navigation */}
@@ -643,20 +648,6 @@ export default function DriverOrdersScreen({
               <ClipboardList className="w-6 h-6" />
             </div>
             <span className="text-[10px] font-bold">Заказы</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("support")}
-            className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${
-              activeTab === "support"
-                ? "text-[#2DB0E6]"
-                : "text-slate-400 hover:text-slate-600"
-            }`}
-          >
-            <div className={`p-1.5 rounded-xl transition-colors ${activeTab === "support" ? "bg-[#2DB0E6]/10" : ""}`}>
-              <Headphones className="w-6 h-6" />
-            </div>
-            <span className="text-[10px] font-bold">Поддержка</span>
           </button>
 
           <button

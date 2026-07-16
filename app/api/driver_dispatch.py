@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -200,6 +201,18 @@ def _build_driver_order_payload(order: Order) -> DriverOfferOrderOut:
     )
 
 
+def _serialize_driver_order_safe(order: Order) -> DriverOrderOut | None:
+    try:
+        return DriverOrderOut.model_validate(order, from_attributes=True)
+    except ValidationError:
+        logger.warning(
+            "driver_order_payload_skipped",
+            extra={"order_id": str(getattr(order, "id", ""))},
+            exc_info=True,
+        )
+        return None
+
+
 @router.get("/orders/incoming/current", response_model=DriverIncomingOfferOut)
 async def get_current_incoming_order(
     db: AsyncSession = Depends(get_db),
@@ -270,20 +283,29 @@ async def get_current_assigned_order(
     order = await get_current_assigned_order_for_driver(db, current_driver.id)
     if order is None:
         return DriverAssignedOrderOut()
+    serialized_order = _serialize_driver_order_safe(order)
+    if serialized_order is None:
+        return DriverAssignedOrderOut()
     return DriverAssignedOrderOut(
         order_id=order.id,
         status=order.status,
         assigned_at=order.assigned_at,
-        order=DriverOrderOut.model_validate(order, from_attributes=True),
+        order=serialized_order,
     )
 
 
-@router.get("/orders", response_model=list[OrderOut])
+@router.get("/orders", response_model=list[DriverOrderOut])
 async def get_driver_orders(
     db: AsyncSession = Depends(get_db),
     current_driver: Driver = Depends(get_current_driver),
-) -> list[Order]:
-    return await list_orders_for_driver(db, current_driver.id)
+) -> list[DriverOrderOut]:
+    orders = await list_orders_for_driver(db, current_driver.id)
+    serialized_orders: list[DriverOrderOut] = []
+    for order in orders:
+        serialized_order = _serialize_driver_order_safe(order)
+        if serialized_order is not None:
+            serialized_orders.append(serialized_order)
+    return serialized_orders
 
 
 @router.patch("/orders/{order_id}/status", response_model=OrderOut)

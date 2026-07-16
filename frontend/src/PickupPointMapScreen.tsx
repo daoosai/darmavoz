@@ -516,9 +516,9 @@ export default function PickupPointMapScreen({
               <span className="block text-xs text-gray-500">Описание</span>
               <p className="mt-1 text-sm text-gray-900">{selected.description || "Описание пока не добавлено"}</p>
             </div>
-            {selectedPhone && (
-              <div className="border-t border-gray-200 pt-3">
-                <span className="block text-xs text-gray-500">Контактный телефон</span>
+            <div className="border-t border-gray-200 pt-3">
+              <span className="block text-xs text-gray-500">Контактный телефон</span>
+              {selectedPhone ? (
                 <div className="mt-2 flex items-center justify-between gap-3">
                   <strong className="text-gray-900">{formatPhoneNumber(selectedPhone)}</strong>
                   <a
@@ -528,8 +528,10 @@ export default function PickupPointMapScreen({
                     Позвонить
                   </a>
                 </div>
-              </div>
-            )}
+              ) : (
+                <p className="mt-2 text-sm text-gray-400">Номер отсутствует</p>
+              )}
+            </div>
             <div className="border-t border-gray-200 pt-3">
               <span className="block text-xs text-gray-500">Материал</span>
               <strong className="text-gray-900">{Number(selected.price).toLocaleString("ru-RU")} ₽/{selected.unit}</strong>
@@ -559,14 +561,14 @@ export default function PickupPointMapScreen({
               )}
             </div>
           </div>
-          {selectedPhone && (
+          {selectedPhone ? (
             <a
               href={`tel:${selectedPhone}`}
               className="mb-3 flex w-full items-center justify-center rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-bold text-sky-700 transition-colors hover:bg-sky-100"
             >
               Позвонить: {formatPhoneNumber(selectedPhone)}
             </a>
-          )}
+          ) : null}
           <button type="button" onClick={() => onSelect(selected)} className="w-full rounded-xl bg-sky-500 py-4 text-base font-bold text-white hover:bg-sky-600">
             Оформить доставку
           </button>

@@ -242,6 +242,39 @@ def schedule_equipment_application_notification(
     )
 
 
+def schedule_equipment_application_rejected_notification(
+    application: SpecialEquipmentApplication,
+) -> None:
+    reason = (application.reject_reason or "").strip()
+    _safe_schedule(
+        schedule_push_to_client,
+        application.client_id,
+        "Заявка на технику отклонена",
+        f"Ваша заявка на технику отклонена. Причина: {reason}",
+        {
+            "event": "equipment_application_rejected",
+            "application_id": str(application.id),
+            "listing_id": str(application.listing_id),
+        },
+    )
+
+
+def schedule_equipment_application_cancelled_notification(
+    application: SpecialEquipmentApplication,
+) -> None:
+    reason = (application.cancel_reason or "").strip()
+    _safe_schedule(
+        schedule_push_to_logists,
+        "Заявка на спецтехнику отменена",
+        f"Клиент отменил заявку на {application.listing_title_snapshot}. Причина: {reason}",
+        {
+            "event": "equipment_application_cancelled",
+            "application_id": str(application.id),
+            "listing_id": str(application.listing_id),
+        },
+    )
+
+
 def schedule_support_operator_notification(ticket_id: UUID, *, is_new: bool) -> None:
     _safe_schedule(
         schedule_push_to_logists,

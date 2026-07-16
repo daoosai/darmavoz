@@ -8,7 +8,7 @@ from app.schemas.catalog import MediaFileOut
 
 
 PriceUnit = Literal["hour", "shift", "day", "negotiable"]
-ApplicationStatus = Literal["new", "in_progress", "closed", "rejected"]
+ApplicationStatus = Literal["new", "in_progress", "closed", "rejected", "cancelled"]
 DurationUnit = Literal["hours", "shifts"]
 
 
@@ -122,6 +122,18 @@ class EquipmentApplicationStatusUpdate(BaseModel):
         return self
 
 
+class EquipmentApplicationReject(BaseModel):
+    reject_reason: str = Field(min_length=1, max_length=5000)
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+
+class EquipmentApplicationCancel(BaseModel):
+    cancel_reason: str = Field(min_length=1, max_length=5000)
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+
 class EquipmentApplicationOut(BaseModel):
     id: UUID
     listing_id: UUID
@@ -136,6 +148,7 @@ class EquipmentApplicationOut(BaseModel):
     duration_unit: DurationUnit
     comment: str | None
     reject_reason: str | None
+    cancel_reason: str | None
     status: ApplicationStatus
     processed_by_user_id: UUID | None
     primary_image_url: str | None = None

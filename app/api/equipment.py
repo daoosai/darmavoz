@@ -17,8 +17,10 @@ from app.models.models import (
     User,
 )
 from app.schemas.equipment import (
+    EquipmentApplicationCancel,
     EquipmentApplicationCreate,
     EquipmentApplicationOut,
+    EquipmentApplicationReject,
     EquipmentApplicationStatusUpdate,
     EquipmentListingCreate,
     EquipmentListingOut,
@@ -28,7 +30,11 @@ from app.schemas.equipment import (
     EquipmentTypeUpdate,
 )
 from app.security.auth import get_current_admin_user, get_current_client, get_current_logist_user
-from app.services.notifications import schedule_equipment_application_notification
+from app.services.notifications import (
+    schedule_equipment_application_cancelled_notification,
+    schedule_equipment_application_notification,
+    schedule_equipment_application_rejected_notification,
+)
 from app.utils.phones import normalize_phone
 
 router = APIRouter()
@@ -110,6 +116,7 @@ async def _application_payload(
         "duration_unit": application.duration_unit,
         "comment": application.comment,
         "reject_reason": application.reject_reason,
+        "cancel_reason": application.cancel_reason,
         "status": application.status,
         "processed_by_user_id": application.processed_by_user_id,
         "primary_image_url": media[0].public_url if media else None,
@@ -496,6 +503,39 @@ async def get_client_equipment_application(
     return await _application_payload(db, application)
 
 
+@router.patch(
+    "/client/equipment-applications/{application_id}/cancel",
+    response_model=EquipmentApplicationOut,
+)
+async def cancel_client_equipment_application(
+    application_id: UUID,
+    payload: EquipmentApplicationCancel,
+    db: AsyncSession = Depends(get_db),
+    current_client: Client = Depends(get_current_client),
+):
+    result = await db.execute(
+        select(SpecialEquipmentApplication)
+        .options(selectinload(SpecialEquipmentApplication.client))
+        .where(
+            SpecialEquipmentApplication.id == application_id,
+            SpecialEquipmentApplication.client_id == current_client.id,
+        )
+    )
+    application = result.scalar_one_or_none()
+    if application is None:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+    if application.status not in {"new", "in_progress"}:
+        raise HTTPException(status_code=409, detail="Эту заявку уже нельзя отменить")
+    application.status = "cancelled"
+    application.cancel_reason = payload.cancel_reason
+    application.reject_reason = None
+    application.closed_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(application)
+    schedule_equipment_application_cancelled_notification(application)
+    return await _application_payload(db, application)
+
+
 @router.get("/admin/equipment-applications", response_model=list[EquipmentApplicationOut])
 async def list_operator_equipment_applications(
     application_status: str | None = Query(default=None, alias="status"),
@@ -576,4 +616,27 @@ async def update_equipment_application_status(
     )
     await db.commit()
     await db.refresh(application)
+    if application.status == "rejected":
+        schedule_equipment_application_rejected_notification(application)
     return await _application_payload(db, application)
+
+
+@router.patch(
+    "/admin/equipment-applications/{application_id}/reject",
+    response_model=EquipmentApplicationOut,
+)
+async def reject_equipment_application(
+    application_id: UUID,
+    payload: EquipmentApplicationReject,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_logist_user),
+):
+    return await update_equipment_application_status(
+        application_id=application_id,
+        payload=EquipmentApplicationStatusUpdate(
+            status="rejected",
+            reject_reason=payload.reject_reason,
+        ),
+        db=db,
+        current_user=current_user,
+    )

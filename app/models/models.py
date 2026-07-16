@@ -495,6 +495,7 @@ class SpecialEquipmentApplication(Base):
     duration_unit: Mapped[str] = mapped_column(String(20), nullable=False)
     comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     reject_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    cancel_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="new", nullable=False, index=True)
     processed_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         ForeignKey("users.id"), nullable=True
@@ -512,12 +513,16 @@ class SpecialEquipmentApplication(Base):
             name="ck_special_equipment_application_duration_unit",
         ),
         CheckConstraint(
-            "status IN ('new', 'in_progress', 'closed', 'rejected')",
+            "status IN ('new', 'in_progress', 'closed', 'rejected', 'cancelled')",
             name="ck_special_equipment_application_status",
         ),
         CheckConstraint(
             "status <> 'rejected' OR (reject_reason IS NOT NULL AND btrim(reject_reason) <> '')",
             name="ck_special_equipment_application_reject_reason",
+        ),
+        CheckConstraint(
+            "status <> 'cancelled' OR (cancel_reason IS NOT NULL AND btrim(cancel_reason) <> '')",
+            name="ck_special_equipment_application_cancel_reason",
         ),
     )
 

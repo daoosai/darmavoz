@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import PullToRefresh from "react-simple-pull-to-refresh";
-import { Package, MapPin, Calendar, Truck, List, Info, User as UserIcon, Phone, Search, UserCheck, CheckCircle, ChevronDown, ArrowLeft, Wrench } from "lucide-react";
-import { clientOrderStatusColors, baseURL, resolveMediaUrl } from "./utils";
+import { Package, MapPin, Calendar, Truck, List, Info, User as UserIcon, Phone, Search, UserCheck, CheckCircle, ChevronDown, ArrowLeft, Wrench, X } from "lucide-react";
+import toast from "react-hot-toast";
+import { clientOrderStatusColors, baseURL, extractApiErrorMessage, resolveMediaUrl } from "./utils";
 import { getOrderStatusText } from "./utils/statusMapper";
 import { ClientOrderSummary, useAuthStore, useClientOrdersStore } from "./store";
 import { motion, AnimatePresence } from "motion/react";
@@ -17,8 +18,9 @@ interface EquipmentApplication {
   requested_time: string;
   duration_value: number;
   duration_unit: "hours" | "shifts";
-  status: "new" | "in_progress" | "closed" | "rejected";
+  status: "new" | "in_progress" | "closed" | "rejected" | "cancelled";
   reject_reason?: string | null;
+  cancel_reason?: string | null;
   primary_image_url?: string | null;
 }
 
@@ -27,6 +29,7 @@ const equipmentStatusLabels: Record<EquipmentApplication["status"], string> = {
   in_progress: "В работе",
   closed: "Завершена",
   rejected: "Отклонена",
+  cancelled: "Отменена",
 };
 
 const equipmentStatusClasses: Record<EquipmentApplication["status"], string> = {
@@ -34,6 +37,7 @@ const equipmentStatusClasses: Record<EquipmentApplication["status"], string> = {
   in_progress: "bg-sky-100 text-sky-700",
   closed: "bg-emerald-100 text-emerald-700",
   rejected: "bg-rose-100 text-rose-700",
+  cancelled: "bg-rose-100 text-rose-700",
 };
 
 const activeStatuses = [
@@ -64,6 +68,40 @@ const formatDate = (dateString: string) => {
   } catch {
     return dateString;
   }
+};
+
+const EquipmentApplicationProgress = ({ application }: { application: EquipmentApplication }) => {
+  if (application.status === "rejected" || application.status === "cancelled") {
+    return (
+      <div className="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-center text-sm font-bold text-rose-700">
+        {application.status === "rejected" ? "Заявка отклонена" : "Заявка отменена"}
+      </div>
+    );
+  }
+
+  const steps = ["Новая", "В работе", "Завершена"];
+  const currentStep = application.status === "new" ? 0 : application.status === "in_progress" ? 1 : 2;
+  const progress = `${(currentStep / (steps.length - 1)) * 100}%`;
+
+  return (
+    <div className="mt-5 px-1">
+      <div className="relative">
+        <div className="absolute left-3 right-3 top-3 h-1 overflow-hidden rounded-full bg-slate-100">
+          <div className="h-full rounded-full bg-sky-500 transition-all" style={{ width: progress }} />
+        </div>
+        <div className="relative flex justify-between">
+          {steps.map((step, index) => (
+            <div key={step} className="flex w-20 flex-col items-center text-center">
+              <div className={`grid h-7 w-7 place-items-center rounded-full border-2 text-[10px] font-black ${index <= currentStep ? "border-sky-500 bg-sky-500 text-white" : "border-slate-200 bg-white text-slate-400"}`}>
+                {index + 1}
+              </div>
+              <span className={`mt-2 text-[10px] font-bold ${index <= currentStep ? "text-sky-700" : "text-slate-400"}`}>{step}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 };
 
 const ActiveOrderCard: React.FC<{ order: ClientOrder }> = ({ order }) => {
@@ -333,6 +371,9 @@ export default function OrdersScreen({
   const [activeTab, setActiveTab] = useState<'current' | 'history' | 'equipment'>('current');
   const [equipmentApplications, setEquipmentApplications] = useState<EquipmentApplication[]>([]);
   const [equipmentApplicationsLoading, setEquipmentApplicationsLoading] = useState(true);
+  const [cancellingApplication, setCancellingApplication] = useState<EquipmentApplication | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelling, setCancelling] = useState(false);
   const [recentlyCompletedIds, setRecentlyCompletedIds] = useState<string[]>([]);
   const prevOrdersRef = useRef<ClientOrder[]>([]);
 
@@ -376,6 +417,29 @@ export default function OrdersScreen({
       console.error(error);
     } finally {
       setEquipmentApplicationsLoading(false);
+    }
+  };
+
+  const cancelEquipmentApplication = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!cancellingApplication || !cancelReason.trim() || !token) return;
+    setCancelling(true);
+    try {
+      const response = await fetch(`${baseURL}/client/equipment-applications/${cancellingApplication.id}/cancel`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ cancel_reason: cancelReason }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось отменить заявку"));
+      setEquipmentApplications((previous) => previous.map((item) => item.id === data.id ? data : item));
+      setCancellingApplication(null);
+      setCancelReason("");
+      toast.success("Заявка отменена");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось отменить заявку");
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -545,7 +609,10 @@ export default function OrdersScreen({
                             <p className="flex items-start gap-2"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />{application.object_address}</p>
                             <p className="flex items-center gap-2"><Calendar className="h-4 w-4 shrink-0 text-slate-400" />{formatDate(application.requested_date)}, {application.requested_time.slice(0, 5)} · {application.duration_value} {application.duration_unit === "hours" ? "ч." : "смен"}</p>
                           </div>
+                          <EquipmentApplicationProgress application={application} />
                           {application.reject_reason && <p className="mt-3 rounded-xl bg-rose-50 p-3 text-sm text-rose-700"><span className="font-bold">Причина отказа:</span> {application.reject_reason}</p>}
+                          {application.cancel_reason && <p className="mt-3 rounded-xl bg-rose-50 p-3 text-sm text-rose-700"><span className="font-bold">Причина отмены:</span> {application.cancel_reason}</p>}
+                          {(application.status === "new" || application.status === "in_progress") && <button onClick={() => { setCancellingApplication(application); setCancelReason(""); }} className="mt-4 w-full rounded-xl bg-rose-50 p-3 text-sm font-bold text-rose-700 transition hover:bg-rose-100">Отменить заявку</button>}
                         </article>
                       ))}
                     </div>
@@ -614,6 +681,7 @@ export default function OrdersScreen({
           </div>
         </PullToRefresh>
       </div>
+      {cancellingApplication && <div className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-900/50 sm:items-center sm:p-4"><form onSubmit={cancelEquipmentApplication} className="w-full max-w-md rounded-t-3xl bg-white p-6 shadow-2xl sm:rounded-3xl"><div className="mb-5 flex items-center justify-between"><div><p className="text-xs font-bold text-rose-600">ОТМЕНА ЗАЯВКИ</p><h3 className="text-xl font-black">{cancellingApplication.listing_title_snapshot}</h3></div><button type="button" onClick={() => setCancellingApplication(null)} className="rounded-full bg-slate-100 p-2"><X className="h-5 w-5" /></button></div><label className="block text-sm font-bold">Причина отмены<textarea autoFocus required rows={5} maxLength={5000} value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} className="mt-2 w-full resize-none rounded-xl bg-slate-100 p-3 font-normal outline-none" /></label><div className="mt-5 flex gap-2"><button type="button" onClick={() => setCancellingApplication(null)} className="flex-1 rounded-xl bg-slate-100 p-3 font-bold text-slate-600">Назад</button><button disabled={cancelling || !cancelReason.trim()} className="flex-1 rounded-xl bg-rose-600 p-3 font-bold text-white disabled:opacity-50">{cancelling ? "Отменяем..." : "Отменить заявку"}</button></div></form></div>}
     </div>
   );
 }

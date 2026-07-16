@@ -30,6 +30,48 @@ interface SupportTicket {
 const statusLabels = { new: "Новое", in_progress: "В работе", closed: "Закрыто" };
 const statusClasses = { new: "bg-amber-100 text-amber-700", in_progress: "bg-sky-100 text-sky-700", closed: "bg-emerald-100 text-emerald-700" };
 
+interface MessageGroup {
+  dayKey: string;
+  date: Date;
+  messages: SupportMessage[];
+}
+
+const messageDayKey = (value: string) => {
+  const date = new Date(value);
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+};
+
+const groupMessagesByDay = (messages: SupportMessage[]) => messages.reduce<MessageGroup[]>((groups, message) => {
+  const dayKey = messageDayKey(message.created_at);
+  const currentGroup = groups.at(-1);
+  if (currentGroup?.dayKey === dayKey) {
+    currentGroup.messages.push(message);
+    return groups;
+  }
+  groups.push({ dayKey, date: new Date(message.created_at), messages: [message] });
+  return groups;
+}, []);
+
+const formatMessageDay = (date: Date) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const messageDay = new Date(date);
+  messageDay.setHours(0, 0, 0, 0);
+  const differenceInDays = Math.round((today.getTime() - messageDay.getTime()) / 86_400_000);
+  if (differenceInDays === 0) return "Сегодня";
+  if (differenceInDays === 1) return "Вчера";
+  return messageDay.toLocaleDateString("ru-RU", {
+    day: "numeric",
+    month: "long",
+    year: messageDay.getFullYear() === today.getFullYear() ? undefined : "numeric",
+  });
+};
+
+const formatMessageTime = (value: string) => new Date(value).toLocaleTimeString("ru-RU", {
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
 interface Props {
   operatorMode?: boolean;
   onBack?: () => void;
@@ -158,6 +200,7 @@ export default function SupportScreen({ operatorMode = false, onBack, initialCon
   };
 
   if (selected) {
+    const messageGroups = groupMessagesByDay(selected.messages);
     return (
       <div className="flex h-full min-h-[calc(100dvh-7rem)] flex-col overflow-hidden bg-slate-50 sm:min-h-full">
         <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-slate-100 bg-white p-4">
@@ -165,11 +208,12 @@ export default function SupportScreen({ operatorMode = false, onBack, initialCon
           <div className="min-w-0 flex-1"><h2 className="truncate font-black text-slate-900">{selected.subject}</h2><p className="text-xs text-slate-500">{operatorMode ? `${selected.requester_name}${selected.requester_phone ? ` · ${selected.requester_phone}` : ""}` : "Служба поддержки Дармавоза"}</p></div>
           <span className={`rounded-full px-3 py-1 text-xs font-bold ${statusClasses[selected.status]}`}>{statusLabels[selected.status]}</span>
         </div>
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-          {selected.messages.map((message) => {
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          {messageGroups.map((group) => <section key={group.dayKey} className="space-y-3"><div className="sticky top-2 z-[5] flex justify-center py-2"><span className="rounded-full bg-slate-700/75 px-3 py-1 text-[11px] font-bold text-white shadow-sm backdrop-blur">{formatMessageDay(group.date)}</span></div>{group.messages.map((message) => {
             const mine = operatorMode ? ["admin", "logist"].includes(message.author_role) : message.author_role === role;
-            return <div key={message.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}><div className={`max-w-[85%] rounded-2xl px-4 py-3 ${mine ? "bg-sky-500 text-white" : "bg-white text-slate-700 shadow-sm"}`}><p className="mb-1 text-[10px] font-bold opacity-70">{message.author_name}</p><p className="whitespace-pre-wrap text-sm">{message.text}</p><p className="mt-1 text-[10px] opacity-60">{new Date(message.created_at).toLocaleString("ru-RU")}</p></div></div>;
-          })}
+            const authorName = ["admin", "logist", "operator"].includes(message.author_role) ? "Поддержка" : message.author_name;
+            return <div key={message.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}><div className={`max-w-[85%] rounded-2xl px-4 py-3 ${mine ? "bg-sky-500 text-white" : "bg-white text-slate-700 shadow-sm"}`}><p className="mb-1 text-[10px] font-bold opacity-70">{authorName}</p><p className="whitespace-pre-wrap text-sm">{message.text}</p><p className="mt-1 text-right text-[10px] opacity-60">{formatMessageTime(message.created_at)}</p></div></div>;
+          })}</section>)}
         </div>
         {operatorMode && selected.status === "new" && <button onClick={() => void moveStatus("in_progress")} className="mx-4 mb-3 rounded-xl bg-amber-100 p-3 font-bold text-amber-700">Взять в работу</button>}
         {operatorMode && selected.status === "in_progress" && <button onClick={() => void moveStatus("closed")} className="mx-4 mb-3 flex items-center justify-center gap-2 rounded-xl bg-emerald-100 p-3 font-bold text-emerald-700"><CheckCircle2 className="h-4 w-4" />Закрыть обращение</button>}

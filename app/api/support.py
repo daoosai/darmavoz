@@ -106,8 +106,10 @@ def _message_payload(message: SupportMessage) -> dict:
         role = "client"
     else:
         user = message.author_user
-        name = (user.display_name or user.username) if user else "Оператор"
         role = user.role.name if user and user.role else "operator"
+        name = "Поддержка" if role in {"admin", "logist"} else (
+            (user.display_name or user.username) if user else "Оператор"
+        )
     return {
         "id": message.id,
         "ticket_id": message.ticket_id,

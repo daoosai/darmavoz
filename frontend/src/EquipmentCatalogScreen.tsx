@@ -32,7 +32,7 @@ export interface EquipmentListing {
 interface EquipmentApplicationSummary {
   id: string;
   listing_id: string;
-  status: "new" | "in_progress" | "closed" | "rejected";
+  status: "new" | "in_progress" | "closed" | "rejected" | "cancelled";
 }
 
 const priceUnits: Record<string, string> = {

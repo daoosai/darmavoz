@@ -83,6 +83,7 @@ export default function SupportScreen({ operatorMode = false, onBack, initialCon
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [selected, setSelected] = useState<SupportTicket | null>(null);
   const [filter, setFilter] = useState("");
+  const [clientTab, setClientTab] = useState<"active" | "closed">("active");
   const [showCreate, setShowCreate] = useState(Boolean(initialContext));
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -97,6 +98,13 @@ export default function SupportScreen({ operatorMode = false, onBack, initialCon
 
   const endpoint = operatorMode ? `${baseURL}/admin/support/tickets` : `${baseURL}/support/tickets`;
   const headers = { Authorization: `Bearer ${token}` };
+  const visibleTickets = operatorMode
+    ? tickets
+    : tickets.filter((ticket) =>
+        clientTab === "active"
+          ? ticket.status === "new" || ticket.status === "in_progress"
+          : ticket.status === "closed",
+      );
 
   const closeCreateForm = () => {
     if (initialContext && onBack) {
@@ -229,7 +237,8 @@ export default function SupportScreen({ operatorMode = false, onBack, initialCon
         {!operatorMode && <button onClick={() => setShowCreate(true)} className="rounded-2xl bg-sky-500 p-3 text-white"><Plus className="h-5 w-5" /></button>}
       </div>
       {operatorMode && <div className="mb-4 flex gap-2 overflow-x-auto">{[["", "Все"], ["new", "Новые"], ["in_progress", "В работе"], ["closed", "Закрытые"]].map(([value, label]) => <button key={value} onClick={() => setFilter(value)} className={`shrink-0 rounded-full px-4 py-2 text-sm font-bold ${filter === value ? "bg-sky-500 text-white" : "bg-white text-slate-600"}`}>{label}</button>)}</div>}
-      {loading ? <p className="py-16 text-center text-slate-400">Загрузка...</p> : tickets.length === 0 ? <div className="rounded-3xl bg-white p-10 text-center shadow-sm"><Headphones className="mx-auto h-12 w-12 text-sky-300" /><p className="mt-3 font-bold text-slate-700">Обращений пока нет</p>{!operatorMode && <button onClick={() => setShowCreate(true)} className="mt-4 rounded-xl bg-sky-500 px-5 py-3 font-bold text-white">Написать оператору</button>}</div> : <div className="space-y-3">{tickets.map((ticket) => <button key={ticket.id} onClick={() => setSelected(ticket)} className="flex w-full items-center gap-3 rounded-2xl bg-white p-4 text-left shadow-sm"><div className="rounded-xl bg-sky-50 p-3"><MessageCircle className="h-5 w-5 text-sky-500" /></div><div className="min-w-0 flex-1"><p className="truncate font-bold">{ticket.subject}</p><p className="truncate text-xs text-slate-500">{operatorMode ? ticket.requester_name : ticket.messages.at(-1)?.text}</p></div><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${statusClasses[ticket.status]}`}>{statusLabels[ticket.status]}</span></button>)}</div>}
+      {!operatorMode && <div className="mb-4 flex gap-2 overflow-x-auto"><button onClick={() => setClientTab("active")} className={`shrink-0 rounded-full px-4 py-2 text-sm font-bold ${clientTab === "active" ? "bg-sky-500 text-white" : "bg-white text-slate-600"}`}>Активные</button><button onClick={() => setClientTab("closed")} className={`shrink-0 rounded-full px-4 py-2 text-sm font-bold ${clientTab === "closed" ? "bg-sky-500 text-white" : "bg-white text-slate-600"}`}>Закрытые</button></div>}
+      {loading ? <p className="py-16 text-center text-slate-400">Загрузка...</p> : visibleTickets.length === 0 ? <div className="rounded-3xl bg-white p-10 text-center shadow-sm"><Headphones className="mx-auto h-12 w-12 text-sky-300" /><p className="mt-3 font-bold text-slate-700">Обращений пока нет</p>{!operatorMode && <button onClick={() => setShowCreate(true)} className="mt-4 rounded-xl bg-sky-500 px-5 py-3 font-bold text-white">Написать оператору</button>}</div> : <div className="space-y-3">{visibleTickets.map((ticket) => <button key={ticket.id} onClick={() => setSelected(ticket)} className="flex w-full items-center gap-3 rounded-2xl bg-white p-4 text-left shadow-sm"><div className="rounded-xl bg-sky-50 p-3"><MessageCircle className="h-5 w-5 text-sky-500" /></div><div className="min-w-0 flex-1"><p className="truncate font-bold">{ticket.subject}</p><p className="truncate text-xs text-slate-500">{operatorMode ? ticket.requester_name : ticket.messages.at(-1)?.text}</p></div><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${statusClasses[ticket.status]}`}>{statusLabels[ticket.status]}</span></button>)}</div>}
       {showCreate && <div className="fixed inset-0 z-[90] flex items-end justify-center bg-slate-900/50 sm:items-center sm:p-4"><form onSubmit={createTicket} className="w-full max-w-md rounded-t-3xl bg-white p-5 sm:rounded-3xl"><div className="mb-5 flex justify-between"><div><p className="text-xs font-bold text-sky-600">НОВОЕ ОБРАЩЕНИЕ</p><h3 className="text-xl font-black">Написать оператору</h3></div><button type="button" onClick={closeCreateForm} className="rounded-full bg-slate-100 p-2"><X className="h-5 w-5" /></button></div><div className="space-y-4"><label className="block text-sm font-bold">Тема<input required value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} className="mt-1 w-full rounded-xl bg-slate-100 p-3 font-normal" /></label><label className="block text-sm font-bold">Категория<select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="mt-1 w-full rounded-xl bg-slate-100 p-3 font-normal"><option value="general">Общий вопрос</option><option value="order">Заказ</option><option value="pickup_point">Точка забора</option><option value="equipment">Спецтехника</option><option value="participant">Участник системы</option></select></label><label className="block text-sm font-bold">Сообщение<textarea required rows={5} value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} className="mt-1 w-full resize-none rounded-xl bg-slate-100 p-3 font-normal" /></label></div><button disabled={sending} className="mt-5 w-full rounded-2xl bg-sky-500 p-4 font-bold text-white disabled:opacity-50">{sending ? "Отправляем..." : "Отправить"}</button></form></div>}
     </div>
   );

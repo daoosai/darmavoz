@@ -74,6 +74,9 @@ const formatDate = (dateString: string) => {
   }
 };
 
+const formatEquipmentApplicationPrice = (value?: number | null) =>
+  value == null ? "По договорённости" : `${Number(value).toLocaleString("ru-RU")} ₽`;
+
 const EquipmentApplicationProgress = ({ application }: { application: EquipmentApplication }) => {
   if (application.status === "rejected" || application.status === "cancelled") {
     return (
@@ -120,7 +123,7 @@ const EquipmentHistoryCard = ({ application }: { application: EquipmentApplicati
         <div><p className="text-xs font-bold uppercase tracking-wide text-slate-400">Заявка #{application.id.slice(0, 8).toUpperCase()}</p><h3 className="mt-1 text-lg font-black text-slate-900">{application.listing_title_snapshot}</h3></div>
         <span className={`shrink-0 rounded-full px-3 py-1 text-[10px] font-bold ${equipmentStatusClasses[application.status]}`}>{statusLabel}</span>
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-3 text-sm"><div><p className="text-xs text-slate-400">Дата</p><p className="mt-1 font-bold text-slate-700">{formatDate(application.requested_date)}</p></div><div><p className="text-xs text-slate-400">Сумма</p><p className="mt-1 font-bold text-slate-700">{application.total_price == null ? "По договорённости" : `${Number(application.total_price).toLocaleString("ru-RU")} ₽`}</p></div></div>
+      <div className="mt-4 grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-3 text-sm"><div><p className="text-xs text-slate-400">Дата</p><p className="mt-1 font-bold text-slate-700">{formatDate(application.requested_date)}</p></div><div><p className="text-xs text-slate-400">Сумма</p><p className="mt-1 font-bold text-slate-700">{formatEquipmentApplicationPrice(application.total_price)}</p></div></div>
       <p className="mt-3 flex items-start gap-2 text-sm text-slate-600"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />{application.object_address}</p>
       {application.reject_reason && <p className="mt-3 rounded-xl bg-rose-50 p-3 text-sm text-rose-700"><span className="font-bold">Причина отказа:</span> {application.reject_reason}</p>}
       {application.cancel_reason && <p className="mt-3 rounded-xl bg-rose-50 p-3 text-sm text-rose-700"><span className="font-bold">Причина отмены:</span> {application.cancel_reason}</p>}
@@ -632,7 +635,10 @@ export default function OrdersScreen({
                             )}
                             <div className="min-w-0 flex-1">
                               <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold ${equipmentStatusClasses[application.status]}`}>{equipmentStatusLabels[application.status]}</span>
-                              <h3 className="mt-2 font-black text-slate-900">{application.listing_title_snapshot}</h3>
+                              <div className="mt-2 flex items-start justify-between gap-3">
+                                <h3 className="min-w-0 flex-1 font-black text-slate-900">{application.listing_title_snapshot}</h3>
+                                <span className="shrink-0 text-sm font-black text-slate-900">{formatEquipmentApplicationPrice(application.total_price)}</span>
+                              </div>
                             </div>
                           </div>
                           <div className="mt-3 space-y-2 text-sm text-slate-600">

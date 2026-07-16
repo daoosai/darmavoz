@@ -166,7 +166,8 @@ async def update_pickup_point(
     current_user: User = Depends(get_current_logist_user),
 ) -> dict:
     point = await _get_point_or_404(db, point_id)
-    changed = payload.model_fields_set
+    payload_data = payload.model_dump(exclude_unset=True)
+    changed = set(payload_data)
     for field in (
         "name",
         "short_name",
@@ -181,7 +182,7 @@ async def update_pickup_point(
         "is_active",
     ):
         if field in changed:
-            setattr(point, field, getattr(payload, field))
+            setattr(point, field, payload_data[field])
 
     if "point_type" in changed and "min_delivery_price" not in changed:
         point.min_delivery_price = default_min_delivery_price(point.point_type)
@@ -189,14 +190,14 @@ async def update_pickup_point(
         await sync_material_offers(
             db,
             quarry_id=point.id,
-            offers=payload.material_offers,
-            legacy_material_ids=payload.material_ids,
+            offers=payload_data.get("material_offers"),
+            legacy_material_ids=payload_data.get("material_ids"),
         )
     if "delivery_option_ids" in changed:
         await sync_delivery_options(
             db,
             quarry_id=point.id,
-            delivery_option_ids=payload.delivery_option_ids or [],
+            delivery_option_ids=payload_data.get("delivery_option_ids") or [],
         )
     elif "point_type" in changed:
         await sync_delivery_options(

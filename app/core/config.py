@@ -64,7 +64,8 @@ class Settings(BaseSettings):
     FIREBASE_CREDENTIALS_PATH: str = "/app/firebase-key.json"
     SMSC_LOGIN: str | None = Field(default=None, validation_alias=AliasChoices("SMSC_LOGIN"))
     SMSC_PASSWORD: str | None = Field(default=None, validation_alias=AliasChoices("SMSC_PASSWORD"))
-    USE_REAL_SMS: bool = True
+    SMSRU_API_KEY: str | None = None
+    USE_REAL_SMS: bool = False
     TWOGIS_API_KEY: str | None = None
     YANDEX_GEOCODER_API_KEY: str | None = None
     YANDEX_ROUTER_API_KEY: str | None = None

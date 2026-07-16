@@ -19,6 +19,7 @@ export interface Quarry {
   min_delivery_price?: number;
   moderation_status?: string;
   is_active: boolean;
+  owner_user_id?: string | null;
   material_ids?: string[];
   material_offers?: { material_id: string; price: number; is_active: boolean }[];
   delivery_option_ids?: string[];
@@ -429,6 +430,7 @@ function EditQuarryModal({
   const [isSaving, setIsSaving] = useState(false);
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [deliveryOptions, setDeliveryOptions] = useState<any[]>([]);
+  const usesOwnerPhone = Boolean(formData.owner_user_id);
 
   const mapRef = React.useRef<any>(null);
   const markerRef = React.useRef<any>(null);
@@ -618,7 +620,6 @@ function EditQuarryModal({
         point_type: formData.point_type,
         address: finalAddress,
         description: formData.description?.trim() || null,
-        contact_phone: formData.contact_phone?.trim() || null,
         subscription_end_date: formData.subscription_end_date
           ? new Date(formData.subscription_end_date).toISOString()
           : null,
@@ -629,6 +630,7 @@ function EditQuarryModal({
         material_ids: formData.material_ids || [],
         material_offers: formData.material_offers || [],
         delivery_option_ids: formData.delivery_option_ids || [],
+        ...(usesOwnerPhone ? {} : { contact_phone: formData.contact_phone?.trim() || null }),
       };
 
       const res = await fetch(url, {
@@ -823,6 +825,7 @@ function EditQuarryModal({
               <input
                 type="tel"
                 value={formData.contact_phone || ""}
+                disabled={usesOwnerPhone}
                 onChange={(event) =>
                   setFormData({
                     ...formData,
@@ -830,8 +833,11 @@ function EditQuarryModal({
                   })
                 }
                 placeholder="+7 (900) 000-00-00"
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
               />
+              {usesOwnerPhone && (
+                <p className="text-xs text-slate-500">Берется из профиля поставщика</p>
+              )}
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">

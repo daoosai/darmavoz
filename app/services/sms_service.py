@@ -7,6 +7,7 @@ from app.core.config import settings
 
 logger = logging.getLogger("uvicorn.error")
 FALLBACK_OTP_CODE = "0000"
+SMSRU_SEND_URL = "https://sms.ru/sms/send"
 
 
 def generate_otp_code() -> str:
@@ -24,12 +25,16 @@ def normalize_sms_phone(phone_number: str) -> str:
 
 async def send_auth_sms_code(*, phone_number: str, code: str, log_prefix: str) -> str:
     if not settings.USE_REAL_SMS:
-        logger.info("%s_sandbox_sms phone=%s code=%s", log_prefix, phone_number, FALLBACK_OTP_CODE)
+        logger.info(
+            "%s_sandbox_sms phone=%s code=%s",
+            log_prefix,
+            phone_number,
+            FALLBACK_OTP_CODE,
+        )
         return FALLBACK_OTP_CODE
 
-    login = settings.SMSC_LOGIN
-    password = settings.SMSC_PASSWORD
-    if not login or not password:
+    api_key = settings.SMSRU_API_KEY
+    if not api_key:
         logger.warning(
             "%s_not_configured_fallback phone=%s fallback_code=%s",
             log_prefix,
@@ -39,17 +44,15 @@ async def send_auth_sms_code(*, phone_number: str, code: str, log_prefix: str) -
         return FALLBACK_OTP_CODE
 
     payload = {
-        "login": login,
-        "psw": password,
-        "phones": phone_number,
-        "mes": f"Код авторизации Дармавоз: {code}",
-        "fmt": 3,
-        "charset": "utf-8",
+        "api_id": api_key,
+        "to": phone_number,
+        "msg": f"{code} — код для входа в приложение Дармавоз. Никому не сообщайте код.",
+        "json": 1,
     }
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.get("https://smsc.ru/sys/send.php", params=payload)
+            response = await client.get(SMSRU_SEND_URL, params=payload)
             response.raise_for_status()
     except httpx.HTTPError:
         logger.warning(
@@ -83,21 +86,20 @@ async def send_auth_sms_code(*, phone_number: str, code: str, log_prefix: str) -
         )
         return FALLBACK_OTP_CODE
 
-    if "error" in response_data:
+    if response_data.get("status") != "OK":
         logger.warning(
-            "%s_gateway_error_fallback phone=%s error_code=%s error=%s response=%s fallback_code=%s",
+            "%s_gateway_error_fallback phone=%s response=%s fallback_code=%s",
             log_prefix,
             phone_number,
-            response_data.get("error_code"),
-            response_data.get("error"),
             response_data,
             FALLBACK_OTP_CODE,
         )
         return FALLBACK_OTP_CODE
 
-    if "id" not in response_data:
+    sms_status = (response_data.get("sms") or {}).get(phone_number)
+    if not isinstance(sms_status, dict) or str(sms_status.get("status")) != "OK":
         logger.warning(
-            "%s_missing_message_id_fallback phone=%s response=%s fallback_code=%s",
+            "%s_delivery_status_fallback phone=%s response=%s fallback_code=%s",
             log_prefix,
             phone_number,
             response_data,

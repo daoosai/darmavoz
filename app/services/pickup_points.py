@@ -264,7 +264,7 @@ async def pickup_point_payload(
         "point_type": point.point_type,
         "address": point.address,
         "description": point.description,
-        "contact_phone": point.contact_phone or (owner.username if owner else None),
+        "contact_phone": owner.username if owner else point.contact_phone,
         "subscription_end_date": point.subscription_end_date,
         "lat": point.lat,
         "lon": point.lon,

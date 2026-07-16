@@ -20,7 +20,7 @@ from app.services.pickup_points import (
 )
 
 router = APIRouter()
-SUPPLIER_POINT_TYPES = {"quarry", "accumulator", "warehouse", "supplier"}
+SUPPLIER_POINT_TYPES = {"quarry", "accumulator"}
 
 
 def _validate_supplier_display_name(user: User) -> None:
@@ -89,9 +89,10 @@ async def create_supplier_point(
     _validate_supplier_display_name(current_user)
     if payload.point_type not in SUPPLIER_POINT_TYPES:
         raise HTTPException(status_code=422, detail="Suppliers may create only quarry or accumulator points")
+    short_name = payload.short_name or payload.name
     point = Quarry(
         name=payload.name,
-        short_name=payload.short_name,
+        short_name=short_name,
         point_type=payload.point_type,
         address=payload.address,
         description=payload.description,
@@ -137,10 +138,15 @@ async def update_supplier_point(
     point = await _owned_point(db, current_user, point_id)
     if payload.point_type is not None and payload.point_type not in SUPPLIER_POINT_TYPES:
         raise HTTPException(status_code=422, detail="Suppliers may create only quarry or accumulator points")
-    changed = payload.model_fields_set
+    payload_data = payload.model_dump(exclude_unset=True)
+    if "name" in payload_data and "short_name" not in payload_data:
+        payload_data["short_name"] = payload_data["name"]
+    elif "short_name" in payload_data and not payload_data["short_name"]:
+        payload_data["short_name"] = payload_data.get("name") or point.name
+    changed = set(payload_data)
     for field in ("name", "short_name", "point_type", "address", "description", "lat", "lon", "is_active"):
         if field in changed:
-            setattr(point, field, getattr(payload, field))
+            setattr(point, field, payload_data[field])
     if "point_type" in changed:
         point.min_delivery_price = default_min_delivery_price(point.point_type)
         await sync_delivery_options(
@@ -152,8 +158,8 @@ async def update_supplier_point(
         await sync_material_offers(
             db,
             quarry_id=point.id,
-            offers=payload.material_offers,
-            legacy_material_ids=payload.material_ids,
+            offers=payload_data.get("material_offers"),
+            legacy_material_ids=payload_data.get("material_ids"),
         )
     if point.moderation_status == ModerationStatus.approved.value:
         point.moderation_status = ModerationStatus.pending_moderation.value

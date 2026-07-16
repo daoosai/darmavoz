@@ -9,7 +9,10 @@ interface Material {
   id: string;
   name: string;
   unit: string;
+  price?: number | null;
 }
+
+type EditablePointType = "quarry" | "accumulator";
 
 export interface SupplierPoint {
   id: string;
@@ -44,10 +47,12 @@ interface Props {
 
 const TYUMEN_CENTER: [number, number] = [65.534328, 57.152286];
 
+const normalizeEditablePointType = (value?: SupplierPoint["point_type"]): EditablePointType =>
+  value === "accumulator" ? "accumulator" : "quarry";
+
 const initialForm = {
-  point_type: "quarry",
+  point_type: "quarry" as EditablePointType,
   name: "",
-  short_name: "",
   address: "",
   description: "",
   lat: "",
@@ -62,9 +67,8 @@ export default function SupplierCreatePointModal({ token, point, onClose, onSave
   const [form, setForm] = useState(() =>
     point
       ? {
-          point_type: point.point_type,
+          point_type: normalizeEditablePointType(point.point_type),
           name: point.name,
-          short_name: point.short_name || "",
           address: point.address || "",
           description: point.description || "",
           lat: String(point.lat),
@@ -211,7 +215,10 @@ export default function SupplierCreatePointModal({ token, point, onClose, onSave
 
   const toggleMaterial = (materialId: string) => {
     setOfferPrices((current) => {
-      if (!(materialId in current)) return { ...current, [materialId]: "" };
+      if (!(materialId in current)) {
+        const material = materials.find((item) => item.id === materialId);
+        return { ...current, [materialId]: String(material?.price ?? "") };
+      }
       const next = { ...current };
       delete next[materialId];
       return next;
@@ -251,7 +258,6 @@ export default function SupplierCreatePointModal({ token, point, onClose, onSave
           body: JSON.stringify({
             ...form,
             address: form.address.trim(),
-            short_name: form.short_name || null,
             description: form.description || null,
             lat,
             lon,
@@ -298,17 +304,22 @@ export default function SupplierCreatePointModal({ token, point, onClose, onSave
         </header>
 
         <form onSubmit={submit} className="space-y-5 p-5 pb-12">
-          <section className="grid grid-cols-2 gap-2 rounded-xl bg-white p-2 shadow-sm">
-            {[["quarry", "Карьер"], ["accumulator", "Накопитель"], ["warehouse", "Склад"], ["supplier", "Поставщик"]].map(([value, label]) => (
-              <button key={value} type="button" onClick={() => setForm({ ...form, point_type: value })} className={`rounded-xl px-3 py-3 text-sm font-bold transition-colors ${form.point_type === value ? "bg-sky-500 text-white" : "text-gray-500 hover:bg-gray-50"}`}>
-                {label}
-              </button>
-            ))}
+          <section className="rounded-xl bg-white p-5 shadow-sm">
+            <label className="text-sm font-bold text-gray-900">Тип точки</label>
+            <select
+              value={form.point_type}
+              onChange={(event) =>
+                setForm({ ...form, point_type: event.target.value as EditablePointType })
+              }
+              className="mt-2 w-full rounded-xl border border-gray-200 p-3 text-gray-900 outline-none focus:border-sky-500"
+            >
+              <option value="quarry">Карьер</option>
+              <option value="accumulator">Накопитель</option>
+            </select>
           </section>
 
           <section className="space-y-3 rounded-xl bg-white p-5 shadow-sm">
             <input required placeholder="Название точки" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full rounded-xl border border-gray-200 p-3 text-gray-900 outline-none focus:border-sky-500" />
-            <input placeholder="Короткое название для карты" value={form.short_name} onChange={(e) => setForm({ ...form, short_name: e.target.value })} className="w-full rounded-xl border border-gray-200 p-3 text-gray-900 outline-none focus:border-sky-500" />
             <textarea placeholder="Описание" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="min-h-24 w-full rounded-xl border border-gray-200 p-3 text-gray-900 outline-none focus:border-sky-500" />
           </section>
 

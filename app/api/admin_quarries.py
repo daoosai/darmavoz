@@ -115,9 +115,10 @@ async def create_pickup_point(
     min_price = payload.min_delivery_price
     if min_price is None:
         min_price = default_min_delivery_price(payload.point_type)
+    short_name = payload.short_name or payload.name
     point = Quarry(
         name=payload.name,
-        short_name=payload.short_name,
+        short_name=short_name,
         point_type=payload.point_type,
         address=payload.address,
         description=payload.description,
@@ -167,6 +168,10 @@ async def update_pickup_point(
 ) -> dict:
     point = await _get_point_or_404(db, point_id)
     payload_data = payload.model_dump(exclude_unset=True)
+    if "name" in payload_data and "short_name" not in payload_data:
+        payload_data["short_name"] = payload_data["name"]
+    elif "short_name" in payload_data and not payload_data["short_name"]:
+        payload_data["short_name"] = payload_data.get("name") or point.name
     changed = set(payload_data)
     for field in (
         "name",

@@ -59,6 +59,26 @@ class QuarryBase(BaseModel):
             return normalized or None
         return value
 
+    @field_validator("short_name", mode="before")
+    @classmethod
+    def normalize_short_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            normalized = value.strip()
+            return normalized or None
+        return value
+
+    @field_validator("subscription_end_date", mode="before")
+    @classmethod
+    def normalize_subscription_end_date(cls, value: object) -> object:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            normalized = value.strip()
+            return normalized or None
+        return value
+
     @field_validator("lat")
     @classmethod
     def validate_lat(cls, value: float) -> float:
@@ -112,6 +132,26 @@ class QuarryUpdate(BaseModel):
     @field_validator("contact_phone", mode="before")
     @classmethod
     def normalize_contact_phone(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            normalized = value.strip()
+            return normalized or None
+        return value
+
+    @field_validator("short_name", mode="before")
+    @classmethod
+    def normalize_short_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            normalized = value.strip()
+            return normalized or None
+        return value
+
+    @field_validator("subscription_end_date", mode="before")
+    @classmethod
+    def normalize_subscription_end_date(cls, value: object) -> object:
         if value is None:
             return None
         if isinstance(value, str):

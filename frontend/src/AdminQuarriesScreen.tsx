@@ -52,12 +52,17 @@ const MODERATION_BADGES: Record<string, { label: string; className: string }> = 
 const moderationBadge = (status?: string) =>
   MODERATION_BADGES[status || "incomplete"] || MODERATION_BADGES.incomplete;
 
-const formatDateTimeLocalValue = (value?: string | null) => {
+type EditablePointType = "quarry" | "accumulator";
+
+const normalizeEditablePointType = (value?: Quarry["point_type"]): EditablePointType =>
+  value === "accumulator" ? "accumulator" : "quarry";
+
+const formatDateInputValue = (value?: string | null) => {
   if (!value) return "";
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return "";
   const timezoneOffsetMs = parsed.getTimezoneOffset() * 60_000;
-  return new Date(parsed.getTime() - timezoneOffsetMs).toISOString().slice(0, 16);
+  return new Date(parsed.getTime() - timezoneOffsetMs).toISOString().slice(0, 10);
 };
 
 interface AdminQuarriesScreenProps {
@@ -166,6 +171,7 @@ export default function AdminQuarriesScreen({
     if (quarry) {
       setEditingQuarry({
         ...quarry,
+        point_type: normalizeEditablePointType(quarry.point_type),
         contact_phone: quarry.contact_phone || quarry.owner_phone || "",
       });
     } else {
@@ -616,12 +622,11 @@ function EditQuarryModal({
 
       const payload = {
         name: nameTrimmed,
-        short_name: formData.short_name || null,
         point_type: formData.point_type,
         address: finalAddress,
         description: formData.description?.trim() || null,
         subscription_end_date: formData.subscription_end_date
-          ? new Date(formData.subscription_end_date).toISOString()
+          ? new Date(`${formData.subscription_end_date}T23:59:59`).toISOString()
           : null,
         lat: formData.lat,
         lon: formData.lon,
@@ -790,10 +795,10 @@ function EditQuarryModal({
               <select
                 value={formData.point_type}
                 onChange={(event) => {
-                  const pointType = event.target.value as Quarry["point_type"];
-                  const defaultMinimum = pointType === "quarry" ? 5000 : pointType === "accumulator" ? 3000 : 0;
+                  const pointType = event.target.value as EditablePointType;
+                  const defaultMinimum = pointType === "quarry" ? 5000 : 3000;
                   const defaultOptions = deliveryOptions
-                    .filter((option) => pointType === "quarry" ? option.capacity_m3 >= 10 : pointType === "accumulator" ? option.capacity_m3 === 5 : false)
+                    .filter((option) => pointType === "quarry" ? option.capacity_m3 >= 10 : option.capacity_m3 === 5)
                     .map((option) => option.id);
                   setFormData({ ...formData, point_type: pointType, min_delivery_price: defaultMinimum, delivery_option_ids: defaultOptions });
                 }}
@@ -801,8 +806,6 @@ function EditQuarryModal({
               >
                 <option value="quarry">Карьер</option>
                 <option value="accumulator">Накопитель</option>
-                <option value="warehouse">Склад</option>
-                <option value="supplier">Поставщик</option>
               </select>
             </div>
             <div className="flex flex-col gap-1.5">
@@ -844,8 +847,8 @@ function EditQuarryModal({
                 Действует до
               </label>
               <input
-                type="datetime-local"
-                value={formatDateTimeLocalValue(formData.subscription_end_date)}
+                type="date"
+                value={formatDateInputValue(formData.subscription_end_date)}
                 onChange={(event) =>
                   setFormData({
                     ...formData,

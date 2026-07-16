@@ -109,6 +109,7 @@ async def _application_payload(
         "duration_value": application.duration_value,
         "duration_unit": application.duration_unit,
         "comment": application.comment,
+        "reject_reason": application.reject_reason,
         "status": application.status,
         "processed_by_user_id": application.processed_by_user_id,
         "primary_image_url": media[0].public_url if media else None,
@@ -421,6 +422,18 @@ async def create_equipment_application(
         raise HTTPException(status_code=400, detail="Объявление больше не активно")
     if payload.requested_date < date.today():
         raise HTTPException(status_code=400, detail="Дата работ не может быть в прошлом")
+    active_application_id = await db.scalar(
+        select(SpecialEquipmentApplication.id).where(
+            SpecialEquipmentApplication.listing_id == listing.id,
+            SpecialEquipmentApplication.client_id == current_client.id,
+            SpecialEquipmentApplication.status.in_(("new", "in_progress")),
+        )
+    )
+    if active_application_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Активная заявка на эту технику уже отправлена",
+        )
     application = SpecialEquipmentApplication(
         listing_id=listing.id,
         client_id=current_client.id,
@@ -549,13 +562,17 @@ async def update_equipment_application_status(
     application = result.scalar_one_or_none()
     if application is None:
         raise HTTPException(status_code=404, detail="Заявка не найдена")
-    allowed = {"new": "in_progress", "in_progress": "closed"}
-    if allowed.get(application.status) != payload.status:
+    allowed = {
+        "new": {"in_progress", "rejected"},
+        "in_progress": {"closed", "rejected"},
+    }
+    if payload.status not in allowed.get(application.status, set()):
         raise HTTPException(status_code=409, detail="Недопустимый переход статуса заявки")
     application.status = payload.status
+    application.reject_reason = payload.reject_reason if payload.status == "rejected" else None
     application.processed_by_user_id = current_user.id
     application.closed_at = (
-        datetime.now(timezone.utc) if payload.status == "closed" else None
+        datetime.now(timezone.utc) if payload.status in {"closed", "rejected"} else None
     )
     await db.commit()
     await db.refresh(application)

@@ -1,12 +1,40 @@
 import React, { useState, useEffect, useRef } from "react";
 import PullToRefresh from "react-simple-pull-to-refresh";
-import { Package, MapPin, Calendar, Truck, List, Info, User as UserIcon, Phone, Search, UserCheck, CheckCircle, ChevronDown, ArrowLeft } from "lucide-react";
-import {  clientOrderStatusColors, baseURL } from "./utils";
+import { Package, MapPin, Calendar, Truck, List, Info, User as UserIcon, Phone, Search, UserCheck, CheckCircle, ChevronDown, ArrowLeft, Wrench } from "lucide-react";
+import { clientOrderStatusColors, baseURL, resolveMediaUrl } from "./utils";
 import { getOrderStatusText } from "./utils/statusMapper";
 import { ClientOrderSummary, useAuthStore, useClientOrdersStore } from "./store";
 import { motion, AnimatePresence } from "motion/react";
 
 type ClientOrder = ClientOrderSummary;
+
+interface EquipmentApplication {
+  id: string;
+  listing_id: string;
+  listing_title_snapshot: string;
+  object_address: string;
+  requested_date: string;
+  requested_time: string;
+  duration_value: number;
+  duration_unit: "hours" | "shifts";
+  status: "new" | "in_progress" | "closed" | "rejected";
+  reject_reason?: string | null;
+  primary_image_url?: string | null;
+}
+
+const equipmentStatusLabels: Record<EquipmentApplication["status"], string> = {
+  new: "Новая",
+  in_progress: "В работе",
+  closed: "Завершена",
+  rejected: "Отклонена",
+};
+
+const equipmentStatusClasses: Record<EquipmentApplication["status"], string> = {
+  new: "bg-amber-100 text-amber-700",
+  in_progress: "bg-sky-100 text-sky-700",
+  closed: "bg-emerald-100 text-emerald-700",
+  rejected: "bg-rose-100 text-rose-700",
+};
 
 const activeStatuses = [
   "created", "searching_driver", "offered_to_driver", "no_driver_found",
@@ -302,7 +330,9 @@ export default function OrdersScreen({
     clearOrders,
   } = useClientOrdersStore();
 
-  const [activeTab, setActiveTab] = useState<'current' | 'history'>('current');
+  const [activeTab, setActiveTab] = useState<'current' | 'history' | 'equipment'>('current');
+  const [equipmentApplications, setEquipmentApplications] = useState<EquipmentApplication[]>([]);
+  const [equipmentApplicationsLoading, setEquipmentApplicationsLoading] = useState(true);
   const [recentlyCompletedIds, setRecentlyCompletedIds] = useState<string[]>([]);
   const prevOrdersRef = useRef<ClientOrder[]>([]);
 
@@ -330,12 +360,34 @@ export default function OrdersScreen({
     }
   };
 
+  const fetchEquipmentApplications = async () => {
+    if (role !== "client" || !token) {
+      setEquipmentApplications([]);
+      setEquipmentApplicationsLoading(false);
+      return;
+    }
+    setEquipmentApplicationsLoading(true);
+    try {
+      const response = await fetch(`${baseURL}/client/equipment-applications`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) setEquipmentApplications(await response.json());
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setEquipmentApplicationsLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (role !== "client") {
       clearOrders();
+      setEquipmentApplications([]);
+      setEquipmentApplicationsLoading(false);
       return;
     }
     if (orders.length === 0) void fetchOrders();
+    void fetchEquipmentApplications();
   }, [role, token]);
 
   useEffect(() => {
@@ -368,10 +420,10 @@ export default function OrdersScreen({
   }, [orders, recentlyCompletedIds]);
 
   const handleRefresh = async () => {
-    await fetchOrders();
+    await Promise.all([fetchOrders(), fetchEquipmentApplications()]);
   };
 
-  if (isLoading && orders.length === 0) {
+  if (isLoading && orders.length === 0 && equipmentApplicationsLoading) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center h-full min-h-[50vh] gap-3 opacity-60">
         <List className="w-12 h-12 text-slate-300 animate-pulse" />
@@ -411,26 +463,6 @@ export default function OrdersScreen({
      !activeStatuses.includes(o.status) && !recentlyCompletedIds.includes(o.id)
   );
 
-  if (orders.length === 0) {
-    return (
-      <div className="h-full">
-        <PullToRefresh onRefresh={handleRefresh} pullingContent={""} refreshingContent={<div className="p-4 text-center text-slate-500 text-sm">Обновление...</div>}>
-          <div className="flex-1 flex flex-col items-center justify-center p-6 text-center min-h-[70vh]">
-            <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mb-5 border border-slate-100">
-              <Package className="w-10 h-10 text-slate-300" />
-            </div>
-            <h3 className="text-[22px] font-bold text-slate-900 mb-2">
-              У вас пока нет заказов
-            </h3>
-            <p className="text-base text-slate-500 max-w-[280px]">
-              Здесь будет отображаться история ваших покупок и активные доставки.
-            </p>
-          </div>
-        </PullToRefresh>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-[calc(100vh-68px)] bg-gray-50 flex flex-col">
       {/* Tabs / focused order navigation */}
@@ -466,6 +498,16 @@ export default function OrdersScreen({
           >
             История
           </button>
+          <button
+            onClick={() => setActiveTab('equipment')}
+            className={`flex-1 rounded-xl px-2 py-3 text-xs font-bold leading-tight transition-all ${
+              activeTab === 'equipment'
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Заявки на технику
+          </button>
         </div>
         )}
       </div>
@@ -474,7 +516,47 @@ export default function OrdersScreen({
         <PullToRefresh onRefresh={handleRefresh} pullingContent={""} refreshingContent={<div className="p-4 text-center text-slate-500 text-sm">Обновление...</div>}>
           <div className="min-h-screen bg-gray-50 px-4 pb-24 pt-4">
             <AnimatePresence mode="wait">
-              {activeTab === 'current' ? (
+              {activeTab === 'equipment' ? (
+                <motion.div
+                  key="equipment"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  {equipmentApplicationsLoading ? (
+                    <p className="py-16 text-center text-sm text-slate-400">Загрузка заявок...</p>
+                  ) : equipmentApplications.length > 0 ? (
+                    <div className="flex flex-col gap-4">
+                      {equipmentApplications.map((application) => (
+                        <article key={application.id} className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm">
+                          <div className="flex gap-3">
+                            {application.primary_image_url ? (
+                              <img src={resolveMediaUrl(application.primary_image_url) || "/placeholder.jpg"} alt={application.listing_title_snapshot} className="h-20 w-24 shrink-0 rounded-xl bg-slate-100 object-contain" />
+                            ) : (
+                              <div className="grid h-20 w-24 shrink-0 place-items-center rounded-xl bg-slate-100"><Wrench className="h-7 w-7 text-slate-300" /></div>
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold ${equipmentStatusClasses[application.status]}`}>{equipmentStatusLabels[application.status]}</span>
+                              <h3 className="mt-2 font-black text-slate-900">{application.listing_title_snapshot}</h3>
+                            </div>
+                          </div>
+                          <div className="mt-3 space-y-2 text-sm text-slate-600">
+                            <p className="flex items-start gap-2"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />{application.object_address}</p>
+                            <p className="flex items-center gap-2"><Calendar className="h-4 w-4 shrink-0 text-slate-400" />{formatDate(application.requested_date)}, {application.requested_time.slice(0, 5)} · {application.duration_value} {application.duration_unit === "hours" ? "ч." : "смен"}</p>
+                          </div>
+                          {application.reject_reason && <p className="mt-3 rounded-xl bg-rose-50 p-3 text-sm text-rose-700"><span className="font-bold">Причина отказа:</span> {application.reject_reason}</p>}
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex min-h-[40vh] flex-col items-center justify-center p-6 text-center opacity-60">
+                      <Wrench className="mb-4 h-12 w-12 text-slate-300" />
+                      <p className="font-medium text-slate-500">Заявок на технику пока нет</p>
+                    </div>
+                  )}
+                </motion.div>
+              ) : activeTab === 'current' ? (
                 <motion.div
                   key="current"
                   initial={{ opacity: 0, x: -20 }}

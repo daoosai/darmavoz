@@ -29,6 +29,12 @@ export interface EquipmentListing {
   media_files?: { id: string; public_url: string; is_primary?: boolean }[];
 }
 
+interface EquipmentApplicationSummary {
+  id: string;
+  listing_id: string;
+  status: "new" | "in_progress" | "closed" | "rejected";
+}
+
 const priceUnits: Record<string, string> = {
   hour: "час",
   shift: "смена",
@@ -48,6 +54,7 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
   const { token, role } = useAuthStore();
   const [types, setTypes] = useState<EquipmentTypeItem[]>([]);
   const [listings, setListings] = useState<EquipmentListing[]>([]);
+  const [applications, setApplications] = useState<EquipmentApplicationSummary[]>([]);
   const [selectedType, setSelectedType] = useState("");
   const [search, setSearch] = useState("");
   const [city, setCity] = useState("");
@@ -75,7 +82,8 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
         fetch(`${baseURL}/equipment`),
       ]);
       if (!typesResponse.ok || !listingsResponse.ok) throw new Error("catalog");
-      setTypes(await typesResponse.json());
+      const loadedTypes: EquipmentTypeItem[] = await typesResponse.json();
+      setTypes(loadedTypes.filter((item) => item.is_active));
       setListings(await listingsResponse.json());
     } catch {
       toast.error("Не удалось загрузить каталог спецтехники");
@@ -87,6 +95,19 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
   useEffect(() => {
     void load();
   }, []);
+
+  useEffect(() => {
+    if (!token || role !== "client") {
+      setApplications([]);
+      return;
+    }
+    fetch(`${baseURL}/client/equipment-applications`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((response) => (response.ok ? response.json() : Promise.reject(new Error("applications"))))
+      .then((data: EquipmentApplicationSummary[]) => setApplications(data))
+      .catch(() => setApplications([]));
+  }, [token, role]);
 
   useEffect(() => {
     if (waitingForAuth && token && role === "client") {
@@ -116,8 +137,17 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
     const matchesSearch = !query || `${item.title} ${item.description}`.toLowerCase().includes(query);
     return matchesType && matchesCity && matchesSearch;
   });
+  const activeApplicationListingIds = useMemo(
+    () => new Set(
+      applications
+        .filter((item) => item.status === "new" || item.status === "in_progress")
+        .map((item) => item.listing_id),
+    ),
+    [applications],
+  );
 
   const startApplication = () => {
+    if (selected && activeApplicationListingIds.has(selected.id)) return;
     if (!token || role !== "client") {
       setWaitingForAuth(true);
       onOpenAuth();
@@ -142,6 +172,7 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось отправить заявку"));
+      setApplications((previous) => [data, ...previous]);
       toast.success(`Заявка №${String(data.id).slice(0, 8)} принята`);
       setShowApplication(false);
     } catch (error) {
@@ -169,6 +200,7 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
       : selected.primary_image_url
         ? [{ id: "primary", public_url: selected.primary_image_url }]
         : [];
+    const hasActiveApplication = activeApplicationListingIds.has(selected.id);
     return (
       <div className="px-4 pb-8">
         <button onClick={() => setSelected(null)} className="mb-4 flex items-center gap-2 text-sm font-bold text-slate-600">
@@ -190,8 +222,8 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
             )}
             <p className="mt-4 text-xl font-black text-sky-600">{formatEquipmentPrice(selected)}</p>
             <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-slate-600">{selected.description}</p>
-            <button onClick={startApplication} className="mt-6 w-full rounded-2xl bg-sky-500 px-5 py-4 font-bold text-white shadow-sm active:bg-sky-600">
-              Оставить заявку
+            <button disabled={hasActiveApplication} onClick={startApplication} className="mt-6 w-full rounded-2xl bg-sky-500 px-5 py-4 font-bold text-white shadow-sm active:bg-sky-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600">
+              {hasActiveApplication ? "Заявка уже отправлена" : "Оставить заявку"}
             </button>
             <button
               onClick={() => {

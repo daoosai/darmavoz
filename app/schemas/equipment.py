@@ -8,7 +8,7 @@ from app.schemas.catalog import MediaFileOut
 
 
 PriceUnit = Literal["hour", "shift", "day", "negotiable"]
-ApplicationStatus = Literal["new", "in_progress", "closed"]
+ApplicationStatus = Literal["new", "in_progress", "closed", "rejected"]
 DurationUnit = Literal["hours", "shifts"]
 
 
@@ -111,6 +111,15 @@ class EquipmentApplicationCreate(BaseModel):
 
 class EquipmentApplicationStatusUpdate(BaseModel):
     status: ApplicationStatus
+    reject_reason: str | None = Field(default=None, min_length=1, max_length=5000)
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    @model_validator(mode="after")
+    def validate_reject_reason(self):
+        if self.status == "rejected" and not self.reject_reason:
+            raise ValueError("reject_reason is required for rejected applications")
+        return self
 
 
 class EquipmentApplicationOut(BaseModel):
@@ -126,6 +135,7 @@ class EquipmentApplicationOut(BaseModel):
     duration_value: float
     duration_unit: DurationUnit
     comment: str | None
+    reject_reason: str | None
     status: ApplicationStatus
     processed_by_user_id: UUID | None
     primary_image_url: str | None = None

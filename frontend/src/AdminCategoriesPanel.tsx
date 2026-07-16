@@ -103,7 +103,7 @@ export default function AdminCategoriesPanel({ token, categories, onChanged }: P
     <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold text-slate-800">Категории доставки</h2>
+          <h2 className="text-lg font-bold text-slate-800">Категории материалов</h2>
           <p className="mt-1 text-sm text-slate-500">Направления, по которым группируются материалы.</p>
         </div>
         <button

@@ -404,6 +404,7 @@ async def create_equipment_listing(
     listing = SpecialEquipmentListing(
         **payload.model_dump(),
         created_by_user_id=current_admin.id,
+        is_deleted=False,
     )
     db.add(listing)
     await db.commit()

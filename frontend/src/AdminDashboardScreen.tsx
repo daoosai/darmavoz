@@ -54,7 +54,7 @@ interface AdminMediaFile {
 
 interface AdminMaterial {
   id: string;
-  category_id: string;
+  category_id?: string | null;
   name: string;
   description: string;
   price: number;
@@ -880,10 +880,10 @@ export default function AdminDashboardScreen({
         unit: editingMaterial.unit || "м3",
         min_volume: Number(editingMaterial.min_volume || 1),
         is_active: editingMaterial.is_active ?? true,
-        category_id: editingMaterial.category_id || categories[0]?.id || null,
+        category_id: editingMaterial.category_id || null,
       };
 
-      if (!payload.category_id) {
+      if (false && !payload.category_id) {
         throw new Error("Сначала создайте категорию материалов");
       }
 
@@ -3099,7 +3099,6 @@ export default function AdminDashboardScreen({
                   Категория
                 </label>
                 <select
-                  required
                   value={editingMaterial.category_id || ""}
                   onChange={(event) =>
                     setEditingMaterial({

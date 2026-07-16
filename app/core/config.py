@@ -61,6 +61,7 @@ class Settings(BaseSettings):
     SMTP_PORT: int = 465
     SMTP_USER: str | None = None
     SMTP_PASSWORD: str | None = None
+    SMTP_FROM_EMAIL: str | None = None
     FIREBASE_CREDENTIALS_PATH: str = "/app/firebase-key.json"
     SMSC_LOGIN: str | None = Field(default=None, validation_alias=AliasChoices("SMSC_LOGIN"))
     SMSC_PASSWORD: str | None = Field(default=None, validation_alias=AliasChoices("SMSC_PASSWORD"))

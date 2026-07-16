@@ -4,7 +4,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class SupplierProfileOut(BaseModel):
-    phone: str
+    phone: str | None = None
+    email: str | None = None
     display_name: str | None = None
 
 

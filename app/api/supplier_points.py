@@ -29,6 +29,10 @@ def _validate_supplier_display_name(user: User) -> None:
     raise HTTPException(status_code=400, detail="Заполните ФИО в профиле")
 
 
+def _supplier_phone_value(user: User) -> str | None:
+    return user.username if "@" not in (user.username or "") else None
+
+
 async def _owned_point(db: AsyncSession, user: User, point_id: UUID) -> Quarry:
     point = await db.scalar(
         select(Quarry).where(Quarry.id == point_id, Quarry.owner_user_id == user.id)
@@ -43,7 +47,8 @@ async def get_supplier_profile(
     current_user: User = Depends(get_current_supplier_user),
 ) -> SupplierProfileOut:
     return SupplierProfileOut(
-        phone=current_user.username,
+        phone=_supplier_phone_value(current_user),
+        email=current_user.email,
         display_name=current_user.display_name,
     )
 
@@ -58,7 +63,8 @@ async def update_supplier_profile(
     await db.commit()
     await db.refresh(current_user)
     return SupplierProfileOut(
-        phone=current_user.username,
+        phone=_supplier_phone_value(current_user),
+        email=current_user.email,
         display_name=current_user.display_name,
     )
 
@@ -96,7 +102,7 @@ async def create_supplier_point(
         point_type=payload.point_type,
         address=payload.address,
         description=payload.description,
-        contact_phone=current_user.username,
+        contact_phone=_supplier_phone_value(current_user),
         lat=payload.lat,
         lon=payload.lon,
         min_delivery_price=default_min_delivery_price(payload.point_type),

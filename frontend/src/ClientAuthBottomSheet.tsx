@@ -1,26 +1,34 @@
-import React, { useState, useEffect, useRef } from "react";
-import { X, ChevronLeft, Loader2 } from "lucide-react";
-import { baseURL } from "./utils";
-import { switchAuthenticatedSession } from "./pushAuth";
+import React, { useEffect, useRef, useState } from "react";
+import { ChevronLeft, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { AnimatePresence, motion } from "motion/react";
+
+import { switchAuthenticatedSession } from "./pushAuth";
+import { baseURL, extractApiErrorMessage } from "./utils";
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
 }
 
+const normalizeEmailValue = (value: string) => value.trim().toLowerCase();
+const isValidEmail = (value: string) => /\S+@\S+\.\S+/.test(normalizeEmailValue(value));
+
 export default function ClientAuthBottomSheet({ isOpen, onClose }: Props) {
   const [step, setStep] = useState<1 | 2>(1);
+  const [authMode, setAuthMode] = useState<"phone" | "email">("phone");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorText, setErrorText] = useState("");
 
   const [phone, setPhone] = useState("+7");
+  const [email, setEmail] = useState("");
   const [agree3, setAgree3] = useState(false);
   const [agree4, setAgree4] = useState(false);
 
   const [timer, setTimer] = useState(40);
+  const [code, setCode] = useState(["", "", "", ""]);
   const phoneInputRef = useRef<HTMLInputElement | null>(null);
+  const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
 
   const normalizePhoneDigits = (value: string) => {
     let digits = value.replace(/\D/g, "");
@@ -48,9 +56,7 @@ export default function ClientAuthBottomSheet({ isOpen, onClose }: Props) {
     return formatted;
   };
 
-  const cleanPhoneNumber = (p: string) => {
-    return `7${normalizePhoneDigits(p)}`;
-  };
+  const cleanPhoneNumber = (value: string) => `7${normalizePhoneDigits(value)}`;
 
   const getCaretPositionByDigits = (digitsCount: number) => {
     const safeCount = Math.max(0, Math.min(10, digitsCount));
@@ -68,16 +74,16 @@ export default function ClientAuthBottomSheet({ isOpen, onClose }: Props) {
     });
   };
 
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const caretPosition = e.target.selectionStart ?? e.target.value.length;
+  const handlePhoneChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const caretPosition = event.target.selectionStart ?? event.target.value.length;
     const digitsBeforeCaret = normalizePhoneDigits(
-      e.target.value.slice(0, caretPosition),
+      event.target.value.slice(0, caretPosition),
     ).length;
-    applyPhoneValue(e.target.value, digitsBeforeCaret);
+    applyPhoneValue(event.target.value, digitsBeforeCaret);
   };
 
-  const handlePhoneKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key !== "Backspace") return;
+  const handlePhoneKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Backspace") return;
     const input = phoneInputRef.current;
     if (!input) return;
 
@@ -86,7 +92,7 @@ export default function ClientAuthBottomSheet({ isOpen, onClose }: Props) {
     if (selectionStart !== selectionEnd) return;
 
     if (selectionStart <= 2) {
-      e.preventDefault();
+      event.preventDefault();
       applyPhoneValue("", 0);
       return;
     }
@@ -94,23 +100,20 @@ export default function ClientAuthBottomSheet({ isOpen, onClose }: Props) {
     const previousChar = input.value[selectionStart - 1];
     if (/\d/.test(previousChar)) return;
 
-    e.preventDefault();
+    event.preventDefault();
     const digits = normalizePhoneDigits(input.value);
-    const digitsBeforeCaret = normalizePhoneDigits(
-      input.value.slice(0, selectionStart),
-    ).length;
+    const digitsBeforeCaret = normalizePhoneDigits(input.value.slice(0, selectionStart)).length;
     const removeIndex = Math.max(0, digitsBeforeCaret - 1);
     const nextDigits = `${digits.slice(0, removeIndex)}${digits.slice(digitsBeforeCaret)}`;
     applyPhoneValue(nextDigits, removeIndex);
   };
 
-  const [code, setCode] = useState(["", "", "", ""]);
-  const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
-  
   useEffect(() => {
     if (isOpen) {
       setStep(1);
+      setAuthMode("phone");
       setPhone("+7");
+      setEmail("");
       setCode(["", "", "", ""]);
       setErrorText("");
       setAgree3(false);
@@ -125,43 +128,79 @@ export default function ClientAuthBottomSheet({ isOpen, onClose }: Props) {
     let interval: NodeJS.Timeout;
     if (step === 2 && timer > 0) {
       interval = setInterval(() => {
-        setTimer((prev) => prev - 1);
+        setTimer((previous) => previous - 1);
       }, 1000);
     }
     return () => clearInterval(interval);
   }, [step, timer]);
 
+  const sendCode = async () => {
+    const endpoint = authMode === "phone" ? `${baseURL}/auth/client/send-code` : `${baseURL}/auth/email/send-code`;
+    const body =
+      authMode === "phone"
+        ? { phone: cleanPhoneNumber(phone) }
+        : { email: normalizeEmailValue(email), auth_scope: "client" };
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(extractApiErrorMessage(data, "Ошибка отправки кода"));
+    }
+
+    return data;
+  };
+
+  const verifyCode = async (fullCode: string) => {
+    const endpoint = authMode === "phone" ? `${baseURL}/auth/client/verify-code` : `${baseURL}/auth/email/verify`;
+    const body =
+      authMode === "phone"
+        ? { phone: cleanPhoneNumber(phone), code: fullCode }
+        : { email: normalizeEmailValue(email), code: fullCode, auth_scope: "client" };
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(extractApiErrorMessage(data, "Неверный код"));
+    }
+
+    return data;
+  };
+
   const handleSendCode = async () => {
-    const digitsOnly = phone.replace(/\D/g, "");
-    if (digitsOnly.length < 11) {
-      setErrorText("Введите корректный номер телефона");
+    if (authMode === "phone") {
+      const digitsOnly = phone.replace(/\D/g, "");
+      if (digitsOnly.length < 11) {
+        setErrorText("Введите корректный номер телефона");
+        return;
+      }
+    } else if (!isValidEmail(email)) {
+      setErrorText("Введите корректный email");
       return;
     }
+
     if (!agree4) {
       setErrorText("Необходимо согласие с политикой конфиденциальности");
       return;
     }
-    
+
     setErrorText("");
     setIsSubmitting(true);
-    const cleanPhone = cleanPhoneNumber(phone);
     try {
-      const res = await fetch(`${baseURL}/auth/client/send-code`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: cleanPhone }),
-      });
-      if (res.ok) {
-        setStep(2);
-        setTimer(40);
-      } else {
-        const errorData = await res.json().catch(() => ({}));
-        const errorMsg = errorData.detail || "Ошибка отправки кода";
-        setErrorText(errorMsg);
-      }
-    } catch (err: any) {
-      const errorMsg = err.response?.data?.detail || "Сетевая ошибка";
-      setErrorText(errorMsg);
+      await sendCode();
+      setStep(2);
+      setTimer(40);
+    } catch (error) {
+      setErrorText(error instanceof Error ? error.message : "Ошибка отправки кода");
     } finally {
       setIsSubmitting(false);
     }
@@ -170,203 +209,220 @@ export default function ClientAuthBottomSheet({ isOpen, onClose }: Props) {
   const handleVerify = async (fullCode: string) => {
     setErrorText("");
     setIsSubmitting(true);
-    const cleanPhone = cleanPhoneNumber(phone);
     try {
-      const res = await fetch(`${baseURL}/auth/client/verify-code`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: cleanPhone, code: fullCode }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        await switchAuthenticatedSession(data.access_token, "client");
-        toast.success("Вход выполнен");
-        onClose();
-        // Since we emit CustomEvent inside login, or we can just fetch Profile here
-        // usually it's handled globally by useAuthStore -> fetch profile
-      } else {
-        const errorData = await res.json().catch(() => ({}));
-        const errorMsg = errorData.detail || "Неверный код";
-        setErrorText(errorMsg);
-      }
-    } catch (err: any) {
-      const errorMsg = err.response?.data?.detail || "Сетевая ошибка";
-      setErrorText(errorMsg);
+      const data = await verifyCode(fullCode);
+      await switchAuthenticatedSession(data.access_token, "client");
+      toast.success("Вход выполнен");
+      onClose();
+    } catch (error) {
+      setErrorText(error instanceof Error ? error.message : "Сетевая ошибка");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const onCodeChange = (val: string, i: number) => {
-    if (!/^\d*$/.test(val)) return;
-    const newCode = [...code];
-    newCode[i] = val.slice(-1);
-    setCode(newCode);
+  const onCodeChange = (value: string, index: number) => {
+    if (!/^\d*$/.test(value)) return;
+    const nextCode = [...code];
+    nextCode[index] = value.slice(-1);
+    setCode(nextCode);
 
-    if (val && i < 3) {
-      inputsRef.current[i + 1]?.focus();
+    if (value && index < 3) {
+      inputsRef.current[index + 1]?.focus();
     }
-    
-    if (newCode.every(c => c !== "")) {
-      handleVerify(newCode.join(""));
+
+    if (nextCode.every((item) => item !== "")) {
+      void handleVerify(nextCode.join(""));
     }
   };
 
+  const contactLabel = authMode === "phone" ? phone : normalizeEmailValue(email);
+
   return (
     <AnimatePresence>
-      {isOpen && (
+      {isOpen ? (
         <div className="fixed inset-0 z-[9999] flex flex-col justify-end">
-          {/* Backdrop */}
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity" 
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity"
             onClick={onClose}
           />
-          
-          {/* Sheet Content */}
-          <motion.div 
+
+          <motion.div
             initial={{ y: "100%" }}
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
             transition={{ type: "spring", bounce: 0, duration: 0.4 }}
-            className="relative bg-white w-full max-w-md mx-auto rounded-t-3xl shadow-2xl flex flex-col mt-auto max-h-[85vh] overflow-hidden"
+            className="relative mt-auto flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl"
           >
-        
-        {/* Decorative Handle */}
-        <div className="w-full flex justify-center pt-3 pb-1">
-          <div className="w-12 h-1.5 bg-slate-200 rounded-full" />
-        </div>
-        
-        {step === 2 && (
-          <button 
-            onClick={() => {
-              setStep(1);
-              setCode(["", "", "", ""]);
-            }}
-            className="absolute left-4 top-4 p-2 text-slate-800"
-          >
-            <ChevronLeft className="w-6 h-6" />
-          </button>
-        )}
-
-        <div className="px-6 pb-6 pt-4 flex-1 overflow-y-auto">
-          {step === 1 && (
-            <div className="flex flex-col animate-in fade-in slide-in-from-right-4 duration-300">
-              <h2 className="text-2xl font-bold text-slate-800 mb-2 mt-4 leading-tight">
-                Вход / Регистрация
-              </h2>
-              <p className="text-[15px] text-slate-600 mb-8 font-medium">
-                Введите свой номер телефона, чтобы войти в приложение
-              </p>
-
-              <div className="relative mb-6">
-                <input
-                  ref={phoneInputRef}
-                  type="tel"
-                  value={phone}
-                  onChange={handlePhoneChange}
-                  onKeyDown={handlePhoneKeyDown}
-                  inputMode="tel"
-                  maxLength={18}
-                  className="w-full border border-[#2DB0E6] rounded-2xl p-4 text-lg font-medium text-slate-800 focus:outline-none"
-                />
-                <label className="absolute -top-2 left-4 bg-white px-1 text-xs font-semibold text-[#2DB0E6]">Номер телефона *</label>
-              </div>
-
-              <div className="flex flex-col gap-4 mb-6">
-                <div className="flex items-start gap-4 cursor-pointer" onClick={() => setAgree3(!agree3)}>
-                  <div className={`w-6 h-6 rounded flex items-center justify-center mt-1 shrink-0 ${agree3 ? "bg-[#2DB0E6]" : "border border-slate-300"}`}>
-                    {agree3 && <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
-                  </div>
-                  <span className="text-[14px] text-slate-500 font-medium leading-snug">
-                    Я согласен(-на) получать уведомления о статусах заказа, рекламных предложениях и новинках в пушах, смс и на почту
-                  </span>
-                </div>
-                <div className="flex items-start gap-4 cursor-pointer" onClick={() => setAgree4(!agree4)}>
-                  <div className={`w-6 h-6 rounded flex items-center justify-center mt-1 shrink-0 ${agree4 ? "bg-[#2DB0E6]" : "border border-slate-300"}`}>
-                    {agree4 && <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
-                  </div>
-                  <span className="text-[14px] text-slate-500 font-medium leading-snug">
-                    Я даю согласие(-ие) на обработку<br/><span className="border-b border-slate-400">персональных данных</span>
-                  </span>
-                </div>
-              </div>
-
-              {errorText && <div className="text-red-500 text-sm font-semibold mb-4">{errorText}</div>}
-
-              <button
-                disabled={isSubmitting || !agree4}
-                onClick={handleSendCode}
-                className="w-full bg-[#2DB0E6] text-white py-4 rounded-2xl font-bold text-lg active:scale-[0.98] transition-transform disabled:opacity-50 flex items-center justify-center gap-2 mt-auto"
-              >
-                {isSubmitting && <Loader2 className="w-5 h-5 animate-spin" />}
-                Далее
-              </button>
+            <div className="flex w-full justify-center pt-3 pb-1">
+              <div className="h-1.5 w-12 rounded-full bg-slate-200" />
             </div>
-          )}
 
-          {step === 2 && (
-            <div className="flex flex-col animate-in fade-in slide-in-from-right-4 duration-300 h-full">
-              <h2 className="text-2xl font-bold text-slate-800 mb-2 mt-4 text-center leading-tight">
-                Введите код
-              </h2>
-              <p className="text-[15px] text-slate-600 mb-8 font-medium text-center px-4">
-                Мы отправили код на номер<br/>
-                <span className="text-slate-900 font-bold">{phone}</span>
-              </p>
+            {step === 2 ? (
+              <button
+                onClick={() => {
+                  setStep(1);
+                  setCode(["", "", "", ""]);
+                }}
+                className="absolute left-4 top-4 p-2 text-slate-800"
+              >
+                <ChevronLeft className="h-6 w-6" />
+              </button>
+            ) : null}
 
-              <div className="flex justify-center gap-3 mb-6">
-                {code.map((val, i) => (
-                  <input
-                    key={i}
-                    ref={el => inputsRef.current[i] = el}
-                    type="number"
-                    maxLength={1}
-                    value={val}
-                    onChange={(e) => onCodeChange(e.target.value, i)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Backspace" && !val && i > 0) {
-                        inputsRef.current[i - 1]?.focus();
-                      }
-                    }}
-                    className="w-14 h-16 border-2 border-slate-200 rounded-2xl text-center text-3xl font-black text-slate-800 focus:border-[#2DB0E6] focus:outline-none transition-colors"
-                  />
-                ))}
-              </div>
-              
-              <div className="text-center font-medium mb-8 text-sm">
-                {timer > 0 ? (
-                  <span className="text-slate-400">
-                    Получить новый код через {timer} сек.
-                  </span>
-                ) : (
+            <div className="flex-1 overflow-y-auto px-6 pt-4 pb-6">
+              {step === 1 ? (
+                <div className="flex flex-col animate-in fade-in slide-in-from-right-4 duration-300">
+                  <h2 className="mt-4 mb-2 text-2xl font-bold leading-tight text-slate-800">
+                    Вход / Регистрация
+                  </h2>
+                  <p className="mb-8 text-[15px] font-medium text-slate-600">
+                    {authMode === "phone"
+                      ? "Введите свой номер телефона, чтобы войти в приложение"
+                      : "Введите электронную почту, чтобы получить код входа"}
+                  </p>
+
+                  {authMode === "phone" ? (
+                    <div className="relative mb-6">
+                      <input
+                        ref={phoneInputRef}
+                        type="tel"
+                        value={phone}
+                        onChange={handlePhoneChange}
+                        onKeyDown={handlePhoneKeyDown}
+                        inputMode="tel"
+                        maxLength={18}
+                        className="w-full rounded-2xl border border-[#2DB0E6] p-4 text-lg font-medium text-slate-800 focus:outline-none"
+                      />
+                      <label className="absolute -top-2 left-4 bg-white px-1 text-xs font-semibold text-[#2DB0E6]">
+                        Номер телефона *
+                      </label>
+                    </div>
+                  ) : (
+                    <div className="relative mb-6">
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(event) => setEmail(event.target.value)}
+                        className="w-full rounded-2xl border border-[#2DB0E6] p-4 text-lg font-medium text-slate-800 focus:outline-none"
+                        placeholder="name@example.com"
+                      />
+                      <label className="absolute -top-2 left-4 bg-white px-1 text-xs font-semibold text-[#2DB0E6]">
+                        Электронная почта *
+                      </label>
+                    </div>
+                  )}
+
                   <button
-                    onClick={handleSendCode}
-                    className="text-[#2DB0E6] active:opacity-80 transition-opacity"
+                    type="button"
+                    onClick={() => {
+                      setAuthMode((current) => (current === "phone" ? "email" : "phone"));
+                      setErrorText("");
+                    }}
+                    className="mb-6 self-start text-sm font-semibold text-[#187fac] underline decoration-[#2DB0E6]/40 underline-offset-4"
                   >
-                    Получить новый код
+                    {authMode === "phone" ? "Войти через электронную почту" : "Войти по номеру телефона"}
                   </button>
-                )}
-              </div>
 
-              {errorText && <div className="text-red-500 text-sm font-semibold mb-4 text-center">{errorText}</div>}
+                  <div className="mb-6 flex flex-col gap-4">
+                    <div className="flex cursor-pointer items-start gap-4" onClick={() => setAgree3(!agree3)}>
+                      <div className={`mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded ${agree3 ? "bg-[#2DB0E6]" : "border border-slate-300"}`}>
+                        {agree3 ? (
+                          <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        ) : null}
+                      </div>
+                      <span className="text-[14px] font-medium leading-snug text-slate-500">
+                        Я согласен(-на) получать уведомления о статусах заказа, рекламных предложениях и новинках в пушах, sms и на почту
+                      </span>
+                    </div>
+                    <div className="flex cursor-pointer items-start gap-4" onClick={() => setAgree4(!agree4)}>
+                      <div className={`mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded ${agree4 ? "bg-[#2DB0E6]" : "border border-slate-300"}`}>
+                        {agree4 ? (
+                          <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        ) : null}
+                      </div>
+                      <span className="text-[14px] font-medium leading-snug text-slate-500">
+                        Я даю согласие на обработку персональных данных
+                      </span>
+                    </div>
+                  </div>
 
-              <button
-                disabled={isSubmitting || code.some(c => !c)}
-                onClick={() => handleVerify(code.join(""))}
-                className="w-full mt-auto bg-[#2DB0E6] text-white py-4 rounded-2xl font-bold text-lg active:scale-[0.98] transition-transform disabled:bg-slate-200 disabled:text-white flex items-center justify-center gap-2"
-              >
-                {isSubmitting && <Loader2 className="w-5 h-5 animate-spin" />}
-                Подтвердить
-              </button>
+                  {errorText ? <div className="mb-4 text-sm font-semibold text-red-500">{errorText}</div> : null}
+
+                  <button
+                    disabled={isSubmitting || !agree4}
+                    onClick={handleSendCode}
+                    className="mt-auto flex w-full items-center justify-center gap-2 rounded-2xl bg-[#2DB0E6] py-4 text-lg font-bold text-white transition-transform active:scale-[0.98] disabled:opacity-50"
+                  >
+                    {isSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : null}
+                    Получить код
+                  </button>
+                </div>
+              ) : (
+                <div className="flex h-full flex-col animate-in fade-in slide-in-from-right-4 duration-300">
+                  <h2 className="mt-4 mb-2 text-center text-2xl font-bold leading-tight text-slate-800">
+                    {authMode === "phone" ? "Введите код" : "Введите код из письма"}
+                  </h2>
+                  <p className="mb-8 px-4 text-center text-[15px] font-medium text-slate-600">
+                    Мы отправили код на
+                    <br />
+                    <span className="font-bold text-slate-900">{contactLabel}</span>
+                  </p>
+
+                  <div className="mb-6 flex justify-center gap-3">
+                    {code.map((value, index) => (
+                      <input
+                        key={index}
+                        ref={(element) => {
+                          inputsRef.current[index] = element;
+                        }}
+                        type="number"
+                        maxLength={1}
+                        value={value}
+                        onChange={(event) => onCodeChange(event.target.value, index)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Backspace" && !value && index > 0) {
+                            inputsRef.current[index - 1]?.focus();
+                          }
+                        }}
+                        className="h-16 w-14 rounded-2xl border-2 border-slate-200 text-center text-3xl font-black text-slate-800 transition-colors focus:border-[#2DB0E6] focus:outline-none"
+                      />
+                    ))}
+                  </div>
+
+                  <div className="mb-8 text-center text-sm font-medium">
+                    {timer > 0 ? (
+                      <span className="text-slate-400">Получить новый код через {timer} сек.</span>
+                    ) : (
+                      <button onClick={handleSendCode} className="text-[#2DB0E6] transition-opacity active:opacity-80">
+                        Получить новый код
+                      </button>
+                    )}
+                  </div>
+
+                  {errorText ? <div className="mb-4 text-center text-sm font-semibold text-red-500">{errorText}</div> : null}
+
+                  <button
+                    disabled={isSubmitting || code.some((item) => !item)}
+                    onClick={() => void handleVerify(code.join(""))}
+                    className="mt-auto flex w-full items-center justify-center gap-2 rounded-2xl bg-[#2DB0E6] py-4 text-lg font-bold text-white transition-transform active:scale-[0.98] disabled:bg-slate-200"
+                  >
+                    {isSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : null}
+                    Подтвердить
+                  </button>
+                </div>
+              )}
             </div>
-          )}
+          </motion.div>
         </div>
-      </motion.div>
-    </div>
-      )}
+      ) : null}
     </AnimatePresence>
   );
 }

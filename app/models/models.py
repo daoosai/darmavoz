@@ -98,7 +98,7 @@ class Client(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255))
     email: Mapped[Optional[str]] = mapped_column(String(255), unique=True, index=True, nullable=True)
-    phone: Mapped[str] = mapped_column(String(20), unique=True, index=True, nullable=False)
+    phone: Mapped[Optional[str]] = mapped_column(String(20), unique=True, index=True, nullable=True)
     fcm_token: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     external_source: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)

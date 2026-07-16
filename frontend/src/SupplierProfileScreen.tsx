@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Building2, Loader2, LogOut, Phone } from "lucide-react";
+import { Building2, Loader2, LogOut, Mail, Phone } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
@@ -11,6 +11,7 @@ interface Props {
 
 export default function SupplierProfileScreen({ token, onLogout }: Props) {
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -23,8 +24,11 @@ export default function SupplierProfileScreen({ token, onLogout }: Props) {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось загрузить профиль"));
+        if (!response.ok) {
+          throw new Error(extractApiErrorMessage(data, "Не удалось загрузить профиль"));
+        }
         setPhone(data.phone || "");
+        setEmail(data.email || "");
         setDisplayName(data.display_name || "");
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Не удалось загрузить профиль");
@@ -45,9 +49,13 @@ export default function SupplierProfileScreen({ token, onLogout }: Props) {
         body: JSON.stringify({ display_name: displayName.trim() || null }),
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось сохранить профиль"));
+      if (!response.ok) {
+        throw new Error(extractApiErrorMessage(data, "Не удалось сохранить профиль"));
+      }
+      setPhone(data.phone || "");
+      setEmail(data.email || "");
       setDisplayName(data.display_name || "");
-      toast.success("Профиль сохранён");
+      toast.success("Профиль сохранен");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Не удалось сохранить профиль");
     } finally {
@@ -69,9 +77,27 @@ export default function SupplierProfileScreen({ token, onLogout }: Props) {
           Номер телефона
           <span className="mt-2 flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4">
             <Phone className="h-5 w-5 text-gray-400" />
-            <input readOnly value={formatPhoneNumber(phone)} className="w-full bg-transparent py-4 text-gray-500 outline-none" />
+            <input
+              readOnly
+              value={phone ? formatPhoneNumber(phone) : "Не указан"}
+              className="w-full bg-transparent py-4 text-gray-500 outline-none"
+            />
           </span>
         </label>
+
+        {email ? (
+          <label className="block text-sm font-bold text-gray-900">
+            Электронная почта
+            <span className="mt-2 flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4">
+              <Mail className="h-5 w-5 text-gray-400" />
+              <input
+                readOnly
+                value={email}
+                className="w-full bg-transparent py-4 text-gray-500 outline-none"
+              />
+            </span>
+          </label>
+        ) : null}
 
         <label className="block text-sm font-bold text-gray-900">
           ФИО / Название компании

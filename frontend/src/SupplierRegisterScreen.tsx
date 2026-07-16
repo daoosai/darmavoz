@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { ArrowLeft, Loader2, Phone } from "lucide-react";
+import { ArrowLeft, Loader2, Mail, Phone } from "lucide-react";
 import toast from "react-hot-toast";
 
 import OtpVerificationStep from "./OtpVerificationStep";
@@ -11,6 +11,8 @@ interface Props {
 }
 
 const normalizePhone = (value: string) => value.replace(/[\s()-]/g, "");
+const normalizeEmail = (value: string) => value.trim().toLowerCase();
+const isValidEmail = (value: string) => /\S+@\S+\.\S+/.test(normalizeEmail(value));
 
 const SUPPLIER_AUTH_ERROR_MESSAGES: Record<string, string> = {
   PHONE_ALREADY_USED_BY_ANOTHER_ROLE: "Этот номер уже используется в другом аккаунте",
@@ -29,30 +31,42 @@ const getSupplierAuthErrorMessage = (
 };
 
 export default function SupplierRegisterScreen({ onBack }: Props) {
+  const [authMode, setAuthMode] = useState<"phone" | "email">("phone");
   const [phone, setPhone] = useState("");
-  const [challengePhone, setChallengePhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [challengeValue, setChallengeValue] = useState("");
   const [otpError, setOtpError] = useState("");
   const [isBusy, setIsBusy] = useState(false);
 
-  const sendCode = async (phoneValue: string) => {
-    const normalizedPhone = normalizePhone(phoneValue);
-    const response = await fetch(`${baseURL}/auth/supplier/register`, {
+  const sendCode = async () => {
+    const isPhoneMode = authMode === "phone";
+    const endpoint = isPhoneMode ? `${baseURL}/auth/supplier/register` : `${baseURL}/auth/email/send-code`;
+    const body = isPhoneMode
+      ? { phone: normalizePhone(phone) }
+      : { email: normalizeEmail(email), auth_scope: "supplier" };
+
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone: normalizedPhone }),
+      body: JSON.stringify(body),
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       throw new Error(getSupplierAuthErrorMessage(data));
     }
-    setChallengePhone(data.phone || normalizedPhone);
+    setChallengeValue(isPhoneMode ? data.phone || normalizePhone(phone) : normalizeEmail(email));
   };
 
   const handleSendCode = async (event: FormEvent) => {
     event.preventDefault();
+    if (authMode === "email" && !isValidEmail(email)) {
+      toast.error("Введите корректный email");
+      return;
+    }
+
     setIsBusy(true);
     try {
-      await sendCode(phone);
+      await sendCode();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Ошибка авторизации");
     } finally {
@@ -62,11 +76,10 @@ export default function SupplierRegisterScreen({ onBack }: Props) {
 
   const handleResend = async () => {
     try {
-      await sendCode(challengePhone);
+      await sendCode();
       toast.success("Код отправлен повторно");
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : getSupplierAuthErrorMessage(null);
+      const message = error instanceof Error ? error.message : getSupplierAuthErrorMessage(null);
       setOtpError(message);
       toast.error(message);
     }
@@ -76,11 +89,17 @@ export default function SupplierRegisterScreen({ onBack }: Props) {
     setIsBusy(true);
     setOtpError("");
     try {
-      const response = await fetch(`${baseURL}/auth/supplier/register/verify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: challengePhone, code }),
-      });
+      const response = await fetch(
+        authMode === "phone" ? `${baseURL}/auth/supplier/register/verify` : `${baseURL}/auth/email/verify`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body:
+            authMode === "phone"
+              ? JSON.stringify({ phone: challengeValue, code })
+              : JSON.stringify({ email: challengeValue, code, auth_scope: "supplier" }),
+        },
+      );
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         setOtpError(getSupplierAuthErrorMessage(data));
@@ -115,19 +134,19 @@ export default function SupplierRegisterScreen({ onBack }: Props) {
           Кабинет поставщика
         </h1>
         <p className="mt-4 max-w-sm text-gray-500">
-          Войдите по номеру телефона. Карьеры и накопители добавляются
-          отдельно в кабинете.
+          Войдите по номеру телефона или электронной почте. Карьеры и накопители
+          добавляются отдельно в кабинете.
         </p>
 
         <section className="mt-10 rounded-2xl bg-white p-6 shadow-sm">
-          {challengePhone ? (
+          {challengeValue ? (
             <OtpVerificationStep
-              title="Введите код из SMS"
-              phone={formatPhoneNumber(challengePhone)}
+              title={authMode === "phone" ? "Введите код из SMS" : "Введите код из письма"}
+              phone={authMode === "phone" ? formatPhoneNumber(challengeValue) : challengeValue}
               errorText={otpError}
               isSubmitting={isBusy}
               onBack={() => {
-                setChallengePhone("");
+                setChallengeValue("");
                 setOtpError("");
               }}
               onResend={handleResend}
@@ -136,30 +155,50 @@ export default function SupplierRegisterScreen({ onBack }: Props) {
           ) : (
             <form onSubmit={handleSendCode} className="space-y-5">
               <label className="block text-sm font-bold text-gray-900">
-                Номер телефона
+                {authMode === "phone" ? "Номер телефона" : "Электронная почта"}
                 <span className="mt-2 flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 focus-within:border-sky-500">
-                  <Phone className="h-5 w-5 text-sky-500" />
+                  {authMode === "phone" ? (
+                    <Phone className="h-5 w-5 text-sky-500" />
+                  ) : (
+                    <Mail className="h-5 w-5 text-sky-500" />
+                  )}
                   <input
                     required
-                    inputMode="tel"
-                    value={phone}
+                    inputMode={authMode === "phone" ? "tel" : "email"}
+                    type={authMode === "phone" ? "tel" : "email"}
+                    value={authMode === "phone" ? phone : email}
                     onChange={(event) =>
-                      setPhone(formatPhoneNumber(event.target.value))
+                      authMode === "phone"
+                        ? setPhone(formatPhoneNumber(event.target.value))
+                        : setEmail(event.target.value)
                     }
-                    placeholder="+7 (___) ___-__-__"
+                    placeholder={authMode === "phone" ? "+7 (___) ___-__-__" : "name@example.com"}
                     className="w-full bg-transparent py-4 text-lg outline-none"
                   />
                 </span>
               </label>
+
               <button
-                disabled={isBusy || normalizePhone(phone).length < 12}
+                type="button"
+                onClick={() => {
+                  setAuthMode((current) => (current === "phone" ? "email" : "phone"));
+                  setOtpError("");
+                }}
+                className="text-sm font-semibold text-[#187fac] underline decoration-[#2DB0E6]/40 underline-offset-4"
+              >
+                {authMode === "phone" ? "Войти через электронную почту" : "Войти по номеру телефона"}
+              </button>
+
+              <button
+                disabled={
+                  isBusy ||
+                  (authMode === "phone"
+                    ? normalizePhone(phone).length < 12
+                    : !isValidEmail(email))
+                }
                 className="flex w-full items-center justify-center rounded-xl bg-sky-500 py-4 text-lg font-bold text-white hover:bg-sky-600 disabled:opacity-40"
               >
-                {isBusy ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                ) : (
-                  "Получить код"
-                )}
+                {isBusy ? <Loader2 className="h-5 w-5 animate-spin" /> : "Получить код"}
               </button>
             </form>
           )}

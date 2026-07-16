@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Headphones, ImageIcon, MapPin, Wrench, X } from "lucide-react";
+import { ArrowLeft, ChevronDown, Headphones, ImageIcon, MapPin, Wrench, X } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { fetch2gisAddressSuggestions, withTyumenBias } from "./addressSearch";
@@ -659,7 +659,7 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
         className="mb-3 w-full rounded-2xl bg-white p-3 shadow-sm outline-none"
       />
 
-      <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
+      <div className="mb-4 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         <button
           onClick={() => setSelectedType("")}
           className={`shrink-0 rounded-full px-4 py-2 text-sm font-bold ${
@@ -682,16 +682,19 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
       </div>
 
       {cities.length > 0 && (
-        <select
-          value={city}
-          onChange={(event) => setCity(event.target.value)}
-          className="mb-4 w-full rounded-xl bg-white p-3 text-sm"
-        >
-          <option value="">Все города и районы</option>
-          {cities.map((item) => (
-            <option key={item}>{item}</option>
-          ))}
-        </select>
+        <div className="relative mb-4">
+          <select
+            value={city}
+            onChange={(event) => setCity(event.target.value)}
+            className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-3 pl-4 pr-11 text-sm text-slate-700 shadow-sm outline-none transition focus:border-sky-500"
+          >
+            <option value="">Все города и районы</option>
+            {cities.map((item) => (
+              <option key={item}>{item}</option>
+            ))}
+          </select>
+          <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        </div>
       )}
 
       {loading ? (

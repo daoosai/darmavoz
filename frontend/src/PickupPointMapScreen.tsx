@@ -116,6 +116,7 @@ export default function PickupPointMapScreen({
   const [detailsLoadingId, setDetailsLoadingId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
   const distanceLocation = deliveryLocation || userLocation;
 
   const carouselPoints = points
@@ -146,6 +147,9 @@ export default function PickupPointMapScreen({
   const selectedMaterialOffers = (selected?.material_offers || []).filter(
     (offer) => offer.is_active !== false,
   );
+  const visibleMaterialOffers = isExpanded
+    ? selectedMaterialOffers
+    : selectedMaterialOffers.slice(0, 4);
   const selectedDistance = selected && distanceLocation
     ? calculateDistance(distanceLocation.lat, distanceLocation.lon, selected.lat, selected.lon)
     : null;
@@ -289,6 +293,7 @@ export default function PickupPointMapScreen({
   };
 
   const openPointDetails = async (point: PickupPointMarker) => {
+    setIsExpanded(false);
     activatePoint(point, true, true);
     setSelected({
       ...point,
@@ -534,14 +539,16 @@ export default function PickupPointMapScreen({
             </div>
             <div className="border-t border-gray-200 pt-3">
               <span className="block text-xs text-gray-500">Материал</span>
-              <strong className="text-gray-900">{Number(selected.price).toLocaleString("ru-RU")} ₽/{selected.unit}</strong>
+              <strong className="text-gray-900">
+                {material.name} {" — "} {Number(selected.price).toLocaleString("ru-RU")} {"₽"}/{selected.unit}
+              </strong>
             </div>
           </div>
           <div className="border-t border-gray-200 pt-3">
             <span className="block text-xs text-gray-500">Доступные материалы</span>
             <div className="mt-2 flex flex-col gap-2">
               {selectedMaterialOffers.length > 0 ? (
-                selectedMaterialOffers.map((offer) => (
+                visibleMaterialOffers.map((offer) => (
                   <div
                     key={offer.material_id}
                     className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2"
@@ -551,7 +558,7 @@ export default function PickupPointMapScreen({
                     </span>
                     <strong className="shrink-0 text-sm text-gray-900">
                       {offer.price !== null
-                        ? `${Number(offer.price).toLocaleString("ru-RU")} ₽/${offer.unit}`
+                        ? `${Number(offer.price).toLocaleString("ru-RU")} \u20BD/${offer.unit}`
                         : "Цена не указана"}
                     </strong>
                   </div>
@@ -560,17 +567,22 @@ export default function PickupPointMapScreen({
                 <p className="text-sm text-gray-500">Материалы для точки пока не настроены.</p>
               )}
             </div>
+            {selectedMaterialOffers.length > 4 && !isExpanded ? (
+              <button
+                type="button"
+                onClick={() => setIsExpanded(true)}
+                className="mt-3 text-sm font-semibold text-sky-600 transition-colors hover:text-sky-700"
+              >
+                {"\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u044c \u0431\u043e\u043b\u044c\u0448\u0435"}
+              </button>
+            ) : null}
           </div>
-          {selectedPhone ? (
-            <a
-              href={`tel:${selectedPhone}`}
-              className="mb-3 flex w-full items-center justify-center rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-bold text-sky-700 transition-colors hover:bg-sky-100"
-            >
-              Позвонить: {formatPhoneNumber(selectedPhone)}
-            </a>
-          ) : null}
-          <button type="button" onClick={() => onSelect(selected)} className="w-full rounded-xl bg-sky-500 py-4 text-base font-bold text-white hover:bg-sky-600">
-            Оформить доставку
+          <button
+            type="button"
+            onClick={() => onSelect(selected)}
+            className="mt-4 w-full rounded-xl bg-sky-500 py-4 text-base font-bold text-white hover:bg-sky-600"
+          >
+            {"\u041e\u0444\u043e\u0440\u043c\u0438\u0442\u044c \u0434\u043e\u0441\u0442\u0430\u0432\u043a\u0443"}
           </button>
         </div>
       )}

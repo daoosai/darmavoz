@@ -19,6 +19,8 @@ from app.models.models import (
     quarry_delivery_options,
     quarry_materials,
 )
+from app.services.pickup_points import public_pickup_point_filters
+
 logger = logging.getLogger(__name__)
 MARKETPLACE_POINT_TYPES = ("quarry", "accumulator", "warehouse", "supplier")
 
@@ -191,9 +193,8 @@ async def calculate_client_order_pricing(
             select(Quarry)
             .join(quarry_materials, quarry_materials.c.quarry_id == Quarry.id)
             .where(
+                *public_pickup_point_filters(),
                 Quarry.id == quarry_id,
-                Quarry.is_active.is_(True),
-                Quarry.moderation_status == ModerationStatus.approved.value,
                 Quarry.point_type.in_(MARKETPLACE_POINT_TYPES),
                 quarry_materials.c.material_id == material_id,
                 quarry_materials.c.is_active.is_(True),
@@ -272,8 +273,7 @@ async def calculate_client_order_options(
             ),
         )
         .where(
-            Quarry.is_active.is_(True),
-            Quarry.moderation_status == ModerationStatus.approved.value,
+            *public_pickup_point_filters(),
             Quarry.point_type.in_(MARKETPLACE_POINT_TYPES),
             quarry_materials.c.material_id == material_id,
             quarry_materials.c.is_active.is_(True),

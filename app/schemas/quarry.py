@@ -42,10 +42,22 @@ class QuarryBase(BaseModel):
     point_type: PickupPointTypeValue = "quarry"
     address: str = Field(default="", max_length=1000)
     description: str | None = Field(default=None, max_length=5000)
+    contact_phone: str | None = Field(default=None, max_length=20)
+    subscription_end_date: datetime | None = None
     lat: float
     lon: float
 
     model_config = ConfigDict(str_strip_whitespace=True)
+
+    @field_validator("contact_phone", mode="before")
+    @classmethod
+    def normalize_contact_phone(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            normalized = value.strip()
+            return normalized or None
+        return value
 
     @field_validator("lat")
     @classmethod
@@ -85,6 +97,8 @@ class QuarryUpdate(BaseModel):
     point_type: PickupPointTypeValue | None = None
     address: str | None = Field(default=None, max_length=1000)
     description: str | None = Field(default=None, max_length=5000)
+    contact_phone: str | None = Field(default=None, max_length=20)
+    subscription_end_date: datetime | None = None
     lat: float | None = None
     lon: float | None = None
     min_delivery_price: float | None = Field(default=None, ge=0)
@@ -94,6 +108,16 @@ class QuarryUpdate(BaseModel):
     delivery_option_ids: list[UUID] | None = None
 
     model_config = ConfigDict(str_strip_whitespace=True)
+
+    @field_validator("contact_phone", mode="before")
+    @classmethod
+    def normalize_contact_phone(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            normalized = value.strip()
+            return normalized or None
+        return value
 
     @field_validator("lat")
     @classmethod

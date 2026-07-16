@@ -52,6 +52,7 @@ from app.services.notifications import (
     schedule_logist_timeout_notification,
 )
 from app.services.order_pricing import calculate_client_order_pricing, resolve_min_delivery_price
+from app.services.pickup_points import is_pickup_point_publicly_available
 from app.services.redis_client import enqueue_dispatch_order
 from app.utils.phones import normalize_phone
 
@@ -505,10 +506,8 @@ async def create_checkout_order(
 
     if quarry_id is not None:
         selected_quarry = await session.get(Quarry, quarry_id)
-        if (
-            selected_quarry is None
-            or not selected_quarry.is_active
-            or selected_quarry.moderation_status != ModerationStatus.approved.value
+        if selected_quarry is None or not is_pickup_point_publicly_available(
+            selected_quarry
         ):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Quarry not found")
 

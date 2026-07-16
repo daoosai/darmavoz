@@ -261,10 +261,17 @@ class Material(Base):
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     category: Mapped[Optional["Category"]] = relationship("Category", back_populates="materials")
+    quarry_links: Mapped[List["QuarryMaterial"]] = relationship(
+        "QuarryMaterial",
+        back_populates="material",
+        cascade="all, delete-orphan",
+        overlaps="materials,quarries",
+    )
     quarries: Mapped[List["Quarry"]] = relationship(
         "Quarry",
         secondary=quarry_materials,
         back_populates="materials",
+        overlaps="quarry_links,material_links,material,quarry",
     )
     cart_items: Mapped[List["CartItem"]] = relationship("CartItem", back_populates="material")
 
@@ -295,10 +302,16 @@ class Quarry(Base):
     )
     address: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    contact_phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     lat: Mapped[float] = mapped_column(Float, nullable=False)
     lon: Mapped[float] = mapped_column(Float, nullable=False)
     min_delivery_price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
     rating: Mapped[float] = mapped_column(Float, default=5.0, server_default="5.0", nullable=False)
+    subscription_end_date: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+    )
     owner_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         ForeignKey("users.id"), nullable=True, index=True
     )
@@ -325,10 +338,17 @@ class Quarry(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
+    material_links: Mapped[List["QuarryMaterial"]] = relationship(
+        "QuarryMaterial",
+        back_populates="quarry",
+        cascade="all, delete-orphan",
+        overlaps="materials,quarries",
+    )
     materials: Mapped[List["Material"]] = relationship(
         "Material",
         secondary=quarry_materials,
         back_populates="quarries",
+        overlaps="material_links,quarry_links,material,quarry",
     )
     delivery_options: Mapped[List["DeliveryOption"]] = relationship(
         "DeliveryOption",
@@ -342,6 +362,21 @@ class Quarry(Base):
         "User", foreign_keys=[moderated_by_user_id]
     )
     orders: Mapped[List["Order"]] = relationship("Order", back_populates="quarry")
+
+
+class QuarryMaterial(Base):
+    __table__ = quarry_materials
+
+    quarry: Mapped["Quarry"] = relationship(
+        "Quarry",
+        back_populates="material_links",
+        overlaps="materials,quarries",
+    )
+    material: Mapped["Material"] = relationship(
+        "Material",
+        back_populates="quarry_links",
+        overlaps="materials,quarries",
+    )
 
 
 class CartItem(Base):

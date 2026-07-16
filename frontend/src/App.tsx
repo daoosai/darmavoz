@@ -48,6 +48,7 @@ import SupplierPortalScreen from "./SupplierPortalScreen";
 import FloatingOrderTracker from "./FloatingOrderTracker";
 import EquipmentCatalogScreen from "./EquipmentCatalogScreen";
 import SupportScreen from "./SupportScreen";
+import PickupPointMapScreen, { PickupPointSelection } from "./PickupPointMapScreen";
 
 // Reuse Material type as MaterialProps by exporting it from MaterialDetailScreen or type matching
 export default function App() {
@@ -439,6 +440,9 @@ function MainContent({
 
   const [showAddressSheet, setShowAddressSheet] = useState(false);
   const [serviceDirection, setServiceDirection] = useState<"delivery" | "equipment">("delivery");
+  const [mapMaterial, setMapMaterial] = useState<MaterialProps | null>(null);
+  const [selectedPickupPoint, setSelectedPickupPoint] =
+    useState<PickupPointSelection | null>(null);
 
   const handleCartClick = () => {
     setActiveTab("cart");
@@ -446,6 +450,23 @@ function MainContent({
 
   const handleProfileClick = () => {
     setActiveTab("profile");
+  };
+
+  const closeMaterialSheet = () => {
+    setSelectedMaterial(null);
+    setSelectedPickupPoint(null);
+  };
+
+  const openDeliveryMap = (material: MaterialProps) => {
+    setSelectedPickupPoint(null);
+    setMapMaterial(material);
+  };
+
+  const handlePickupPointSelected = (point: PickupPointSelection) => {
+    if (!mapMaterial) return;
+    setSelectedPickupPoint(point);
+    setSelectedMaterial(mapMaterial);
+    setMapMaterial(null);
   };
 
   return (
@@ -479,13 +500,20 @@ function MainContent({
 
               <div className="mx-4 mb-5 grid grid-cols-2 gap-3 rounded-2xl bg-slate-100 p-1.5">
                 <button
-                  onClick={() => setServiceDirection("delivery")}
+                  onClick={() => {
+                    setServiceDirection("delivery");
+                    setMapMaterial(null);
+                  }}
                   className={`flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-bold transition ${serviceDirection === "delivery" ? "bg-white text-sky-600 shadow-sm" : "text-slate-500"}`}
                 >
                   <Truck className="h-4 w-4" /> Доставка
                 </button>
                 <button
-                  onClick={() => setServiceDirection("equipment")}
+                  onClick={() => {
+                    setServiceDirection("equipment");
+                    setMapMaterial(null);
+                    closeMaterialSheet();
+                  }}
                   className={`flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-bold transition ${serviceDirection === "equipment" ? "bg-white text-sky-600 shadow-sm" : "text-slate-500"}`}
                 >
                   <Wrench className="h-4 w-4" /> Спецтехника
@@ -573,7 +601,7 @@ function MainContent({
                       <ProductCard
                         key={material.id}
                         material={material}
-                        onClick={() => setSelectedMaterial(material)}
+                        onClick={() => openDeliveryMap(material)}
                       />
                     ))
                 )}
@@ -664,8 +692,18 @@ function MainContent({
         {/* Bottom Sheet */}
         <MaterialBottomSheet
           material={selectedMaterial}
-          onClose={() => setSelectedMaterial(null)}
+          pickupPoint={selectedPickupPoint}
+          onClose={closeMaterialSheet}
+          onSubmitted={() => setActiveTab("cart")}
         />
+
+        {mapMaterial && (
+          <PickupPointMapScreen
+            material={mapMaterial}
+            onClose={() => setMapMaterial(null)}
+            onSelect={handlePickupPointSelected}
+          />
+        )}
 
         {/* Auth Bottom Sheet */}
         <ClientAuthBottomSheet

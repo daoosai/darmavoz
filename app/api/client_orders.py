@@ -12,7 +12,11 @@ from app.schemas.order import (
 )
 from app.security.auth import get_optional_current_client
 from app.services.dispatch_service import create_checkout_order
-from app.services.order_pricing import ClientOrderPricing, calculate_client_order_options
+from app.services.order_pricing import (
+    ClientOrderPricing,
+    calculate_client_order_options,
+    calculate_client_order_pricing,
+)
 
 router = APIRouter(prefix="/client/orders")
 
@@ -22,15 +26,6 @@ async def calculate_order(
     payload: ClientOrderCalculationRequest,
     db: AsyncSession = Depends(get_db),
 ) -> ClientOrderCalculationOut:
-    pricing_options = await calculate_client_order_options(
-        db,
-        material_id=payload.material_id,
-        delivery_option_id=payload.delivery_option_id,
-        delivery_lat=payload.delivery_lat,
-        delivery_lon=payload.delivery_lon,
-        quantity=payload.quantity,
-    )
-
     def serialize_option(pricing: ClientOrderPricing) -> ClientOrderCalculationOptionOut:
         return ClientOrderCalculationOptionOut(
             quarry_id=pricing.quarry.id,
@@ -45,18 +40,30 @@ async def calculate_order(
             media_files=pricing.media_files,
         )
 
-    best_pricing = pricing_options[0]
     if payload.quarry_id is not None:
-        selected_pricing = next(
-            (pricing for pricing in pricing_options if pricing.quarry.id == payload.quarry_id),
-            None,
+        selected_pricing = await calculate_client_order_pricing(
+            db,
+            material_id=payload.material_id,
+            delivery_option_id=payload.delivery_option_id,
+            delivery_lat=payload.delivery_lat,
+            delivery_lon=payload.delivery_lon,
+            quantity=payload.quantity,
+            quarry_id=payload.quarry_id,
         )
-        if selected_pricing is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Selected pickup point is not available for this material and vehicle",
-            )
-        best_pricing = selected_pricing
+        return ClientOrderCalculationOut(
+            best_option=serialize_option(selected_pricing),
+            alternatives=[],
+        )
+
+    pricing_options = await calculate_client_order_options(
+        db,
+        material_id=payload.material_id,
+        delivery_option_id=payload.delivery_option_id,
+        delivery_lat=payload.delivery_lat,
+        delivery_lon=payload.delivery_lon,
+        quantity=payload.quantity,
+    )
+    best_pricing = pricing_options[0]
 
     return ClientOrderCalculationOut(
         best_option=serialize_option(best_pricing),

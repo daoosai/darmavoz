@@ -11,6 +11,7 @@ interface MaterialBottomSheetProps {
   material: MaterialProps | null;
   onClose: () => void;
   pickupPoint?: PickupPointSelection | null;
+  onSubmitted?: () => void;
 }
 
 const resolveAppImageUrl = (imageUrl: string) => {
@@ -60,6 +61,7 @@ export default function MaterialBottomSheet({
   material,
   onClose,
   pickupPoint,
+  onSubmitted,
 }: MaterialBottomSheetProps) {
   const [deliveryOptions, setDeliveryOptions] = useState<DeliveryOption[]>([]);
   const [selectedOption, setSelectedOption] = useState<DeliveryOption | null>(
@@ -132,6 +134,7 @@ export default function MaterialBottomSheet({
     );
     if (!wasAdded) return;
     toast.success("Товар добавлен в корзину");
+    onSubmitted?.();
     onClose();
   };
 

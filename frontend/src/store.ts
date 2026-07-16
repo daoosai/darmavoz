@@ -151,6 +151,22 @@ export const useCartStore = create<CartState>()(
     ]);
 
     if (existingItems.length > 0) {
+      const lockedPickupPointId =
+        pickupPoint?.id || existingItems.find((item) => item.pickupPoint?.id)?.pickupPoint?.id;
+      const hasConflictingPickupPoint = existingItems.some(
+        (item) =>
+          item.pickupPoint?.id &&
+          lockedPickupPointId &&
+          item.pickupPoint.id !== lockedPickupPointId,
+      );
+
+      if (hasConflictingPickupPoint) {
+        toast.error(
+          "Этот материал уже добавлен из другой точки. Оформите его отдельным заказом.",
+        );
+        return false;
+      }
+
       const existingVolume = existingItems.reduce(
         (sum, item) =>
           sum +
@@ -186,7 +202,7 @@ export const useCartStore = create<CartState>()(
                     delivery_options: uniqueOptions,
                   },
                   deliveryOption: upgradedOption,
-                  pickupPoint: undefined,
+                  pickupPoint: pickupPoint || item.pickupPoint,
                   comment: item.comment || comment,
                   quantity: 1,
                   volume: newVolume,

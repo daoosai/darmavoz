@@ -10,7 +10,7 @@ import {
   Mountain,
   Warehouse,
 } from "lucide-react";
-import { baseURL } from "./utils";
+import { baseURL, formatPhoneNumber } from "./utils";
 import { MaterialProps } from "./MaterialDetailScreen";
 
 export interface PickupPointMarker {
@@ -30,7 +30,15 @@ export interface PickupPointMarker {
 export interface PickupPointSelection extends PickupPointMarker {
   address: string;
   description?: string | null;
+  contact_phone?: string | null;
   delivery_options: any[];
+  material_offers?: {
+    material_id: string;
+    material_name: string;
+    price: number | null;
+    unit: string;
+    is_active: boolean;
+  }[];
   media_files?: { id: string; public_url: string }[];
 }
 
@@ -134,6 +142,10 @@ export default function PickupPointMapScreen({
         : [],
   ));
   const selectedAddress = getClientFacingAddress(selected?.address);
+  const selectedPhone = selected?.contact_phone?.trim() || "";
+  const selectedMaterialOffers = (selected?.material_offers || []).filter(
+    (offer) => offer.is_active !== false,
+  );
   const selectedDistance = selected && distanceLocation
     ? calculateDistance(distanceLocation.lat, distanceLocation.lon, selected.lat, selected.lon)
     : null;
@@ -504,12 +516,51 @@ export default function PickupPointMapScreen({
               <span className="block text-xs text-gray-500">Описание</span>
               <p className="mt-1 text-sm text-gray-900">{selected.description || "Описание пока не добавлено"}</p>
             </div>
+            {selectedPhone && (
+              <div className="border-t border-gray-200 pt-3">
+                <span className="block text-xs text-gray-500">Контактный телефон</span>
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <strong className="text-gray-900">{formatPhoneNumber(selectedPhone)}</strong>
+                  <a
+                    href={`tel:${selectedPhone}`}
+                    className="inline-flex items-center rounded-full bg-white px-3 py-2 text-xs font-bold text-sky-600 shadow-sm hover:bg-sky-50"
+                  >
+                    Позвонить
+                  </a>
+                </div>
+              </div>
+            )}
             <div className="border-t border-gray-200 pt-3">
               <span className="block text-xs text-gray-500">Материал</span>
               <strong className="text-gray-900">{Number(selected.price).toLocaleString("ru-RU")} ₽/{selected.unit}</strong>
             </div>
           </div>
-          <button onClick={() => onSelect(selected)} className="w-full rounded-xl bg-sky-500 py-4 font-bold text-white hover:bg-sky-600">
+          <div className="border-t border-gray-200 pt-3">
+            <span className="block text-xs text-gray-500">Доступные материалы</span>
+            <div className="mt-2 flex flex-col gap-2">
+              {selectedMaterialOffers.length > 0 ? (
+                selectedMaterialOffers.map((offer) => (
+                  <div
+                    key={offer.material_id}
+                    className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2"
+                  >
+                    <span className="min-w-0 text-sm font-medium text-gray-700">
+                      {offer.material_name}
+                    </span>
+                    <strong className="shrink-0 text-sm text-gray-900">
+                      {offer.price !== null
+                        ? `${Number(offer.price).toLocaleString("ru-RU")} ₽/${offer.unit}`
+                        : "Цена не указана"}
+                    </strong>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-gray-500">Материалы для точки пока не настроены.</p>
+              )}
+            </div>
+          </div>
+          <button onClick={() => onSelect(selected)} className="w-full rounded-xl bg-sky-500 py-4 text-[0px] font-bold text-white hover:bg-sky-600">
+            <span className="text-base">Оформить доставку</span>
             Выбрать точку
           </button>
         </div>

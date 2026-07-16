@@ -3,7 +3,7 @@ import { Plus, Edit2, ImagePlus, Star, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { fetch2gisAddressSuggestions, withTyumenBias } from "./addressSearch";
 import { useAuthStore } from "./store";
-import { baseURL, extractApiErrorMessage } from "./utils";
+import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
 
 export interface Quarry {
   id?: string;
@@ -12,6 +12,8 @@ export interface Quarry {
   point_type: "quarry" | "accumulator" | "warehouse" | "supplier";
   address: string;
   description?: string;
+  contact_phone?: string | null;
+  subscription_end_date?: string | null;
   lat: number;
   lon: number;
   min_delivery_price?: number;
@@ -48,6 +50,14 @@ const MODERATION_BADGES: Record<string, { label: string; className: string }> = 
 
 const moderationBadge = (status?: string) =>
   MODERATION_BADGES[status || "incomplete"] || MODERATION_BADGES.incomplete;
+
+const formatDateTimeLocalValue = (value?: string | null) => {
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+  const timezoneOffsetMs = parsed.getTimezoneOffset() * 60_000;
+  return new Date(parsed.getTime() - timezoneOffsetMs).toISOString().slice(0, 16);
+};
 
 interface AdminQuarriesScreenProps {
   materials: any[];
@@ -160,6 +170,8 @@ export default function AdminQuarriesScreen({
         point_type: "quarry",
         address: "",
         description: "",
+        contact_phone: "",
+        subscription_end_date: "",
         lat: 0,
         lon: 0,
         is_active: false,
@@ -603,6 +615,10 @@ function EditQuarryModal({
         point_type: formData.point_type,
         address: finalAddress,
         description: formData.description?.trim() || null,
+        contact_phone: formData.contact_phone?.trim() || null,
+        subscription_end_date: formData.subscription_end_date
+          ? new Date(formData.subscription_end_date).toISOString()
+          : null,
         lat: formData.lat,
         lon: formData.lon,
         min_delivery_price: formData.min_delivery_price,
@@ -791,6 +807,42 @@ function EditQuarryModal({
                 min="0"
                 value={formData.min_delivery_price || ""}
                 onChange={(event) => setFormData({ ...formData, min_delivery_price: Number(event.target.value) })}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                Контактный телефон
+              </label>
+              <input
+                type="tel"
+                value={formData.contact_phone || ""}
+                onChange={(event) =>
+                  setFormData({
+                    ...formData,
+                    contact_phone: formatPhoneNumber(event.target.value),
+                  })
+                }
+                placeholder="+7 (900) 000-00-00"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                Действует до
+              </label>
+              <input
+                type="datetime-local"
+                value={formatDateTimeLocalValue(formData.subscription_end_date)}
+                onChange={(event) =>
+                  setFormData({
+                    ...formData,
+                    subscription_end_date: event.target.value || null,
+                  })
+                }
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3"
               />
             </div>

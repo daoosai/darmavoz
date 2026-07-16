@@ -8,13 +8,16 @@ from app.db.database import get_db
 from app.models.models import (
     Material,
     MediaFile,
-    ModerationStatus,
     Quarry,
     quarry_delivery_options,
     quarry_materials,
 )
 from app.schemas.quarry import PickupPointMarkerOut, QuarryOut
-from app.services.pickup_points import pickup_point_payload
+from app.services.pickup_points import (
+    is_pickup_point_publicly_available,
+    pickup_point_payload,
+    public_pickup_point_filters,
+)
 
 router = APIRouter()
 
@@ -68,8 +71,7 @@ async def list_pickup_points(
         .join(quarry_materials, quarry_materials.c.quarry_id == Quarry.id)
         .join(Material, Material.id == quarry_materials.c.material_id)
         .where(
-            Quarry.is_active.is_(True),
-            Quarry.moderation_status == ModerationStatus.approved.value,
+            *public_pickup_point_filters(),
             quarry_materials.c.material_id == material_id,
             quarry_materials.c.is_active.is_(True),
             quarry_materials.c.price.is_not(None),
@@ -114,11 +116,7 @@ async def get_pickup_point(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     point = await db.get(Quarry, point_id)
-    if (
-        point is None
-        or not point.is_active
-        or point.moderation_status != ModerationStatus.approved.value
-    ):
+    if point is None or not is_pickup_point_publicly_available(point):
         raise HTTPException(status_code=404, detail="Pickup point not found")
     payload = await pickup_point_payload(db, point)
     active_offers = [offer for offer in payload["material_offers"] if offer["is_active"]]

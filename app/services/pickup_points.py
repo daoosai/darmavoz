@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,6 +29,30 @@ DEFAULT_MIN_DELIVERY_PRICE = {
     PickupPointType.warehouse.value: Decimal("3000.00"),
     PickupPointType.supplier.value: Decimal("3000.00"),
 }
+
+
+def public_pickup_point_filters():
+    return (
+        Quarry.is_active.is_(True),
+        Quarry.moderation_status == ModerationStatus.approved.value,
+        or_(
+            Quarry.subscription_end_date.is_(None),
+            Quarry.subscription_end_date > func.now(),
+        ),
+    )
+
+
+def is_pickup_point_publicly_available(
+    point: Quarry,
+    *,
+    now: datetime | None = None,
+) -> bool:
+    if not point.is_active or point.moderation_status != ModerationStatus.approved.value:
+        return False
+    if point.subscription_end_date is None:
+        return True
+    current_time = now or datetime.now(timezone.utc)
+    return point.subscription_end_date > current_time
 
 
 def default_min_delivery_price(point_type: str) -> Decimal | None:
@@ -215,6 +240,8 @@ async def pickup_point_payload(
         "point_type": point.point_type,
         "address": point.address,
         "description": point.description,
+        "contact_phone": point.contact_phone,
+        "subscription_end_date": point.subscription_end_date,
         "lat": point.lat,
         "lon": point.lon,
         "min_delivery_price": point.min_delivery_price,

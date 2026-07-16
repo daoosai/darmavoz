@@ -2,7 +2,7 @@ from datetime import date, datetime, time
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.schemas.catalog import MediaFileOut
 
@@ -42,6 +42,44 @@ class EquipmentTariff(BaseModel):
     type: TariffType
     price: float | None = Field(default=None, gt=0)
     hours: float | None = Field(default=None, gt=0, le=24)
+
+
+def _coerce_positive_number(value: object, *, max_value: float | None = None) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number <= 0:
+        return None
+    if max_value is not None and number > max_value:
+        return None
+    return number
+
+
+def _sanitize_tariffs_for_output(value: object) -> list[dict]:
+    if not isinstance(value, list):
+        return []
+
+    sanitized: list[dict] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+
+        tariff_type = item.get("type")
+        if tariff_type not in ("hour", "shift"):
+            continue
+
+        price = _coerce_positive_number(item.get("price"))
+        if tariff_type == "hour":
+            sanitized.append({"type": "hour", "price": price, "hours": None})
+            continue
+
+        hours = _coerce_positive_number(item.get("hours"), max_value=24)
+        if hours is None:
+            continue
+        sanitized.append({"type": "shift", "price": price, "hours": hours})
+
+    return sanitized
 
 
 def _normalize_tariffs(tariffs: list[EquipmentTariff]) -> list[EquipmentTariff]:
@@ -120,6 +158,11 @@ class EquipmentListingOut(BaseModel):
     primary_image_url: str | None = None
     created_at: datetime
     updated_at: datetime
+
+    @field_validator("tariffs", mode="before")
+    @classmethod
+    def validate_output_tariffs(cls, value: object) -> list[dict]:
+        return _sanitize_tariffs_for_output(value)
 
 
 class EquipmentApplicationCreate(BaseModel):

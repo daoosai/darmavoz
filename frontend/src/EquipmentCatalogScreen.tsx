@@ -57,6 +57,12 @@ export const getEquipmentTariffs = (item: EquipmentListing): EquipmentTariff[] =
   return [{ type: "hour", price: Number(item.price_amount) }];
 };
 
+const isConfiguredEquipmentTariff = (tariff: EquipmentTariff) =>
+  tariff.price != null && Number.isFinite(Number(tariff.price)) && Number(tariff.price) > 0;
+
+export const hasConfiguredEquipmentTariffs = (item: EquipmentListing) =>
+  getEquipmentTariffs(item).some(isConfiguredEquipmentTariff);
+
 export const formatEquipmentPrice = (item: EquipmentListing) => {
   const tariffs = getEquipmentTariffs(item);
   const hourTariff = tariffs.find((tariff) => tariff.type === "hour");
@@ -203,16 +209,19 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
     ),
     [applications],
   );
-  const selectedTariffs = selected ? getEquipmentTariffs(selected) : [];
+  const selectedTariffs = selected
+    ? getEquipmentTariffs(selected).filter(isConfiguredEquipmentTariff)
+    : [];
   const selectedTariff = selectedTariffs.find(
     (tariff) => tariff.type === (form.duration_unit === "hours" ? "hour" : "shift"),
   );
   const calculatedTotal = selectedTariff?.price == null
     ? null
     : Number(form.duration_value || 0) * Number(selectedTariff.price);
+  const selectedHasConfiguredTariffs = selected ? hasConfiguredEquipmentTariffs(selected) : false;
 
   const startApplication = () => {
-    if (selected && activeApplicationListingIds.has(selected.id)) return;
+    if (selected && (activeApplicationListingIds.has(selected.id) || !hasConfiguredEquipmentTariffs(selected))) return;
     if (!token || role !== "client") {
       setWaitingForAuth(true);
       onOpenAuth();
@@ -288,8 +297,12 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
             )}
             <p className="mt-4 text-xl font-black text-sky-600">{formatEquipmentPrice(selected)}</p>
             <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-slate-600">{selected.description}</p>
-            <button disabled={hasActiveApplication} onClick={startApplication} className="mt-6 w-full rounded-2xl bg-sky-500 px-5 py-4 font-bold text-white shadow-sm active:bg-sky-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600">
-              {hasActiveApplication ? "Заявка уже отправлена" : "Оставить заявку"}
+            <button disabled={hasActiveApplication || !selectedHasConfiguredTariffs} onClick={startApplication} className="mt-6 w-full rounded-2xl bg-sky-500 px-5 py-4 font-bold text-white shadow-sm active:bg-sky-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600">
+              {hasActiveApplication
+                ? "Заявка уже отправлена"
+                : !selectedHasConfiguredTariffs
+                  ? "Требуется обновление тарифов"
+                  : "Оставить заявку"}
             </button>
             <button
               onClick={() => {

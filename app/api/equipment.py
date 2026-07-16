@@ -4,7 +4,8 @@ from decimal import Decimal, ROUND_HALF_UP
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -39,6 +40,44 @@ from app.services.notifications import (
 from app.utils.phones import normalize_phone
 
 router = APIRouter()
+
+
+def _coerce_tariff_number(value: object, *, max_value: float | None = None) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number <= 0:
+        return None
+    if max_value is not None and number > max_value:
+        return None
+    return number
+
+
+def _normalize_listing_tariffs(raw_tariffs: object) -> list[dict]:
+    if not isinstance(raw_tariffs, list):
+        return []
+
+    normalized: list[dict] = []
+    for item in raw_tariffs:
+        if not isinstance(item, dict):
+            continue
+
+        tariff_type = item.get("type")
+        if tariff_type not in ("hour", "shift"):
+            continue
+
+        price = _coerce_tariff_number(item.get("price"))
+        if tariff_type == "hour":
+            normalized.append({"type": "hour", "price": price, "hours": None})
+            continue
+
+        hours = _coerce_tariff_number(item.get("hours"), max_value=24)
+        if hours is None:
+            continue
+        normalized.append({"type": "shift", "price": price, "hours": hours})
+
+    return normalized
 
 
 def _slugify(value: str) -> str:
@@ -86,7 +125,7 @@ async def _listing_payload(db: AsyncSession, listing: SpecialEquipmentListing) -
         "equipment_type_name": listing.equipment_type.name,
         "title": listing.title,
         "description": listing.description,
-        "tariffs": listing.tariffs or [],
+        "tariffs": _normalize_listing_tariffs(listing.tariffs),
         "city": listing.city,
         "district": listing.district,
         "is_active": listing.is_active,
@@ -127,12 +166,20 @@ async def _application_payload(
     }
 
 
-async def _get_listing(db: AsyncSession, listing_id: UUID) -> SpecialEquipmentListing:
-    result = await db.execute(
+async def _get_listing(
+    db: AsyncSession,
+    listing_id: UUID,
+    *,
+    include_deleted: bool = False,
+) -> SpecialEquipmentListing:
+    stmt = (
         select(SpecialEquipmentListing)
         .options(selectinload(SpecialEquipmentListing.equipment_type))
         .where(SpecialEquipmentListing.id == listing_id)
     )
+    if not include_deleted:
+        stmt = stmt.where(SpecialEquipmentListing.is_deleted.is_(False))
+    result = await db.execute(stmt)
     listing = result.scalar_one_or_none()
     if listing is None:
         raise HTTPException(status_code=404, detail="Объявление спецтехники не найдено")
@@ -146,7 +193,7 @@ def _calculate_application_total(
 ) -> float | None:
     tariff_type = "hour" if duration_unit == "hours" else "shift"
     tariff = next(
-        (item for item in (listing.tariffs or []) if item.get("type") == tariff_type),
+        (item for item in _normalize_listing_tariffs(listing.tariffs) if item.get("type") == tariff_type),
         None,
     )
     if tariff is None:
@@ -193,6 +240,7 @@ async def list_public_equipment(
         .options(selectinload(SpecialEquipmentListing.equipment_type))
         .where(
             SpecialEquipmentListing.is_active.is_(True),
+            SpecialEquipmentListing.is_deleted.is_(False),
             SpecialEquipmentType.is_active.is_(True),
         )
     )
@@ -327,7 +375,7 @@ async def list_admin_equipment(
     del current_admin
     stmt = select(SpecialEquipmentListing).options(
         selectinload(SpecialEquipmentListing.equipment_type)
-    )
+    ).where(SpecialEquipmentListing.is_deleted.is_(False))
     if equipment_type_id:
         stmt = stmt.where(SpecialEquipmentListing.equipment_type_id == equipment_type_id)
     if is_active is not None:
@@ -412,25 +460,17 @@ async def delete_equipment_listing(
 ):
     del current_admin
     listing = await _get_listing(db, listing_id)
-    application_count = await db.scalar(
-        select(func.count()).select_from(SpecialEquipmentApplication).where(
-            SpecialEquipmentApplication.listing_id == listing.id
-        )
-    )
-    if application_count:
-        listing.is_active = False
-        result = "hidden"
-    else:
-        await db.execute(
-            delete(MediaFile).where(
-                MediaFile.entity_type == "equipment_listing",
-                MediaFile.entity_id == listing.id,
-            )
-        )
-        await db.delete(listing)
-        result = "deleted"
-    await db.commit()
-    return {"ok": True, "result": result}
+    listing.is_active = False
+    listing.is_deleted = True
+    try:
+        await db.commit()
+    except SQLAlchemyError as error:
+        await db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="Не удалось удалить объявление спецтехники",
+        ) from error
+    return {"ok": True, "result": "hidden"}
 
 
 @router.post(

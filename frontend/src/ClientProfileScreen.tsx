@@ -211,7 +211,7 @@ export default function ClientProfileScreen({
             <Headphones className="w-5 h-5 text-sky-500" />
           </div>
           <span className="font-semibold text-slate-800 text-left flex-1">
-            Поддержка / Написать оператору
+            Поддержка
           </span>
         </button>
       </div>

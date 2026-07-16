@@ -18,16 +18,19 @@ interface EquipmentApplication {
   requested_time: string;
   duration_value: number;
   duration_unit: "hours" | "shifts";
-  status: "new" | "in_progress" | "closed" | "rejected" | "cancelled";
+  total_price?: number | null;
+  status: "new" | "in_progress" | "closed" | "completed" | "rejected" | "cancelled";
   reject_reason?: string | null;
   cancel_reason?: string | null;
   primary_image_url?: string | null;
+  created_at: string;
 }
 
 const equipmentStatusLabels: Record<EquipmentApplication["status"], string> = {
   new: "Новая",
   in_progress: "В работе",
   closed: "Завершена",
+  completed: "Завершена",
   rejected: "Отклонена",
   cancelled: "Отменена",
 };
@@ -36,6 +39,7 @@ const equipmentStatusClasses: Record<EquipmentApplication["status"], string> = {
   new: "bg-amber-100 text-amber-700",
   in_progress: "bg-sky-100 text-sky-700",
   closed: "bg-emerald-100 text-emerald-700",
+  completed: "bg-emerald-100 text-emerald-700",
   rejected: "bg-rose-100 text-rose-700",
   cancelled: "bg-rose-100 text-rose-700",
 };
@@ -101,6 +105,26 @@ const EquipmentApplicationProgress = ({ application }: { application: EquipmentA
         </div>
       </div>
     </div>
+  );
+};
+
+const EquipmentHistoryCard = ({ application }: { application: EquipmentApplication }) => {
+  const statusLabel = application.status === "rejected"
+    ? "Отклонён"
+    : application.status === "cancelled"
+      ? "Отменён"
+      : "Завершён";
+  return (
+    <article className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div><p className="text-xs font-bold uppercase tracking-wide text-slate-400">Заявка #{application.id.slice(0, 8).toUpperCase()}</p><h3 className="mt-1 text-lg font-black text-slate-900">{application.listing_title_snapshot}</h3></div>
+        <span className={`shrink-0 rounded-full px-3 py-1 text-[10px] font-bold ${equipmentStatusClasses[application.status]}`}>{statusLabel}</span>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-3 text-sm"><div><p className="text-xs text-slate-400">Дата</p><p className="mt-1 font-bold text-slate-700">{formatDate(application.requested_date)}</p></div><div><p className="text-xs text-slate-400">Сумма</p><p className="mt-1 font-bold text-slate-700">{application.total_price == null ? "По договорённости" : `${Number(application.total_price).toLocaleString("ru-RU")} ₽`}</p></div></div>
+      <p className="mt-3 flex items-start gap-2 text-sm text-slate-600"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />{application.object_address}</p>
+      {application.reject_reason && <p className="mt-3 rounded-xl bg-rose-50 p-3 text-sm text-rose-700"><span className="font-bold">Причина отказа:</span> {application.reject_reason}</p>}
+      {application.cancel_reason && <p className="mt-3 rounded-xl bg-rose-50 p-3 text-sm text-rose-700"><span className="font-bold">Причина отмены:</span> {application.cancel_reason}</p>}
+    </article>
   );
 };
 
@@ -526,6 +550,12 @@ export default function OrdersScreen({
   const displayHistoryOrders = orders.filter(o => 
      !activeStatuses.includes(o.status) && !recentlyCompletedIds.includes(o.id)
   );
+  const activeEquipmentApplications = equipmentApplications.filter(
+    (application) => application.status === "new" || application.status === "in_progress",
+  );
+  const historyEquipmentApplications = equipmentApplications.filter(
+    (application) => !["new", "in_progress"].includes(application.status),
+  );
 
   return (
     <div className="min-h-[calc(100vh-68px)] bg-gray-50 flex flex-col">
@@ -553,16 +583,6 @@ export default function OrdersScreen({
             Текущие
           </button>
           <button
-            onClick={() => setActiveTab('history')}
-            className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${
-              activeTab === 'history'
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            История
-          </button>
-          <button
             onClick={() => setActiveTab('equipment')}
             className={`flex-1 rounded-xl px-2 py-3 text-xs font-bold leading-tight transition-all ${
               activeTab === 'equipment'
@@ -571,6 +591,16 @@ export default function OrdersScreen({
             }`}
           >
             Заявки на технику
+          </button>
+          <button
+            onClick={() => setActiveTab('history')}
+            className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${
+              activeTab === 'history'
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            История
           </button>
         </div>
         )}
@@ -590,9 +620,9 @@ export default function OrdersScreen({
                 >
                   {equipmentApplicationsLoading ? (
                     <p className="py-16 text-center text-sm text-slate-400">Загрузка заявок...</p>
-                  ) : equipmentApplications.length > 0 ? (
+                  ) : activeEquipmentApplications.length > 0 ? (
                     <div className="flex flex-col gap-4">
-                      {equipmentApplications.map((application) => (
+                      {activeEquipmentApplications.map((application) => (
                         <article key={application.id} className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm">
                           <div className="flex gap-3">
                             {application.primary_image_url ? (
@@ -654,7 +684,7 @@ export default function OrdersScreen({
                   exit={{ opacity: 0, x: 20 }}
                   transition={{ duration: 0.2 }}
                 >
-                  {displayHistoryOrders.length > 0 ? (
+                  {displayHistoryOrders.length > 0 || historyEquipmentApplications.length > 0 ? (
                     <div className="flex flex-col gap-3">
                       <AnimatePresence>
                           {displayHistoryOrders.map(order => (
@@ -668,6 +698,7 @@ export default function OrdersScreen({
                               </motion.div>
                           ))}
                       </AnimatePresence>
+                      {historyEquipmentApplications.map((application) => <div key={application.id}><EquipmentHistoryCard application={application} /></div>)}
                     </div>
                   ) : (
                     <div className="flex flex-col items-center justify-center p-6 text-center min-h-[40vh] opacity-60">

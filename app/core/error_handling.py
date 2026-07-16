@@ -4,10 +4,11 @@ import string
 from collections.abc import Iterable
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,7 @@ CUSTOM_ERROR_STATUSES = {
     status.HTTP_404_NOT_FOUND,
     status.HTTP_409_CONFLICT,
     status.HTTP_422_UNPROCESSABLE_ENTITY,
+    status.HTTP_500_INTERNAL_SERVER_ERROR,
 }
 
 DETAIL_TRANSLATIONS = {
@@ -42,9 +44,10 @@ DETAIL_TRANSLATIONS = {
 
 DEFAULT_STATUS_DETAILS = {
     status.HTTP_400_BAD_REQUEST: "Запрос содержит некорректные данные",
-    status.HTTP_404_NOT_FOUND: "Запрошенные данные не найдены",
+    status.HTTP_404_NOT_FOUND: "Ресурс не найден",
     status.HTTP_409_CONFLICT: "Конфликт данных. Проверьте корректность введенных значений",
     status.HTTP_422_UNPROCESSABLE_ENTITY: "Проверьте корректность заполнения полей запроса",
+    status.HTTP_500_INTERNAL_SERVER_ERROR: "Ошибка сервера",
 }
 
 
@@ -134,10 +137,10 @@ def register_exception_handlers(app: FastAPI) -> None:
         logger.exception("integrity_error", exc_info=exc)
         return _error_response(status.HTTP_409_CONFLICT, str(exc.orig) or str(exc))
 
-    @app.exception_handler(HTTPException)
+    @app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(
         request: Request,
-        exc: HTTPException,
+        exc: StarletteHTTPException,
     ) -> JSONResponse:
         del request
         if exc.status_code in CUSTOM_ERROR_STATUSES:
@@ -163,6 +166,6 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={
                 "error_code": generate_error_code(),
-                "detail": "Внутренняя ошибка сервера. Сообщите код ошибки в поддержку.",
+                "detail": "Ошибка сервера. Сообщите код ошибки в поддержку.",
             },
         )

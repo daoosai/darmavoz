@@ -68,8 +68,7 @@ async def test_equipment_catalog_application_and_operator_flow(
             "equipment_type_id": type_id,
             "title": "Автокран 25 тонн",
             "description": "Работа по городу и району",
-            "price_amount": 4500,
-            "price_unit": "hour",
+            "tariffs": [{"type": "hour", "price": 4500}],
             "city": "Тюмень",
             "district": "Центральный",
             "is_active": True,
@@ -114,7 +113,7 @@ async def test_equipment_catalog_application_and_operator_flow(
     close_response = await client.patch(
         f"/api/v1/admin/equipment-applications/{application_id}/status",
         headers={"Authorization": f"Bearer {logist_token}"},
-        json={"status": "closed"},
+        json={"status": "completed"},
     )
     assert close_response.status_code == 200
     assert close_response.json()["closed_at"] is not None

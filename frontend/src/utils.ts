@@ -78,7 +78,7 @@ const formatValidationErrors = (detail: any[]): string | null => {
 
 export const extractApiErrorMessage = (
   source: any,
-  fallbackMessage: string = "РќРµ СѓРґР°Р»РѕСЃСЊ РІС‹РїРѕР»РЅРёС‚СЊ РґРµР№СЃС‚РІРёРµ",
+  fallbackMessage: string = "Не удалось выполнить действие",
 ): string => {
   if (!source) {
     return fallbackMessage;
@@ -107,6 +107,11 @@ export const extractApiErrorMessage = (
     }
   }
 
+  const statusCode = source.status ?? source.response?.status ?? source.response?.data?.status;
+  if (statusCode === 404) return "Ресурс не найден";
+  if (statusCode === 422) return "Проверьте правильность заполнения полей";
+  if (statusCode >= 500) return "Ошибка сервера";
+
   const message =
     source.message ??
     source.response?.data?.message ??
@@ -122,7 +127,7 @@ export const extractApiErrorMessage = (
 
 export const handleApiError = (
   error: any,
-  fallbackMessage: string = "РќРµ СѓРґР°Р»РѕСЃСЊ РІС‹РїРѕР»РЅРёС‚СЊ РґРµР№СЃС‚РІРёРµ",
+  fallbackMessage: string = "Не удалось выполнить действие",
 ): string => {
   if (!error) return fallbackMessage;
 
@@ -137,12 +142,12 @@ export const handleApiError = (
     lowerMsg.includes("failed to fetch") ||
     lowerMsg.includes("network error")
   ) {
-    return "РћС€РёР±РєР° СЃРµС‚Рё. РџСЂРѕРІРµСЂСЊС‚Рµ РїРѕРґРєР»СЋС‡РµРЅРёРµ Рє РёРЅС‚РµСЂРЅРµС‚Сѓ.";
+    return "Ошибка сети. Проверьте подключение к интернету.";
   }
 
   // 2. РћС€РёР±РєР° СЃРµСЂРІРµСЂР° (500+)
   if (error.response?.status >= 500 || error.status >= 500) {
-    return "РЎРµСЂРІРµСЂ РІСЂРµРјРµРЅРЅРѕ РЅРµРґРѕСЃС‚СѓРїРµРЅ. РњС‹ СѓР¶Рµ С‡РёРЅРёРј!";
+    return "Ошибка сервера. Попробуйте позже.";
   }
 
   // 3. РўР°Р№РјР°СѓС‚
@@ -151,7 +156,7 @@ export const handleApiError = (
     lowerMsg.includes("timeout") ||
     error.name === "AbortError"
   ) {
-    return "РџСЂРµРІС‹С€РµРЅРѕ РІСЂРµРјСЏ РѕР¶РёРґР°РЅРёСЏ РѕС‚РІРµС‚Р° РѕС‚ СЃРµСЂРІРµСЂР°.";
+    return "Превышено время ожидания ответа от сервера.";
   }
 
   // Fallback, if there's random English text or message, return fallback Message

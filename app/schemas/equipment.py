@@ -7,8 +7,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.schemas.catalog import MediaFileOut
 
 
-PriceUnit = Literal["hour", "shift", "day", "negotiable"]
-ApplicationStatus = Literal["new", "in_progress", "closed", "rejected", "cancelled"]
+TariffType = Literal["hour", "shift"]
+ApplicationStatus = Literal["new", "in_progress", "closed", "completed", "rejected", "cancelled"]
 DurationUnit = Literal["hours", "shifts"]
 
 
@@ -38,12 +38,37 @@ class EquipmentTypeOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class EquipmentTariff(BaseModel):
+    type: TariffType
+    price: float | None = Field(default=None, gt=0)
+    hours: float | None = Field(default=None, gt=0, le=24)
+
+
+def _normalize_tariffs(tariffs: list[EquipmentTariff]) -> list[EquipmentTariff]:
+    if not tariffs:
+        raise ValueError("Укажите хотя бы один тариф")
+    tariff_types = [tariff.type for tariff in tariffs]
+    if tariff_types.count("hour") != 1:
+        raise ValueError("Должен быть указан один базовый тариф «За час»")
+    if len(set(tariff_types)) != len(tariff_types):
+        raise ValueError("Тарифы не должны повторяться")
+    hour_tariff = next(tariff for tariff in tariffs if tariff.type == "hour")
+    if hour_tariff.price is None:
+        raise ValueError("Укажите цену за час")
+    hour_tariff.hours = None
+    for tariff in tariffs:
+        if tariff.type == "shift":
+            if tariff.hours is None:
+                raise ValueError("Укажите количество часов в смене")
+            tariff.price = round(hour_tariff.price * tariff.hours, 2)
+    return tariffs
+
+
 class EquipmentListingBase(BaseModel):
     equipment_type_id: UUID
     title: str = Field(min_length=1, max_length=255)
     description: str = Field(min_length=1, max_length=10000)
-    price_amount: float | None = Field(default=None, gt=0)
-    price_unit: PriceUnit
+    tariffs: list[EquipmentTariff] = Field(min_length=1, max_length=2)
     city: str | None = Field(default=None, max_length=255)
     district: str | None = Field(default=None, max_length=255)
     is_active: bool = True
@@ -52,11 +77,8 @@ class EquipmentListingBase(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     @model_validator(mode="after")
-    def validate_price(self):
-        if self.price_unit == "negotiable":
-            self.price_amount = None
-        elif self.price_amount is None:
-            raise ValueError("price_amount is required for a fixed price")
+    def validate_tariffs(self):
+        self.tariffs = _normalize_tariffs(self.tariffs)
         return self
 
 
@@ -68,14 +90,19 @@ class EquipmentListingUpdate(BaseModel):
     equipment_type_id: UUID | None = None
     title: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = Field(default=None, min_length=1, max_length=10000)
-    price_amount: float | None = Field(default=None, gt=0)
-    price_unit: PriceUnit | None = None
+    tariffs: list[EquipmentTariff] | None = Field(default=None, min_length=1, max_length=2)
     city: str | None = Field(default=None, max_length=255)
     district: str | None = Field(default=None, max_length=255)
     is_active: bool | None = None
     sort_order: int | None = None
 
     model_config = ConfigDict(str_strip_whitespace=True)
+
+    @model_validator(mode="after")
+    def validate_tariffs(self):
+        if self.tariffs is not None:
+            self.tariffs = _normalize_tariffs(self.tariffs)
+        return self
 
 
 class EquipmentListingOut(BaseModel):
@@ -84,8 +111,7 @@ class EquipmentListingOut(BaseModel):
     equipment_type_name: str
     title: str
     description: str
-    price_amount: float | None
-    price_unit: PriceUnit
+    tariffs: list[EquipmentTariff]
     city: str | None
     district: str | None
     is_active: bool
@@ -103,6 +129,7 @@ class EquipmentApplicationCreate(BaseModel):
     requested_time: time
     duration_value: float = Field(gt=0, le=1000)
     duration_unit: DurationUnit
+    total_price: float | None = Field(default=None, ge=0)
     comment: str | None = Field(default=None, max_length=5000)
     contact_phone: str = Field(min_length=10, max_length=20)
 
@@ -146,6 +173,7 @@ class EquipmentApplicationOut(BaseModel):
     requested_time: time
     duration_value: float
     duration_unit: DurationUnit
+    total_price: float | None
     comment: str | None
     reject_reason: str | None
     cancel_reason: str | None

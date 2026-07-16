@@ -445,8 +445,9 @@ class SpecialEquipmentListing(Base):
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
-    price_amount: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
-    price_unit: Mapped[str] = mapped_column(String(20), nullable=False)
+    tariffs: Mapped[list[dict]] = mapped_column(
+        JSONB, default=list, nullable=False, server_default="[]"
+    )
     city: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
     district: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
@@ -455,18 +456,6 @@ class SpecialEquipmentListing(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
-
-    __table_args__ = (
-        CheckConstraint(
-            "price_unit IN ('hour', 'shift', 'day', 'negotiable')",
-            name="ck_special_equipment_price_unit",
-        ),
-        CheckConstraint(
-            "(price_unit = 'negotiable' AND price_amount IS NULL) OR "
-            "(price_unit <> 'negotiable' AND price_amount IS NOT NULL AND price_amount > 0)",
-            name="ck_special_equipment_price",
-        ),
     )
 
     equipment_type: Mapped["SpecialEquipmentType"] = relationship(
@@ -494,6 +483,7 @@ class SpecialEquipmentApplication(Base):
     duration_value: Mapped[float] = mapped_column(Float, nullable=False)
     duration_unit: Mapped[str] = mapped_column(String(20), nullable=False)
     comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    total_price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
     reject_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     cancel_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="new", nullable=False, index=True)
@@ -513,7 +503,7 @@ class SpecialEquipmentApplication(Base):
             name="ck_special_equipment_application_duration_unit",
         ),
         CheckConstraint(
-            "status IN ('new', 'in_progress', 'closed', 'rejected', 'cancelled')",
+            "status IN ('new', 'in_progress', 'closed', 'completed', 'rejected', 'cancelled')",
             name="ck_special_equipment_application_status",
         ),
         CheckConstraint(

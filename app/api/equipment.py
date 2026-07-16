@@ -1,5 +1,6 @@
 import re
 from datetime import date, datetime, timezone
+from decimal import Decimal, ROUND_HALF_UP
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -85,8 +86,7 @@ async def _listing_payload(db: AsyncSession, listing: SpecialEquipmentListing) -
         "equipment_type_name": listing.equipment_type.name,
         "title": listing.title,
         "description": listing.description,
-        "price_amount": float(listing.price_amount) if listing.price_amount is not None else None,
-        "price_unit": listing.price_unit,
+        "tariffs": listing.tariffs or [],
         "city": listing.city,
         "district": listing.district,
         "is_active": listing.is_active,
@@ -114,6 +114,7 @@ async def _application_payload(
         "requested_time": application.requested_time,
         "duration_value": application.duration_value,
         "duration_unit": application.duration_unit,
+        "total_price": float(application.total_price) if application.total_price is not None else None,
         "comment": application.comment,
         "reject_reason": application.reject_reason,
         "cancel_reason": application.cancel_reason,
@@ -136,6 +137,26 @@ async def _get_listing(db: AsyncSession, listing_id: UUID) -> SpecialEquipmentLi
     if listing is None:
         raise HTTPException(status_code=404, detail="Объявление спецтехники не найдено")
     return listing
+
+
+def _calculate_application_total(
+    listing: SpecialEquipmentListing,
+    duration_unit: str,
+    duration_value: float,
+) -> float | None:
+    tariff_type = "hour" if duration_unit == "hours" else "shift"
+    tariff = next(
+        (item for item in (listing.tariffs or []) if item.get("type") == tariff_type),
+        None,
+    )
+    if tariff is None:
+        label = "Часы" if tariff_type == "hour" else "Смены"
+        raise HTTPException(status_code=400, detail=f"Тариф «{label}» недоступен")
+    price = tariff.get("price")
+    if price is None:
+        return None
+    total = Decimal(str(price)) * Decimal(str(duration_value))
+    return float(total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
 @router.get("/equipment/types", response_model=list[EquipmentTypeOut])
@@ -368,19 +389,17 @@ async def update_equipment_listing(
         "equipment_type_id",
         "title",
         "description",
-        "price_amount",
-        "price_unit",
+        "tariffs",
         "city",
         "district",
         "is_active",
         "sort_order",
     ):
         if field in changed:
-            setattr(listing, field, getattr(payload, field))
-    if listing.price_unit == "negotiable":
-        listing.price_amount = None
-    elif listing.price_amount is None:
-        raise HTTPException(status_code=400, detail="Для выбранного тарифа укажите цену")
+            value = getattr(payload, field)
+            if field == "tariffs" and value is not None:
+                value = [tariff.model_dump() for tariff in value]
+            setattr(listing, field, value)
     await db.commit()
     return await _listing_payload(db, await _get_listing(db, listing.id))
 
@@ -451,6 +470,11 @@ async def create_equipment_application(
         requested_time=payload.requested_time,
         duration_value=payload.duration_value,
         duration_unit=payload.duration_unit,
+        total_price=_calculate_application_total(
+            listing,
+            payload.duration_unit,
+            payload.duration_value,
+        ),
         comment=payload.comment,
         status="new",
     )
@@ -604,15 +628,17 @@ async def update_equipment_application_status(
         raise HTTPException(status_code=404, detail="Заявка не найдена")
     allowed = {
         "new": {"in_progress", "rejected"},
-        "in_progress": {"closed", "rejected"},
+        "in_progress": {"completed", "rejected"},
     }
+    if payload.status == "rejected" and application.status not in {"new", "in_progress"}:
+        raise HTTPException(status_code=400, detail="Заявка уже обработана")
     if payload.status not in allowed.get(application.status, set()):
         raise HTTPException(status_code=409, detail="Недопустимый переход статуса заявки")
     application.status = payload.status
     application.reject_reason = payload.reject_reason if payload.status == "rejected" else None
     application.processed_by_user_id = current_user.id
     application.closed_at = (
-        datetime.now(timezone.utc) if payload.status in {"closed", "rejected"} else None
+        datetime.now(timezone.utc) if payload.status in {"completed", "rejected"} else None
     )
     await db.commit()
     await db.refresh(application)

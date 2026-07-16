@@ -30,14 +30,15 @@ async def _get_supplier_user(db: AsyncSession, phone: str) -> User | None:
     )
 
 
-@router.post("/register", response_model=SupplierSmsChallengeOut, status_code=status.HTTP_202_ACCEPTED)
+@router.post("/register", response_model=SupplierSmsChallengeOut, status_code=status.HTTP_200_OK)
 async def register_supplier(
     payload: SupplierRegisterRequest,
     db: AsyncSession = Depends(get_db),
 ) -> SupplierSmsChallengeOut:
     phone = normalize_phone(payload.phone)
     existing_user = await db.scalar(select(User).where(User.username == phone))
-    if existing_user is not None and await _get_supplier_user(db, phone) is None:
+    existing_supplier = await _get_supplier_user(db, phone)
+    if existing_user is not None and existing_supplier is None:
         raise HTTPException(status_code=409, detail="PHONE_ALREADY_USED_BY_ANOTHER_ROLE")
     code = generate_otp_code()
     stored_code = await send_auth_sms_code(

@@ -58,6 +58,7 @@ from app.schemas.driver import (
     VehicleOut,
 )
 from app.schemas.order import OrderDeleteOut, OrderOut, OrderUpdate
+from app.schemas.supplier import AdminSupplierOut
 from app.security.auth import (
     get_current_admin_user,
     get_current_logist_user,
@@ -212,6 +213,37 @@ async def update_admin_me(
         email=current_admin.email,
         role=current_admin.role.name if current_admin.role else None,
     )
+
+
+@router.get("/suppliers", response_model=list[AdminSupplierOut])
+async def list_admin_suppliers(
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+) -> list[AdminSupplierOut]:
+    del current_admin
+    result = await db.execute(
+        select(User)
+        .join(Role)
+        .options(selectinload(User.pickup_points))
+        .where(Role.name == "supplier")
+        .order_by(func.coalesce(User.display_name, User.username))
+    )
+    suppliers = result.scalars().unique().all()
+    return [
+        AdminSupplierOut(
+            id=supplier.id,
+            full_name=(supplier.display_name or None),
+            phone=supplier.username,
+            is_active=supplier.is_active,
+            pickup_points=list(supplier.pickup_points or []),
+            active_point_names=[
+                point.name
+                for point in supplier.pickup_points
+                if point.is_active
+            ],
+        )
+        for supplier in suppliers
+    ]
 
 
 @router.get("/logist-area")

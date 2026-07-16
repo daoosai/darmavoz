@@ -1,6 +1,6 @@
 ﻿import React, { useState, useEffect } from "react";
 import toast from "react-hot-toast";
-import { BarChart3, ClipboardList, Headphones, LogOut, Wrench } from "lucide-react";
+import { BarChart3, Building2, ClipboardList, Headphones, LogOut, Wrench } from "lucide-react";
 import { NotificationToggle } from "./components/shared/NotificationToggle";
 import { baseURL, handleApiError } from "./utils";
 import { useAuthStore } from "./store";
@@ -8,6 +8,7 @@ import { useAuthStore } from "./store";
 interface AdminProfileScreenProps {
   onLogout: () => void;
   notificationRole?: "admin" | "logist";
+  onOpenSuppliers?: () => void;
   onOpenEquipment?: () => void;
   onOpenSupport?: () => void;
 }
@@ -15,6 +16,7 @@ interface AdminProfileScreenProps {
 export default function AdminProfileScreen({
   onLogout,
   notificationRole,
+  onOpenSuppliers,
   onOpenEquipment,
   onOpenSupport,
 }: AdminProfileScreenProps) {
@@ -137,6 +139,19 @@ export default function AdminProfileScreen({
             </span>
             <span className="text-white/85 text-sm">{"\u041e\u0442\u043a\u0440\u044b\u0442\u044c"}</span>
           </a>
+          {effectiveNotificationRole === "admin" && onOpenSuppliers ? (
+            <button
+              type="button"
+              onClick={onOpenSuppliers}
+              className="w-full h-14 bg-white active:bg-slate-50 text-slate-800 font-bold text-lg rounded-xl flex items-center justify-between px-6 border border-slate-200 shadow-sm"
+            >
+              <span className="flex items-center gap-3">
+                <Building2 className="w-5 h-5 text-sky-500" />
+                Поставщики
+              </span>
+              <span className="text-sky-600 text-sm">Открыть</span>
+            </button>
+          ) : null}
           {effectiveNotificationRole === "admin" && onOpenEquipment ? (
             <button
               type="button"

@@ -22,14 +22,16 @@ const TYPE_LABELS: Record<string, string> = {
 
 interface Props {
   token: string;
+  onRequireProfile?: () => void;
 }
 
-export default function SupplierDashboardScreen({ token }: Props) {
+export default function SupplierDashboardScreen({ token, onRequireProfile }: Props) {
   const [points, setPoints] = useState<SupplierPoint[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isBusy, setIsBusy] = useState(false);
   const [showCreatePoint, setShowCreatePoint] = useState(false);
   const [editingPoint, setEditingPoint] = useState<SupplierPoint | null>(null);
+  const [displayName, setDisplayName] = useState("");
 
   const fetchPoints = async () => {
     try {
@@ -46,9 +48,40 @@ export default function SupplierDashboardScreen({ token }: Props) {
     }
   };
 
+  const fetchProfile = async () => {
+    try {
+      const response = await fetch(`${baseURL}/supplier/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(
+          extractApiErrorMessage(data, "Не удалось загрузить профиль поставщика"),
+        );
+      }
+      setDisplayName(data.display_name || "");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Не удалось загрузить профиль поставщика",
+      );
+    }
+  };
+
   useEffect(() => {
     void fetchPoints();
+    void fetchProfile();
   }, [token]);
+
+  const openCreatePoint = () => {
+    if (displayName.trim()) {
+      setShowCreatePoint(true);
+      return;
+    }
+    toast.error("Пожалуйста, укажите ваше ФИО в профиле перед добавлением точки");
+    onRequireProfile?.();
+  };
 
   const uploadPhoto = async (point: SupplierPoint, file: File) => {
     setIsBusy(true);
@@ -125,7 +158,7 @@ export default function SupplierDashboardScreen({ token }: Props) {
       </header>
 
       <main className="px-5 pb-8">
-        <button onClick={() => setShowCreatePoint(true)} className="mt-5 flex w-full items-center justify-center gap-3 rounded-xl bg-sky-500 px-5 py-5 text-lg font-black text-white shadow-sm hover:bg-sky-600">
+        <button onClick={openCreatePoint} className="mt-5 flex w-full items-center justify-center gap-3 rounded-xl bg-sky-500 px-5 py-5 text-lg font-black text-white shadow-sm hover:bg-sky-600">
           <Plus className="h-6 w-6" /> Добавить точку забора
         </button>
 

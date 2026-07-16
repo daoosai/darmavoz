@@ -23,6 +23,12 @@ router = APIRouter()
 SUPPLIER_POINT_TYPES = {"quarry", "accumulator", "warehouse", "supplier"}
 
 
+def _validate_supplier_display_name(user: User) -> None:
+    if (user.display_name or "").strip():
+        return
+    raise HTTPException(status_code=400, detail="Заполните ФИО в профиле")
+
+
 async def _owned_point(db: AsyncSession, user: User, point_id: UUID) -> Quarry:
     point = await db.scalar(
         select(Quarry).where(Quarry.id == point_id, Quarry.owner_user_id == user.id)
@@ -80,6 +86,7 @@ async def create_supplier_point(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_supplier_user),
 ) -> dict:
+    _validate_supplier_display_name(current_user)
     if payload.point_type not in SUPPLIER_POINT_TYPES:
         raise HTTPException(status_code=422, detail="Suppliers may create only quarry or accumulator points")
     point = Quarry(

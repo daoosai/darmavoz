@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import AdminProfileScreen from "./AdminProfileScreen";
 import AdminQuarriesScreen from "./AdminQuarriesScreen";
+import AdminSuppliersScreen from "./AdminSuppliersScreen";
 import AdminCategoriesPanel from "./AdminCategoriesPanel";
 import { DriverHistoryModal } from "./components/admin/DriverHistoryModal";
 import toast from "react-hot-toast";
@@ -155,7 +156,7 @@ export default function AdminDashboardScreen({
 }: AdminDashboardScreenProps) {
   const { token } = useAuthStore();
   const [activeTab, setActiveTab] = useState<
-    "materials" | "quarries" | "delivery" | "drivers" | "moderation" | "equipment" | "support" | "profile"
+    "materials" | "quarries" | "delivery" | "drivers" | "moderation" | "suppliers" | "equipment" | "support" | "profile"
   >("materials");
 
   const [materials, setMaterials] = useState<AdminMaterial[]>([]);
@@ -2936,6 +2937,8 @@ export default function AdminDashboardScreen({
             </>
           ) : activeTab === "quarries" ? (
             <AdminQuarriesScreen materials={materials} />
+          ) : activeTab === "suppliers" ? (
+            <AdminSuppliersScreen />
           ) : activeTab === "equipment" ? (
             <AdminEquipmentScreen />
           ) : activeTab === "support" ? (
@@ -2943,6 +2946,7 @@ export default function AdminDashboardScreen({
           ) : activeTab === "profile" ? (
             <AdminProfileScreen
               onLogout={handleLogout}
+              onOpenSuppliers={() => setActiveTab("suppliers")}
               onOpenEquipment={() => setActiveTab("equipment")}
               onOpenSupport={() => setActiveTab("support")}
             />

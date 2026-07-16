@@ -18,9 +18,12 @@ export default function SupplierPortalScreen({ onBack }: { onBack: () => void })
     };
 
     return (
-      <div className="min-h-screen bg-gray-50 pb-24 sm:mx-auto sm:max-w-md">
+        <div className="min-h-screen bg-gray-50 pb-24 sm:mx-auto sm:max-w-md">
         {activeTab === "points" ? (
-          <SupplierDashboardScreen token={token} />
+          <SupplierDashboardScreen
+            token={token}
+            onRequireProfile={() => setActiveTab("profile")}
+          />
         ) : (
           <SupplierProfileScreen token={token} onLogout={handleLogout} />
         )}

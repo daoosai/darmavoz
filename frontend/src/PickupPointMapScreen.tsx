@@ -10,8 +10,10 @@ import {
   Mountain,
   Warehouse,
 } from "lucide-react";
+import ClientAddressBottomSheet from "./ClientAddressBottomSheet";
 import { baseURL, formatPhoneNumber } from "./utils";
 import { MaterialProps } from "./MaterialDetailScreen";
+import { useAddressStore } from "./store";
 
 export interface PickupPointMarker {
   id: string;
@@ -94,12 +96,21 @@ const TYPE_LABELS: Record<string, string> = {
   supplier: "Поставщик",
 };
 
+const getSelectPointButtonLabel = (pointType?: string) => {
+  if (pointType === "quarry") return "Выбрать карьер";
+  if (pointType === "warehouse" || pointType === "accumulator") {
+    return "Выбрать накопитель";
+  }
+  return "Выбрать точку";
+};
+
 export default function PickupPointMapScreen({
   material,
   onClose,
   onSelect,
   deliveryLocation,
 }: Props) {
+  const { selectedAddress: currentDeliveryAddress } = useAddressStore();
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const markerRefs = useRef<any[]>([]);
@@ -117,7 +128,22 @@ export default function PickupPointMapScreen({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
-  const distanceLocation = deliveryLocation || userLocation;
+  const [isAddressSheetOpen, setIsAddressSheetOpen] = useState(false);
+  const [selectedDeliveryLocation, setSelectedDeliveryLocation] = useState<UserLocation | null>(
+    deliveryLocation || null,
+  );
+  const hasDeliveryAddress = Boolean(currentDeliveryAddress.trim());
+  const distanceLocation = deliveryLocation || selectedDeliveryLocation || userLocation;
+
+  useEffect(() => {
+    if (deliveryLocation) {
+      setSelectedDeliveryLocation(deliveryLocation);
+    }
+  }, [deliveryLocation]);
+
+  useEffect(() => {
+    setIsAddressSheetOpen(!hasDeliveryAddress);
+  }, [hasDeliveryAddress]);
 
   const carouselPoints = points
     .filter((point) => filter === "all" || point.point_type === filter)
@@ -142,7 +168,7 @@ export default function PickupPointMapScreen({
         ? [selected.primary_image_url]
         : [],
   ));
-  const selectedAddress = getClientFacingAddress(selected?.address);
+  const selectedPointAddress = getClientFacingAddress(selected?.address);
   const selectedPhone = selected?.contact_phone?.trim() || "";
   const selectedMaterialOffers = (selected?.material_offers || []).filter(
     (offer) => offer.is_active !== false,
@@ -182,6 +208,38 @@ export default function PickupPointMapScreen({
       mounted = false;
     };
   }, [deliveryLocation]);
+
+  useEffect(() => {
+    if (deliveryLocation) return;
+    if (!currentDeliveryAddress.trim()) {
+      setSelectedDeliveryLocation(null);
+      return;
+    }
+
+    let cancelled = false;
+    fetch(
+      `${baseURL}/geo/geocode?address=${encodeURIComponent(currentDeliveryAddress)}`,
+    )
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Не удалось определить координаты адреса");
+        return response.json();
+      })
+      .then((data) => {
+        if (cancelled) return;
+        const lat = Number(data?.lat);
+        const lon = Number(data?.lon);
+        if (Number.isFinite(lat) && Number.isFinite(lon)) {
+          setSelectedDeliveryLocation({ lat, lon });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setSelectedDeliveryLocation(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [deliveryLocation, currentDeliveryAddress]);
 
   useEffect(() => {
     let cancelled = false;
@@ -366,7 +424,7 @@ export default function PickupPointMapScreen({
     if (!isLocationResolved || carouselPoints.length === 0) return;
     if (carouselPoints.some(({ point }) => point.id === activePointId)) return;
     activatePoint(carouselPoints[0].point);
-  }, [activePointId, filter, isLocationResolved, points, userLocation]);
+  }, [activePointId, filter, isLocationResolved, points, userLocation, selectedDeliveryLocation]);
 
   return (
     <div className="fixed inset-0 z-[90] overflow-hidden bg-gray-50 sm:mx-auto sm:max-w-md sm:rounded-[32px]">
@@ -402,7 +460,7 @@ export default function PickupPointMapScreen({
       )}
 
       {!selected && !isLoading && !error && carouselPoints.length > 0 && (
-        <div className="fixed bottom-4 left-0 right-0 z-[100] sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2">
+        <div className="fixed bottom-4 left-0 right-0 z-[100] flex flex-col gap-3 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2">
           <button
             type="button"
             aria-label="Предыдущая точка"
@@ -469,6 +527,25 @@ export default function PickupPointMapScreen({
           >
             <ChevronRight className="h-5 w-5" />
           </button>
+          <div className="px-4 sm:px-0">
+            <button
+              type="button"
+              onClick={() => setIsAddressSheetOpen(true)}
+              className="flex w-full items-center gap-3 rounded-2xl bg-white/95 px-4 py-3 text-left shadow-xl backdrop-blur"
+            >
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-sky-50 text-sky-600">
+                <MapPin className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                  Адрес доставки
+                </p>
+                <p className="truncate text-sm font-semibold text-slate-800">
+                  {currentDeliveryAddress || "Укажите адрес доставки"}
+                </p>
+              </div>
+            </button>
+          </div>
         </div>
       )}
 
@@ -508,7 +585,7 @@ export default function PickupPointMapScreen({
           <div className="mt-4 min-w-0">
             <span className="text-xs font-bold uppercase tracking-wide text-sky-500">{TYPE_LABELS[selected.point_type]}</span>
             <h2 className="text-xl font-bold text-gray-900">{selected.name}</h2>
-            {selectedAddress && <p className="mt-1 text-sm text-gray-500">{selectedAddress}</p>}
+            {selectedPointAddress && <p className="mt-1 text-sm text-gray-500">{selectedPointAddress}</p>}
             {selectedDistance !== null && (
               <p className="mt-1 flex items-center gap-1 text-xs font-medium text-gray-400">
                 <MapPin className="h-3.5 w-3.5" />
@@ -582,10 +659,43 @@ export default function PickupPointMapScreen({
             onClick={() => onSelect(selected)}
             className="mt-4 w-full rounded-xl bg-sky-500 py-4 text-base font-bold text-white hover:bg-sky-600"
           >
-            {"\u041e\u0444\u043e\u0440\u043c\u0438\u0442\u044c \u0434\u043e\u0441\u0442\u0430\u0432\u043a\u0443"}
+            {getSelectPointButtonLabel(selected.point_type)}
           </button>
         </div>
       )}
+
+      <ClientAddressBottomSheet
+        isOpen={isAddressSheetOpen}
+        onClose={() => {
+          if (hasDeliveryAddress) setIsAddressSheetOpen(false);
+        }}
+        dismissible={hasDeliveryAddress}
+        closeOnSelect
+        overlayZIndexClassName="z-[120]"
+        sheetZIndexClassName="z-[130]"
+        onAddressConfirmed={({ address, lat, lon }) => {
+          if (lat != null && lon != null) {
+            setSelectedDeliveryLocation({ lat, lon });
+          } else if (address.trim()) {
+            void fetch(
+              `${baseURL}/geo/geocode?address=${encodeURIComponent(address)}`,
+            )
+              .then(async (response) => {
+                if (!response.ok) throw new Error("geocode");
+                return response.json();
+              })
+              .then((data) => {
+                const resolvedLat = Number(data?.lat);
+                const resolvedLon = Number(data?.lon);
+                if (Number.isFinite(resolvedLat) && Number.isFinite(resolvedLon)) {
+                  setSelectedDeliveryLocation({ lat: resolvedLat, lon: resolvedLon });
+                }
+              })
+              .catch(() => undefined);
+          }
+          setIsAddressSheetOpen(false);
+        }}
+      />
     </div>
   );
 }

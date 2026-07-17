@@ -537,7 +537,10 @@ export default function CartScreen({
         {/* Marketplace calculation result */}
         {!globalAddress.trim() ? (
           <div className="p-4 bg-blue-50 text-blue-700 rounded-xl text-sm mt-4">
-            💡 Укажите адрес доставки, чтобы мы сравнили цены всех доступных точек.
+            {Object.values(preferredPointIds).some(Boolean) ||
+            cartItems.some((item) => Boolean(item.pickupPoint?.id))
+              ? "Укажите адрес доставки."
+              : "💡 Укажите адрес доставки, чтобы мы сравнили цены всех доступных точек."}
           </div>
         ) : isCalculating ? (
           <div className="flex flex-col items-center justify-center gap-3 rounded-[24px] border border-slate-100 bg-white py-10 shadow-sm">

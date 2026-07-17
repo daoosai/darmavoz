@@ -28,11 +28,25 @@ interface Address {
 interface ClientAddressBottomSheetProps {
   isOpen: boolean;
   onClose: () => void;
+  dismissible?: boolean;
+  closeOnSelect?: boolean;
+  overlayZIndexClassName?: string;
+  sheetZIndexClassName?: string;
+  onAddressConfirmed?: (address: {
+    address: string;
+    lat: number | null;
+    lon: number | null;
+  }) => void;
 }
 
 export default function ClientAddressBottomSheet({
   isOpen,
   onClose,
+  dismissible = true,
+  closeOnSelect = false,
+  overlayZIndexClassName = "z-[60]",
+  sheetZIndexClassName = "z-[70]",
+  onAddressConfirmed,
 }: ClientAddressBottomSheetProps) {
   const { token, role } = useAuthStore();
   const { selectedAddress, setSelectedAddress } = useAddressStore();
@@ -58,6 +72,17 @@ export default function ClientAddressBottomSheet({
       fetchAddresses();
     }
   }, [isOpen, token, role, isAdding]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (token && role === "client") return;
+
+    setAddresses([]);
+    setLocalSelectedId(null);
+    setEditingAddressId(null);
+    setIsAdding(true);
+    setNewAddress(selectedAddress || "");
+  }, [isOpen, token, role, selectedAddress]);
 
   useEffect(() => {
     let mapInstance: any = null;
@@ -208,6 +233,11 @@ export default function ClientAddressBottomSheet({
       const selectedAddr = addresses.find((a) => a.id === localSelectedId);
       if (selectedAddr) {
         setSelectedAddress(selectedAddr.full_address);
+        onAddressConfirmed?.({
+          address: selectedAddr.full_address,
+          lat: selectedAddr.lat ?? null,
+          lon: selectedAddr.lon ?? null,
+        });
       }
     }
     onClose();
@@ -244,6 +274,26 @@ export default function ClientAddressBottomSheet({
     if (!addressToSave.trim()) return;
     setIsSubmitting(true);
     try {
+      if (!token || role !== "client") {
+        setSelectedAddress(addressToSave);
+        onAddressConfirmed?.({
+          address: addressToSave,
+          lat,
+          lon,
+        });
+        onAddressConfirmed?.({
+          address: addressToSave,
+          lat,
+          lon,
+        });
+        toast.success("Адрес выбран");
+        setNewAddress("");
+        setNewComment("");
+        setSuggestions([]);
+        if (closeOnSelect) onClose();
+        return;
+      }
+
       const method = editingAddressId ? "PUT" : "POST";
       const url = editingAddressId
         ? `${baseURL}/client/addresses/${editingAddressId}`
@@ -272,7 +322,8 @@ export default function ClientAddressBottomSheet({
         setNewComment("");
         setEditingAddressId(null);
         setIsAdding(false);
-        fetchAddresses();
+        if (closeOnSelect) onClose();
+        else fetchAddresses();
       } else {
         toast.error("Не удалось сохранить адрес");
       }
@@ -297,11 +348,11 @@ export default function ClientAddressBottomSheet({
   return (
     <>
       <div
-        className="fixed inset-0 z-[60] bg-slate-900/40 backdrop-blur-sm transition-opacity"
-        onClick={onClose}
+        className={`fixed inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity ${overlayZIndexClassName}`}
+        onClick={dismissible ? onClose : undefined}
       />
       <div
-        className={`fixed inset-x-0 bottom-0 z-[70] bg-white rounded-t-[32px] shadow-2xl transform transition-transform duration-300 ease-out flex flex-col max-h-[95vh] ${isAdding ? "h-[95vh]" : "h-auto"} sm:max-w-xl sm:mx-auto`}
+        className={`fixed inset-x-0 bottom-0 bg-white rounded-t-[32px] shadow-2xl transform transition-transform duration-300 ease-out flex flex-col max-h-[95vh] ${sheetZIndexClassName} ${isAdding ? "h-[95vh]" : "h-auto"} sm:max-w-xl sm:mx-auto`}
       >
         <div className="w-full flex justify-center pt-3 pb-1 shrink-0">
           <div className="w-12 h-1.5 bg-slate-200 rounded-full"></div>
@@ -311,7 +362,7 @@ export default function ClientAddressBottomSheet({
           <h2 className="text-[20px] font-bold text-slate-900 leading-tight">
             {isAdding ? "Укажите адрес" : "Мои адреса"}
           </h2>
-          {!isAdding && (
+          {!isAdding && dismissible && (
             <button
               onClick={onClose}
               className="p-2 text-slate-400 hover:text-slate-600 bg-slate-50 hover:bg-slate-100 transition-colors rounded-full -mr-2"

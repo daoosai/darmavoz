@@ -243,7 +243,7 @@ export default function ClientAuthBottomSheet({ isOpen, onClose, onAuthenticated
   return (
     <AnimatePresence>
       {isOpen ? (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[9999] flex items-end justify-center sm:p-4">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -257,7 +257,7 @@ export default function ClientAuthBottomSheet({ isOpen, onClose, onAuthenticated
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
             transition={{ type: "spring", bounce: 0, duration: 0.4 }}
-            className="relative flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"
+            className="relative flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl"
           >
             <div className="flex w-full justify-center pt-3 pb-1">
               <div className="h-1.5 w-12 rounded-full bg-slate-200" />

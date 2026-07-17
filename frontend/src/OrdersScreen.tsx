@@ -458,13 +458,13 @@ export default function OrdersScreen({
     }
   };
 
-  const fetchEquipmentApplications = async () => {
+  const fetchEquipmentApplications = async (silent = false) => {
     if (role !== "client" || !token) {
       setEquipmentApplications([]);
       setEquipmentApplicationsLoading(false);
       return;
     }
-    setEquipmentApplicationsLoading(true);
+    if (!silent) setEquipmentApplicationsLoading(true);
     try {
       const response = await fetch(`${baseURL}/client/equipment-applications`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -473,7 +473,7 @@ export default function OrdersScreen({
     } catch (error) {
       console.error(error);
     } finally {
-      setEquipmentApplicationsLoading(false);
+      if (!silent) setEquipmentApplicationsLoading(false);
     }
   };
 
@@ -509,6 +509,14 @@ export default function OrdersScreen({
     }
     if (orders.length === 0) void fetchOrders();
     void fetchEquipmentApplications();
+  }, [role, token]);
+
+  useEffect(() => {
+    if (role !== "client" || !token) return;
+    const timer = window.setInterval(() => {
+      void fetchEquipmentApplications(true);
+    }, 8000);
+    return () => window.clearInterval(timer);
   }, [role, token]);
 
   useEffect(() => {
@@ -623,7 +631,14 @@ export default function OrdersScreen({
                 : 'text-slate-500 hover:text-slate-700'
             }`}
           >
-            Заявки на технику
+            <span className="relative inline-flex items-center justify-center">
+              <span>Заявки на технику</span>
+              {activeEquipmentApplications.length > 0 ? (
+                <span className="absolute -right-4 -top-2 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-black text-white shadow-sm">
+                  {activeEquipmentApplications.length}
+                </span>
+              ) : null}
+            </span>
           </button>
           <button
             onClick={() => setActiveTab('history')}

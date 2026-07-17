@@ -28,6 +28,7 @@ from app.schemas.support import (
     SupportAttachmentPresignRequest,
     SupportAttachmentPresignResponse,
     SupportMessageCreate,
+    SupportMessageUpdate,
     SupportTicketCreate,
     SupportTicketOut,
     SupportStatusUpdate,
@@ -140,12 +141,25 @@ def _actor_can_access_ticket(actor: SupportActor, ticket: SupportTicket) -> bool
     return actor.is_operator or _actor_owns_ticket(actor, ticket)
 
 
+def _actor_owns_message(actor: SupportActor, message: SupportMessage) -> bool:
+    if actor.client is not None:
+        return message.author_client_id == actor.client.id
+    return actor.user is not None and message.author_user_id == actor.user.id
+
+
+def _message_is_operator_authored(message: SupportMessage) -> bool:
+    if message.author_client_id is not None:
+        return False
+    user = message.author_user
+    return bool(user and user.role and user.role.name in {"admin", "logist"})
+
+
 def _validate_ticket_open_for_message(ticket: SupportTicket) -> None:
     if ticket.status == "closed":
         raise HTTPException(status_code=409, detail="Обращение уже закрыто")
 
 
-def _message_payload(message: SupportMessage) -> dict:
+def _message_payload(message: SupportMessage, actor: SupportActor | None = None) -> dict:
     if message.author_client is not None:
         name = message.author_client.name
         role = "client"
@@ -164,11 +178,13 @@ def _message_payload(message: SupportMessage) -> dict:
         "author_role": role,
         "text": message.text,
         "attachment_url": message.attachment_url,
+        "is_read": message.is_read,
+        "is_own": _actor_owns_message(actor, message) if actor is not None else False,
         "created_at": message.created_at,
     }
 
 
-def _ticket_payload(ticket: SupportTicket) -> dict:
+def _ticket_payload(ticket: SupportTicket, actor: SupportActor | None = None) -> dict:
     if ticket.client is not None:
         requester_name = ticket.client.name
         requester_phone = ticket.client.phone
@@ -191,7 +207,7 @@ def _ticket_payload(ticket: SupportTicket) -> dict:
         "requester_phone": requester_phone,
         "requester_role": requester_role,
         "assigned_to_user_id": ticket.assigned_to_user_id,
-        "messages": [_message_payload(item) for item in messages],
+        "messages": [_message_payload(item, actor) for item in messages],
         "created_at": ticket.created_at,
         "updated_at": ticket.updated_at,
         "closed_at": ticket.closed_at,
@@ -228,6 +244,22 @@ async def _validate_context(
         raise HTTPException(status_code=404, detail="Связанный объект не найден")
 
 
+async def _get_message(db: AsyncSession, message_id: UUID) -> SupportMessage:
+    result = await db.execute(
+        select(SupportMessage)
+        .options(
+            selectinload(SupportMessage.author_client),
+            selectinload(SupportMessage.author_user).selectinload(User.role),
+            selectinload(SupportMessage.ticket).options(*_ticket_load_options()),
+        )
+        .where(SupportMessage.id == message_id)
+    )
+    message = result.scalar_one_or_none()
+    if message is None:
+        raise HTTPException(status_code=404, detail="Сообщение не найдено")
+    return message
+
+
 @router.post("/support/tickets", response_model=SupportTicketOut, status_code=201)
 async def create_support_ticket(
     payload: SupportTicketCreate,
@@ -258,7 +290,7 @@ async def create_support_ticket(
     await db.commit()
     ticket = await _get_ticket(db, ticket.id)
     schedule_support_operator_notification(ticket.id, is_new=True)
-    return _ticket_payload(ticket)
+    return _ticket_payload(ticket, actor)
 
 
 @router.get("/support/tickets", response_model=list[SupportTicketOut])
@@ -272,7 +304,7 @@ async def list_own_support_tickets(
     else:
         stmt = stmt.where(SupportTicket.user_id == actor.user.id)
     result = await db.execute(stmt.order_by(SupportTicket.updated_at.desc()))
-    return [_ticket_payload(item) for item in result.scalars().unique().all()]
+    return [_ticket_payload(item, actor) for item in result.scalars().unique().all()]
 
 
 @router.get("/support/tickets/{ticket_id}", response_model=SupportTicketOut)
@@ -284,7 +316,7 @@ async def get_own_support_ticket(
     ticket = await _get_ticket(db, ticket_id)
     if not _actor_owns_ticket(actor, ticket):
         raise HTTPException(status_code=404, detail="Обращение не найдено")
-    return _ticket_payload(ticket)
+    return _ticket_payload(ticket, actor)
 
 
 @router.post("/support/tickets/{ticket_id}/messages", response_model=SupportTicketOut)
@@ -311,7 +343,76 @@ async def add_own_support_message(
     ticket.updated_at = datetime.now(timezone.utc)
     await db.commit()
     schedule_support_operator_notification(ticket.id, is_new=False)
-    return _ticket_payload(await _get_ticket(db, ticket.id))
+    return _ticket_payload(await _get_ticket(db, ticket.id), actor)
+
+
+@router.patch("/support/tickets/{ticket_id}/read", response_model=SupportTicketOut)
+async def mark_support_ticket_read(
+    ticket_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    actor: SupportActor = Depends(get_support_session_actor),
+):
+    ticket = await _get_ticket(db, ticket_id)
+    if not _actor_can_access_ticket(actor, ticket):
+        raise HTTPException(status_code=404, detail="Обращение не найдено")
+
+    updated = False
+    for message in ticket.messages:
+        should_mark = (
+            not _message_is_operator_authored(message)
+            if actor.is_operator
+            else _message_is_operator_authored(message)
+        )
+        if should_mark and not message.is_read:
+            message.is_read = True
+            updated = True
+
+    if updated:
+        await db.commit()
+
+    return _ticket_payload(await _get_ticket(db, ticket.id), actor)
+
+
+@router.patch("/support/messages/{message_id}", response_model=SupportTicketOut)
+async def update_support_message(
+    message_id: UUID,
+    payload: SupportMessageUpdate,
+    db: AsyncSession = Depends(get_db),
+    actor: SupportActor = Depends(get_support_session_actor),
+):
+    message = await _get_message(db, message_id)
+    ticket = message.ticket
+    if ticket is None or not _actor_can_access_ticket(actor, ticket):
+        raise HTTPException(status_code=404, detail="Обращение не найдено")
+    _validate_ticket_open_for_message(ticket)
+    if not _actor_owns_message(actor, message):
+        raise HTTPException(status_code=403, detail="Можно изменять только свои сообщения")
+
+    message.text = payload.text
+    message.is_read = False
+    ticket.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    return _ticket_payload(await _get_ticket(db, ticket.id), actor)
+
+
+@router.delete("/support/messages/{message_id}", response_model=SupportTicketOut)
+async def delete_support_message(
+    message_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    actor: SupportActor = Depends(get_support_session_actor),
+):
+    message = await _get_message(db, message_id)
+    ticket = message.ticket
+    if ticket is None or not _actor_can_access_ticket(actor, ticket):
+        raise HTTPException(status_code=404, detail="Обращение не найдено")
+    _validate_ticket_open_for_message(ticket)
+    if not _actor_owns_message(actor, message):
+        raise HTTPException(status_code=403, detail="Можно удалять только свои сообщения")
+
+    await db.delete(message)
+    ticket.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    return _ticket_payload(await _get_ticket(db, ticket.id), actor)
 
 
 @router.get("/admin/support/tickets", response_model=list[SupportTicketOut])
@@ -322,7 +423,10 @@ async def list_operator_support_tickets(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_logist_user),
 ):
-    del current_user
+    actor = SupportActor(
+        role=current_user.role.name if current_user.role else "operator",
+        user=current_user,
+    )
     stmt = select(SupportTicket).options(*_ticket_load_options())
     if ticket_status:
         stmt = stmt.where(SupportTicket.status == ticket_status)
@@ -333,7 +437,7 @@ async def list_operator_support_tickets(
     elif requester_role == "driver":
         stmt = stmt.where(SupportTicket.user_id.is_not(None))
     result = await db.execute(stmt.order_by(SupportTicket.updated_at.desc()))
-    return [_ticket_payload(item) for item in result.scalars().unique().all()]
+    return [_ticket_payload(item, actor) for item in result.scalars().unique().all()]
 
 
 @router.get("/admin/support/tickets/{ticket_id}", response_model=SupportTicketOut)
@@ -342,8 +446,11 @@ async def get_operator_support_ticket(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_logist_user),
 ):
-    del current_user
-    return _ticket_payload(await _get_ticket(db, ticket_id))
+    actor = SupportActor(
+        role=current_user.role.name if current_user.role else "operator",
+        user=current_user,
+    )
+    return _ticket_payload(await _get_ticket(db, ticket_id), actor)
 
 
 @router.post("/admin/support/tickets/{ticket_id}/messages", response_model=SupportTicketOut)
@@ -376,7 +483,11 @@ async def add_operator_support_message(
         client_id=ticket.client_id,
         driver_id=driver_id,
     )
-    return _ticket_payload(ticket)
+    actor = SupportActor(
+        role=current_user.role.name if current_user.role else "operator",
+        user=current_user,
+    )
+    return _ticket_payload(ticket, actor)
 
 
 @router.post(
@@ -467,4 +578,8 @@ async def update_support_ticket_status(
     ticket.closed_at = datetime.now(timezone.utc) if payload.status == "closed" else None
     ticket.updated_at = datetime.now(timezone.utc)
     await db.commit()
-    return _ticket_payload(await _get_ticket(db, ticket.id))
+    actor = SupportActor(
+        role=current_user.role.name if current_user.role else "operator",
+        user=current_user,
+    )
+    return _ticket_payload(await _get_ticket(db, ticket.id), actor)

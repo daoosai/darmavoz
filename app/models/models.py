@@ -633,6 +633,9 @@ class SupportMessage(Base):
     )
     text: Mapped[str] = mapped_column(Text, nullable=False)
     attachment_url: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    is_read: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (

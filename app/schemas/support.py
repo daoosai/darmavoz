@@ -45,6 +45,12 @@ class SupportMessageCreate(BaseModel):
         raise ValueError("text or attachment_url is required")
 
 
+class SupportMessageUpdate(BaseModel):
+    text: str = Field(min_length=1, max_length=10000)
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+
 class SupportAttachmentPresignRequest(BaseModel):
     file_name: str
     content_type: str
@@ -89,6 +95,8 @@ class SupportMessageOut(BaseModel):
     author_role: str
     text: str
     attachment_url: str | None = None
+    is_read: bool = False
+    is_own: bool = False
     created_at: datetime
 
     @field_validator("attachment_url")

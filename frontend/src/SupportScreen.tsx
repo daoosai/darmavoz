@@ -1,12 +1,17 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
+  Check,
+  CheckCheck,
   CheckCircle2,
   Headphones,
   MessageCircle,
+  MoreHorizontal,
   Paperclip,
+  Pencil,
   Plus,
   Send,
+  Trash2,
   X,
 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -16,10 +21,14 @@ import { baseURL, extractApiErrorMessage, resolveMediaUrl } from "./utils";
 
 interface SupportMessage {
   id: string;
+  author_client_id?: string | null;
+  author_user_id?: string | null;
   author_name: string;
   author_role: string;
   text: string;
   attachment_url?: string | null;
+  is_read: boolean;
+  is_own: boolean;
   created_at: string;
 }
 
@@ -37,6 +46,12 @@ interface SupportTicket {
   created_at: string;
   updated_at: string;
 }
+
+const sortTicketsByUpdatedAt = (items: SupportTicket[]) =>
+  [...items].sort(
+    (left, right) =>
+      new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime(),
+  );
 
 const statusLabels = { new: "Новое", in_progress: "В работе", closed: "Закрыто" };
 const statusClasses = {
@@ -130,6 +145,11 @@ export default function SupportScreen({
   const [reply, setReply] = useState("");
   const [selectedAttachment, setSelectedAttachment] = useState<File | null>(null);
   const [attachmentPreviewUrl, setAttachmentPreviewUrl] = useState<string | null>(null);
+  const [openedMessageMenuId, setOpenedMessageMenuId] = useState<string | null>(null);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState("");
+  const [messageActionLoading, setMessageActionLoading] = useState(false);
+  const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null);
   const [form, setForm] = useState({
     subject: initialContext?.subject || "",
     category: "general",
@@ -147,6 +167,25 @@ export default function SupportScreen({
           ? ticket.status === "new" || ticket.status === "in_progress"
           : ticket.status === "closed",
       );
+
+  const syncTicket = (ticket: SupportTicket) => {
+    setSelected(ticket);
+    setTickets((current) =>
+      sortTicketsByUpdatedAt([
+        ticket,
+        ...current.filter((item) => item.id !== ticket.id),
+      ]),
+    );
+  };
+
+  const hasUnreadIncomingMessages = (ticket: SupportTicket) =>
+    ticket.messages.some((message) => !message.is_own && !message.is_read);
+
+  const hasUnreadClientMessages = (ticket: SupportTicket) =>
+    ticket.messages.some(
+      (message) =>
+        !message.is_read && !["admin", "logist", "operator"].includes(message.author_role),
+    );
 
   const clearAttachment = () => {
     setSelectedAttachment(null);
@@ -174,7 +213,9 @@ export default function SupportScreen({
       if (!response.ok) throw new Error("load");
       const data: SupportTicket[] = await response.json();
       setTickets(data);
-      if (selected) setSelected(data.find((item) => item.id === selected.id) || selected);
+      setSelected((current) =>
+        current ? data.find((item) => item.id === current.id) || current : null,
+      );
     } catch {
       if (!silent) toast.error("Не удалось загрузить обращения");
     } finally {
@@ -191,17 +232,20 @@ export default function SupportScreen({
     const timer = window.setInterval(async () => {
       try {
         const response = await fetch(`${endpoint}/${selected.id}`, { headers });
-        if (response.ok) setSelected(await response.json());
+        if (response.ok) syncTicket(await response.json());
       } catch {
         // Keep the current history while the connection is unavailable.
       }
     }, 10000);
     return () => window.clearInterval(timer);
-  }, [selected?.id, token, operatorMode]);
+  }, [selected?.id, token, operatorMode, filter]);
 
   useEffect(() => {
     clearAttachment();
     setReply("");
+    setOpenedMessageMenuId(null);
+    setEditingMessageId(null);
+    setEditingText("");
   }, [selected?.id]);
 
   useEffect(() => {
@@ -209,6 +253,27 @@ export default function SupportScreen({
       if (attachmentPreviewUrl?.startsWith("blob:")) URL.revokeObjectURL(attachmentPreviewUrl);
     };
   }, [attachmentPreviewUrl]);
+
+  useEffect(() => {
+    if (!selected || !token || !hasUnreadIncomingMessages(selected)) return;
+    const controller = new AbortController();
+
+    const markRead = async () => {
+      try {
+        const response = await fetch(`${baseURL}/support/tickets/${selected.id}/read`, {
+          method: "PATCH",
+          headers,
+          signal: controller.signal,
+        });
+        if (response.ok) syncTicket(await response.json());
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+      }
+    };
+
+    void markRead();
+    return () => controller.abort();
+  }, [selected, token]);
 
   const createTicket = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -235,8 +300,7 @@ export default function SupportScreen({
         context_id: "",
         message: "",
       });
-      setSelected(data);
-      await load(true);
+      syncTicket(data);
       toast.success("Обращение отправлено оператору");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Не удалось создать обращение");
@@ -316,14 +380,76 @@ export default function SupportScreen({
       if (!response.ok) {
         throw new Error(extractApiErrorMessage(data, "Не удалось отправить сообщение"));
       }
-      setSelected(data);
+      syncTicket(data);
       setReply("");
       clearAttachment();
-      await load(true);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Не удалось отправить сообщение");
     } finally {
       setSending(false);
+    }
+  };
+
+  const startEditingMessage = (message: SupportMessage) => {
+    setOpenedMessageMenuId(null);
+    setEditingMessageId(message.id);
+    setEditingText(message.text);
+  };
+
+  const cancelEditingMessage = () => {
+    setEditingMessageId(null);
+    setEditingText("");
+  };
+
+  const saveEditedMessage = async (messageId: string) => {
+    const nextText = editingText.trim();
+    if (!nextText) {
+      toast.error("Введите текст сообщения");
+      return;
+    }
+
+    setMessageActionLoading(true);
+    try {
+      const response = await fetch(`${baseURL}/support/messages/${messageId}`, {
+        method: "PATCH",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ text: nextText }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(extractApiErrorMessage(data, "Не удалось изменить сообщение"));
+      }
+      syncTicket(data);
+      cancelEditingMessage();
+      toast.success("Сообщение обновлено");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось изменить сообщение");
+    } finally {
+      setMessageActionLoading(false);
+    }
+  };
+
+  const removeMessage = async (messageId: string) => {
+    if (!window.confirm("Удалить сообщение?")) return;
+
+    setOpenedMessageMenuId(null);
+    setMessageActionLoading(true);
+    try {
+      const response = await fetch(`${baseURL}/support/messages/${messageId}`, {
+        method: "DELETE",
+        headers,
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(extractApiErrorMessage(data, "Не удалось удалить сообщение"));
+      }
+      syncTicket(data);
+      if (editingMessageId === messageId) cancelEditingMessage();
+      toast.success("Сообщение удалено");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось удалить сообщение");
+    } finally {
+      setMessageActionLoading(false);
     }
   };
 
@@ -338,8 +464,7 @@ export default function SupportScreen({
     if (!response.ok) {
       return toast.error(extractApiErrorMessage(data, "Не удалось изменить статус"));
     }
-    setSelected(data);
-    await load(true);
+    syncTicket(data);
   };
 
   if (selected) {
@@ -379,53 +504,147 @@ export default function SupportScreen({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          {messageGroups.map((group) => (
-            <section key={group.dayKey} className="space-y-3">
-              <div className="sticky top-2 z-[5] flex justify-center py-2">
-                <span className="rounded-full bg-slate-700/75 px-3 py-1 text-[11px] font-bold text-white shadow-sm backdrop-blur">
-                  {formatMessageDay(group.date)}
-                </span>
-              </div>
-              {group.messages.map((message) => {
-                const mine = operatorMode
-                  ? ["admin", "logist"].includes(message.author_role)
-                  : message.author_role === role;
-                const authorName = ["admin", "logist", "operator"].includes(message.author_role)
-                  ? "Поддержка"
-                  : message.author_name;
-                const resolvedAttachmentUrl =
-                  resolveMediaUrl(message.attachment_url) || message.attachment_url;
+          {selected.messages.length === 0 ? (
+            <div className="flex h-full items-center justify-center text-center text-sm text-slate-400">
+              Сообщений пока нет
+            </div>
+          ) : (
+            messageGroups.map((group) => (
+              <section key={group.dayKey} className="space-y-3">
+                <div className="sticky top-2 z-[5] flex justify-center py-2">
+                  <span className="rounded-full bg-slate-700/75 px-3 py-1 text-[11px] font-bold text-white shadow-sm backdrop-blur">
+                    {formatMessageDay(group.date)}
+                  </span>
+                </div>
+                {group.messages.map((message) => {
+                  const mine = message.is_own;
+                  const authorName = ["admin", "logist", "operator"].includes(message.author_role)
+                    ? "Поддержка"
+                    : message.author_name;
+                  const resolvedAttachmentUrl =
+                    resolveMediaUrl(message.attachment_url) || message.attachment_url;
+                  const isEditing = editingMessageId === message.id;
 
-                return (
-                  <div
-                    key={message.id}
-                    className={`flex ${mine ? "justify-end" : "justify-start"}`}
-                  >
+                  return (
                     <div
-                      className={`max-w-[85%] rounded-2xl px-4 py-3 ${
-                        mine ? "bg-sky-500 text-white" : "bg-white text-slate-700 shadow-sm"
-                      }`}
+                      key={message.id}
+                      className={`flex ${mine ? "justify-end" : "justify-start"}`}
                     >
-                      <p className="mb-1 text-[10px] font-bold opacity-70">{authorName}</p>
-                      {resolvedAttachmentUrl && (
-                        <img
-                          src={resolvedAttachmentUrl}
-                          alt="Вложение"
-                          className="mb-2 max-h-64 w-full max-w-xs rounded-2xl object-cover"
-                        />
-                      )}
-                      {message.text.trim() && (
-                        <p className="whitespace-pre-wrap text-sm">{message.text}</p>
-                      )}
-                      <p className="mt-1 text-right text-[10px] opacity-60">
-                        {formatMessageTime(message.created_at)}
-                      </p>
+                      <div
+                        className={`relative max-w-[85%] rounded-2xl px-4 py-3 ${
+                          mine
+                            ? "bg-sky-500 pr-11 text-white"
+                            : "bg-white text-slate-700 shadow-sm"
+                        }`}
+                      >
+                        <p className="mb-1 text-[10px] font-bold opacity-70">{authorName}</p>
+
+                        {mine && selected.status !== "closed" ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setOpenedMessageMenuId((current) =>
+                                current === message.id ? null : message.id,
+                              )
+                            }
+                            className={`absolute right-2 top-2 rounded-full p-1.5 ${
+                              mine ? "bg-white/15 text-white" : "bg-slate-100 text-slate-500"
+                            }`}
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </button>
+                        ) : null}
+
+                        {openedMessageMenuId === message.id ? (
+                          <div className="absolute right-2 top-11 z-10 w-44 overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-xl">
+                            <button
+                              type="button"
+                              onClick={() => startEditingMessage(message)}
+                              className="flex w-full items-center gap-2 px-4 py-3 text-sm font-semibold transition hover:bg-slate-50"
+                            >
+                              <Pencil className="h-4 w-4" />
+                              Изменить
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void removeMessage(message.id)}
+                              className="flex w-full items-center gap-2 px-4 py-3 text-sm font-semibold text-rose-600 transition hover:bg-rose-50"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              Удалить
+                            </button>
+                          </div>
+                        ) : null}
+
+                        {resolvedAttachmentUrl ? (
+                          <button
+                            type="button"
+                            onClick={() => setLightboxImageUrl(resolvedAttachmentUrl)}
+                            className="mb-2 block overflow-hidden rounded-2xl"
+                          >
+                            <img
+                              src={resolvedAttachmentUrl}
+                              alt="Вложение"
+                              className="max-h-64 w-full max-w-xs rounded-2xl object-cover transition duration-200 hover:scale-[1.01]"
+                            />
+                          </button>
+                        ) : null}
+
+                        {isEditing ? (
+                          <div className="space-y-2">
+                            <textarea
+                              autoFocus
+                              rows={4}
+                              value={editingText}
+                              onChange={(event) => setEditingText(event.target.value)}
+                              className="w-full resize-none rounded-2xl border border-white/30 bg-white/10 p-3 text-sm text-inherit outline-none placeholder:text-white/60"
+                              placeholder="Текст сообщения"
+                            />
+                            <div className="flex justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={cancelEditingMessage}
+                                className={`rounded-xl px-3 py-2 text-xs font-bold ${
+                                  mine ? "bg-white/15 text-white" : "bg-slate-100 text-slate-600"
+                                }`}
+                              >
+                                Отмена
+                              </button>
+                              <button
+                                type="button"
+                                disabled={messageActionLoading || !editingText.trim()}
+                                onClick={() => void saveEditedMessage(message.id)}
+                                className={`rounded-xl px-3 py-2 text-xs font-bold ${
+                                  mine
+                                    ? "bg-white text-sky-600 disabled:bg-white/70"
+                                    : "bg-sky-500 text-white disabled:opacity-50"
+                                }`}
+                              >
+                                Сохранить
+                              </button>
+                            </div>
+                          </div>
+                        ) : message.text.trim() ? (
+                          <p className="whitespace-pre-wrap text-sm">{message.text}</p>
+                        ) : null}
+
+                        <div className="mt-1 flex items-center justify-end gap-1 text-[10px] opacity-70">
+                          <span>{formatMessageTime(message.created_at)}</span>
+                          {mine ? (
+                            message.is_read ? (
+                              <CheckCheck className="h-3.5 w-3.5 text-sky-100" />
+                            ) : (
+                              <Check className="h-3.5 w-3.5 text-slate-200" />
+                            )
+                          ) : null}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </section>
-          ))}
+                  );
+                })}
+              </section>
+            ))
+          )}
         </div>
 
         {operatorMode && selected.status === "new" && (
@@ -627,7 +846,20 @@ export default function SupportScreen({
                 <MessageCircle className="h-5 w-5 text-sky-500" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate font-bold">{ticket.subject}</p>
+                <div className="flex items-center gap-2">
+                  <p
+                    className={`truncate font-bold ${
+                      operatorMode && hasUnreadClientMessages(ticket) ? "text-slate-950" : ""
+                    }`}
+                  >
+                    {ticket.subject}
+                  </p>
+                  {operatorMode && hasUnreadClientMessages(ticket) ? (
+                    <span className="shrink-0 rounded-full bg-rose-500 px-2 py-1 text-[10px] font-bold text-white">
+                      Новое сообщение
+                    </span>
+                  ) : null}
+                </div>
                 {operatorMode ? (
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                     <span className="truncate">{ticket.requester_name}</span>
@@ -718,6 +950,23 @@ export default function SupportScreen({
           </form>
         </div>
       )}
+
+      {lightboxImageUrl ? (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/90 p-4">
+          <button
+            type="button"
+            onClick={() => setLightboxImageUrl(null)}
+            className="absolute right-4 top-4 rounded-full bg-white/10 p-3 text-white transition hover:bg-white/20"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          <img
+            src={lightboxImageUrl}
+            alt="Вложение"
+            className="max-h-full max-w-full rounded-3xl object-contain shadow-2xl"
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

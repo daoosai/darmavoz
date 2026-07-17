@@ -666,12 +666,18 @@ export default function SupportScreen({
   const createTicketModal =
     showCreate && typeof document !== "undefined"
       ? createPortal(
-          <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/50 sm:items-center">
-            <div className="relative mx-4 flex w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl max-h-[85vh]">
+          <div
+            onClick={closeCreateForm}
+            className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/50 sm:items-center"
+          >
+            <div
+              onClick={(event) => event.stopPropagation()}
+              className="relative mx-4 flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+            >
               <div className="flex items-center justify-between border-b border-slate-100 p-4">
                 <div>
-                  <p className="text-xs font-bold text-sky-600">\u041d\u041e\u0412\u041e\u0415 \u041e\u0411\u0420\u0410\u0429\u0415\u041d\u0418\u0415</p>
-                  <h3 className="text-xl font-black">\u041d\u0430\u043f\u0438\u0441\u0430\u0442\u044c \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440\u0443</h3>
+                  <p className="text-xs font-bold text-sky-600">НОВОЕ ОБРАЩЕНИЕ</p>
+                  <h3 className="text-xl font-black">Написать оператору</h3>
                 </div>
                 <button
                   type="button"
@@ -685,7 +691,7 @@ export default function SupportScreen({
               <form onSubmit={createTicket} className="flex min-h-0 flex-1 flex-col">
                 <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
                   <label className="block text-sm font-bold">
-                    \u0422\u0435\u043c\u0430
+                    Тема
                     <input
                       required
                       value={form.subject}
@@ -694,21 +700,21 @@ export default function SupportScreen({
                     />
                   </label>
                   <label className="block text-sm font-bold">
-                    \u041a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u044f
+                    Категория
                     <select
                       value={form.category}
                       onChange={(event) => setForm({ ...form, category: event.target.value })}
                       className="mt-1 w-full rounded-xl bg-slate-100 p-3 font-normal"
                     >
-                      <option value="general">\u041e\u0431\u0449\u0438\u0439 \u0432\u043e\u043f\u0440\u043e\u0441</option>
-                      <option value="order">\u0417\u0430\u043a\u0430\u0437</option>
-                      <option value="pickup_point">\u0422\u043e\u0447\u043a\u0430 \u0437\u0430\u0431\u043e\u0440\u0430</option>
-                      <option value="equipment">\u0421\u043f\u0435\u0446\u0442\u0435\u0445\u043d\u0438\u043a\u0430</option>
-                      <option value="participant">\u0423\u0447\u0430\u0441\u0442\u043d\u0438\u043a \u0441\u0438\u0441\u0442\u0435\u043c\u044b</option>
+                      <option value="general">Общий вопрос</option>
+                      <option value="order">Заказ</option>
+                      <option value="pickup_point">Точка забора</option>
+                      <option value="equipment">Спецтехника</option>
+                      <option value="participant">Участник системы</option>
                     </select>
                   </label>
                   <label className="block text-sm font-bold">
-                    РЎРѕРѕР±С‰РµРЅРёРµ
+                    Сообщение
                     <textarea
                       required
                       rows={5}
@@ -724,7 +730,7 @@ export default function SupportScreen({
                     disabled={sending}
                     className="w-full rounded-2xl bg-sky-500 p-4 font-bold text-white disabled:opacity-50"
                   >
-                    {sending ? "РћС‚РїСЂР°РІР»СЏРµРј..." : "РћС‚РїСЂР°РІРёС‚СЊ"}
+                    {sending ? "Отправляем..." : "Отправить"}
                   </button>
                 </div>
               </form>

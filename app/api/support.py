@@ -124,7 +124,10 @@ def _ticket_load_options():
 
 async def _get_ticket(db: AsyncSession, ticket_id: UUID) -> SupportTicket:
     result = await db.execute(
-        select(SupportTicket).options(*_ticket_load_options()).where(SupportTicket.id == ticket_id)
+        select(SupportTicket)
+        .options(*_ticket_load_options())
+        .where(SupportTicket.id == ticket_id)
+        .execution_options(populate_existing=True)
     )
     ticket = result.scalar_one_or_none()
     if ticket is None:

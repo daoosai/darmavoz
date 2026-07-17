@@ -57,6 +57,11 @@ const sortTicketsByUpdatedAt = (items: SupportTicket[]) =>
       new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime(),
   );
 
+const withoutMessage = (ticket: SupportTicket, messageId: string): SupportTicket => ({
+  ...ticket,
+  messages: ticket.messages.filter((message) => message.id !== messageId),
+});
+
 const statusLabels = { new: "Новое", in_progress: "В работе", closed: "Закрыто" };
 const statusClasses = {
   new: "bg-amber-100 text-amber-700",
@@ -163,6 +168,7 @@ export default function SupportScreen({
   const messageMenuButtonRef = useRef<HTMLDivElement | null>(null);
   const messageMenuDropdownRef = useRef<HTMLDivElement | null>(null);
   const lastReadRequestRef = useRef<string | null>(null);
+  const hiddenMessageIdsRef = useRef(new Set<string>());
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [selected, setSelected] = useState<SupportTicket | null>(null);
   const [filter, setFilter] = useState("");
@@ -198,11 +204,19 @@ export default function SupportScreen({
       );
 
   const syncTicket = (ticket: SupportTicket) => {
-    setSelected(ticket);
+    const hiddenMessageIds = hiddenMessageIdsRef.current;
+    const visibleTicket = hiddenMessageIds.size > 0
+      ? {
+          ...ticket,
+          messages: ticket.messages.filter((message) => !hiddenMessageIds.has(message.id)),
+        }
+      : ticket;
+
+    setSelected(visibleTicket);
     setTickets((current) =>
       sortTicketsByUpdatedAt([
-        ticket,
-        ...current.filter((item) => item.id !== ticket.id),
+        visibleTicket,
+        ...current.filter((item) => item.id !== visibleTicket.id),
       ]),
     );
   };
@@ -556,8 +570,14 @@ export default function SupportScreen({
   const removeMessage = async (messageId: string) => {
     if (!window.confirm("Удалить сообщение?")) return;
 
+    const ticketBeforeDelete = selected;
+    hiddenMessageIdsRef.current.add(messageId);
     setOpenedMessageMenuId(null);
     setMessageActionLoading(true);
+    setSelected((current) => (current ? withoutMessage(current, messageId) : current));
+    setTickets((current) =>
+      current.map((ticket) => withoutMessage(ticket, messageId)),
+    );
     try {
       const response = await fetch(`${baseURL}/support/messages/${messageId}`, {
         method: "DELETE",
@@ -573,6 +593,8 @@ export default function SupportScreen({
       }
       toast.success("Сообщение удалено");
     } catch (error) {
+      hiddenMessageIdsRef.current.delete(messageId);
+      if (ticketBeforeDelete) syncTicket(ticketBeforeDelete);
       toast.error(error instanceof Error ? error.message : "Не удалось удалить сообщение");
     } finally {
       setMessageActionLoading(false);
@@ -757,8 +779,9 @@ export default function SupportScreen({
                             </button>
                             <button
                               type="button"
+                              disabled={messageActionLoading}
                               onClick={() => void removeMessage(message.id)}
-                              className="flex w-full items-center gap-2 px-4 py-3 text-sm font-semibold text-rose-600 transition hover:bg-rose-50"
+                              className="flex w-full items-center gap-2 px-4 py-3 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 disabled:cursor-wait disabled:opacity-50"
                             >
                               <Trash2 className="h-4 w-4" />
                               Удалить

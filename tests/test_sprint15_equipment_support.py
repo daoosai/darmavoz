@@ -4,7 +4,7 @@ from datetime import date, timedelta
 import pytest
 from sqlalchemy import select
 
-from app.models.models import Client, Driver, Role, User
+from app.models.models import Client, Driver, Role, SupportMessage, User
 from app.security.jwt import create_access_token
 
 
@@ -260,6 +260,19 @@ async def test_support_read_edit_and_delete_endpoints(client, session_factory, m
     edited_messages = {message["id"]: message for message in edit_response.json()["messages"]}
     assert edited_messages[client_message_id]["text"] == "Обновленный текст клиента"
 
+    image_response = await client.post(
+        f"/api/v1/support/tickets/{ticket_id}/messages",
+        headers={"Authorization": f"Bearer {client_token}"},
+        json={"attachment_url": "https://files.example.test/support/image.jpg"},
+    )
+    assert image_response.status_code == 200
+    image_message = next(
+        message
+        for message in image_response.json()["messages"]
+        if message["attachment_url"] == "https://files.example.test/support/image.jpg"
+    )
+    assert image_message["attachment_url"] == "https://files.example.test/support/image.jpg"
+
     delete_response = await client.delete(
         f"/api/v1/support/messages/{client_message_id}",
         headers={"Authorization": f"Bearer {client_token}"},
@@ -267,3 +280,17 @@ async def test_support_read_edit_and_delete_endpoints(client, session_factory, m
     assert delete_response.status_code == 200
     remaining_message_ids = {message["id"] for message in delete_response.json()["messages"]}
     assert client_message_id not in remaining_message_ids
+
+    delete_image_response = await client.delete(
+        f"/api/v1/support/messages/{image_message['id']}",
+        headers={"Authorization": f"Bearer {client_token}"},
+    )
+    assert delete_image_response.status_code == 200
+    remaining_message_ids = {
+        message["id"] for message in delete_image_response.json()["messages"]
+    }
+    assert image_message["id"] not in remaining_message_ids
+
+    async with session_factory() as session:
+        assert await session.get(SupportMessage, uuid.UUID(client_message_id)) is None
+        assert await session.get(SupportMessage, uuid.UUID(image_message["id"])) is None

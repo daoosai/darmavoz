@@ -3,8 +3,8 @@ import PullToRefresh from "react-simple-pull-to-refresh";
 import { Package, MapPin, Calendar, Truck, List, Info, User as UserIcon, Phone, Search, UserCheck, CheckCircle, ChevronDown, ArrowLeft, Wrench, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { clientOrderStatusColors, baseURL, extractApiErrorMessage, resolveMediaUrl } from "./utils";
-import { getOrderStatusText } from "./utils/statusMapper";
-import { ClientOrderSummary, useAuthStore, useClientOrdersStore } from "./store";
+import { getOrderStatusText, getOrderStepIndex } from "./utils/statusMapper";
+import { ClientOrderSummary, normalizeClientOrderSummary, useAuthStore, useClientOrdersStore } from "./store";
 import { motion, AnimatePresence } from "motion/react";
 
 type ClientOrder = ClientOrderSummary;
@@ -51,16 +51,6 @@ const activeStatuses = [
   "heading_to_client"
 ];
 
-const getStepIndex = (status: string) => {
-  if (status === 'created') return 0;
-  if (['searching_driver', 'offered_to_driver', 'no_driver_found'].includes(status)) return 1;
-  if (['driver_assigned', 'driver_accepted'].includes(status)) return 2;
-  if (['heading_to_pickup', 'arrived_at_pickup', 'loading'].includes(status)) return 3;
-  if (status === 'heading_to_client') return 4;
-  if (status === 'completed' || status === 'delivered') return 5;
-  return -1;
-};
-
 const formatDate = (dateString: string) => {
   try {
     const date = new Date(dateString);
@@ -76,6 +66,22 @@ const formatDate = (dateString: string) => {
 
 const formatEquipmentApplicationPrice = (value?: number | null) =>
   value == null ? "По договорённости" : `${Number(value).toLocaleString("ru-RU")} ₽`;
+
+const getOrderDisplayAmount = (
+  order: Pick<ClientOrder, "total_price" | "estimated_total_amount" | "total_amount" | "delivery_cost">,
+) => {
+  if (typeof order.total_price === "number") return order.total_price;
+  if (typeof order.estimated_total_amount === "number") return order.estimated_total_amount;
+  if (order.total_amount == null && order.delivery_cost == null) return null;
+  return Number(order.total_amount ?? 0) + Number(order.delivery_cost ?? 0);
+};
+
+const formatOrderDisplayAmount = (
+  order: Pick<ClientOrder, "total_price" | "estimated_total_amount" | "total_amount" | "delivery_cost">,
+) => {
+  const amount = getOrderDisplayAmount(order);
+  return amount == null ? "..." : `${amount.toLocaleString("ru-RU")} ₽`;
+};
 
 const EquipmentApplicationProgress = ({ application }: { application: EquipmentApplication }) => {
   if (application.status === "rejected" || application.status === "cancelled") {
@@ -132,7 +138,7 @@ const EquipmentHistoryCard = ({ application }: { application: EquipmentApplicati
 };
 
 const ActiveOrderCard: React.FC<{ order: ClientOrder }> = ({ order }) => {
-  const stepIndex = getStepIndex(order.status);
+  const stepIndex = getOrderStepIndex(order.status);
   
   const renderCentralAnimation = () => {
     if (stepIndex === 1) {
@@ -419,7 +425,7 @@ export default function OrdersScreen({
       });
       if (res.ok) {
         const data = await res.json();
-        setOrders(data);
+        setOrders(Array.isArray(data) ? data.map(normalizeClientOrderSummary) : []);
       }
     } catch (err) {
       console.error(err);

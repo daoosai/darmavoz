@@ -496,6 +496,11 @@ class OrderOut(BaseModel):
     def estimated_total_amount(self) -> float:
         return round((self.total_amount or 0.0) + (self.delivery_cost or 0.0), 2)
 
+    @computed_field(return_type=float)
+    @property
+    def total_price(self) -> float:
+        return self.estimated_total_amount
+
 
 class DriverOrderOut(OrderOut):
     client_phone: str | None = None

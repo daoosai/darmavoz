@@ -34,6 +34,9 @@ export interface ClientOrderSummary {
   status: string;
   address?: string | null;
   total_amount?: number | null;
+  delivery_cost?: number | null;
+  estimated_total_amount?: number | null;
+  total_price?: number | null;
   created_at: string;
   items?: {
     material?: { name?: string | null } | null;
@@ -53,6 +56,26 @@ export interface ClientOrderSummary {
     title: string;
   };
 }
+
+export const normalizeClientOrderSummary = <T extends ClientOrderSummary>(order: T): T => {
+  const resolvedTotal =
+    typeof order.total_price === "number"
+      ? order.total_price
+      : typeof order.estimated_total_amount === "number"
+        ? order.estimated_total_amount
+        : order.total_amount == null && order.delivery_cost == null
+          ? null
+          : Number(order.total_amount ?? 0) + Number(order.delivery_cost ?? 0);
+
+  if (resolvedTotal == null) return order;
+
+  return {
+    ...order,
+    total_amount: resolvedTotal,
+    estimated_total_amount: resolvedTotal,
+    total_price: resolvedTotal,
+  };
+};
 
 interface ClientOrdersState {
   orders: ClientOrderSummary[];

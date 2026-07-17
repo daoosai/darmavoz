@@ -1,25 +1,12 @@
 import { useEffect, useMemo } from "react";
 import { Package, Truck } from "lucide-react";
-import { useAuthStore, useClientOrdersStore } from "./store";
+import { normalizeClientOrderSummary, useAuthStore, useClientOrdersStore } from "./store";
+import { getOrderTrackerProgress } from "./utils/statusMapper";
 import { baseURL } from "./utils";
 
 interface Props {
   onOpenOrder: (orderId: string) => void;
 }
-
-const ORDER_PROGRESS: Record<string, { percentage: number; text: string }> = {
-  created: { percentage: 20, text: "Ищем водителя..." },
-  searching_driver: { percentage: 20, text: "Ищем водителя..." },
-  offered_to_driver: { percentage: 20, text: "Ищем водителя..." },
-  no_driver_found: { percentage: 20, text: "Ищем водителя..." },
-  driver_assigned: { percentage: 40, text: "Машина едет на погрузку" },
-  driver_accepted: { percentage: 40, text: "Машина едет на погрузку" },
-  heading_to_pickup: { percentage: 40, text: "Машина едет на погрузку" },
-  arrived_at_pickup: { percentage: 60, text: "Идет загрузка материала" },
-  loading: { percentage: 60, text: "Идет загрузка материала" },
-  heading_to_client: { percentage: 80, text: "Машина едет к вам!" },
-  delivered: { percentage: 100, text: "Машина прибыла на объект" },
-};
 
 export default function FloatingOrderTracker({ onOpenOrder }: Props) {
   const { role, token } = useAuthStore();
@@ -40,7 +27,7 @@ export default function FloatingOrderTracker({ onOpenOrder }: Props) {
         if (!isMounted) return;
         if (response.ok) {
           const payload = await response.json();
-          setOrders(Array.isArray(payload) ? payload : []);
+          setOrders(Array.isArray(payload) ? payload.map(normalizeClientOrderSummary) : []);
         } else if (response.status === 401 || response.status === 403) {
           clearOrders();
         }
@@ -61,18 +48,21 @@ export default function FloatingOrderTracker({ onOpenOrder }: Props) {
   }, [clearOrders, role, setIsLoading, setOrders, token]);
 
   const activeOrder = useMemo(
-    () => orders
-      .filter((order) => ORDER_PROGRESS[order.status])
-      .sort(
-        (first, second) =>
-          new Date(second.created_at).getTime() - new Date(first.created_at).getTime(),
-      )[0],
+    () =>
+      orders
+        .filter((order) => getOrderTrackerProgress(order.status))
+        .sort(
+          (first, second) =>
+            new Date(second.created_at).getTime() - new Date(first.created_at).getTime(),
+        )[0],
     [orders],
   );
 
   if (!activeOrder) return null;
 
-  const progress = ORDER_PROGRESS[activeOrder.status];
+  const progress = getOrderTrackerProgress(activeOrder.status);
+  if (!progress) return null;
+
   const materialName = activeOrder.items?.[0]?.material?.name || "Активный заказ";
 
   return (
@@ -94,7 +84,7 @@ export default function FloatingOrderTracker({ onOpenOrder }: Props) {
       </div>
       <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-gray-100">
         <div
-          className="h-full bg-sky-500 transition-all duration-500"
+          className="progress-shimmer h-full rounded-full bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-400 transition-[width] duration-700"
           style={{ width: `${progress.percentage}%` }}
         />
       </div>

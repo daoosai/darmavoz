@@ -1125,10 +1125,10 @@ export default function SupportScreen({
       )}
 
       {showCreate && (
-        <div className="fixed inset-0 z-[90] flex items-end justify-center bg-slate-900/50 sm:items-center sm:p-4">
+        <div className="fixed inset-0 z-[9999] flex items-end justify-center overflow-y-auto bg-slate-900/50 sm:items-center sm:p-4">
           <form
             onSubmit={createTicket}
-            className="w-full max-w-md rounded-t-3xl bg-white p-5 sm:rounded-3xl"
+            className="max-h-[90vh] w-full overflow-y-auto overscroll-contain rounded-t-3xl bg-white p-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] sm:max-h-[85vh] sm:max-w-md sm:rounded-3xl"
           >
             <div className="mb-5 flex justify-between">
               <div>

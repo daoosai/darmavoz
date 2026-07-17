@@ -175,7 +175,7 @@ async def test_support_history_permissions_and_close_flow(
     closed_message_response = await client.post(
         f"/api/v1/support/tickets/{ticket_id}/messages",
         headers={"Authorization": f"Bearer {client_token}"},
-        json={"text": "Новое сообщение"},
+        json={"text": "\u041d\u043e\u0432\u043e\u0435 \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435"},
     )
     assert closed_message_response.status_code == 409
 
@@ -185,7 +185,7 @@ async def test_driver_can_create_support_ticket(client, session_factory, monkeyp
     driver_user, driver_token = await _create_user(session_factory, "driver")
     async with session_factory() as session:
         driver = Driver(
-            name="Водитель поддержки",
+            name="\u0412\u043e\u0434\u0438\u0442\u0435\u043b\u044c \u043f\u043e\u0434\u0434\u0435\u0440\u0436\u043a\u0438",
             phone=f"+7999{str(uuid.uuid4().int)[-7:]}",
             user_id=driver_user.id,
             status="offline",
@@ -200,14 +200,69 @@ async def test_driver_can_create_support_ticket(client, session_factory, monkeyp
         "/api/v1/support/tickets",
         headers={"Authorization": f"Bearer {driver_token}"},
         json={
-            "subject": "Вопрос водителя",
+            "subject": "\u0412\u043e\u043f\u0440\u043e\u0441 \u0432\u043e\u0434\u0438\u0442\u0435\u043b\u044f",
             "category": "general",
             "context_type": "general",
-            "message": "Не меняется статус заказа",
+            "message": "\u041d\u0435 \u043c\u0435\u043d\u044f\u0435\u0442\u0441\u044f \u0441\u0442\u0430\u0442\u0443\u0441 \u0437\u0430\u043a\u0430\u0437\u0430",
         },
     )
     assert response.status_code == 201
     assert response.json()["requester_role"] == "driver"
+
+
+@pytest.mark.asyncio
+async def test_operator_reply_sends_push_to_driver_ticket_author(
+    client, session_factory, monkeypatch
+):
+    driver_user, driver_token = await _create_user(session_factory, "driver")
+    _logist, logist_token = await _create_user(session_factory, "logist")
+    async with session_factory() as session:
+        driver = Driver(
+            name="\u0412\u043e\u0434\u0438\u0442\u0435\u043b\u044c \u043f\u043e\u0434\u0434\u0435\u0440\u0436\u043a\u0438",
+            phone=f"+7999{str(uuid.uuid4().int)[-7:]}",
+            user_id=driver_user.id,
+            status="offline",
+        )
+        session.add(driver)
+        await session.commit()
+        await session.refresh(driver)
+        driver_id = driver.id
+
+    monkeypatch.setattr(
+        "app.api.support.schedule_support_operator_notification", lambda *args, **kwargs: None
+    )
+    reply_notifications: list[dict[str, uuid.UUID | None]] = []
+    monkeypatch.setattr(
+        "app.api.support.schedule_support_reply_notification",
+        lambda **kwargs: reply_notifications.append(kwargs),
+    )
+
+    create_response = await client.post(
+        "/api/v1/support/tickets",
+        headers={"Authorization": f"Bearer {driver_token}"},
+        json={
+            "subject": "\u0412\u043e\u043f\u0440\u043e\u0441 \u0432\u043e\u0434\u0438\u0442\u0435\u043b\u044f",
+            "category": "general",
+            "context_type": "general",
+            "message": "\u041d\u0443\u0436\u043d\u0430 \u043f\u043e\u043c\u043e\u0449\u044c \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440\u0430",
+        },
+    )
+    assert create_response.status_code == 201
+    ticket_id = create_response.json()["id"]
+
+    reply_response = await client.post(
+        f"/api/v1/admin/support/tickets/{ticket_id}/messages",
+        headers={"Authorization": f"Bearer {logist_token}"},
+        json={"text": "\u041f\u0440\u043e\u0432\u0435\u0440\u044c\u0442\u0435 \u043d\u043e\u0432\u044b\u0439 \u0442\u0430\u0439\u043c\u0441\u043b\u043e\u0442"},
+    )
+    assert reply_response.status_code == 200
+    assert reply_notifications == [
+        {
+            "ticket_id": uuid.UUID(ticket_id),
+            "client_id": None,
+            "driver_id": driver_id,
+        }
+    ]
 
 
 @pytest.mark.asyncio

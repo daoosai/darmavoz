@@ -163,6 +163,23 @@ def _validate_ticket_open_for_message(ticket: SupportTicket) -> None:
         raise HTTPException(status_code=409, detail="Обращение уже закрыто")
 
 
+async def _resolve_support_reply_target(
+    db: AsyncSession,
+    ticket: SupportTicket,
+) -> tuple[UUID | None, UUID | None]:
+    if ticket.client_id is not None:
+        return ticket.client_id, None
+
+    if ticket.user is not None and ticket.user.driver_profile is not None:
+        return None, ticket.user.driver_profile.id
+
+    if ticket.user_id is None:
+        return None, None
+
+    driver_id = await db.scalar(select(Driver.id).where(Driver.user_id == ticket.user_id))
+    return None, driver_id
+
+
 def _message_payload(message: SupportMessage, actor: SupportActor | None = None) -> dict:
     if message.author_client is not None:
         name = message.author_client.name
@@ -482,10 +499,10 @@ async def add_operator_support_message(
     ticket.updated_at = datetime.now(timezone.utc)
     await db.commit()
     ticket = await _get_ticket(db, ticket.id)
-    driver_id = ticket.user.driver_profile.id if ticket.user and ticket.user.driver_profile else None
+    client_id, driver_id = await _resolve_support_reply_target(db, ticket)
     schedule_support_reply_notification(
         ticket_id=ticket.id,
-        client_id=ticket.client_id,
+        client_id=client_id,
         driver_id=driver_id,
     )
     actor = SupportActor(

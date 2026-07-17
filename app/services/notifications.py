@@ -415,11 +415,12 @@ async def _send_support_reply_notification(
     last_message = max(ticket.messages, key=lambda item: item.created_at)
     preview = _support_message_preview(last_message.text, last_message.attachment_url)
     data = {"event": "support_operator_reply", "ticket_id": str(ticket_id)}
-    title = f"Ответ от Поддержки: {ticket.subject}"
+    title = "\u041f\u043e\u0434\u0434\u0435\u0440\u0436\u043a\u0430 \u0414\u0430\u0440\u043c\u0430\u0432\u043e\u0437\u0430"
+    body = f"\u041e\u0442\u0432\u0435\u0442 \u043e\u0442 \u041f\u043e\u0434\u0434\u0435\u0440\u0436\u043a\u0438: {preview}"
     if client_id is not None:
-        _safe_schedule(schedule_push_to_client, client_id, title, preview, data)
+        _safe_schedule(schedule_push_to_client, client_id, title, body, data)
     elif driver_id is not None:
-        _safe_schedule(schedule_push_to_driver, driver_id, title, preview, data)
+        _safe_schedule(schedule_push_to_driver, driver_id, title, body, data)
 
 
 def schedule_support_operator_notification(ticket_id: UUID, *, is_new: bool) -> None:

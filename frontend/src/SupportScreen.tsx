@@ -531,13 +531,17 @@ export default function SupportScreen({
                       className={`flex ${mine ? "justify-end" : "justify-start"}`}
                     >
                       <div
-                        className={`relative max-w-[85%] rounded-2xl px-4 py-3 ${
+                        className={`relative max-w-[85%] px-4 py-3 ${
                           mine
-                            ? "bg-sky-500 pr-11 text-white"
-                            : "bg-white text-slate-700 shadow-sm"
+                            ? "rounded-2xl rounded-br-none bg-blue-500 pr-11 text-white"
+                            : "rounded-2xl rounded-bl-none bg-white text-gray-900 shadow-sm"
                         }`}
                       >
-                        <p className="mb-1 text-[10px] font-bold opacity-70">{authorName}</p>
+                        {!mine ? (
+                          <p className="mb-1 text-[10px] font-bold text-slate-500">
+                            {authorName}
+                          </p>
+                        ) : null}
 
                         {mine && selected.status !== "closed" ? (
                           <button
@@ -628,13 +632,17 @@ export default function SupportScreen({
                           <p className="whitespace-pre-wrap text-sm">{message.text}</p>
                         ) : null}
 
-                        <div className="mt-1 flex items-center justify-end gap-1 text-[10px] opacity-70">
+                        <div
+                          className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${
+                            mine ? "text-white/75" : "text-slate-400"
+                          }`}
+                        >
                           <span>{formatMessageTime(message.created_at)}</span>
                           {mine ? (
                             message.is_read ? (
-                              <CheckCheck className="h-3.5 w-3.5 text-sky-100" />
+                              <CheckCheck className="h-3.5 w-3.5 text-cyan-100" />
                             ) : (
-                              <Check className="h-3.5 w-3.5 text-slate-200" />
+                              <Check className="h-3.5 w-3.5 text-white/60" />
                             )
                           ) : null}
                         </div>

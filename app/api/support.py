@@ -50,6 +50,7 @@ from app.services.storage import (
 )
 
 router = APIRouter()
+message_router = APIRouter(prefix="/support", tags=["support"])
 
 
 @router.get("/support", response_model=dict[str, str])
@@ -347,7 +348,7 @@ async def add_own_support_message(
     return _ticket_payload(await _get_ticket(db, ticket.id), actor)
 
 
-@router.patch("/support/tickets/{ticket_id}/read", response_model=SupportTicketOut)
+@message_router.patch("/tickets/{ticket_id}/read", response_model=SupportTicketOut)
 async def mark_support_ticket_read(
     ticket_id: UUID,
     db: AsyncSession = Depends(get_db),
@@ -374,7 +375,7 @@ async def mark_support_ticket_read(
     return _ticket_payload(await _get_ticket(db, ticket.id), actor)
 
 
-@router.patch("/support/messages/{message_id}", response_model=SupportTicketOut)
+@message_router.patch("/messages/{message_id}", response_model=SupportTicketOut)
 async def update_support_message(
     message_id: UUID,
     payload: SupportMessageUpdate,
@@ -396,7 +397,7 @@ async def update_support_message(
     return _ticket_payload(await _get_ticket(db, ticket.id), actor)
 
 
-@router.delete("/support/messages/{message_id}", response_model=SupportTicketOut)
+@message_router.delete("/messages/{message_id}", response_model=SupportTicketOut)
 async def delete_support_message(
     message_id: UUID,
     db: AsyncSession = Depends(get_db),

@@ -687,8 +687,8 @@ export default function PickupPointMapScreen({
         onClose={handleAddressSheetClose}
         dismissible
         closeOnSelect
-        overlayZIndexClassName="z-[140]"
-        sheetZIndexClassName="z-[150]"
+        overlayZIndexClassName="z-[9999]"
+        sheetZIndexClassName="z-[10000]"
         onAddressConfirmed={({ address, lat, lon }) => {
           if (lat != null && lon != null) {
             setSelectedDeliveryLocation({ lat, lon });

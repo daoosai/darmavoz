@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   X,
   MapPin,
@@ -45,8 +46,8 @@ export default function ClientAddressBottomSheet({
   onClose,
   dismissible = true,
   closeOnSelect = false,
-  overlayZIndexClassName = "z-[60]",
-  sheetZIndexClassName = "z-[70]",
+  overlayZIndexClassName = "z-[9999]",
+  sheetZIndexClassName = "z-[10000]",
   onAddressConfirmed,
 }: ClientAddressBottomSheetProps) {
   const { token, role } = useAuthStore();
@@ -356,13 +357,13 @@ export default function ClientAddressBottomSheet({
 
   if (!isOpen) return null;
 
-  return (
+  const sheet = (
     <SwipeableBottomSheet
       isOpen={isOpen}
       onClose={onClose}
-      containerClassName="fixed inset-0 flex items-end justify-center"
-      overlayClassName={`fixed inset-0 bg-slate-900/40 backdrop-blur-sm ${overlayZIndexClassName}`}
-      sheetClassName={`fixed inset-x-0 bottom-0 flex max-h-[95vh] flex-col rounded-t-[32px] bg-white shadow-2xl sm:mx-auto sm:max-w-xl ${sheetZIndexClassName} ${isAdding ? "h-[95vh]" : "h-auto"}`}
+      containerClassName="fixed inset-0 z-[9999] flex items-end justify-center"
+      overlayClassName={`fixed inset-0 z-[9999] bg-slate-900/40 backdrop-blur-sm ${overlayZIndexClassName}`}
+      sheetClassName={`fixed inset-x-0 bottom-0 relative z-[10000] flex max-h-[95vh] flex-col rounded-t-[32px] bg-white shadow-2xl sm:mx-auto sm:max-w-xl ${sheetZIndexClassName} ${isAdding ? "h-[95vh]" : "h-auto"}`}
       closeOnOverlayClick={dismissible}
       enableDragToClose={dismissible}
     >
@@ -541,4 +542,10 @@ export default function ClientAddressBottomSheet({
         </div>
     </SwipeableBottomSheet>
   );
+
+  if (typeof document === "undefined") {
+    return sheet;
+  }
+
+  return createPortal(sheet, document.body);
 }

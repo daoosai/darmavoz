@@ -77,13 +77,18 @@ async def sync_material_offers(
     db: AsyncSession,
     *,
     quarry_id: UUID,
-    offers: list[QuarryMaterialOfferIn] | None = None,
+    offers: list[QuarryMaterialOfferIn | dict] | None = None,
     legacy_material_ids: list[UUID] | None = None,
 ) -> None:
     if offers is None and legacy_material_ids is None:
         return
 
-    normalized_offers = list(offers or [])
+    normalized_offers = [
+        offer
+        if isinstance(offer, QuarryMaterialOfferIn)
+        else QuarryMaterialOfferIn.model_validate(offer)
+        for offer in (offers or [])
+    ]
     if not normalized_offers and legacy_material_ids:
         result = await db.execute(
             select(Material).where(Material.id.in_(list(dict.fromkeys(legacy_material_ids))))

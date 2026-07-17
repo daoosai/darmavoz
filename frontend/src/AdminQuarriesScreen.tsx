@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { Plus, Edit2, ImagePlus, Star, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
-import { fetch2gisAddressSuggestions, withTyumenBias } from "./addressSearch";
+import {
+  fetch2gisAddressSuggestions,
+  get2gisSuggestionLabel,
+  withTyumenBias,
+} from "./addressSearch";
 import { useAuthStore } from "./store";
 import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
 
@@ -557,7 +561,7 @@ function EditQuarryModal({
     const suggests = await fetch2GISSuggests(val);
     setSuggestions(
       suggests
-        .map((s: any) => s.search_attributes?.suggested_text || s.name)
+        .map((s: any) => get2gisSuggestionLabel(s))
         .filter(Boolean),
     );
   };

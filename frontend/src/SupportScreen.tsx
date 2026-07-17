@@ -23,6 +23,8 @@ import { baseURL, extractApiErrorMessage, resolveMediaUrl } from "./utils";
 
 interface SupportMessage {
   id: string;
+  ticket_id: string;
+  sender_id?: string | null;
   author_client_id?: string | null;
   author_user_id?: string | null;
   author_name: string;
@@ -125,7 +127,7 @@ const getRequesterRoleLabel = (role: string) => requesterRoleLabels[role] || rol
 const getRequesterRoleClass = (role: string) =>
   requesterRoleClasses[role] || "bg-slate-100 text-slate-600";
 const getMessageSenderId = (message: SupportMessage) =>
-  message.author_client_id || message.author_user_id || null;
+  message.sender_id || message.author_client_id || message.author_user_id || null;
 const getSupportActorId = (
   messages: SupportMessage[],
   currentRole: string | null,
@@ -172,6 +174,7 @@ export default function SupportScreen({
   const [selectedAttachment, setSelectedAttachment] = useState<File | null>(null);
   const [attachmentPreviewUrl, setAttachmentPreviewUrl] = useState<string | null>(null);
   const [openedMessageMenuId, setOpenedMessageMenuId] = useState<string | null>(null);
+  const [editingMessage, setEditingMessage] = useState<SupportMessage | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
   const [messageActionLoading, setMessageActionLoading] = useState(false);
@@ -283,8 +286,7 @@ export default function SupportScreen({
     clearAttachment();
     setReply("");
     setOpenedMessageMenuId(null);
-    setEditingMessageId(null);
-    setEditingText("");
+    setEditingMessage(null);
     lastReadRequestRef.current = null;
   }, [selected?.id]);
 
@@ -469,23 +471,36 @@ export default function SupportScreen({
 
   const sendReply = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!selected || (!reply.trim() && !selectedAttachment)) return;
+    const nextText = reply.trim();
+    if (!selected) return;
+    if (editingMessage ? !nextText : !nextText && !selectedAttachment) return;
     setSending(true);
     try {
-      const attachmentUrl = selectedAttachment
-        ? await uploadSupportAttachment(selected.id, selectedAttachment)
-        : null;
-      const response = await fetch(`${endpoint}/${selected.id}/messages`, {
-        method: "POST",
-        headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify({ text: reply.trim() || null, attachment_url: attachmentUrl }),
-      });
+      const response = editingMessage
+        ? await fetch(`${baseURL}/support/messages/${editingMessage.id}`, {
+            method: "PATCH",
+            headers: { ...headers, "Content-Type": "application/json" },
+            body: JSON.stringify({ text: nextText }),
+          })
+        : await fetch(`${endpoint}/${selected.id}/messages`, {
+            method: "POST",
+            headers: { ...headers, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              text: nextText || null,
+              attachment_url: selectedAttachment
+                ? await uploadSupportAttachment(selected.id, selectedAttachment)
+                : null,
+            }),
+          });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(extractApiErrorMessage(data, "Не удалось отправить сообщение"));
       }
       syncTicket(data);
       setReply("");
+      setEditingMessage(null);
+      setEditingMessageId(null);
+      setEditingText("");
       clearAttachment();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Не удалось отправить сообщение");
@@ -496,11 +511,16 @@ export default function SupportScreen({
 
   const startEditingMessage = (message: SupportMessage) => {
     setOpenedMessageMenuId(null);
-    setEditingMessageId(message.id);
+    clearAttachment();
+    setEditingMessage(message);
+    setReply(message.text);
+    setEditingMessageId(null);
     setEditingText(message.text);
   };
 
   const cancelEditingMessage = () => {
+    setEditingMessage(null);
+    setReply("");
     setEditingMessageId(null);
     setEditingText("");
   };
@@ -548,7 +568,9 @@ export default function SupportScreen({
         throw new Error(extractApiErrorMessage(data, "Не удалось удалить сообщение"));
       }
       syncTicket(data);
-      if (editingMessageId === messageId) cancelEditingMessage();
+      if (editingMessage?.id === messageId || editingMessageId === messageId) {
+        cancelEditingMessage();
+      }
       toast.success("Сообщение удалено");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Не удалось удалить сообщение");
@@ -670,9 +692,9 @@ export default function SupportScreen({
                 </div>
                 {group.messages.map((message) => {
                   const senderId = getMessageSenderId(message);
-                  const mine = currentSupportActorId
-                    ? senderId === currentSupportActorId
-                    : message.is_own;
+                  const mine = Boolean(message.is_own) || (
+                    currentSupportActorId ? senderId === currentSupportActorId : false
+                  );
                   const authorName = operatorAuthorRoles.has(message.author_role)
                     ? "Поддержка"
                     : message.author_name;
@@ -842,7 +864,27 @@ export default function SupportScreen({
             onSubmit={sendReply}
             className="mt-auto shrink-0 border-t border-slate-100 bg-white p-4"
           >
-            {attachmentPreviewUrl && (
+            {editingMessage ? (
+              <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-sky-600">
+                    Редактирование
+                  </p>
+                  <p className="truncate text-sm font-medium text-slate-700">
+                    {editingMessage.text}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={cancelEditingMessage}
+                  className="rounded-full bg-white p-2 text-slate-500 shadow-sm transition hover:bg-slate-50"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ) : null}
+
+            {attachmentPreviewUrl && !editingMessage ? (
               <div className="mb-3 flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
                 <img
                   src={attachmentPreviewUrl}
@@ -865,7 +907,7 @@ export default function SupportScreen({
                   <X className="h-4 w-4" />
                 </button>
               </div>
-            )}
+            ) : null}
 
             <div className="flex gap-2">
               <input
@@ -895,8 +937,9 @@ export default function SupportScreen({
               />
               <button
                 type="button"
+                disabled={Boolean(editingMessage)}
                 onClick={() => attachmentInputRef.current?.click()}
-                className="rounded-2xl bg-slate-100 p-3 text-slate-600 transition hover:bg-slate-200"
+                className="rounded-2xl bg-slate-100 p-3 text-slate-600 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Paperclip className="h-5 w-5" />
               </button>
@@ -908,10 +951,10 @@ export default function SupportScreen({
                 className="min-h-12 flex-1 resize-none rounded-2xl bg-slate-100 p-3 outline-none"
               />
               <button
-                disabled={sending || (!reply.trim() && !selectedAttachment)}
+                disabled={sending || (editingMessage ? !reply.trim() : !reply.trim() && !selectedAttachment)}
                 className="rounded-2xl bg-sky-500 p-3 text-white disabled:opacity-40"
               >
-                <Send className="h-5 w-5" />
+                {editingMessage ? <Check className="h-5 w-5" /> : <Send className="h-5 w-5" />}
               </button>
             </div>
           </form>

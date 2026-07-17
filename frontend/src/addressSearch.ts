@@ -1,6 +1,13 @@
 const DGIS_KEY = import.meta.env.VITE_2GIS_KEY;
-const TYUMEN_CITY = "Тюмень";
+const TYUMEN_CITY = "\u0422\u044e\u043c\u0435\u043d\u044c";
 const TYUMEN_LOCATION = "65.534328,57.152286";
+
+export const get2gisSuggestionLabel = (item: any): string =>
+  item?.search_attributes?.suggested_text ||
+  item?.full_name ||
+  item?.address_name ||
+  item?.name ||
+  "";
 
 export const withTyumenBias = (address: string): string => {
   const normalized = address.trim();

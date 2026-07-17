@@ -172,6 +172,7 @@ def _message_payload(message: SupportMessage, actor: SupportActor | None = None)
     return {
         "id": message.id,
         "ticket_id": message.ticket_id,
+        "sender_id": message.author_client_id or message.author_user_id,
         "author_client_id": message.author_client_id,
         "author_user_id": message.author_user_id,
         "author_name": name,

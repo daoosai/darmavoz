@@ -89,6 +89,7 @@ class SupportStatusUpdate(BaseModel):
 class SupportMessageOut(BaseModel):
     id: UUID
     ticket_id: UUID
+    sender_id: UUID | None = None
     author_client_id: UUID | None
     author_user_id: UUID | None
     author_name: str

@@ -1,7 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Loader2, MapPin, X } from "lucide-react";
 import toast from "react-hot-toast";
-import { fetch2gisAddressSuggestions, withTyumenBias } from "./addressSearch";
+import {
+  fetch2gisAddressSuggestions,
+  get2gisSuggestionLabel,
+  withTyumenBias,
+} from "./addressSearch";
 import { baseURL } from "./utils";
 
 interface EditOrderModalProps {
@@ -316,7 +320,7 @@ export default function LogistEditOrderModal({
 
   const fetch2GISSuggests = async (query: string) => {
     const items = await fetch2gisAddressSuggestions(query);
-    return items.map((item: any) => item.search_attributes?.suggested_text);
+    return items.map((item: any) => get2gisSuggestionLabel(item));
   };
 
   const handleDeliveryChange = async (

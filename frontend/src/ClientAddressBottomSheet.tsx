@@ -11,7 +11,11 @@ import {
   CheckCircle2,
   Circle,
 } from "lucide-react";
-import { fetch2gisAddressSuggestions, withTyumenBias } from "./addressSearch";
+import {
+  fetch2gisAddressSuggestions,
+  get2gisSuggestionLabel,
+  withTyumenBias,
+} from "./addressSearch";
 import { baseURL, handleApiError } from "./utils";
 import { useAuthStore, useAddressStore } from "./store";
 import toast from "react-hot-toast";
@@ -162,7 +166,7 @@ export default function ClientAddressBottomSheet({
 
   const fetch2GISSuggests = async (query: string) => {
     const items = await fetch2gisAddressSuggestions(query);
-    return items.map((item: any) => item.search_attributes?.suggested_text);
+    return items.map((item: any) => get2gisSuggestionLabel(item));
   };
 
   const handleAddressChange = async (

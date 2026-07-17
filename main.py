@@ -2,10 +2,12 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api import admin, admin_quarries, auth, catalog, client_addresses, client_auth, client_orders, clients, driver_dispatch, drivers, equipment, geo, logist_orders, media, orders, pickup_points, supplier_auth, supplier_points, support, system, telemetry, webhooks
 from app.core.config import settings
@@ -48,6 +50,59 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Дармавоз.рф API", lifespan=lifespan)
 register_exception_handlers(app)
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_exception_handler(
+    request: Request,
+    exc: RequestValidationError,
+) -> JSONResponse:
+    del request, exc
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": "Проверьте правильность заполнения полей"},
+    )
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(
+    request: Request,
+    exc: StarletteHTTPException,
+) -> JSONResponse:
+    del request
+    if exc.status_code == status.HTTP_404_NOT_FOUND:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": "Ресурс не найден"},
+            headers=exc.headers,
+        )
+    if exc.status_code == status.HTTP_405_METHOD_NOT_ALLOWED:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": "Метод запроса не поддерживается"},
+            headers=exc.headers,
+        )
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers=exc.headers,
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(
+    request: Request,
+    exc: Exception,
+) -> JSONResponse:
+    logger.exception(
+        "unhandled_exception",
+        extra={"path": str(request.url.path)},
+        exc_info=exc,
+    )
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": "Внутренняя ошибка сервера. Повторите попытку позже"},
+    )
 
 app.add_middleware(
     CORSMiddleware,

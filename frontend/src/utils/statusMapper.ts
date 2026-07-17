@@ -27,8 +27,8 @@ export const ORDER_TRACKER_PROGRESS: Record<string, { percentage: number; text: 
   arrived_at_pickup: { percentage: 60, text: "Машина прибыла на погрузку" },
   loading: { percentage: 60, text: "Идет погрузка материала" },
   heading_to_client: { percentage: 80, text: "Машина едет к вам" },
-  delivered: { percentage: 100, text: "Машина прибыла на объект" },
-  completed: { percentage: 100, text: "Заказ выполнен" },
+  delivered: { percentage: 100, text: "Заказ получен" },
+  completed: { percentage: 100, text: "Заказ получен" },
 };
 
 const STEP_INDEX_BY_STATUS: Record<string, number> = {

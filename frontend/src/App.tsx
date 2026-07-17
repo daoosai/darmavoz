@@ -654,7 +654,7 @@ function MainContent({
         )}
 
         {/* Bottom Navigation */}
-        <nav className="fixed bottom-0 left-0 right-0 z-50 w-full max-w-md mx-auto bg-white border-t border-gray-200 pb-[env(safe-area-inset-bottom)] flex flex-col sm:rounded-b-[32px]">
+        <nav className="fixed bottom-0 left-0 right-0 z-40 w-full max-w-md mx-auto bg-white border-t border-gray-200 pb-[env(safe-area-inset-bottom)] flex flex-col sm:rounded-b-[32px]">
           <div className="flex justify-around items-center h-16 px-2">
             {tabs.map((tab) => {
               const Icon = tab.icon;

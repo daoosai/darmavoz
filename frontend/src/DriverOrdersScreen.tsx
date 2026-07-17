@@ -632,7 +632,7 @@ export default function DriverOrdersScreen({
       )}
 
       {/* Bottom Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 w-full bg-white z-[9999] border-t border-gray-200 pb-safe">
+      <div className="fixed bottom-0 left-0 right-0 z-40 w-full bg-white border-t border-gray-200 pb-safe">
         <div className="flex justify-around items-center p-2 sm:max-w-md sm:mx-auto">
           <button
             onClick={() => setActiveTab("orders")}

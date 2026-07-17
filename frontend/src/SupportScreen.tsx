@@ -663,6 +663,77 @@ export default function SupportScreen({
       )
     : null;
 
+  const createTicketModal =
+    showCreate && typeof document !== "undefined"
+      ? createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/50 sm:items-center">
+            <div className="relative mx-4 flex w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl max-h-[85vh]">
+              <div className="flex items-center justify-between border-b border-slate-100 p-4">
+                <div>
+                  <p className="text-xs font-bold text-sky-600">\u041d\u041e\u0412\u041e\u0415 \u041e\u0411\u0420\u0410\u0429\u0415\u041d\u0418\u0415</p>
+                  <h3 className="text-xl font-black">\u041d\u0430\u043f\u0438\u0441\u0430\u0442\u044c \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440\u0443</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeCreateForm}
+                  className="rounded-full bg-slate-100 p-2"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <form onSubmit={createTicket} className="flex min-h-0 flex-1 flex-col">
+                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+                  <label className="block text-sm font-bold">
+                    \u0422\u0435\u043c\u0430
+                    <input
+                      required
+                      value={form.subject}
+                      onChange={(event) => setForm({ ...form, subject: event.target.value })}
+                      className="mt-1 w-full rounded-xl bg-slate-100 p-3 font-normal"
+                    />
+                  </label>
+                  <label className="block text-sm font-bold">
+                    \u041a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u044f
+                    <select
+                      value={form.category}
+                      onChange={(event) => setForm({ ...form, category: event.target.value })}
+                      className="mt-1 w-full rounded-xl bg-slate-100 p-3 font-normal"
+                    >
+                      <option value="general">\u041e\u0431\u0449\u0438\u0439 \u0432\u043e\u043f\u0440\u043e\u0441</option>
+                      <option value="order">\u0417\u0430\u043a\u0430\u0437</option>
+                      <option value="pickup_point">\u0422\u043e\u0447\u043a\u0430 \u0437\u0430\u0431\u043e\u0440\u0430</option>
+                      <option value="equipment">\u0421\u043f\u0435\u0446\u0442\u0435\u0445\u043d\u0438\u043a\u0430</option>
+                      <option value="participant">\u0423\u0447\u0430\u0441\u0442\u043d\u0438\u043a \u0441\u0438\u0441\u0442\u0435\u043c\u044b</option>
+                    </select>
+                  </label>
+                  <label className="block text-sm font-bold">
+                    РЎРѕРѕР±С‰РµРЅРёРµ
+                    <textarea
+                      required
+                      rows={5}
+                      value={form.message}
+                      onChange={(event) => setForm({ ...form, message: event.target.value })}
+                      className="mt-1 w-full resize-none rounded-xl bg-slate-100 p-3 font-normal"
+                    />
+                  </label>
+                </div>
+
+                <div className="border-t border-slate-100 p-4">
+                  <button
+                    disabled={sending}
+                    className="w-full rounded-2xl bg-sky-500 p-4 font-bold text-white disabled:opacity-50"
+                  >
+                    {sending ? "РћС‚РїСЂР°РІР»СЏРµРј..." : "РћС‚РїСЂР°РІРёС‚СЊ"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>,
+          document.body,
+        )
+      : null;
+
   if (selected) {
     const messageGroups = groupMessagesByDay(selected.messages);
     return (
@@ -1124,71 +1195,7 @@ export default function SupportScreen({
         </div>
       )}
 
-      {showCreate && (
-        <div className="fixed inset-0 z-[9999] flex items-end justify-center overflow-y-auto bg-slate-900/50 sm:items-center sm:p-4">
-          <form
-            onSubmit={createTicket}
-            className="max-h-[90vh] w-full overflow-y-auto overscroll-contain rounded-t-3xl bg-white p-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] sm:max-h-[85vh] sm:max-w-md sm:rounded-3xl"
-          >
-            <div className="mb-5 flex justify-between">
-              <div>
-                <p className="text-xs font-bold text-sky-600">НОВОЕ ОБРАЩЕНИЕ</p>
-                <h3 className="text-xl font-black">Написать оператору</h3>
-              </div>
-              <button
-                type="button"
-                onClick={closeCreateForm}
-                className="rounded-full bg-slate-100 p-2"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <label className="block text-sm font-bold">
-                Тема
-                <input
-                  required
-                  value={form.subject}
-                  onChange={(event) => setForm({ ...form, subject: event.target.value })}
-                  className="mt-1 w-full rounded-xl bg-slate-100 p-3 font-normal"
-                />
-              </label>
-              <label className="block text-sm font-bold">
-                Категория
-                <select
-                  value={form.category}
-                  onChange={(event) => setForm({ ...form, category: event.target.value })}
-                  className="mt-1 w-full rounded-xl bg-slate-100 p-3 font-normal"
-                >
-                  <option value="general">Общий вопрос</option>
-                  <option value="order">Заказ</option>
-                  <option value="pickup_point">Точка забора</option>
-                  <option value="equipment">Спецтехника</option>
-                  <option value="participant">Участник системы</option>
-                </select>
-              </label>
-              <label className="block text-sm font-bold">
-                Сообщение
-                <textarea
-                  required
-                  rows={5}
-                  value={form.message}
-                  onChange={(event) => setForm({ ...form, message: event.target.value })}
-                  className="mt-1 w-full resize-none rounded-xl bg-slate-100 p-3 font-normal"
-                />
-              </label>
-            </div>
-
-            <button
-              disabled={sending}
-              className="mt-5 w-full rounded-2xl bg-sky-500 p-4 font-bold text-white disabled:opacity-50"
-            >
-              {sending ? "Отправляем..." : "Отправить"}
-            </button>
-          </form>
-        </div>
-      )}
+      {createTicketModal}
 
       {lightboxImageUrl ? (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/90 p-4">

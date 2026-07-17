@@ -4,7 +4,7 @@ import toast from "react-hot-toast";
 
 import { fetch2gisAddressSuggestions, withTyumenBias } from "./addressSearch";
 import SupportScreen from "./SupportScreen";
-import { useAuthStore } from "./store";
+import { useAddressStore, useAuthStore } from "./store";
 import { baseURL, extractApiErrorMessage, resolveMediaUrl } from "./utils";
 
 export interface EquipmentTypeItem {
@@ -42,6 +42,16 @@ interface EquipmentApplicationSummary {
   id: string;
   listing_id: string;
   status: "new" | "in_progress" | "closed" | "completed" | "rejected" | "cancelled";
+}
+
+interface ClientAddress {
+  id?: string;
+  address?: string;
+  full_address: string;
+  lat?: number | null;
+  lon?: number | null;
+  comment?: string | null;
+  is_default?: boolean;
 }
 
 interface Props {
@@ -86,6 +96,7 @@ export const formatEquipmentPrice = (item: EquipmentListing) => {
 
 export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
   const { token, role } = useAuthStore();
+  const { selectedAddress, setSelectedAddress } = useAddressStore();
   const [types, setTypes] = useState<EquipmentTypeItem[]>([]);
   const [listings, setListings] = useState<EquipmentListing[]>([]);
   const [applications, setApplications] = useState<EquipmentApplicationSummary[]>([]);
@@ -101,6 +112,10 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
   const [addressSuggestions, setAddressSuggestions] = useState<any[]>([]);
   const [addressSelected, setAddressSelected] = useState(false);
   const [selectedAddressCoords, setSelectedAddressCoords] = useState<[number, number] | null>(null);
+  const [clientAddresses, setClientAddresses] = useState<ClientAddress[]>([]);
+  const [clientAddressesLoading, setClientAddressesLoading] = useState(false);
+  const [addressMode, setAddressMode] = useState<"saved" | "new">("new");
+  const [selectedSavedAddressId, setSelectedSavedAddressId] = useState<string | null>(null);
   const mapRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
   const [form, setForm] = useState({
@@ -189,7 +204,12 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
   }, [showApplication, token, role, form.contact_phone]);
 
   useEffect(() => {
-    if (!showApplication || addressSelected || form.object_address.trim().length < 3) {
+    if (
+      !showApplication ||
+      addressMode !== "new" ||
+      addressSelected ||
+      form.object_address.trim().length < 3
+    ) {
       setAddressSuggestions([]);
       return;
     }
@@ -206,7 +226,65 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
       active = false;
       window.clearTimeout(timer);
     };
-  }, [showApplication, form.object_address, addressSelected]);
+  }, [showApplication, form.object_address, addressSelected, addressMode]);
+
+  useEffect(() => {
+    if (!showApplication || !token || role !== "client") return;
+
+    const loadClientAddresses = async () => {
+      setClientAddressesLoading(true);
+      try {
+        const response = await fetch(`${baseURL}/client/addresses`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = response.ok ? await response.json() : [];
+        const addressList: ClientAddress[] = Array.isArray(data) ? data : data.results || [];
+        setClientAddresses(addressList);
+
+        if (addressList.length === 0) {
+          setAddressMode("new");
+          setSelectedSavedAddressId(null);
+          return;
+        }
+
+        const fallbackAddress =
+          (selectedAddress
+            ? addressList.find((item) => item.full_address === selectedAddress)
+            : null) ||
+          addressList.find((item) => item.is_default) ||
+          addressList[0];
+
+        if (!fallbackAddress) {
+          setAddressMode("new");
+          setSelectedSavedAddressId(null);
+          return;
+        }
+
+        const addressLabel = fallbackAddress.full_address || fallbackAddress.address || "";
+        setAddressMode("saved");
+        setSelectedSavedAddressId(fallbackAddress.id || null);
+        setAddressSelected(true);
+        setAddressSuggestions([]);
+        setForm((previous) => ({ ...previous, object_address: addressLabel }));
+        if (addressLabel) {
+          setSelectedAddress(addressLabel);
+        }
+        try {
+          await resolveAddressCoordinates(addressLabel, fallbackAddress);
+        } catch {
+          setSelectedAddressCoords(null);
+        }
+      } catch {
+        setClientAddresses([]);
+        setAddressMode("new");
+        setSelectedSavedAddressId(null);
+      } finally {
+        setClientAddressesLoading(false);
+      }
+    };
+
+    void loadClientAddresses();
+  }, [showApplication, token, role, selectedAddress, setSelectedAddress]);
 
   useEffect(() => {
     if (!showApplication || !(window as any).mapgl || mapRef.current) {
@@ -243,7 +321,17 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
   }, [showApplication]);
 
   useEffect(() => {
-    if (!mapRef.current || !selectedAddressCoords) return;
+    if (!mapRef.current) return;
+
+    if (!selectedAddressCoords) {
+      if (markerRef.current) {
+        markerRef.current.destroy();
+        markerRef.current = null;
+      }
+      mapRef.current.setCenter(DEFAULT_MAP_CENTER);
+      mapRef.current.setZoom(12);
+      return;
+    }
 
     mapRef.current.setCenter(selectedAddressCoords);
     mapRef.current.setZoom(15);
@@ -295,6 +383,10 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
   const selectedHasConfiguredTariffs = selected ? hasConfiguredEquipmentTariffs(selected) : false;
 
   const resetApplicationMeta = () => {
+    setClientAddresses([]);
+    setClientAddressesLoading(false);
+    setAddressMode("new");
+    setSelectedSavedAddressId(null);
     setAddressSuggestions([]);
     setAddressSelected(false);
     setSelectedAddressCoords(null);
@@ -321,6 +413,13 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
       return;
     }
 
+    const directLat = Number(item?.lat);
+    const directLon = Number(item?.lon);
+    if (Number.isFinite(directLat) && Number.isFinite(directLon)) {
+      setSelectedAddressCoords([directLon, directLat]);
+      return;
+    }
+
     const response = await fetch(
       `${baseURL}/geo/geocode?address=${encodeURIComponent(withTyumenBias(address))}`,
       {
@@ -331,6 +430,50 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
     if (response.ok && Number.isFinite(Number(data.lat)) && Number.isFinite(Number(data.lon))) {
       setSelectedAddressCoords([Number(data.lon), Number(data.lat)]);
     }
+  };
+
+  const handleSavedAddressSelect = async (address: ClientAddress) => {
+    const addressLabel = address.full_address || address.address || "";
+    setAddressMode("saved");
+    setSelectedSavedAddressId(address.id || null);
+    setAddressSelected(true);
+    setAddressSuggestions([]);
+    setSelectedAddressCoords(null);
+    setForm((previous) => ({ ...previous, object_address: addressLabel }));
+    if (addressLabel) {
+      setSelectedAddress(addressLabel);
+    }
+    try {
+      await resolveAddressCoordinates(addressLabel, address);
+    } catch {
+      setSelectedAddressCoords(null);
+    }
+  };
+
+  const startManualAddressEntry = () => {
+    setAddressMode("new");
+    setSelectedSavedAddressId(null);
+    setAddressSelected(false);
+    setAddressSuggestions([]);
+    setSelectedAddressCoords(null);
+    setForm((previous) => ({ ...previous, object_address: "" }));
+  };
+
+  const restoreSavedAddressMode = () => {
+    const fallbackAddress =
+      clientAddresses.find((item) => item.id === selectedSavedAddressId) ||
+      (selectedAddress
+        ? clientAddresses.find((item) => item.full_address === selectedAddress)
+        : null) ||
+      clientAddresses.find((item) => item.is_default) ||
+      clientAddresses[0];
+
+    if (!fallbackAddress) {
+      setAddressMode("new");
+      return;
+    }
+
+    void handleSavedAddressSelect(fallbackAddress);
   };
 
   const submitApplication = async (event: React.FormEvent) => {
@@ -484,7 +627,75 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
               </div>
 
               <div className="space-y-4">
-                <label className="relative block text-sm font-bold">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-bold">Адрес объекта</p>
+                    {clientAddresses.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          addressMode === "saved"
+                            ? startManualAddressEntry()
+                            : restoreSavedAddressMode()
+                        }
+                        className="text-xs font-bold text-sky-600"
+                      >
+                        {addressMode === "saved"
+                          ? "Ввести новый адрес"
+                          : "Выбрать сохраненный"}
+                      </button>
+                    )}
+                  </div>
+
+                  {addressMode === "saved" && clientAddresses.length > 0 && (
+                    <div className="space-y-2">
+                      {clientAddressesLoading ? (
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                          Загружаем сохраненные адреса...
+                        </div>
+                      ) : (
+                        clientAddresses.map((address) => {
+                          const addressLabel = address.full_address || address.address || "";
+                          const isSelected = selectedSavedAddressId === (address.id || null);
+                          return (
+                            <button
+                              key={address.id || addressLabel}
+                              type="button"
+                              onClick={() => void handleSavedAddressSelect(address)}
+                              className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
+                                isSelected
+                                  ? "border-sky-500 bg-sky-50"
+                                  : "border-slate-200 bg-white hover:border-sky-300"
+                              }`}
+                            >
+                              <div className="flex items-start gap-3">
+                                <MapPin
+                                  className={`mt-0.5 h-4 w-4 shrink-0 ${
+                                    isSelected ? "text-sky-500" : "text-slate-400"
+                                  }`}
+                                />
+                                <div className="min-w-0">
+                                  <p
+                                    className={`text-sm font-semibold ${
+                                      isSelected ? "text-sky-700" : "text-slate-800"
+                                    }`}
+                                  >
+                                    {addressLabel}
+                                  </p>
+                                  {address.comment && (
+                                    <p className="mt-1 text-xs text-slate-500">{address.comment}</p>
+                                  )}
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
+                {(addressMode === "new" || clientAddresses.length === 0) && (
+                  <label className="relative block text-sm font-bold">
                   Адрес объекта
                   <input
                     required
@@ -509,6 +720,7 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
                                 setForm({ ...form, object_address: address });
                                 setAddressSelected(true);
                                 setAddressSuggestions([]);
+                                setSelectedAddress(address);
                                 try {
                                   await resolveAddressCoordinates(address, item);
                                 } catch {
@@ -525,7 +737,8 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
                       })}
                     </ul>
                   )}
-                </label>
+                  </label>
+                )}
 
                 <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
                   <div id="equipment-application-map" className="h-52 w-full" />

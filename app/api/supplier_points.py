@@ -204,9 +204,10 @@ async def submit_supplier_point(
     await db.refresh(point)
     try:
         schedule_pickup_point_moderation_notification(point)
-    except Exception:
-        logger.exception(
+    except Exception as exc:
+        logger.error(
             "pickup_point_moderation_notification_failed",
             extra={"pickup_point_id": str(point.id)},
+            exc_info=exc,
         )
     return await pickup_point_payload(db, point)

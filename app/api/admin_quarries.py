@@ -284,17 +284,6 @@ async def approve_pickup_point(
 ) -> dict:
     point = await _get_point_or_404(db, point_id)
     try:
-        if point.min_delivery_price is None:
-            point.min_delivery_price = default_min_delivery_price(point.point_type)
-
-        point_payload = await pickup_point_payload(db, point)
-        if not point_payload["delivery_option_ids"]:
-            await sync_delivery_options(
-                db,
-                quarry_id=point.id,
-                delivery_option_ids=await default_delivery_option_ids(db, point.point_type),
-            )
-
         await validate_point_can_be_approved(db, point)
         point.moderation_status = ModerationStatus.approved.value
         point.moderation_comment = payload.comment
@@ -302,6 +291,7 @@ async def approve_pickup_point(
         point.moderated_by_user_id = current_user.id
         point.is_active = True
         await db.commit()
+        await db.refresh(point)
         return await _admin_pickup_point_payload(db, point)
     except HTTPException:
         await db.rollback()
@@ -316,8 +306,7 @@ async def approve_pickup_point(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                "Точку нельзя одобрить: проверьте материал и цену, фотографию, "
-                "координаты и параметры доставки"
+                "Точку нельзя одобрить: проверьте материал и цену, фотографию и координаты"
             ),
         ) from exc
 

@@ -72,6 +72,13 @@ const formatDateInputValue = (value?: string | null) => {
   return new Date(parsed.getTime() - timezoneOffsetMs).toISOString().slice(0, 10);
 };
 
+const serializeSubscriptionEndDate = (value?: string | null) => {
+  if (!value) return null;
+  const parsed = new Date(`${value}T23:59:59`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString();
+};
+
 interface AdminQuarriesScreenProps {
   materials: any[];
 }
@@ -447,6 +454,10 @@ function EditQuarryModal({
   const [isSaving, setIsSaving] = useState(false);
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const usesOwnerPhone = Boolean(formData.owner_user_id);
+  const pointTitle =
+    formData.point_type === "accumulator" || formData.point_type === "warehouse"
+      ? "накопитель"
+      : "карьер";
 
   const mapRef = React.useRef<any>(null);
   const markerRef = React.useRef<any>(null);
@@ -628,9 +639,7 @@ function EditQuarryModal({
         point_type: formData.point_type,
         address: finalAddress,
         description: formData.description?.trim() || null,
-        subscription_end_date: formData.subscription_end_date
-          ? new Date(`${formData.subscription_end_date}T23:59:59`).toISOString()
-          : null,
+        subscription_end_date: serializeSubscriptionEndDate(formData.subscription_end_date),
         lat: formData.lat,
         lon: formData.lon,
         is_active: formData.is_active,
@@ -761,7 +770,7 @@ function EditQuarryModal({
       <div className="bg-white rounded-3xl w-full max-w-xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
         <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
           <h3 className="text-xl font-bold text-slate-800">
-            {formData.id ? "Редактировать карьер" : "Добавить карьер"}
+            {formData.id ? `Редактировать ${pointTitle}` : `Добавить ${pointTitle}`}
           </h3>
           <button
             onClick={onClose}

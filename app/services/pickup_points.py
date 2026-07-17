@@ -299,10 +299,6 @@ async def validate_point_can_be_approved(db: AsyncSession, point: Quarry) -> Non
         for offer in payload["material_offers"]
     ):
         missing.append("хотя бы один активный материал с ценой")
-    if not payload["delivery_option_ids"]:
-        missing.append("хотя бы один вариант доставки")
-    if point.min_delivery_price is None:
-        missing.append("минимальная стоимость доставки")
     if not payload["media_files"]:
         missing.append("фотография")
     if missing:

@@ -452,6 +452,11 @@ function MainContent({
     setActiveTab("profile");
   };
 
+  const handleClientAuthenticated = () => {
+    onClearFocusedOrder();
+    setActiveTab("home");
+  };
+
   const closeMaterialSheet = () => {
     setSelectedMaterial(null);
     setSelectedPickupPoint(null);
@@ -709,6 +714,7 @@ function MainContent({
         <ClientAuthBottomSheet
           isOpen={showAuthSheet}
           onClose={() => setShowAuthSheet(false)}
+          onAuthenticated={handleClientAuthenticated}
         />
 
         {/* Address Bottom Sheet */}

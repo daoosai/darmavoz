@@ -147,6 +147,11 @@ interface PendingModerationRequest {
   vehicle_plate_url?: string | null;
 }
 
+interface AdminEquipmentApplicationAlert {
+  id: string;
+  status: "new" | "in_progress" | "closed" | "completed" | "rejected" | "cancelled";
+}
+
 interface AdminDashboardScreenProps {
   onLogout: () => void;
 }
@@ -203,6 +208,9 @@ export default function AdminDashboardScreen({
   const [drivers, setDrivers] = useState<AdminDriver[]>([]);
   const [pendingRequests, setPendingRequests] = useState<
     PendingModerationRequest[]
+  >([]);
+  const [equipmentApplications, setEquipmentApplications] = useState<
+    AdminEquipmentApplicationAlert[]
   >([]);
   const [driverActiveOverrides, setDriverActiveOverrides] = useState<
     Record<string, boolean>
@@ -330,6 +338,13 @@ export default function AdminDashboardScreen({
   const [previewMain, setPreviewMain] = useState<string | null>(null);
   const [previewLeft, setPreviewLeft] = useState<string | null>(null);
   const [previewPlate, setPreviewPlate] = useState<string | null>(null);
+
+  const newEquipmentApplicationsCount = equipmentApplications.filter(
+    (item) => item.status === "new",
+  ).length;
+  const activeEquipmentApplicationsCount = equipmentApplications.filter(
+    (item) => item.status === "new" || item.status === "in_progress",
+  ).length;
 
   const sortedDeliveryOptions = useMemo(() => {
     return [...deliveryOptions].sort(
@@ -671,6 +686,24 @@ export default function AdminDashboardScreen({
     }
   };
 
+  const fetchEquipmentApplications = async (silent = true) => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${baseURL}/admin/equipment-applications`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        throw new Error("Не удалось загрузить заявки на спецтехнику");
+      }
+      const data = await res.json();
+      setEquipmentApplications(Array.isArray(data) ? data : data.results || []);
+    } catch (err) {
+      if (!silent) {
+        toast.error("Не удалось загрузить заявки на спецтехнику");
+      }
+    }
+  };
+
   const fetchLiveCars = async () => {
     if (!token) return;
     setIsLoadingCars(true);
@@ -721,6 +754,17 @@ export default function AdminDashboardScreen({
   ]);
 
   useEffect(() => {
+    if (!token) return;
+
+    void fetchEquipmentApplications(true);
+    const intervalId = window.setInterval(() => {
+      void fetchEquipmentApplications(true);
+    }, 30000);
+
+    return () => window.clearInterval(intervalId);
+  }, [token]);
+
+  useEffect(() => {
     fetchCategories();
     if (activeTab === "materials" && materials.length === 0) {
       fetchMaterials();
@@ -731,6 +775,8 @@ export default function AdminDashboardScreen({
       if (deliveryOptions.length === 0) fetchDeliveryOptions(true);
     } else if (activeTab === "moderation" && pendingRequests.length === 0) {
       fetchPendingRequests();
+    } else if (activeTab === "equipment") {
+      void fetchEquipmentApplications(false);
     }
   }, [activeTab]);
 
@@ -1448,7 +1494,8 @@ export default function AdminDashboardScreen({
   return (
     <div className="flex flex-col h-screen bg-slate-50 relative overflow-hidden text-slate-800">
       {/* Header */}
-      <div className="bg-white px-6 py-4 shadow-sm z-10 sticky top-0 border-b border-slate-100 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+      <div className="bg-white px-6 py-4 shadow-sm z-10 sticky top-0 border-b border-slate-100 flex flex-col gap-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center justify-between sm:justify-start gap-6">
           <div>
             <h1 className="text-2xl font-black text-[#2DB0E6] tracking-tight">
@@ -1557,6 +1604,34 @@ export default function AdminDashboardScreen({
           <LogOut className="w-4 h-4" />
           <span>Выйти</span>
         </button>
+        </div>
+        {activeEquipmentApplicationsCount > 0 ? (
+          <div className="w-full rounded-2xl border border-sky-200 bg-[linear-gradient(135deg,rgba(239,246,255,1)_0%,rgba(255,251,235,1)_100%)] px-4 py-3 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 rounded-2xl bg-sky-500/10 p-2 text-sky-600">
+                  <Clock className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-black text-slate-900">
+                    У вас есть активные заявки на спецтехнику
+                  </p>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Новых: {newEquipmentApplicationsCount}. В работе:{" "}
+                    {Math.max(activeEquipmentApplicationsCount - newEquipmentApplicationsCount, 0)}.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab("equipment")}
+                className="inline-flex items-center justify-center rounded-xl bg-sky-500 px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-sky-600"
+              >
+                Перейти
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {/* Main Content */}
@@ -2940,7 +3015,13 @@ export default function AdminDashboardScreen({
           ) : activeTab === "suppliers" ? (
             <AdminSuppliersScreen />
           ) : activeTab === "equipment" ? (
-            <AdminEquipmentScreen />
+            <AdminEquipmentScreen
+              onApplicationsChanged={(applications) =>
+                setEquipmentApplications(
+                  applications.map(({ id, status }) => ({ id, status })),
+                )
+              }
+            />
           ) : activeTab === "support" ? (
             <SupportScreen operatorMode />
           ) : activeTab === "profile" ? (
@@ -2949,6 +3030,7 @@ export default function AdminDashboardScreen({
               onOpenSuppliers={() => setActiveTab("suppliers")}
               onOpenEquipment={() => setActiveTab("equipment")}
               onOpenSupport={() => setActiveTab("support")}
+              equipmentNewCount={newEquipmentApplicationsCount}
             />
           ) : null}
         </div>

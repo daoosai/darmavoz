@@ -9,12 +9,13 @@ import { baseURL, extractApiErrorMessage } from "./utils";
 interface Props {
   isOpen: boolean;
   onClose: () => void;
+  onAuthenticated?: () => void;
 }
 
 const normalizeEmailValue = (value: string) => value.trim().toLowerCase();
 const isValidEmail = (value: string) => /\S+@\S+\.\S+/.test(normalizeEmailValue(value));
 
-export default function ClientAuthBottomSheet({ isOpen, onClose }: Props) {
+export default function ClientAuthBottomSheet({ isOpen, onClose, onAuthenticated }: Props) {
   const [step, setStep] = useState<1 | 2>(1);
   const [authMode, setAuthMode] = useState<"phone" | "email">("phone");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -213,6 +214,7 @@ export default function ClientAuthBottomSheet({ isOpen, onClose }: Props) {
       const data = await verifyCode(fullCode);
       await switchAuthenticatedSession(data.access_token, "client");
       toast.success("Вход выполнен");
+      onAuthenticated?.();
       onClose();
     } catch (error) {
       setErrorText(error instanceof Error ? error.message : "Сетевая ошибка");
@@ -241,7 +243,7 @@ export default function ClientAuthBottomSheet({ isOpen, onClose }: Props) {
   return (
     <AnimatePresence>
       {isOpen ? (
-        <div className="fixed inset-0 z-[9999] flex flex-col justify-end">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -255,7 +257,7 @@ export default function ClientAuthBottomSheet({ isOpen, onClose }: Props) {
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
             transition={{ type: "spring", bounce: 0, duration: 0.4 }}
-            className="relative mt-auto flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl"
+            className="relative flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"
           >
             <div className="flex w-full justify-center pt-3 pb-1">
               <div className="h-1.5 w-12 rounded-full bg-slate-200" />
@@ -273,20 +275,20 @@ export default function ClientAuthBottomSheet({ isOpen, onClose }: Props) {
               </button>
             ) : null}
 
-            <div className="flex-1 overflow-y-auto px-6 pt-4 pb-6">
+            <div className="mx-auto flex-1 w-full max-w-md overflow-y-auto px-6 pt-4 pb-6">
               {step === 1 ? (
-                <div className="flex flex-col animate-in fade-in slide-in-from-right-4 duration-300">
-                  <h2 className="mt-4 mb-2 text-2xl font-bold leading-tight text-slate-800">
+                <div className="flex w-full flex-col items-center animate-in fade-in slide-in-from-right-4 duration-300">
+                  <h2 className="mt-4 mb-2 text-center text-2xl font-bold leading-tight text-slate-800">
                     Вход / Регистрация
                   </h2>
-                  <p className="mb-8 text-[15px] font-medium text-slate-600">
+                  <p className="mb-8 max-w-sm text-center text-[15px] font-medium text-slate-600">
                     {authMode === "phone"
                       ? "Введите свой номер телефона, чтобы войти в приложение"
                       : "Введите электронную почту, чтобы получить код входа"}
                   </p>
 
                   {authMode === "phone" ? (
-                    <div className="relative mb-6">
+                    <div className="relative mb-6 w-full">
                       <input
                         ref={phoneInputRef}
                         type="tel"
@@ -302,7 +304,7 @@ export default function ClientAuthBottomSheet({ isOpen, onClose }: Props) {
                       </label>
                     </div>
                   ) : (
-                    <div className="relative mb-6">
+                    <div className="relative mb-6 w-full">
                       <input
                         type="email"
                         value={email}
@@ -322,12 +324,12 @@ export default function ClientAuthBottomSheet({ isOpen, onClose }: Props) {
                       setAuthMode((current) => (current === "phone" ? "email" : "phone"));
                       setErrorText("");
                     }}
-                    className="mb-6 self-start text-sm font-semibold text-[#187fac] underline decoration-[#2DB0E6]/40 underline-offset-4"
+                    className="mb-6 text-center text-sm font-semibold text-[#187fac] underline decoration-[#2DB0E6]/40 underline-offset-4"
                   >
                     {authMode === "phone" ? "Войти через электронную почту" : "Войти по номеру телефона"}
                   </button>
 
-                  <div className="mb-6 flex flex-col gap-4">
+                  <div className="mb-6 flex w-full flex-col gap-4">
                     <div className="flex cursor-pointer items-start gap-4" onClick={() => setAgree3(!agree3)}>
                       <div className={`mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded ${agree3 ? "bg-[#2DB0E6]" : "border border-slate-300"}`}>
                         {agree3 ? (
@@ -354,7 +356,7 @@ export default function ClientAuthBottomSheet({ isOpen, onClose }: Props) {
                     </div>
                   </div>
 
-                  {errorText ? <div className="mb-4 text-sm font-semibold text-red-500">{errorText}</div> : null}
+                  {errorText ? <div className="mb-4 w-full text-center text-sm font-semibold text-red-500">{errorText}</div> : null}
 
                   <button
                     disabled={isSubmitting || !agree4}

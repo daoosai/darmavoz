@@ -3,12 +3,13 @@ from datetime import date, datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.config import settings
 from app.db.database import get_db
 from app.models.models import (
     Client,
@@ -37,9 +38,18 @@ from app.services.notifications import (
     schedule_equipment_application_notification,
     schedule_equipment_application_rejected_notification,
 )
+from app.services.email_service import send_email
 from app.utils.phones import normalize_phone
 
 router = APIRouter()
+
+
+def _format_duration_value(value: float) -> str:
+    return str(int(value)) if float(value).is_integer() else f"{value}".rstrip("0").rstrip(".")
+
+
+def _duration_unit_label(value: str) -> str:
+    return "часов" if value == "hours" else "смен"
 
 
 def _coerce_tariff_number(value: object, *, max_value: float | None = None) -> float | None:
@@ -481,6 +491,7 @@ async def delete_equipment_listing(
 )
 async def create_equipment_application(
     payload: EquipmentApplicationCreate,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_client: Client = Depends(get_current_client),
 ):
@@ -528,6 +539,24 @@ async def create_equipment_application(
     )
     application = result.scalar_one()
     schedule_equipment_application_notification(application)
+
+    if settings.ADMIN_EMAIL:
+        comment = payload.comment.strip() if payload.comment else "Не указан"
+        background_tasks.add_task(
+            send_email,
+            to_email=settings.ADMIN_EMAIL,
+            subject="Новая заявка на спецтехнику!",
+            body=(
+                "НОВАЯ ЗАЯВКА\n"
+                f"{listing.title}\n"
+                f"{(current_client.name or 'Клиент').strip()} · {application.contact_phone}\n"
+                f"{payload.object_address}\n"
+                f"{payload.requested_date.strftime('%d.%m.%Y')} в {payload.requested_time.strftime('%H:%M')} · "
+                f"{_format_duration_value(payload.duration_value)} {_duration_unit_label(payload.duration_unit)}\n"
+                f"Комментарий: {comment}"
+            ),
+        )
+
     return await _application_payload(db, application)
 
 

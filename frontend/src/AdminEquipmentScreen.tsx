@@ -77,7 +77,13 @@ const getApplicationStatusClass = (status: Application["status"]) =>
     ? "text-rose-600"
     : "text-sky-600";
 
-export default function AdminEquipmentScreen({ applicationsOnly = false }: { applicationsOnly?: boolean }) {
+export default function AdminEquipmentScreen({
+  applicationsOnly = false,
+  onApplicationsChanged,
+}: {
+  applicationsOnly?: boolean;
+  onApplicationsChanged?: (applications: Application[]) => void;
+}) {
   const { token } = useAuthStore();
   const [tab, setTab] = useState<Tab>(applicationsOnly ? "applications" : "listings");
   const [applicationsTab, setApplicationsTab] = useState<ApplicationsTab>("active");
@@ -121,7 +127,9 @@ export default function AdminEquipmentScreen({ applicationsOnly = false }: { app
       }
 
       setTypes(await responses[0].json());
-      setApplications(await responses[1].json());
+      const loadedApplications: Application[] = await responses[1].json();
+      setApplications(loadedApplications);
+      onApplicationsChanged?.(loadedApplications);
       if (responses[2]) {
         setListings(await responses[2].json());
       }

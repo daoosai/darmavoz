@@ -100,15 +100,39 @@ const EquipmentApplicationProgress = ({ application }: { application: EquipmentA
     <div className="mt-5 px-1">
       <div className="relative">
         <div className="absolute left-3 right-3 top-3 h-1 overflow-hidden rounded-full bg-slate-100">
-          <div className="h-full rounded-full bg-sky-500 transition-all" style={{ width: progress }} />
+          <motion.div
+            className="h-full rounded-full bg-[linear-gradient(90deg,#38bdf8_0%,#0ea5e9_45%,#7dd3fc_100%)] bg-[length:200%_100%]"
+            style={{ width: progress }}
+            animate={{ backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"] }}
+            transition={{ repeat: Infinity, duration: 2.8, ease: "easeInOut" }}
+          />
         </div>
         <div className="relative flex justify-between">
           {steps.map((step, index) => (
             <div key={step} className="flex w-20 flex-col items-center text-center">
-              <div className={`grid h-7 w-7 place-items-center rounded-full border-2 text-[10px] font-black ${index <= currentStep ? "border-sky-500 bg-sky-500 text-white" : "border-slate-200 bg-white text-slate-400"}`}>
-                {index + 1}
+              <div
+                className={`relative grid h-7 w-7 place-items-center rounded-full border-2 text-[10px] font-black transition-all ${
+                  index <= currentStep
+                    ? "border-sky-500 bg-sky-500 text-white"
+                    : "border-slate-200 bg-white text-slate-400"
+                } ${index === currentStep ? "shadow-lg shadow-sky-200 ring-4 ring-sky-100" : ""}`}
+              >
+                {index === currentStep ? (
+                  <motion.span
+                    className="absolute inset-[-4px] rounded-full bg-sky-200/70"
+                    animate={{ scale: [1, 1.2, 1], opacity: [0.55, 0.15, 0.55] }}
+                    transition={{ repeat: Infinity, duration: 1.8, ease: "easeInOut" }}
+                  />
+                ) : null}
+                <span className="relative">{index + 1}</span>
               </div>
-              <span className={`mt-2 text-[10px] font-bold ${index <= currentStep ? "text-sky-700" : "text-slate-400"}`}>{step}</span>
+              <span
+                className={`mt-2 text-[10px] font-bold ${
+                  index <= currentStep ? "text-sky-700" : "text-slate-400"
+                } ${index === currentStep ? "animate-pulse" : ""}`}
+              >
+                {step}
+              </span>
             </div>
           ))}
         </div>

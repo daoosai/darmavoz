@@ -199,7 +199,7 @@ async def update_pickup_point(
         await sync_material_offers(
             db,
             quarry_id=point.id,
-            offers=payload_data.get("material_offers"),
+            offers=payload.material_offers if "material_offers" in changed else None,
             legacy_material_ids=payload_data.get("material_ids"),
         )
     if "delivery_option_ids" in changed:

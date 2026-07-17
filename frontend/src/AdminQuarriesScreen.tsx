@@ -78,7 +78,7 @@ const formatDateInputValue = (value?: string | null) => {
 
 const serializeSubscriptionEndDate = (value?: string | null) => {
   if (!value) return null;
-  const parsed = new Date(`${value}T23:59:59`);
+  const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return null;
   return parsed.toISOString();
 };

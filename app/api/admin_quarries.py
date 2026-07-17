@@ -168,6 +168,10 @@ async def update_pickup_point(
 ) -> dict:
     point = await _get_point_or_404(db, point_id)
     payload_data = payload.model_dump(exclude_unset=True)
+    for nullable_field in ("description", "contact_phone", "subscription_end_date", "short_name"):
+        if nullable_field in payload_data and isinstance(payload_data[nullable_field], str):
+            normalized = payload_data[nullable_field].strip()
+            payload_data[nullable_field] = normalized or None
     if "name" in payload_data and "short_name" not in payload_data:
         payload_data["short_name"] = payload_data["name"]
     elif "short_name" in payload_data and not payload_data["short_name"]:

@@ -59,9 +59,13 @@ interface Props {
 }
 
 const DEFAULT_MAP_CENTER: [number, number] = [65.534328, 57.152286];
+const MANUAL_ADDRESS_OPTION = "__manual__";
 
 const getSuggestionLabel = (item: any) =>
   item?.search_attributes?.suggested_text || item?.full_name || item?.name || "";
+
+const getClientAddressKey = (address: ClientAddress) =>
+  address.id || address.full_address || address.address || "";
 
 export const getEquipmentTariffs = (item: EquipmentListing): EquipmentTariff[] => {
   if (item.tariffs?.length) return item.tariffs;
@@ -262,7 +266,7 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
 
         const addressLabel = fallbackAddress.full_address || fallbackAddress.address || "";
         setAddressMode("saved");
-        setSelectedSavedAddressId(fallbackAddress.id || null);
+        setSelectedSavedAddressId(getClientAddressKey(fallbackAddress));
         setAddressSelected(true);
         setAddressSuggestions([]);
         setForm((previous) => ({ ...previous, object_address: addressLabel }));
@@ -435,7 +439,7 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
   const handleSavedAddressSelect = async (address: ClientAddress) => {
     const addressLabel = address.full_address || address.address || "";
     setAddressMode("saved");
-    setSelectedSavedAddressId(address.id || null);
+    setSelectedSavedAddressId(getClientAddressKey(address));
     setAddressSelected(true);
     setAddressSuggestions([]);
     setSelectedAddressCoords(null);
@@ -459,21 +463,17 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
     setForm((previous) => ({ ...previous, object_address: "" }));
   };
 
-  const restoreSavedAddressMode = () => {
-    const fallbackAddress =
-      clientAddresses.find((item) => item.id === selectedSavedAddressId) ||
-      (selectedAddress
-        ? clientAddresses.find((item) => item.full_address === selectedAddress)
-        : null) ||
-      clientAddresses.find((item) => item.is_default) ||
-      clientAddresses[0];
-
-    if (!fallbackAddress) {
-      setAddressMode("new");
+  const handleAddressModeSelect = async (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const nextValue = event.target.value;
+    if (nextValue === MANUAL_ADDRESS_OPTION) {
+      startManualAddressEntry();
       return;
     }
 
-    void handleSavedAddressSelect(fallbackAddress);
+    const nextAddress = clientAddresses.find((item) => getClientAddressKey(item) === nextValue);
+    if (nextAddress) {
+      await handleSavedAddressSelect(nextAddress);
+    }
   };
 
   const submitApplication = async (event: React.FormEvent) => {
@@ -628,115 +628,79 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
 
               <div className="space-y-4">
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-bold">Адрес объекта</p>
-                    {clientAddresses.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          addressMode === "saved"
-                            ? startManualAddressEntry()
-                            : restoreSavedAddressMode()
+                  <p className="text-sm font-bold">Адрес объекта</p>
+                  {clientAddresses.length > 0 && (
+                    <div className="space-y-3">
+                      <select
+                        value={
+                          addressMode === "new"
+                            ? MANUAL_ADDRESS_OPTION
+                            : selectedSavedAddressId || MANUAL_ADDRESS_OPTION
                         }
-                        className="text-xs font-bold text-sky-600"
+                        onChange={(event) => void handleAddressModeSelect(event)}
+                        disabled={clientAddressesLoading}
+                        className="w-full rounded-xl bg-slate-100 p-3 text-sm font-medium outline-none transition focus:ring-2 focus:ring-sky-200 disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        {addressMode === "saved"
-                          ? "Ввести новый адрес"
-                          : "Выбрать сохраненный"}
-                      </button>
-                    )}
-                  </div>
-
-                  {addressMode === "saved" && clientAddresses.length > 0 && (
-                    <div className="space-y-2">
-                      {clientAddressesLoading ? (
+                        {clientAddresses.map((address) => {
+                          const addressLabel = address.full_address || address.address || "";
+                          return (
+                            <option key={getClientAddressKey(address)} value={getClientAddressKey(address)}>
+                              {addressLabel}
+                            </option>
+                          );
+                        })}
+                        <option value={MANUAL_ADDRESS_OPTION}>+ Ввести другой адрес</option>
+                      </select>
+                      {clientAddressesLoading && (
                         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
                           Загружаем сохраненные адреса...
                         </div>
-                      ) : (
-                        clientAddresses.map((address) => {
-                          const addressLabel = address.full_address || address.address || "";
-                          const isSelected = selectedSavedAddressId === (address.id || null);
-                          return (
-                            <button
-                              key={address.id || addressLabel}
-                              type="button"
-                              onClick={() => void handleSavedAddressSelect(address)}
-                              className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
-                                isSelected
-                                  ? "border-sky-500 bg-sky-50"
-                                  : "border-slate-200 bg-white hover:border-sky-300"
-                              }`}
-                            >
-                              <div className="flex items-start gap-3">
-                                <MapPin
-                                  className={`mt-0.5 h-4 w-4 shrink-0 ${
-                                    isSelected ? "text-sky-500" : "text-slate-400"
-                                  }`}
-                                />
-                                <div className="min-w-0">
-                                  <p
-                                    className={`text-sm font-semibold ${
-                                      isSelected ? "text-sky-700" : "text-slate-800"
-                                    }`}
-                                  >
-                                    {addressLabel}
-                                  </p>
-                                  {address.comment && (
-                                    <p className="mt-1 text-xs text-slate-500">{address.comment}</p>
-                                  )}
-                                </div>
-                              </div>
-                            </button>
-                          );
-                        })
                       )}
                     </div>
                   )}
                 </div>
                 {(addressMode === "new" || clientAddresses.length === 0) && (
                   <label className="relative block text-sm font-bold">
-                  Адрес объекта
-                  <input
-                    required
-                    value={form.object_address}
-                    onChange={(event) => {
-                      setAddressSelected(false);
-                      setSelectedAddressCoords(null);
-                      setForm({ ...form, object_address: event.target.value });
-                    }}
-                    placeholder="Начните вводить адрес"
-                    className="mt-1 w-full rounded-xl bg-slate-100 p-3 font-normal outline-none"
-                  />
-                  {addressSuggestions.length > 0 && (
-                    <ul className="absolute z-20 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white text-sm font-normal shadow-xl">
-                      {addressSuggestions.map((item) => {
-                        const address = getSuggestionLabel(item);
-                        return (
-                          <li key={`${address}-${item.id || item.point?.lon || ""}`}>
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                setForm({ ...form, object_address: address });
-                                setAddressSelected(true);
-                                setAddressSuggestions([]);
-                                setSelectedAddress(address);
-                                try {
-                                  await resolveAddressCoordinates(address, item);
-                                } catch {
-                                  // Form stays usable even if only address text is available.
-                                }
-                              }}
-                              className="flex w-full items-start gap-2 border-b border-slate-100 px-3 py-3 text-left last:border-0 hover:bg-slate-50"
-                            >
-                              <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-sky-500" />
-                              {address}
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
+                    <input
+                      required
+                      value={form.object_address}
+                      onChange={(event) => {
+                        setAddressSelected(false);
+                        setSelectedAddressCoords(null);
+                        setForm({ ...form, object_address: event.target.value });
+                      }}
+                      placeholder="Начните вводить адрес"
+                      className="w-full rounded-xl bg-slate-100 p-3 font-normal outline-none"
+                    />
+                    {addressSuggestions.length > 0 && (
+                      <ul className="absolute z-20 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white text-sm font-normal shadow-xl">
+                        {addressSuggestions.map((item) => {
+                          const address = getSuggestionLabel(item);
+                          return (
+                            <li key={`${address}-${item.id || item.point?.lon || ""}`}>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  setForm({ ...form, object_address: address });
+                                  setAddressSelected(true);
+                                  setAddressSuggestions([]);
+                                  setSelectedAddress(address);
+                                  try {
+                                    await resolveAddressCoordinates(address, item);
+                                  } catch {
+                                    // Form stays usable even if only address text is available.
+                                  }
+                                }}
+                                className="flex w-full items-start gap-2 border-b border-slate-100 px-3 py-3 text-left last:border-0 hover:bg-slate-50"
+                              >
+                                <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-sky-500" />
+                                {address}
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
                   </label>
                 )}
 

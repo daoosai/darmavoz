@@ -83,6 +83,12 @@ const serializeSubscriptionEndDate = (value?: string | null) => {
   return parsed.toISOString();
 };
 
+const normalizeOptionalText = (value?: string | null) => {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return normalized || null;
+};
+
 interface AdminQuarriesScreenProps {
   materials: any[];
 }
@@ -638,18 +644,26 @@ function EditQuarryModal({
         ? `${baseURL}/admin/quarries/${formData.id}`
         : `${baseURL}/admin/quarries`;
 
+      const normalizedMaterialOffers = (formData.material_offers || [])
+        .filter((item) => item.material_id)
+        .map((item) => ({
+          material_id: item.material_id,
+          price: Number(item.price || 0),
+          is_active: Boolean(item.is_active),
+        }));
+
       const payload = {
         name: nameTrimmed,
         point_type: formData.point_type,
         address: finalAddress,
-        description: formData.description?.trim() || null,
+        description: normalizeOptionalText(formData.description),
         subscription_end_date: serializeSubscriptionEndDate(formData.subscription_end_date),
         lat: formData.lat,
         lon: formData.lon,
         is_active: formData.is_active,
-        material_ids: formData.material_ids || [],
-        material_offers: formData.material_offers || [],
-        ...(usesOwnerPhone ? {} : { contact_phone: formData.contact_phone?.trim() || null }),
+        material_ids: Array.from(new Set((formData.material_ids || []).filter(Boolean))),
+        material_offers: normalizedMaterialOffers,
+        ...(usesOwnerPhone ? {} : { contact_phone: normalizeOptionalText(formData.contact_phone) }),
       };
 
       const res = await fetch(url, {

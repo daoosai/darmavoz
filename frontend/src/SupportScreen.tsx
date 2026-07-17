@@ -5,6 +5,7 @@ import {
   Check,
   CheckCheck,
   CheckCircle2,
+  Clock3,
   Headphones,
   MessageCircle,
   MoreHorizontal,
@@ -33,6 +34,8 @@ interface SupportMessage {
   attachment_url?: string | null;
   is_read: boolean;
   is_own: boolean;
+  isOptimistic?: boolean;
+  isSending?: boolean;
   created_at: string;
 }
 
@@ -56,6 +59,23 @@ const sortTicketsByUpdatedAt = (items: SupportTicket[]) =>
     (left, right) =>
       new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime(),
   );
+
+const sortMessagesByCreatedAt = (messages: SupportMessage[]) =>
+  [...messages].sort(
+    (left, right) =>
+      new Date(left.created_at).getTime() - new Date(right.created_at).getTime(),
+  );
+
+const hasConfirmedOptimisticMatch = (
+  serverMessage: SupportMessage,
+  optimisticMessage: SupportMessage,
+) =>
+  Boolean(serverMessage.is_own) &&
+  serverMessage.author_role === optimisticMessage.author_role &&
+  serverMessage.text === optimisticMessage.text &&
+  (serverMessage.attachment_url ?? null) === (optimisticMessage.attachment_url ?? null) &&
+  new Date(serverMessage.created_at).getTime() >=
+    new Date(optimisticMessage.created_at).getTime() - 60_000;
 
 const withoutMessage = (ticket: SupportTicket, messageId: string): SupportTicket => ({
   ...ticket,
@@ -209,21 +229,52 @@ export default function SupportScreen({
           : ticket.status === "closed",
       );
 
-  const syncTicket = (ticket: SupportTicket) => {
+  const mergeFetchedTicket = (
+    ticket: SupportTicket,
+    currentTicket: SupportTicket | null | undefined,
+  ): SupportTicket => {
     const hiddenMessageIds = hiddenMessageIdsRef.current;
-    const visibleTicket = hiddenMessageIds.size > 0
-      ? {
-          ...ticket,
-          messages: ticket.messages.filter((message) => !hiddenMessageIds.has(message.id)),
-        }
-      : ticket;
+    const serverMessages = ticket.messages.filter((message) => !hiddenMessageIds.has(message.id));
+    const optimisticMessages = (currentTicket?.messages ?? []).filter(
+      (message) => message.isOptimistic,
+    );
+    const pendingOptimisticMessages = optimisticMessages.filter(
+      (optimisticMessage) =>
+        !serverMessages.some((serverMessage) =>
+          hasConfirmedOptimisticMatch(serverMessage, optimisticMessage),
+        ),
+    );
+    const mergedMessages = sortMessagesByCreatedAt([
+      ...serverMessages,
+      ...pendingOptimisticMessages,
+    ]);
+    const latestMessageDate = mergedMessages.at(-1)?.created_at ?? ticket.updated_at;
 
-    setSelected(visibleTicket);
-    setTickets((current) =>
-      sortTicketsByUpdatedAt([
-        visibleTicket,
-        ...current.filter((item) => item.id !== visibleTicket.id),
-      ]),
+    return {
+      ...ticket,
+      updated_at:
+        new Date(latestMessageDate).getTime() > new Date(ticket.updated_at).getTime()
+          ? latestMessageDate
+          : ticket.updated_at,
+      messages: mergedMessages,
+    };
+  };
+
+  const syncTicket = (ticket: SupportTicket) => {
+    let mergedTicket: SupportTicket | null = null;
+
+    setTickets((current) => {
+      const currentTicket = current.find((item) => item.id === ticket.id) ?? null;
+      mergedTicket = mergeFetchedTicket(ticket, currentTicket);
+      return sortTicketsByUpdatedAt([
+        mergedTicket,
+        ...current.filter((item) => item.id !== ticket.id),
+      ]);
+    });
+    setSelected((current) =>
+      current && current.id === ticket.id
+        ? mergedTicket ?? mergeFetchedTicket(ticket, current)
+        : current,
     );
   };
 
@@ -288,9 +339,18 @@ export default function SupportScreen({
       const response = await fetch(`${endpoint}${query}`, { headers });
       if (!response.ok) throw new Error("load");
       const data: SupportTicket[] = await response.json();
-      setTickets(data);
+      let mergedData: SupportTicket[] = [];
+      setTickets((current) => {
+        mergedData = data.map((ticket) =>
+          mergeFetchedTicket(
+            ticket,
+            current.find((currentTicket) => currentTicket.id === ticket.id) ?? null,
+          ),
+        );
+        return sortTicketsByUpdatedAt(mergedData);
+      });
       setSelected((current) =>
-        current ? data.find((item) => item.id === current.id) || current : null,
+        current ? mergedData.find((ticket) => ticket.id === current.id) || current : null,
       );
     } catch {
       if (!silent) toast.error("Не удалось загрузить обращения");
@@ -528,6 +588,8 @@ export default function SupportScreen({
           attachment_url: null,
           is_read: false,
           is_own: true,
+          isOptimistic: true,
+          isSending: true,
           created_at: optimisticCreatedAt,
         };
 
@@ -549,7 +611,7 @@ export default function SupportScreen({
         const data = await response.json().catch(() => ({}));
         if (!response.ok) {
           updateTicketInState(ticketId, (ticket) => withoutMessage(ticket, optimisticMessage.id));
-          throw new Error(extractApiErrorMessage(data, "РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РїСЂР°РІРёС‚СЊ СЃРѕРѕР±С‰РµРЅРёРµ"));
+          throw new Error(extractApiErrorMessage(data, "Не удалось отправить сообщение"));
         }
         syncTicket(data);
         return;
@@ -865,6 +927,9 @@ export default function SupportScreen({
                   const resolvedAttachmentUrl =
                     resolveMediaUrl(message.attachment_url) || message.attachment_url;
                   const isEditing = editingMessageId === message.id;
+                  const isSendingMessage = Boolean(
+                    message.isOptimistic || message.isSending,
+                  );
 
                   return (
                     <div
@@ -872,7 +937,9 @@ export default function SupportScreen({
                       className={`flex ${mine ? "justify-end" : "justify-start"}`}
                     >
                       <div
-                        className={`relative max-w-[85%] px-4 py-3 ${
+                        className={`relative max-w-[85%] px-4 py-3 transition-opacity ${
+                          isSendingMessage ? "opacity-70" : ""
+                        } ${
                           mine
                             ? "rounded-2xl rounded-br-sm bg-blue-500 pr-11 text-white"
                             : "rounded-2xl rounded-bl-sm bg-white text-black shadow-sm"
@@ -990,7 +1057,9 @@ export default function SupportScreen({
                         >
                           <span>{formatMessageTime(message.created_at)}</span>
                           {mine ? (
-                            message.is_read ? (
+                            isSendingMessage ? (
+                              <Clock3 className="h-3.5 w-3.5 animate-pulse text-white/70" />
+                            ) : message.is_read ? (
                               <CheckCheck className="h-3.5 w-3.5 text-cyan-100" />
                             ) : (
                               <Check className="h-3.5 w-3.5 text-white/60" />

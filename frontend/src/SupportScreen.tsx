@@ -158,6 +158,9 @@ export default function SupportScreen({
 }: Props) {
   const { token, role } = useAuthStore();
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const messageMenuButtonRef = useRef<HTMLDivElement | null>(null);
+  const messageMenuDropdownRef = useRef<HTMLDivElement | null>(null);
+  const lastReadRequestRef = useRef<string | null>(null);
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [selected, setSelected] = useState<SupportTicket | null>(null);
   const [filter, setFilter] = useState("");
@@ -201,8 +204,21 @@ export default function SupportScreen({
     );
   };
 
-  const hasUnreadIncomingMessages = (ticket: SupportTicket) =>
-    ticket.messages.some((message) => !message.is_own && !message.is_read);
+  const isOperatorViewer = operatorMode || operatorAuthorRoles.has(role || "");
+  const isIncomingMessage = (message: SupportMessage) =>
+    isOperatorViewer
+      ? !operatorAuthorRoles.has(message.author_role)
+      : operatorAuthorRoles.has(message.author_role);
+
+  const getUnreadIncomingSignature = (ticket: SupportTicket) => {
+    const unreadIncomingIds = ticket.messages
+      .filter((message) => isIncomingMessage(message) && !message.is_read)
+      .map((message) => message.id);
+
+    return unreadIncomingIds.length > 0
+      ? `${ticket.id}:${unreadIncomingIds.join(",")}`
+      : null;
+  };
 
   const hasUnreadClientMessages = (ticket: SupportTicket) =>
     ticket.messages.some(
@@ -269,6 +285,7 @@ export default function SupportScreen({
     setOpenedMessageMenuId(null);
     setEditingMessageId(null);
     setEditingText("");
+    lastReadRequestRef.current = null;
   }, [selected?.id]);
 
   useEffect(() => {
@@ -276,6 +293,30 @@ export default function SupportScreen({
       if (attachmentPreviewUrl?.startsWith("blob:")) URL.revokeObjectURL(attachmentPreviewUrl);
     };
   }, [attachmentPreviewUrl]);
+
+  useEffect(() => {
+    if (!openedMessageMenuId || typeof document === "undefined") return;
+
+    const handlePointerDown = (event: MouseEvent | TouchEvent) => {
+      const target = event.target;
+      if (
+        messageMenuButtonRef.current &&
+        target instanceof Node &&
+        !messageMenuButtonRef.current.contains(target) &&
+        !messageMenuDropdownRef.current?.contains(target)
+      ) {
+        setOpenedMessageMenuId(null);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("touchstart", handlePointerDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("touchstart", handlePointerDown);
+    };
+  }, [openedMessageMenuId]);
 
   useEffect(() => {
     if (!lightboxImageUrl || typeof window === "undefined") return;
@@ -296,8 +337,18 @@ export default function SupportScreen({
     };
   }, [lightboxImageUrl]);
 
+  const unreadIncomingSignature = selected ? getUnreadIncomingSignature(selected) : null;
+
   useEffect(() => {
-    if (!selected || !token || !hasUnreadIncomingMessages(selected)) return;
+    if (!selected || !token || !unreadIncomingSignature) {
+      if (!selected || !unreadIncomingSignature) {
+        lastReadRequestRef.current = null;
+      }
+      return;
+    }
+    if (lastReadRequestRef.current === unreadIncomingSignature) return;
+
+    lastReadRequestRef.current = unreadIncomingSignature;
     const controller = new AbortController();
 
     const markRead = async () => {
@@ -307,7 +358,10 @@ export default function SupportScreen({
           headers,
           signal: controller.signal,
         });
-        if (response.ok) syncTicket(await response.json());
+        if (!response.ok) return;
+
+        const ticket: SupportTicket = await response.json();
+        syncTicket(ticket);
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") return;
       }
@@ -315,7 +369,7 @@ export default function SupportScreen({
 
     void markRead();
     return () => controller.abort();
-  }, [selected, token]);
+  }, [selected?.id, token, unreadIncomingSignature]);
 
   const closeLightbox = () => {
     if (typeof window !== "undefined" && window.history.state?.supportLightbox) {
@@ -645,23 +699,32 @@ export default function SupportScreen({
                         ) : null}
 
                         {mine && selected.status !== "closed" ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setOpenedMessageMenuId((current) =>
-                                current === message.id ? null : message.id,
-                              )
-                            }
-                            className={`absolute right-2 top-2 rounded-full p-1.5 ${
-                              mine ? "bg-white/15 text-white" : "bg-slate-100 text-slate-500"
-                            }`}
+                          <div
+                            ref={openedMessageMenuId === message.id ? messageMenuButtonRef : undefined}
+                            className="absolute right-2 top-2"
                           >
-                            <MoreHorizontal className="h-4 w-4" />
-                          </button>
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setOpenedMessageMenuId((current) =>
+                                  current === message.id ? null : message.id,
+                                );
+                              }}
+                              className={`rounded-full p-1.5 ${
+                                mine ? "bg-white/15 text-white" : "bg-slate-100 text-slate-500"
+                              }`}
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </button>
+                          </div>
                         ) : null}
 
                         {openedMessageMenuId === message.id ? (
-                          <div className="absolute right-2 top-11 z-10 w-44 overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-xl">
+                          <div
+                            ref={openedMessageMenuId === message.id ? messageMenuDropdownRef : undefined}
+                            className="absolute right-2 top-11 z-10 w-44 overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-xl"
+                          >
                             <button
                               type="button"
                               onClick={() => startEditingMessage(message)}

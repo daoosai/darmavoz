@@ -208,3 +208,62 @@ async def test_driver_can_create_support_ticket(client, session_factory, monkeyp
     )
     assert response.status_code == 201
     assert response.json()["requester_role"] == "driver"
+
+
+@pytest.mark.asyncio
+async def test_support_read_edit_and_delete_endpoints(client, session_factory, monkeypatch):
+    customer, client_token = await _create_client(session_factory)
+    _logist, logist_token = await _create_user(session_factory, "logist")
+    monkeypatch.setattr(
+        "app.api.support.schedule_support_operator_notification", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr("app.api.support.schedule_support_reply_notification", lambda **kwargs: None)
+
+    create_response = await client.post(
+        "/api/v1/support/tickets",
+        headers={"Authorization": f"Bearer {client_token}"},
+        json={
+            "subject": "Редактирование обращения",
+            "category": "general",
+            "context_type": "general",
+            "message": "Первое сообщение клиента",
+        },
+    )
+    assert create_response.status_code == 201
+    created_ticket = create_response.json()
+    ticket_id = created_ticket["id"]
+    client_message_id = created_ticket["messages"][0]["id"]
+
+    reply_response = await client.post(
+        f"/api/v1/admin/support/tickets/{ticket_id}/messages",
+        headers={"Authorization": f"Bearer {logist_token}"},
+        json={"text": "Ответ оператора"},
+    )
+    assert reply_response.status_code == 200
+    operator_message = reply_response.json()["messages"][-1]
+    assert operator_message["is_read"] is False
+
+    read_response = await client.patch(
+        f"/api/v1/support/tickets/{ticket_id}/read",
+        headers={"Authorization": f"Bearer {client_token}"},
+    )
+    assert read_response.status_code == 200
+    read_messages = {message["id"]: message for message in read_response.json()["messages"]}
+    assert read_messages[operator_message["id"]]["is_read"] is True
+
+    edit_response = await client.patch(
+        f"/api/v1/support/messages/{client_message_id}",
+        headers={"Authorization": f"Bearer {client_token}"},
+        json={"text": "Обновленный текст клиента"},
+    )
+    assert edit_response.status_code == 200
+    edited_messages = {message["id"]: message for message in edit_response.json()["messages"]}
+    assert edited_messages[client_message_id]["text"] == "Обновленный текст клиента"
+
+    delete_response = await client.delete(
+        f"/api/v1/support/messages/{client_message_id}",
+        headers={"Authorization": f"Bearer {client_token}"},
+    )
+    assert delete_response.status_code == 200
+    remaining_message_ids = {message["id"] for message in delete_response.json()["messages"]}
+    assert client_message_id not in remaining_message_ids

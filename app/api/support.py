@@ -4,7 +4,7 @@ from pathlib import Path
 from uuid import UUID
 
 from botocore.exceptions import ClientError
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from jose import JWTError, jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,8 +40,8 @@ from app.security.auth import (
     oauth2_scheme,
 )
 from app.services.notifications import (
-    schedule_support_operator_notification,
-    schedule_support_reply_notification,
+    send_support_operator_notification,
+    send_support_reply_notification,
 )
 from app.services.storage import (
     StorageNotConfiguredError,
@@ -285,6 +285,7 @@ async def _get_message(db: AsyncSession, message_id: UUID) -> SupportMessage:
 @router.post("/support/tickets", response_model=SupportTicketOut, status_code=201)
 async def create_support_ticket(
     payload: SupportTicketCreate,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     actor: SupportActor = Depends(get_support_actor),
 ):
@@ -311,7 +312,7 @@ async def create_support_ticket(
     )
     await db.commit()
     ticket = await _get_ticket(db, ticket.id)
-    schedule_support_operator_notification(ticket.id, is_new=True)
+    background_tasks.add_task(send_support_operator_notification, ticket.id, True)
     return _ticket_payload(ticket, actor)
 
 
@@ -345,6 +346,7 @@ async def get_own_support_ticket(
 async def add_own_support_message(
     ticket_id: UUID,
     payload: SupportMessageCreate,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     actor: SupportActor = Depends(get_support_actor),
 ):
@@ -364,8 +366,9 @@ async def add_own_support_message(
     )
     ticket.updated_at = datetime.now(timezone.utc)
     await db.commit()
-    schedule_support_operator_notification(ticket.id, is_new=False)
-    return _ticket_payload(await _get_ticket(db, ticket.id), actor)
+    ticket = await _get_ticket(db, ticket.id)
+    background_tasks.add_task(send_support_operator_notification, ticket.id, False)
+    return _ticket_payload(ticket, actor)
 
 
 @message_router.patch("/tickets/{ticket_id}/read", response_model=SupportTicketOut)
@@ -479,6 +482,7 @@ async def get_operator_support_ticket(
 async def add_operator_support_message(
     ticket_id: UUID,
     payload: SupportMessageCreate,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_logist_user),
 ):
@@ -500,7 +504,8 @@ async def add_operator_support_message(
     await db.commit()
     ticket = await _get_ticket(db, ticket.id)
     client_id, driver_id = await _resolve_support_reply_target(db, ticket)
-    schedule_support_reply_notification(
+    background_tasks.add_task(
+        send_support_reply_notification,
         ticket_id=ticket.id,
         client_id=client_id,
         driver_id=driver_id,

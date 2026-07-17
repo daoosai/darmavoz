@@ -423,6 +423,23 @@ async def _send_support_reply_notification(
         _safe_schedule(schedule_push_to_driver, driver_id, title, body, data)
 
 
+async def send_support_operator_notification(ticket_id: UUID, is_new: bool) -> None:
+    await _send_support_operator_notification(ticket_id, is_new=is_new)
+
+
+async def send_support_reply_notification(
+    *,
+    ticket_id: UUID,
+    client_id: UUID | None = None,
+    driver_id: UUID | None = None,
+) -> None:
+    await _send_support_reply_notification(
+        ticket_id=ticket_id,
+        client_id=client_id,
+        driver_id=driver_id,
+    )
+
+
 def schedule_support_operator_notification(ticket_id: UUID, *, is_new: bool) -> None:
     _safe_schedule(
         schedule_push_to_logists,

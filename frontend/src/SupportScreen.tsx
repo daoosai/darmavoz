@@ -62,6 +62,12 @@ const withoutMessage = (ticket: SupportTicket, messageId: string): SupportTicket
   messages: ticket.messages.filter((message) => message.id !== messageId),
 });
 
+const withMessage = (ticket: SupportTicket, message: SupportMessage): SupportTicket => ({
+  ...ticket,
+  updated_at: message.created_at,
+  messages: [...ticket.messages, message],
+});
+
 const statusLabels = { new: "Новое", in_progress: "В работе", closed: "Закрыто" };
 const statusClasses = {
   new: "bg-amber-100 text-amber-700",
@@ -218,6 +224,20 @@ export default function SupportScreen({
         visibleTicket,
         ...current.filter((item) => item.id !== visibleTicket.id),
       ]),
+    );
+  };
+
+  const updateTicketInState = (
+    ticketId: string,
+    updater: (ticket: SupportTicket) => SupportTicket,
+  ) => {
+    setSelected((current) =>
+      current && current.id === ticketId ? updater(current) : current,
+    );
+    setTickets((current) =>
+      sortTicketsByUpdatedAt(
+        current.map((ticket) => (ticket.id === ticketId ? updater(ticket) : ticket)),
+      ),
     );
   };
 
@@ -488,21 +508,66 @@ export default function SupportScreen({
     const nextText = reply.trim();
     if (!selected) return;
     if (editingMessage ? !nextText : !nextText && !selectedAttachment) return;
+    const ticketId = selected.id;
     setSending(true);
     try {
+      if (!editingMessage && !selectedAttachment) {
+        const optimisticCreatedAt = new Date().toISOString();
+        const optimisticSenderId = role === "driver"
+          ? useAuthStore.getState().driverId || getSupportActorId(selected.messages, role) || `${Date.now()}`
+          : getSupportActorId(selected.messages, role) || `${Date.now()}`;
+        const optimisticMessage: SupportMessage = {
+          id: `temp-${Date.now()}`,
+          ticket_id: ticketId,
+          sender_id: optimisticSenderId,
+          author_client_id: role === "client" ? optimisticSenderId : null,
+          author_user_id: role !== "client" ? optimisticSenderId : null,
+          author_name: "Вы",
+          author_role: role || "client",
+          text: nextText,
+          attachment_url: null,
+          is_read: false,
+          is_own: true,
+          created_at: optimisticCreatedAt,
+        };
+
+        setReply("");
+        updateTicketInState(ticketId, (ticket) =>
+          withMessage(
+            operatorMode && ticket.status === "new"
+              ? { ...ticket, status: "in_progress" }
+              : ticket,
+            optimisticMessage,
+          ),
+        );
+
+        const response = await fetch(`${endpoint}/${ticketId}/messages`, {
+          method: "POST",
+          headers: { ...headers, "Content-Type": "application/json" },
+          body: JSON.stringify({ text: nextText, attachment_url: null }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          updateTicketInState(ticketId, (ticket) => withoutMessage(ticket, optimisticMessage.id));
+          throw new Error(extractApiErrorMessage(data, "РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РїСЂР°РІРёС‚СЊ СЃРѕРѕР±С‰РµРЅРёРµ"));
+        }
+        syncTicket(data);
+        return;
+      }
+
       const response = editingMessage
         ? await fetch(`${baseURL}/support/messages/${editingMessage.id}`, {
             method: "PATCH",
             headers: { ...headers, "Content-Type": "application/json" },
             body: JSON.stringify({ text: nextText }),
           })
-        : await fetch(`${endpoint}/${selected.id}/messages`, {
+        : await fetch(`${endpoint}/${ticketId}/messages`, {
             method: "POST",
             headers: { ...headers, "Content-Type": "application/json" },
             body: JSON.stringify({
               text: nextText || null,
               attachment_url: selectedAttachment
-                ? await uploadSupportAttachment(selected.id, selectedAttachment)
+                ? await uploadSupportAttachment(ticketId, selectedAttachment)
                 : null,
             }),
           });

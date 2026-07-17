@@ -24,6 +24,7 @@ jobs:
       - name: Build frontend on runner
         working-directory: frontend
         env:
+          VITE_APP_VERSION: 2.5.0
           VITE_2GIS_KEY: ${{ secrets.VITE_2GIS_KEY }}
         run: |
           set -euo pipefail

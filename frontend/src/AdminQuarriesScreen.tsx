@@ -52,6 +52,13 @@ const MODERATION_BADGES: Record<string, { label: string; className: string }> = 
 const moderationBadge = (status?: string) =>
   MODERATION_BADGES[status || "incomplete"] || MODERATION_BADGES.incomplete;
 
+const POINT_TYPE_LABELS: Record<Quarry["point_type"], string> = {
+  quarry: "Карьер",
+  accumulator: "Накопитель",
+  warehouse: "Склад",
+  supplier: "Поставщик",
+};
+
 type EditablePointType = "quarry" | "accumulator";
 
 const normalizeEditablePointType = (value?: Quarry["point_type"]): EditablePointType =>
@@ -241,10 +248,11 @@ export default function AdminQuarriesScreen({
       {/* Desktop View */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden hidden md:block">
         <div className="overflow-x-auto w-full">
-          <table className="w-full text-left border-collapse min-w-[600px]">
+          <table className="w-full text-left border-collapse min-w-[720px]">
             <thead>
               <tr className="bg-slate-50/80 text-slate-500 text-xs uppercase tracking-wider font-bold">
                 <th className="p-4 border-b border-slate-100">ID</th>
+                <th className="p-4 border-b border-slate-100">Тип</th>
                 <th className="p-4 border-b border-slate-100">Название</th>
                 <th className="p-4 border-b border-slate-100">Адрес</th>
                 <th className="p-4 border-b border-slate-100">Статус</th>
@@ -255,7 +263,7 @@ export default function AdminQuarriesScreen({
             <tbody className="divide-y divide-slate-50">
               {quarries.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-slate-500">
+                  <td colSpan={7} className="p-8 text-center text-slate-500">
                     Нет точек
                   </td>
                 </tr>
@@ -267,6 +275,11 @@ export default function AdminQuarriesScreen({
                   >
                     <td className="p-4 text-sm font-medium text-slate-600">
                       #{quarry.id}
+                    </td>
+                    <td className="p-4">
+                      <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                        {POINT_TYPE_LABELS[quarry.point_type] || quarry.point_type}
+                      </span>
                     </td>
                     <td className="p-4 text-slate-800">
                       <div className="font-bold">{quarry.name}</div>

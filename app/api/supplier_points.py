@@ -1,3 +1,4 @@
+import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -20,6 +21,7 @@ from app.services.pickup_points import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 SUPPLIER_POINT_TYPES = {"quarry", "accumulator"}
 
 
@@ -199,5 +201,12 @@ async def submit_supplier_point(
     point.moderation_status = ModerationStatus.pending_moderation.value
     point.moderation_comment = None
     await db.commit()
-    schedule_pickup_point_moderation_notification(point)
+    await db.refresh(point)
+    try:
+        schedule_pickup_point_moderation_notification(point)
+    except Exception:
+        logger.exception(
+            "pickup_point_moderation_notification_failed",
+            extra={"pickup_point_id": str(point.id)},
+        )
     return await pickup_point_payload(db, point)

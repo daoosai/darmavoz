@@ -48,7 +48,11 @@ async def lifespan(app: FastAPI):
         await close_redis()
 
 
-app = FastAPI(title="Дармавоз.рф API", lifespan=lifespan)
+app = FastAPI(
+    title="Дармавоз.рф API",
+    version=settings.WEB_VERSION,
+    lifespan=lifespan,
+)
 register_exception_handlers(app)
 
 

@@ -61,16 +61,14 @@ def default_min_delivery_price(point_type: str) -> Decimal | None:
 
 
 async def default_delivery_option_ids(db: AsyncSession, point_type: str) -> list[UUID]:
-    stmt = select(DeliveryOption.id).where(DeliveryOption.is_active.is_(True))
-    if point_type == PickupPointType.quarry.value:
-        stmt = stmt.where(DeliveryOption.capacity_m3 >= 10)
-    elif point_type == PickupPointType.accumulator.value:
-        stmt = stmt.where(DeliveryOption.capacity_m3 == 5)
-    elif point_type not in {
+    if point_type not in {
+        PickupPointType.quarry.value,
+        PickupPointType.accumulator.value,
         PickupPointType.warehouse.value,
         PickupPointType.supplier.value,
     }:
         return []
+    stmt = select(DeliveryOption.id).where(DeliveryOption.is_active.is_(True))
     result = await db.execute(stmt.order_by(DeliveryOption.capacity_m3.asc()))
     return list(result.scalars().all())
 
@@ -199,14 +197,7 @@ async def pickup_point_payload(
         (
             await db.execute(
                 select(DeliveryOption)
-                .join(
-                    quarry_delivery_options,
-                    quarry_delivery_options.c.delivery_option_id == DeliveryOption.id,
-                )
-                .where(
-                    quarry_delivery_options.c.quarry_id == point.id,
-                    quarry_delivery_options.c.is_active.is_(True),
-                )
+                .where(DeliveryOption.is_active.is_(True))
                 .order_by(DeliveryOption.capacity_m3.asc())
             )
         ).scalars().all()

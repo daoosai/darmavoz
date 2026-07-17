@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import exists, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
@@ -9,7 +9,6 @@ from app.models.models import (
     Material,
     MediaFile,
     Quarry,
-    quarry_delivery_options,
     quarry_materials,
 )
 from app.schemas.quarry import PickupPointMarkerOut, QuarryOut
@@ -49,12 +48,6 @@ async def list_pickup_points(
         .limit(1)
         .scalar_subquery()
     )
-    has_delivery_option = exists(
-        select(quarry_delivery_options.c.delivery_option_id).where(
-            quarry_delivery_options.c.quarry_id == Quarry.id,
-            quarry_delivery_options.c.is_active.is_(True),
-        )
-    )
     stmt = (
         select(
             Quarry.id,
@@ -76,7 +69,6 @@ async def list_pickup_points(
             quarry_materials.c.is_active.is_(True),
             quarry_materials.c.price.is_not(None),
             Material.is_active.is_(True),
-            has_delivery_option,
         )
         .order_by(Quarry.name.asc())
         .limit(limit)
@@ -124,7 +116,5 @@ async def get_pickup_point(
         offer["material_id"] == material_id for offer in active_offers
     ):
         raise HTTPException(status_code=404, detail="Material not found at pickup point")
-    if not payload["delivery_option_ids"]:
-        raise HTTPException(status_code=404, detail="Pickup point not found")
     payload["material_offers"] = active_offers
     return payload

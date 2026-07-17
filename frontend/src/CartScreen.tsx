@@ -12,9 +12,11 @@ import {
 import {
   findDeliveryOptionForVolume,
   getDeliveryOptionsForVolume,
+  normalizeClientOrderSummary,
   useAuthStore,
   useCartStore,
   useAddressStore,
+  useClientOrdersStore,
 } from "./store";
 import { baseURL, resolveMediaUrl } from "./utils";
 import toast from "react-hot-toast";
@@ -94,6 +96,7 @@ export default function CartScreen({
     updateItemVolume,
   } = useCartStore();
   const { role, token } = useAuthStore();
+  const setOrders = useClientOrdersStore((state) => state.setOrders);
   const { selectedAddress, setSelectedAddress } = useAddressStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [globalAddress, setGlobalAddress] = useState(selectedAddress);
@@ -321,6 +324,23 @@ export default function CartScreen({
       const hasErrors = responses.some((res) => !res.ok);
 
       if (!hasErrors) {
+        try {
+          const ordersResponse = await fetch(`${baseURL}/clients/me/orders`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          });
+          if (ordersResponse.ok) {
+            const ordersData = await ordersResponse.json();
+            setOrders(
+              Array.isArray(ordersData)
+                ? ordersData.map(normalizeClientOrderSummary)
+                : [],
+            );
+          }
+        } catch (refreshError) {
+          console.error("Orders refresh error", refreshError);
+        }
         toast.success("Заказ успешно оформлен");
         clearCart();
         setGlobalAddress("");

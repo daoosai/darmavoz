@@ -27,7 +27,6 @@ from app.models.models import (
     OrderOfferStatus,
     OrderStatus,
     Vehicle,
-    quarry_delivery_options,
     quarry_materials,
 )
 from app.schemas.order import (
@@ -38,10 +37,11 @@ from app.schemas.order import (
     OrderHistoryOut,
 )
 from app.services.notifications import (
-    schedule_client_driver_assigned_notification,
-    schedule_client_heading_to_client_notification,
-    schedule_client_order_completed_notification,
-    schedule_client_order_created_notification,
+    schedule_client_completed_status_notification,
+    schedule_client_driver_assigned_status_notification,
+    schedule_client_heading_to_client_status_notification,
+    schedule_client_heading_to_pickup_status_notification,
+    schedule_client_searching_driver_status_notification,
     schedule_driver_manual_assignment_notification,
     schedule_driver_new_order_notification,
     schedule_driver_order_cancelled_notification,
@@ -549,21 +549,6 @@ async def create_checkout_order(
                     quarry_materials.c.is_active.is_(True),
                 )
             )
-            configured_options = list(
-                (
-                    await session.execute(
-                        select(quarry_delivery_options.c.delivery_option_id).where(
-                            quarry_delivery_options.c.quarry_id == selected_quarry.id,
-                            quarry_delivery_options.c.is_active.is_(True),
-                        )
-                    )
-                ).scalars().all()
-            )
-            if configured_options and delivery_option_id not in configured_options:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="DELIVERY_OPTION_NOT_AVAILABLE_AT_POINT",
-                )
             unit_price = float(offer_price if offer_price is not None else material.price or 0)
             if unit_price <= 0:
                 raise HTTPException(
@@ -641,7 +626,7 @@ async def create_checkout_order(
     )
 
     await session.commit()
-    schedule_client_order_created_notification(order)
+    schedule_client_searching_driver_status_notification(order)
     await enqueue_order_for_dispatch_safe(order.id)
     return await get_order_by_id(session, order.id)
 
@@ -776,7 +761,7 @@ async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate)
         route_calculated_at=route_calculated_at,
     )
     await session.commit()
-    schedule_client_order_created_notification(order)
+    schedule_client_searching_driver_status_notification(order)
     if payload.driver_id is not None:
         return await assign_order_to_driver_manually(
             session,
@@ -864,7 +849,7 @@ async def assign_order_to_driver_manually(session: AsyncSession, *, order_id: UU
     await add_event(session, order.id, "driver_assigned_manual", f"Driver {driver_id} assigned manually")
     await session.commit()
     refreshed_order = await get_order_by_id(session, order.id)
-    schedule_client_driver_assigned_notification(refreshed_order)
+    schedule_client_driver_assigned_status_notification(refreshed_order)
     schedule_driver_manual_assignment_notification(refreshed_order, driver.id)
     return refreshed_order
 
@@ -1499,7 +1484,7 @@ async def accept_offer(session: AsyncSession, *, offer_id: UUID, driver_id: UUID
     await add_event(session, order.id, "driver_assigned", f"Driver {driver_id} accepted the order")
     await session.commit()
     refreshed_order = await get_order_by_id(session, order.id)
-    schedule_client_driver_assigned_notification(refreshed_order)
+    schedule_client_driver_assigned_status_notification(refreshed_order)
     return refreshed_order
 
 
@@ -1696,10 +1681,12 @@ async def set_driver_order_status(
     await session.commit()
 
     refreshed_order = await get_order_by_id(session, order.id)
+    if target_status == OrderStatus.heading_to_pickup.value:
+        schedule_client_heading_to_pickup_status_notification(refreshed_order)
     if target_status == OrderStatus.heading_to_client.value:
-        schedule_client_heading_to_client_notification(refreshed_order)
+        schedule_client_heading_to_client_status_notification(refreshed_order)
     if target_status == OrderStatus.completed.value:
-        schedule_client_order_completed_notification(refreshed_order)
+        schedule_client_completed_status_notification(refreshed_order)
     return refreshed_order
 
 

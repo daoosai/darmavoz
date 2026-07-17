@@ -187,8 +187,6 @@ export default function AdminQuarriesScreen({
         is_active: false,
         material_ids: [],
         material_offers: [],
-        delivery_option_ids: [],
-        min_delivery_price: 5000,
         media_files: [],
       });
     }
@@ -435,18 +433,10 @@ function EditQuarryModal({
   const [formData, setFormData] = useState<Quarry>(quarry);
   const [isSaving, setIsSaving] = useState(false);
   const [suggestions, setSuggestions] = useState<any[]>([]);
-  const [deliveryOptions, setDeliveryOptions] = useState<any[]>([]);
   const usesOwnerPhone = Boolean(formData.owner_user_id);
 
   const mapRef = React.useRef<any>(null);
   const markerRef = React.useRef<any>(null);
-
-  React.useEffect(() => {
-    fetch(`${baseURL}/catalog/delivery-options/`)
-      .then((response) => (response.ok ? response.json() : []))
-      .then((data) => setDeliveryOptions(Array.isArray(data) ? data : []))
-      .catch(() => setDeliveryOptions([]));
-  }, []);
 
   React.useEffect(() => {
     let mapInstance: any = null;
@@ -630,11 +620,9 @@ function EditQuarryModal({
           : null,
         lat: formData.lat,
         lon: formData.lon,
-        min_delivery_price: formData.min_delivery_price,
         is_active: formData.is_active,
         material_ids: formData.material_ids || [],
         material_offers: formData.material_offers || [],
-        delivery_option_ids: formData.delivery_option_ids || [],
         ...(usesOwnerPhone ? {} : { contact_phone: formData.contact_phone?.trim() || null }),
       };
 
@@ -796,27 +784,13 @@ function EditQuarryModal({
                 value={formData.point_type}
                 onChange={(event) => {
                   const pointType = event.target.value as EditablePointType;
-                  const defaultMinimum = pointType === "quarry" ? 5000 : 3000;
-                  const defaultOptions = deliveryOptions
-                    .filter((option) => pointType === "quarry" ? option.capacity_m3 >= 10 : option.capacity_m3 === 5)
-                    .map((option) => option.id);
-                  setFormData({ ...formData, point_type: pointType, min_delivery_price: defaultMinimum, delivery_option_ids: defaultOptions });
+                  setFormData({ ...formData, point_type: pointType });
                 }}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3"
               >
                 <option value="quarry">Карьер</option>
                 <option value="accumulator">Накопитель</option>
               </select>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Доставка от, ₽</label>
-              <input
-                type="number"
-                min="0"
-                value={formData.min_delivery_price || ""}
-                onChange={(event) => setFormData({ ...formData, min_delivery_price: Number(event.target.value) })}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3"
-              />
             </div>
           </div>
 
@@ -972,27 +946,6 @@ function EditQuarryModal({
                   )}
                 </div>
               )})}
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Доступные машины</label>
-            <div className="grid grid-cols-2 gap-2 bg-slate-50 border border-slate-200 rounded-xl p-3">
-              {deliveryOptions.map((option) => (
-                <label key={option.id} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={(formData.delivery_option_ids || []).includes(option.id)}
-                    onChange={() => setFormData({
-                      ...formData,
-                      delivery_option_ids: (formData.delivery_option_ids || []).includes(option.id)
-                        ? (formData.delivery_option_ids || []).filter((id) => id !== option.id)
-                        : [...(formData.delivery_option_ids || []), option.id],
-                    })}
-                  />
-                  {option.capacity_m3} м³
-                </label>
-              ))}
             </div>
           </div>
 

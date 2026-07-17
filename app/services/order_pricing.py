@@ -6,7 +6,7 @@ from uuid import UUID
 
 import httpx
 from fastapi import HTTPException, status
-from sqlalchemy import and_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -16,7 +16,6 @@ from app.models.models import (
     MediaFile,
     ModerationStatus,
     Quarry,
-    quarry_delivery_options,
     quarry_materials,
 )
 from app.services.pickup_points import public_pickup_point_filters
@@ -235,33 +234,12 @@ async def calculate_client_order_options(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Pickup point not found for material",
             )
-        selected_option_id = await session.scalar(
-            select(quarry_delivery_options.c.delivery_option_id).where(
-                quarry_delivery_options.c.quarry_id == quarry_id,
-                quarry_delivery_options.c.delivery_option_id == delivery_option_id,
-                quarry_delivery_options.c.is_active.is_(True),
-            )
-        )
-        if selected_option_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="DELIVERY_OPTION_NOT_AVAILABLE_AT_POINT",
-            )
-
     result = await session.execute(
         select(
             Quarry,
             quarry_materials.c.price,
         )
         .join(quarry_materials, quarry_materials.c.quarry_id == Quarry.id)
-        .join(
-            quarry_delivery_options,
-            and_(
-                quarry_delivery_options.c.quarry_id == Quarry.id,
-                quarry_delivery_options.c.delivery_option_id == delivery_option_id,
-                quarry_delivery_options.c.is_active.is_(True),
-            ),
-        )
         .where(
             *public_pickup_point_filters(),
             Quarry.point_type.in_(MARKETPLACE_POINT_TYPES),

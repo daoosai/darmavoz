@@ -118,6 +118,56 @@ def schedule_client_order_completed_notification(order: Order) -> None:
     )
 
 
+def schedule_client_searching_driver_status_notification(order: Order) -> None:
+    _safe_schedule(
+        schedule_push_to_client,
+        order.client_id,
+        "Поиск машины",
+        "Ищем водителя для вашего заказа.",
+        _order_push_data(order),
+    )
+
+
+def schedule_client_driver_assigned_status_notification(order: Order) -> None:
+    _safe_schedule(
+        schedule_push_to_client,
+        order.client_id,
+        "Водитель найден",
+        "Машина назначена на ваш заказ.",
+        _order_push_data(order),
+    )
+
+
+def schedule_client_heading_to_pickup_status_notification(order: Order) -> None:
+    _safe_schedule(
+        schedule_push_to_client,
+        order.client_id,
+        "В пути на погрузку",
+        "Машина едет на карьер.",
+        _order_push_data(order),
+    )
+
+
+def schedule_client_heading_to_client_status_notification(order: Order) -> None:
+    _safe_schedule(
+        schedule_push_to_client,
+        order.client_id,
+        "В пути к вам",
+        "Машина загружена и едет к вам!",
+        _order_push_data(order),
+    )
+
+
+def schedule_client_completed_status_notification(order: Order) -> None:
+    _safe_schedule(
+        schedule_push_to_client,
+        order.client_id,
+        "Заказ завершен",
+        "Спасибо, что выбрали Дармавоз!",
+        _order_push_data(order),
+    )
+
+
 def schedule_driver_new_order_notification(order: Order, driver_id: UUID) -> None:
     _safe_schedule(
         schedule_push_to_driver,

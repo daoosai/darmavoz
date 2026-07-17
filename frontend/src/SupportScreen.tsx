@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   ArrowLeft,
   Check,
@@ -14,6 +15,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import toast from "react-hot-toast";
 
 import { useAuthStore } from "./store";
@@ -73,6 +75,7 @@ const requesterRoleClasses: Record<string, string> = {
   logist: "bg-sky-100 text-sky-700",
   operator: "bg-emerald-100 text-emerald-700",
 };
+const operatorAuthorRoles = new Set(["admin", "logist", "operator"]);
 
 interface MessageGroup {
   dayKey: string;
@@ -121,6 +124,26 @@ const formatMessageTime = (value: string) =>
 const getRequesterRoleLabel = (role: string) => requesterRoleLabels[role] || role;
 const getRequesterRoleClass = (role: string) =>
   requesterRoleClasses[role] || "bg-slate-100 text-slate-600";
+const getMessageSenderId = (message: SupportMessage) =>
+  message.author_client_id || message.author_user_id || null;
+const getSupportActorId = (
+  messages: SupportMessage[],
+  currentRole: string | null,
+) => {
+  if (currentRole === "client") {
+    return messages.find((message) => message.author_client_id)?.author_client_id || null;
+  }
+  if (currentRole === "driver") {
+    return (
+      messages.find(
+        (message) => message.author_role === "driver" && message.author_user_id,
+      )?.author_user_id ||
+      messages.find((message) => message.is_own && message.author_user_id)?.author_user_id ||
+      null
+    );
+  }
+  return messages.find((message) => message.is_own && message.author_user_id)?.author_user_id || null;
+};
 
 interface Props {
   operatorMode?: boolean;
@@ -255,6 +278,25 @@ export default function SupportScreen({
   }, [attachmentPreviewUrl]);
 
   useEffect(() => {
+    if (!lightboxImageUrl || typeof window === "undefined") return;
+
+    const handlePopState = () => {
+      setLightboxImageUrl(null);
+    };
+
+    window.history.pushState(
+      { ...(window.history.state || {}), supportLightbox: true },
+      "",
+      window.location.href,
+    );
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [lightboxImageUrl]);
+
+  useEffect(() => {
     if (!selected || !token || !hasUnreadIncomingMessages(selected)) return;
     const controller = new AbortController();
 
@@ -274,6 +316,14 @@ export default function SupportScreen({
     void markRead();
     return () => controller.abort();
   }, [selected, token]);
+
+  const closeLightbox = () => {
+    if (typeof window !== "undefined" && window.history.state?.supportLightbox) {
+      window.history.back();
+      return;
+    }
+    setLightboxImageUrl(null);
+  };
 
   const createTicket = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -467,6 +517,54 @@ export default function SupportScreen({
     syncTicket(data);
   };
 
+  const currentSupportActorId = selected ? getSupportActorId(selected.messages, role) : null;
+  const lightbox = typeof document !== "undefined"
+    ? createPortal(
+        <AnimatePresence>
+          {lightboxImageUrl ? (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={closeLightbox}
+              className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/95 p-4"
+            >
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  closeLightbox();
+                }}
+                className="absolute right-5 top-5 z-10 rounded-full bg-black/35 p-4 text-white shadow-2xl transition hover:bg-black/55"
+              >
+                <X className="h-8 w-8" />
+              </button>
+              <motion.div
+                drag="y"
+                dragDirectionLock
+                dragConstraints={{ top: 0, bottom: 0 }}
+                dragElastic={{ top: 0, bottom: 0.22 }}
+                onClick={(event) => event.stopPropagation()}
+                onDragEnd={(_event, info) => {
+                  if (info.offset.y > 120 || info.velocity.y > 700) {
+                    closeLightbox();
+                  }
+                }}
+                className="flex max-h-full max-w-full items-center justify-center"
+              >
+                <img
+                  src={lightboxImageUrl}
+                  alt="Вложение"
+                  className="max-h-[88vh] max-w-full rounded-3xl object-contain shadow-2xl"
+                />
+              </motion.div>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>,
+        document.body,
+      )
+    : null;
+
   if (selected) {
     const messageGroups = groupMessagesByDay(selected.messages);
     return (
@@ -517,8 +615,11 @@ export default function SupportScreen({
                   </span>
                 </div>
                 {group.messages.map((message) => {
-                  const mine = message.is_own;
-                  const authorName = ["admin", "logist", "operator"].includes(message.author_role)
+                  const senderId = getMessageSenderId(message);
+                  const mine = currentSupportActorId
+                    ? senderId === currentSupportActorId
+                    : message.is_own;
+                  const authorName = operatorAuthorRoles.has(message.author_role)
                     ? "Поддержка"
                     : message.author_name;
                   const resolvedAttachmentUrl =
@@ -533,8 +634,8 @@ export default function SupportScreen({
                       <div
                         className={`relative max-w-[85%] px-4 py-3 ${
                           mine
-                            ? "rounded-2xl rounded-br-none bg-blue-500 pr-11 text-white"
-                            : "rounded-2xl rounded-bl-none bg-white text-gray-900 shadow-sm"
+                            ? "rounded-2xl rounded-br-sm bg-blue-500 pr-11 text-white"
+                            : "rounded-2xl rounded-bl-sm bg-white text-black shadow-sm"
                         }`}
                       >
                         {!mine ? (
@@ -756,6 +857,7 @@ export default function SupportScreen({
             Обращение закрыто. История доступна только для чтения.
           </p>
         )}
+        {lightbox}
       </div>
     );
   }

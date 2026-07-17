@@ -437,6 +437,7 @@ export default function PickupPointMapScreen({
   return (
     <div className="fixed inset-0 z-[90] overflow-hidden bg-gray-50 sm:mx-auto sm:max-w-md sm:rounded-[32px]">
       <div ref={mapContainerRef} className="absolute inset-0" />
+      {!isAddressSheetOpen && (
       <header className="absolute top-0 inset-x-0 p-4 pt-[max(1rem,env(safe-area-inset-top))] pointer-events-none">
         <div className="flex items-center gap-3 pointer-events-auto">
           <button onClick={onClose} className="grid h-11 w-11 place-items-center rounded-full bg-white text-gray-900 shadow-lg">
@@ -459,15 +460,16 @@ export default function PickupPointMapScreen({
           ))}
         </div>
       </header>
+      )}
 
-      {(isLoading || error || (!isLoading && points.length === 0)) && (
+      {!isAddressSheetOpen && (isLoading || error || (!isLoading && points.length === 0)) && (
         <div className="absolute inset-x-4 top-36 bg-white rounded-2xl shadow-xl p-4 flex items-center gap-3">
           {isLoading ? <Loader2 className="animate-spin" /> : <MapPin />}
           <span className="text-sm font-medium">{isLoading ? "Загружаем точки…" : error || "Для материала пока нет точек"}</span>
         </div>
       )}
 
-      {!selected && !isLoading && !error && carouselPoints.length > 0 && (
+      {!isAddressSheetOpen && !selected && !isLoading && !error && carouselPoints.length > 0 && (
         <div className="fixed bottom-4 left-0 right-0 z-[100] flex flex-col gap-3 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2">
           <button
             type="button"
@@ -557,7 +559,7 @@ export default function PickupPointMapScreen({
         </div>
       )}
 
-      {selected && (
+      {!isAddressSheetOpen && selected && (
         <SwipeableBottomSheet
           isOpen={Boolean(selected)}
           onClose={() => setSelected(null)}
@@ -685,8 +687,8 @@ export default function PickupPointMapScreen({
         onClose={handleAddressSheetClose}
         dismissible
         closeOnSelect
-        overlayZIndexClassName="z-[120]"
-        sheetZIndexClassName="z-[130]"
+        overlayZIndexClassName="z-[140]"
+        sheetZIndexClassName="z-[150]"
         onAddressConfirmed={({ address, lat, lon }) => {
           if (lat != null && lon != null) {
             setSelectedDeliveryLocation({ lat, lon });

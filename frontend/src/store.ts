@@ -119,7 +119,7 @@ export const useAuthStore = create<AuthState>()(
       login: (token, role, driverId) => set({ token, role, driverId: driverId || null }),
       logout: () => {
         set({ token: null, role: null, driverId: null });
-        useAddressStore.getState().setSelectedAddress("");
+        useAddressStore.getState().clearSelectedAddress();
         useClientOrdersStore.getState().clearOrders();
         localStorage.removeItem('address-storage');
       },
@@ -133,6 +133,7 @@ export const useAuthStore = create<AuthState>()(
 interface AddressState {
   selectedAddress: string;
   setSelectedAddress: (address: string) => void;
+  clearSelectedAddress: () => void;
 }
 
 export const useAddressStore = create<AddressState>()(
@@ -140,6 +141,7 @@ export const useAddressStore = create<AddressState>()(
     (set) => ({
       selectedAddress: "",
       setSelectedAddress: (address: string) => set({ selectedAddress: address }),
+      clearSelectedAddress: () => set({ selectedAddress: "" }),
     }),
     {
       name: "address-storage",

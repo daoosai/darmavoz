@@ -49,7 +49,8 @@ export default function ClientAddressBottomSheet({
   onAddressConfirmed,
 }: ClientAddressBottomSheetProps) {
   const { token, role } = useAuthStore();
-  const { selectedAddress, setSelectedAddress } = useAddressStore();
+  const { selectedAddress, setSelectedAddress, clearSelectedAddress } =
+    useAddressStore();
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
@@ -206,6 +207,8 @@ export default function ClientAddressBottomSheet({
         setAddresses(addressList);
 
         if (addressList.length === 0) {
+          clearSelectedAddress();
+          setLocalSelectedId(null);
           setIsAdding(true);
         } else {
           const match = selectedAddress
@@ -214,10 +217,7 @@ export default function ClientAddressBottomSheet({
           if (match) {
             setLocalSelectedId(match.id);
           } else {
-            const def =
-              addressList.find((a: any) => a.is_default) || addressList[0];
-            setSelectedAddress(def.full_address);
-            setLocalSelectedId(def.id);
+            setLocalSelectedId(null);
           }
         }
       }
@@ -246,11 +246,21 @@ export default function ClientAddressBottomSheet({
   const handleDeleteAddress = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     try {
+      const deletedAddress = addresses.find((item) => item.id === id);
       const res = await fetch(`${baseURL}/client/addresses/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
+        if (localSelectedId === id) {
+          setLocalSelectedId(null);
+        }
+        if (
+          deletedAddress?.full_address &&
+          selectedAddress === deletedAddress.full_address
+        ) {
+          clearSelectedAddress();
+        }
         toast.success("Адрес удален");
         fetchAddresses();
       } else {
@@ -276,11 +286,6 @@ export default function ClientAddressBottomSheet({
     try {
       if (!token || role !== "client") {
         setSelectedAddress(addressToSave);
-        onAddressConfirmed?.({
-          address: addressToSave,
-          lat,
-          lon,
-        });
         onAddressConfirmed?.({
           address: addressToSave,
           lat,
@@ -318,6 +323,11 @@ export default function ClientAddressBottomSheet({
       if (res.ok) {
         toast.success(editingAddressId ? "Адрес обновлен!" : "Адрес добавлен!");
         setSelectedAddress(addressToSave);
+        onAddressConfirmed?.({
+          address: addressToSave,
+          lat,
+          lon,
+        });
         setNewAddress("");
         setNewComment("");
         setEditingAddressId(null);

@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import { X, Loader2 } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
 import { MaterialProps, DeliveryOption } from "./MaterialDetailScreen";
 import { useCartStore } from "./store";
 import { getImageUrl, baseURL } from "./utils";
 import toast from "react-hot-toast";
 import { PickupPointSelection } from "./PickupPointMapScreen";
+import SwipeableBottomSheet from "./SwipeableBottomSheet";
 
 interface MaterialBottomSheetProps {
   material: MaterialProps | null;
@@ -139,28 +139,14 @@ export default function MaterialBottomSheet({
   };
 
   return (
-    <AnimatePresence>
-      {material && (
-        <>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onClose}
-            className="fixed inset-0 bg-black/50 z-[100] sm:rounded-[32px]"
-          />
-          <motion.div
-            initial={{ y: "100%" }}
-            animate={{ y: 0 }}
-            exit={{ y: "100%" }}
-            transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="fixed bottom-0 left-0 w-full sm:max-w-md sm:left-[50%] sm:-translate-x-1/2 bg-white rounded-t-[16px] z-[101] flex flex-col max-h-[90%]"
-          >
-            {/* Handle for drag */}
-            <div className="w-full flex justify-center py-3">
-              <div className="h-1.5 w-12 rounded-full bg-gray-200" />
-            </div>
-
+    <SwipeableBottomSheet
+      isOpen={Boolean(material)}
+      onClose={onClose}
+      containerClassName="fixed inset-0 z-[100] flex items-end justify-center"
+      overlayClassName="fixed inset-0 bg-black/50 sm:rounded-[32px]"
+      sheetClassName="fixed bottom-0 left-0 z-[101] flex max-h-[90%] w-full flex-col rounded-t-[16px] bg-white sm:left-1/2 sm:max-w-md sm:-translate-x-1/2"
+      transition={{ type: "spring", damping: 25, stiffness: 200 }}
+    >
             <button
               onClick={onClose}
               className="absolute right-4 top-4 z-50 rounded-full bg-gray-100 p-2 text-gray-500 shadow-sm hover:bg-gray-200"
@@ -317,9 +303,6 @@ export default function MaterialBottomSheet({
                 В корзину
               </button>
             </div>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
+    </SwipeableBottomSheet>
   );
 }

@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import { ChevronLeft, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
-import { AnimatePresence, motion } from "motion/react";
 
 import { switchAuthenticatedSession } from "./pushAuth";
 import { baseURL, extractApiErrorMessage } from "./utils";
+import SwipeableBottomSheet from "./SwipeableBottomSheet";
 
 interface Props {
   isOpen: boolean;
@@ -241,41 +241,20 @@ export default function ClientAuthBottomSheet({ isOpen, onClose, onAuthenticated
   const contactLabel = authMode === "phone" ? phone : normalizeEmailValue(email);
 
   return (
-    <AnimatePresence>
-      {isOpen ? (
-        <div className="fixed inset-0 z-[9999] flex items-end justify-center sm:p-4">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity"
-            onClick={onClose}
-          />
-
-          <motion.div
-            initial={{ y: "100%" }}
-            animate={{ y: 0 }}
-            exit={{ y: "100%" }}
-            transition={{ type: "spring", bounce: 0, duration: 0.4 }}
-            className="relative flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl"
-          >
-            <div className="flex w-full justify-center pt-3 pb-1">
-              <div className="h-1.5 w-12 rounded-full bg-slate-200" />
-            </div>
-
-            {step === 2 ? (
+    <SwipeableBottomSheet isOpen={isOpen} onClose={onClose}>
+      {step === 2 ? (
               <button
                 onClick={() => {
                   setStep(1);
                   setCode(["", "", "", ""]);
                 }}
-                className="absolute left-4 top-4 p-2 text-slate-800"
+                className="absolute left-4 top-4 z-10 p-2 text-slate-800"
               >
                 <ChevronLeft className="h-6 w-6" />
               </button>
-            ) : null}
+      ) : null}
 
-            <div className="mx-auto flex-1 w-full max-w-md overflow-y-auto px-6 pt-4 pb-6">
+      <div className="mx-auto flex-1 w-full max-w-md overflow-y-auto px-6 pt-4 pb-6">
               {step === 1 ? (
                 <div className="flex w-full flex-col items-center animate-in fade-in slide-in-from-right-4 duration-300">
                   <h2 className="mt-4 mb-2 text-center text-2xl font-bold leading-tight text-slate-800">
@@ -421,10 +400,7 @@ export default function ClientAuthBottomSheet({ isOpen, onClose, onAuthenticated
                   </button>
                 </div>
               )}
-            </div>
-          </motion.div>
-        </div>
-      ) : null}
-    </AnimatePresence>
+      </div>
+    </SwipeableBottomSheet>
   );
 }

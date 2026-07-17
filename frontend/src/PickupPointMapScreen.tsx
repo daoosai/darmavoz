@@ -14,6 +14,7 @@ import ClientAddressBottomSheet from "./ClientAddressBottomSheet";
 import { baseURL, formatPhoneNumber } from "./utils";
 import { MaterialProps } from "./MaterialDetailScreen";
 import { useAddressStore } from "./store";
+import SwipeableBottomSheet from "./SwipeableBottomSheet";
 
 export interface PickupPointMarker {
   id: string;
@@ -426,6 +427,13 @@ export default function PickupPointMapScreen({
     activatePoint(carouselPoints[0].point);
   }, [activePointId, filter, isLocationResolved, points, userLocation, selectedDeliveryLocation]);
 
+  const handleAddressSheetClose = () => {
+    setIsAddressSheetOpen(false);
+    if (!currentDeliveryAddress.trim()) {
+      onClose();
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[90] overflow-hidden bg-gray-50 sm:mx-auto sm:max-w-md sm:rounded-[32px]">
       <div ref={mapContainerRef} className="absolute inset-0" />
@@ -550,7 +558,14 @@ export default function PickupPointMapScreen({
       )}
 
       {selected && (
-        <div className="pickup-point-sheet hide-scrollbar absolute bottom-0 inset-x-0 z-[110] max-h-[72vh] overflow-y-auto bg-white rounded-t-[28px] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+        <SwipeableBottomSheet
+          isOpen={Boolean(selected)}
+          onClose={() => setSelected(null)}
+          containerClassName="pointer-events-none absolute inset-0 z-[110] flex items-end"
+          sheetClassName="pointer-events-auto w-full"
+          showOverlay={false}
+        >
+        <div className="pickup-point-sheet hide-scrollbar max-h-[72vh] overflow-y-auto bg-white rounded-t-[28px] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           <button
             type="button"
             aria-label="Свернуть подробности"
@@ -662,14 +677,13 @@ export default function PickupPointMapScreen({
             {getSelectPointButtonLabel(selected.point_type)}
           </button>
         </div>
+        </SwipeableBottomSheet>
       )}
 
       <ClientAddressBottomSheet
         isOpen={isAddressSheetOpen}
-        onClose={() => {
-          if (hasDeliveryAddress) setIsAddressSheetOpen(false);
-        }}
-        dismissible={hasDeliveryAddress}
+        onClose={handleAddressSheetClose}
+        dismissible
         closeOnSelect
         overlayZIndexClassName="z-[120]"
         sheetZIndexClassName="z-[130]"

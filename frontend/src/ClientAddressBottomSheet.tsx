@@ -14,6 +14,7 @@ import { fetch2gisAddressSuggestions, withTyumenBias } from "./addressSearch";
 import { baseURL, handleApiError } from "./utils";
 import { useAuthStore, useAddressStore } from "./store";
 import toast from "react-hot-toast";
+import SwipeableBottomSheet from "./SwipeableBottomSheet";
 
 interface Address {
   id?: string;
@@ -356,18 +357,15 @@ export default function ClientAddressBottomSheet({
   if (!isOpen) return null;
 
   return (
-    <>
-      <div
-        className={`fixed inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity ${overlayZIndexClassName}`}
-        onClick={dismissible ? onClose : undefined}
-      />
-      <div
-        className={`fixed inset-x-0 bottom-0 bg-white rounded-t-[32px] shadow-2xl transform transition-transform duration-300 ease-out flex flex-col max-h-[95vh] ${sheetZIndexClassName} ${isAdding ? "h-[95vh]" : "h-auto"} sm:max-w-xl sm:mx-auto`}
-      >
-        <div className="w-full flex justify-center pt-3 pb-1 shrink-0">
-          <div className="w-12 h-1.5 bg-slate-200 rounded-full"></div>
-        </div>
-
+    <SwipeableBottomSheet
+      isOpen={isOpen}
+      onClose={onClose}
+      containerClassName="fixed inset-0 flex items-end justify-center"
+      overlayClassName={`fixed inset-0 bg-slate-900/40 backdrop-blur-sm ${overlayZIndexClassName}`}
+      sheetClassName={`fixed inset-x-0 bottom-0 flex max-h-[95vh] flex-col rounded-t-[32px] bg-white shadow-2xl sm:mx-auto sm:max-w-xl ${sheetZIndexClassName} ${isAdding ? "h-[95vh]" : "h-auto"}`}
+      closeOnOverlayClick={dismissible}
+      enableDragToClose={dismissible}
+    >
         <div className="px-6 pb-4 pt-2 flex items-center justify-between shrink-0 border-b border-slate-50">
           <h2 className="text-[20px] font-bold text-slate-900 leading-tight">
             {isAdding ? "Укажите адрес" : "Мои адреса"}
@@ -541,7 +539,6 @@ export default function ClientAddressBottomSheet({
             </div>
           )}
         </div>
-      </div>
-    </>
+    </SwipeableBottomSheet>
   );
 }

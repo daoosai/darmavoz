@@ -363,7 +363,7 @@ export default function ClientAddressBottomSheet({
       onClose={onClose}
       containerClassName="fixed inset-0 z-[9999] flex items-end justify-center"
       overlayClassName={`fixed inset-0 z-[9999] bg-slate-900/40 backdrop-blur-sm ${overlayZIndexClassName}`}
-      sheetClassName={`fixed inset-x-0 bottom-0 relative z-[10000] flex max-h-[95vh] flex-col rounded-t-[32px] bg-white shadow-2xl sm:mx-auto sm:max-w-xl ${sheetZIndexClassName} ${isAdding ? "h-[95vh]" : "h-auto"}`}
+      sheetClassName={`fixed inset-x-0 bottom-0 z-[10000] flex w-full max-h-[95vh] flex-col rounded-t-[32px] bg-white shadow-2xl sm:mx-auto sm:max-w-xl ${sheetZIndexClassName} ${isAdding ? "h-[95vh]" : "h-auto"}`}
       closeOnOverlayClick={dismissible}
       enableDragToClose={dismissible}
     >

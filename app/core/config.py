@@ -68,7 +68,10 @@ class Settings(BaseSettings):
     SMSC_PASSWORD: str | None = Field(default=None, validation_alias=AliasChoices("SMSC_PASSWORD"))
     SMSRU_API_KEY: str | None = None
     USE_REAL_SMS: bool = False
-    TWOGIS_API_KEY: str | None = None
+    TWOGIS_API_KEY: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("TWOGIS_API_KEY", "VITE_2GIS_KEY"),
+    )
     YANDEX_GEOCODER_API_KEY: str | None = None
     YANDEX_ROUTER_API_KEY: str | None = None
 

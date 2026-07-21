@@ -184,6 +184,9 @@ async def pickup_point_payload(
     *,
     include_owner_contacts: bool = False,
 ) -> dict:
+    await db.flush()
+    await db.refresh(point, attribute_names=["created_at", "updated_at"])
+
     offer_rows = (
         await db.execute(
             select(

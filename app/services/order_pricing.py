@@ -106,9 +106,9 @@ def get_straight_distance_km(lat_a: float, lon_a: float, lat_b: float, lon_b: fl
 
 def _resolve_route_distance_failure(*, strict: bool, fallback_km: float) -> float:
     if strict:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=ROUTE_BUILD_ERROR_MESSAGE,
+        logger.warning(
+            "2GIS routing fallback applied for explicitly selected pickup point",
+            extra={"fallback_km": fallback_km},
         )
     return fallback_km
 

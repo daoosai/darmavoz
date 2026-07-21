@@ -6,7 +6,7 @@ from uuid import UUID
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from jose import JWTError, jwt
-from sqlalchemy import select
+from sqlalchemy import inspect as sa_inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -170,14 +170,51 @@ async def _resolve_support_reply_target(
     if ticket.client_id is not None:
         return ticket.client_id, None
 
-    if ticket.user is not None and ticket.user.driver_profile is not None:
-        return None, ticket.user.driver_profile.id
+    if ticket.user is not None:
+        driver_profile = _get_loaded_driver_profile(ticket.user)
+        if driver_profile is not None:
+            return None, driver_profile.id
 
     if ticket.user_id is None:
         return None, None
 
     driver_id = await db.scalar(select(Driver.id).where(Driver.user_id == ticket.user_id))
     return None, driver_id
+
+
+def _get_loaded_driver_profile(user: User | None) -> Driver | None:
+    if user is None:
+        return None
+
+    state = sa_inspect(user)
+    if "driver_profile" in state.unloaded:
+        return None
+
+    return user.driver_profile
+
+
+def _resolve_driver_requester_phone(
+    ticket: SupportTicket,
+    actor: SupportActor | None = None,
+) -> str | None:
+    user = ticket.user
+    if user is None:
+        return None
+
+    driver_profile = _get_loaded_driver_profile(user)
+    if (
+        driver_profile is None
+        and actor is not None
+        and actor.user is not None
+        and actor.user.id == user.id
+    ):
+        driver_profile = _get_loaded_driver_profile(actor.user)
+
+    if driver_profile is not None and driver_profile.phone:
+        return driver_profile.phone
+
+    username = (user.username or "").strip()
+    return username or None
 
 
 def _message_payload(message: SupportMessage, actor: SupportActor | None = None) -> dict:
@@ -213,9 +250,7 @@ def _ticket_payload(ticket: SupportTicket, actor: SupportActor | None = None) ->
         requester_role = "client"
     else:
         requester_name = ticket.user.display_name or ticket.user.username
-        requester_phone = (
-            ticket.user.driver_profile.phone if ticket.user.driver_profile is not None else None
-        )
+        requester_phone = _resolve_driver_requester_phone(ticket, actor)
         requester_role = ticket.user.role.name if ticket.user.role else "driver"
     messages = sorted(ticket.messages, key=lambda item: item.created_at)
     return {

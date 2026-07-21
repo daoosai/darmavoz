@@ -1,4 +1,4 @@
-const DGIS_KEY = import.meta.env.VITE_2GIS_KEY || "6990476e-6c34-4049-9f9c-a1333924bce4";
+const DGIS_KEY = import.meta.env.VITE_2GIS_KEY;
 const TYUMEN_CITY = "Тюмень";
 const TYUMEN_LOCATION = "65.534328,57.152286";
 

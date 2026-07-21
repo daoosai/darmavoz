@@ -217,9 +217,11 @@ async def calculate_client_order_options(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Delivery option not found")
     if delivery_option.delivery_rate_per_km is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Delivery rate is not configured")
+    selected_point: Quarry | None = None
+    selected_point_price: float | None = None
     if quarry_id is not None:
-        selected_point = await session.scalar(
-            select(Quarry)
+        selected_point_row = await session.execute(
+            select(Quarry, quarry_materials.c.price)
             .join(quarry_materials, quarry_materials.c.quarry_id == Quarry.id)
             .where(
                 *public_pickup_point_filters(),
@@ -229,26 +231,30 @@ async def calculate_client_order_options(
                 quarry_materials.c.is_active.is_(True),
             )
         )
-        if selected_point is None:
+        selected_point_match = selected_point_row.first()
+        if selected_point_match is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Pickup point not found for material",
             )
-    result = await session.execute(
-        select(
-            Quarry,
-            quarry_materials.c.price,
+        selected_point, selected_point_price = selected_point_match
+        quarry_rows = [(selected_point, selected_point_price)]
+    else:
+        result = await session.execute(
+            select(
+                Quarry,
+                quarry_materials.c.price,
+            )
+            .join(quarry_materials, quarry_materials.c.quarry_id == Quarry.id)
+            .where(
+                *public_pickup_point_filters(),
+                Quarry.point_type.in_(MARKETPLACE_POINT_TYPES),
+                quarry_materials.c.material_id == material_id,
+                quarry_materials.c.is_active.is_(True),
+            )
+            .order_by(Quarry.name.asc())
         )
-        .join(quarry_materials, quarry_materials.c.quarry_id == Quarry.id)
-        .where(
-            *public_pickup_point_filters(),
-            Quarry.point_type.in_(MARKETPLACE_POINT_TYPES),
-            quarry_materials.c.material_id == material_id,
-            quarry_materials.c.is_active.is_(True),
-        )
-        .order_by(Quarry.name.asc())
-    )
-    quarry_rows = list(result.unique().all())
+        quarry_rows = list(result.unique().all())
     media_by_point = await load_pickup_point_media_files(
         session,
         [quarry.id for quarry, _price in quarry_rows],
@@ -264,8 +270,12 @@ async def calculate_client_order_options(
     ]
     if not priced_rows:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No active pickup point found for material and delivery option",
+            status_code=status.HTTP_409_CONFLICT if quarry_id is not None else status.HTTP_404_NOT_FOUND,
+            detail=(
+                "Material price is not configured for pickup point"
+                if quarry_id is not None
+                else "No active pickup point found for material"
+            ),
         )
 
     distances = await asyncio.gather(
@@ -319,16 +329,4 @@ async def calculate_client_order_options(
             option.quarry.name.casefold(),
         )
     )
-    if quarry_id is not None:
-        selected_index = next(
-            (index for index, option in enumerate(options) if option.quarry.id == quarry_id),
-            None,
-        )
-        if selected_index is None:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Material price is not configured for pickup point",
-            )
-        selected_option = options.pop(selected_index)
-        options.insert(0, selected_option)
     return options

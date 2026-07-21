@@ -263,13 +263,6 @@ export default function CartScreen({
 
   const selectPointFromMap = (point: PickupPointSelection) => {
     if (!mapContext) return;
-    const supportsSelectedVehicle = point.delivery_options?.some(
-      (option) => option.id === mapContext.deliveryOptionId,
-    );
-    if (!supportsSelectedVehicle) {
-      toast.error("Для этой точки выбранная машина недоступна");
-      return;
-    }
     setPreferredPointIds((current) => ({
       ...current,
       [mapContext.itemId]: point.id,

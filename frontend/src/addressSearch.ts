@@ -9,6 +9,30 @@ export const get2gisSuggestionLabel = (item: any): string =>
   item?.name ||
   "";
 
+export const get2gisSuggestionAddress = (item: any): string =>
+  item?.full_name ||
+  item?.address_name ||
+  item?.name ||
+  get2gisSuggestionLabel(item);
+
+export const get2gisSuggestionCoordinates = (
+  item: any,
+): { lat?: number; lon?: number } => {
+  const pointLat = Number(item?.point?.lat);
+  const pointLon = Number(item?.point?.lon);
+  if (Number.isFinite(pointLat) && Number.isFinite(pointLon)) {
+    return { lat: pointLat, lon: pointLon };
+  }
+
+  const directLat = Number(item?.lat);
+  const directLon = Number(item?.lon);
+  if (Number.isFinite(directLat) && Number.isFinite(directLon)) {
+    return { lat: directLat, lon: directLon };
+  }
+
+  return {};
+};
+
 export const withTyumenBias = (address: string): string => {
   const normalized = address.trim();
   if (!normalized) {

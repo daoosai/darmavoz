@@ -3,6 +3,8 @@ import { Plus, Edit2, ImagePlus, Star, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import {
   fetch2gisAddressSuggestions,
+  get2gisSuggestionAddress,
+  get2gisSuggestionCoordinates,
   get2gisSuggestionLabel,
   withTyumenBias,
 } from "./addressSearch";
@@ -125,6 +127,7 @@ type QuarryFormData = Omit<Quarry, "lat" | "lon" | "media_files"> & {
 
 type AddressSuggestion = {
   label: string;
+  address: string;
   lat?: number;
   lon?: number;
 };
@@ -698,21 +701,22 @@ function EditQuarryModal({
     setSuggestions(
       suggests
         .map((suggestion: any) => {
+          const address = get2gisSuggestionAddress(suggestion);
           const label = get2gisSuggestionLabel(suggestion);
-          const lat = Number(suggestion.point?.lat);
-          const lon = Number(suggestion.point?.lon);
+          const { lat, lon } = get2gisSuggestionCoordinates(suggestion);
           return {
-            label,
-            lat: Number.isFinite(lat) ? lat : undefined,
-            lon: Number.isFinite(lon) ? lon : undefined,
+            label: label || address,
+            address,
+            lat,
+            lon,
           };
         })
-        .filter((item) => Boolean(item.label)),
+        .filter((item) => Boolean(item.address)),
     );
   };
 
   const selectSuggestion = async (suggestion: AddressSuggestion) => {
-    const address = suggestion.label.trim();
+    const address = suggestion.address.trim() || suggestion.label.trim();
     setFormData((prev) => ({ ...prev, address }));
     setSuggestions([]);
 
@@ -1543,21 +1547,22 @@ function EnhancedEditQuarryModal({
     setSuggestions(
       results
         .map((item: any) => {
+          const address = get2gisSuggestionAddress(item);
           const label = get2gisSuggestionLabel(item);
-          const lat = Number(item.point?.lat);
-          const lon = Number(item.point?.lon);
+          const { lat, lon } = get2gisSuggestionCoordinates(item);
           return {
-            label,
-            lat: Number.isFinite(lat) ? lat : undefined,
-            lon: Number.isFinite(lon) ? lon : undefined,
+            label: label || address,
+            address,
+            lat,
+            lon,
           };
         })
-        .filter((item) => Boolean(item.label)),
+        .filter((item) => Boolean(item.address)),
     );
   };
 
   const handleSuggestionSelect = async (suggestion: AddressSuggestion) => {
-    const address = suggestion.label.trim();
+    const address = suggestion.address.trim() || suggestion.label.trim();
     setSuggestions([]);
     setShowSuggestions(false);
     setFormData((current) => ({

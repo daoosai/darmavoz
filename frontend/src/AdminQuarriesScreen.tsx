@@ -1150,6 +1150,8 @@ function EditQuarryModal({
               <input
                 type="date"
                 value={formData.subscription_end_date || ""}
+                min="2000-01-01"
+                max="2099-12-31"
                 onChange={(event) =>
                   setFormData({
                     ...formData,
@@ -1986,7 +1988,8 @@ function EnhancedEditQuarryModal({
                 {suggestions.map((suggestion, index) => (
                   <li
                     key={`${suggestion.label}-${index}`}
-                    onMouseDown={() => {
+                    onMouseDown={(event) => {
+                      event.preventDefault();
                       if (blurTimeoutRef.current) {
                         window.clearTimeout(blurTimeoutRef.current);
                         blurTimeoutRef.current = null;

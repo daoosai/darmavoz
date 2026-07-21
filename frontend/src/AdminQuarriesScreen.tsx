@@ -68,6 +68,16 @@ type EditablePointType = "quarry" | "accumulator";
 const normalizeEditablePointType = (value?: Quarry["point_type"]): EditablePointType =>
   value === "accumulator" ? "accumulator" : "quarry";
 
+const normalizeDateInputValue = (value?: unknown) => {
+  if (!value) return "";
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
+    return value.trim();
+  }
+
+  const parsed = parseSubscriptionEndDate(value);
+  return parsed ? parsed.toISOString().split("T")[0] : "";
+};
+
 const parseSubscriptionEndDate = (value?: unknown) => {
   if (!value) return null;
   if (value instanceof Date) {
@@ -92,11 +102,6 @@ const parseSubscriptionEndDate = (value?: unknown) => {
 
   const parsed = new Date(normalized);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
-};
-
-const formatDateInputValue = (value?: string | null) => {
-  const parsed = parseSubscriptionEndDate(value);
-  return parsed ? parsed.toISOString().slice(0, 10) : "";
 };
 
 const serializeSubscriptionEndDate = (value?: string | null) => {
@@ -218,6 +223,7 @@ export default function AdminQuarriesScreen({
         ...quarry,
         point_type: normalizeEditablePointType(quarry.point_type),
         contact_phone: quarry.contact_phone || quarry.owner_phone || "",
+        subscription_end_date: normalizeDateInputValue(quarry.subscription_end_date),
       });
     } else {
       setEditingQuarry({
@@ -481,7 +487,10 @@ function EditQuarryModal({
   onSave: () => void;
 }) {
   const { token } = useAuthStore();
-  const [formData, setFormData] = useState<Quarry>(quarry);
+  const [formData, setFormData] = useState<Quarry>({
+    ...quarry,
+    subscription_end_date: normalizeDateInputValue(quarry.subscription_end_date),
+  });
   const [isSaving, setIsSaving] = useState(false);
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const usesOwnerPhone = Boolean(formData.owner_user_id);
@@ -883,7 +892,7 @@ function EditQuarryModal({
               </label>
               <input
                 type="date"
-                value={formatDateInputValue(formData.subscription_end_date)}
+                value={formData.subscription_end_date || ""}
                 onChange={(event) =>
                   setFormData({
                     ...formData,

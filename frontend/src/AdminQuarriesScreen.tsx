@@ -68,19 +68,40 @@ type EditablePointType = "quarry" | "accumulator";
 const normalizeEditablePointType = (value?: Quarry["point_type"]): EditablePointType =>
   value === "accumulator" ? "accumulator" : "quarry";
 
+const parseSubscriptionEndDate = (value?: unknown) => {
+  if (!value) return null;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  if (typeof value !== "string") return null;
+
+  const normalized = value.trim();
+  if (!normalized) return null;
+
+  const dottedMatch = normalized.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (dottedMatch) {
+    const [, day, month, year] = dottedMatch;
+    return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+  }
+
+  const isoDateMatch = normalized.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoDateMatch) {
+    const [, year, month, day] = isoDateMatch;
+    return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+  }
+
+  const parsed = new Date(normalized);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
 const formatDateInputValue = (value?: string | null) => {
-  if (!value) return "";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "";
-  const timezoneOffsetMs = parsed.getTimezoneOffset() * 60_000;
-  return new Date(parsed.getTime() - timezoneOffsetMs).toISOString().slice(0, 10);
+  const parsed = parseSubscriptionEndDate(value);
+  return parsed ? parsed.toISOString().slice(0, 10) : "";
 };
 
 const serializeSubscriptionEndDate = (value?: string | null) => {
-  if (!value) return null;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed.toISOString();
+  const parsed = parseSubscriptionEndDate(value);
+  return parsed ? parsed.toISOString() : null;
 };
 
 const normalizeOptionalText = (value?: string | null) => {

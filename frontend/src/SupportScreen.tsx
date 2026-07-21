@@ -82,6 +82,9 @@ const withoutMessage = (ticket: SupportTicket, messageId: string): SupportTicket
   messages: ticket.messages.filter((message) => message.id !== messageId),
 });
 
+const withoutTicket = (tickets: SupportTicket[], ticketId: string) =>
+  sortTicketsByUpdatedAt(tickets.filter((ticket) => ticket.id !== ticketId));
+
 const withMessage = (ticket: SupportTicket, message: SupportMessage): SupportTicket => ({
   ...ticket,
   updated_at: message.created_at,
@@ -210,6 +213,7 @@ export default function SupportScreen({
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
   const [messageActionLoading, setMessageActionLoading] = useState(false);
+  const [deletingTicketId, setDeletingTicketId] = useState<string | null>(null);
   const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null);
   const [form, setForm] = useState({
     subject: initialContext?.subject || "",
@@ -290,6 +294,11 @@ export default function SupportScreen({
         current.map((ticket) => (ticket.id === ticketId ? updater(ticket) : ticket)),
       ),
     );
+  };
+
+  const removeTicketFromState = (ticketId: string) => {
+    setSelected((current) => (current?.id === ticketId ? null : current));
+    setTickets((current) => withoutTicket(current, ticketId));
   };
 
   const isOperatorViewer = operatorMode || operatorAuthorRoles.has(role || "");
@@ -740,6 +749,34 @@ export default function SupportScreen({
       return toast.error(extractApiErrorMessage(data, "Не удалось изменить статус"));
     }
     syncTicket(data);
+  };
+
+  const deleteTicket = async (ticketId: string) => {
+    if (!window.confirm("Удалить этот чат навсегда?")) return;
+
+    const previousTickets = tickets;
+    const previousSelected = selected;
+
+    setDeletingTicketId(ticketId);
+    removeTicketFromState(ticketId);
+
+    try {
+      const response = await fetch(`${baseURL}/admin/support/tickets/${ticketId}`, {
+        method: "DELETE",
+        headers,
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(extractApiErrorMessage(data, "Не удалось удалить чат"));
+      }
+      toast.success("Чат удалён");
+    } catch (error) {
+      setTickets(previousTickets);
+      setSelected(previousSelected);
+      toast.error(error instanceof Error ? error.message : "Не удалось удалить чат");
+    } finally {
+      setDeletingTicketId(null);
+    }
   };
 
   const currentSupportActorId = selected ? getSupportActorId(selected.messages, role) : null;
@@ -1288,6 +1325,7 @@ export default function SupportScreen({
         <div className="space-y-3">
           {visibleTickets.map((ticket) => (
             <button
+              type="button"
               key={ticket.id}
               onClick={() => setSelected(ticket)}
               className="flex w-full items-center gap-3 rounded-2xl bg-white p-4 text-left shadow-sm"
@@ -1325,11 +1363,38 @@ export default function SupportScreen({
                   </p>
                 )}
               </div>
-              <span
-                className={`rounded-full px-2 py-1 text-[10px] font-bold ${statusClasses[ticket.status]}`}
-              >
-                {statusLabels[ticket.status]}
-              </span>
+              <div className="ml-auto flex items-center gap-2">
+                <span
+                  className={`rounded-full px-2 py-1 text-[10px] font-bold ${statusClasses[ticket.status]}`}
+                >
+                  {statusLabels[ticket.status]}
+                </span>
+                {operatorMode ? (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void deleteTicket(ticket.id);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        void deleteTicket(ticket.id);
+                      }
+                    }}
+                    aria-label="Удалить чат"
+                    className={`rounded-xl p-2 transition ${
+                      deletingTicketId === ticket.id
+                        ? "cursor-not-allowed text-slate-300"
+                        : "text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                    }`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </span>
+                ) : null}
+              </div>
             </button>
           ))}
         </div>

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal
 from uuid import UUID
 
@@ -11,6 +11,36 @@ PickupPointTypeValue = Literal["quarry", "accumulator", "warehouse", "supplier"]
 ModerationStatusValue = Literal[
     "incomplete", "pending_moderation", "approved", "rejected", "suspended"
 ]
+
+
+def _normalize_optional_text(value: object) -> object:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        normalized = value.strip()
+        return normalized or None
+    return value
+
+
+def _normalize_subscription_end_date_value(value: object) -> object:
+    normalized = _normalize_optional_text(value)
+    if normalized is None or not isinstance(normalized, str):
+        return normalized
+
+    if len(normalized) == 10 and normalized[4] == "-" and normalized[7] == "-":
+        year, month, day = normalized.split("-")
+        return datetime(int(year), int(month), int(day), tzinfo=timezone.utc)
+
+    if len(normalized) == 10 and normalized[2] == "." and normalized[5] == ".":
+        day, month, year = normalized.split(".")
+        return datetime(int(year), int(month), int(day), tzinfo=timezone.utc)
+
+    try:
+        return datetime.fromisoformat(normalized.replace("Z", "+00:00"))
+    except ValueError:
+        pass
+
+    return normalized
 
 
 class QuarryMaterialRef(BaseModel):
@@ -52,32 +82,22 @@ class QuarryBase(BaseModel):
     @field_validator("contact_phone", mode="before")
     @classmethod
     def normalize_contact_phone(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        if isinstance(value, str):
-            normalized = value.strip()
-            return normalized or None
-        return value
+        return _normalize_optional_text(value)
 
     @field_validator("short_name", mode="before")
     @classmethod
     def normalize_short_name(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        if isinstance(value, str):
-            normalized = value.strip()
-            return normalized or None
-        return value
+        return _normalize_optional_text(value)
+
+    @field_validator("description", mode="before")
+    @classmethod
+    def normalize_description(cls, value: str | None) -> str | None:
+        return _normalize_optional_text(value)
 
     @field_validator("subscription_end_date", mode="before")
     @classmethod
     def normalize_subscription_end_date(cls, value: object) -> object:
-        if value is None:
-            return None
-        if isinstance(value, str):
-            normalized = value.strip()
-            return normalized or None
-        return value
+        return _normalize_subscription_end_date_value(value)
 
     @field_validator("lat")
     @classmethod
@@ -132,32 +152,22 @@ class QuarryUpdate(BaseModel):
     @field_validator("contact_phone", mode="before")
     @classmethod
     def normalize_contact_phone(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        if isinstance(value, str):
-            normalized = value.strip()
-            return normalized or None
-        return value
+        return _normalize_optional_text(value)
 
     @field_validator("short_name", mode="before")
     @classmethod
     def normalize_short_name(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        if isinstance(value, str):
-            normalized = value.strip()
-            return normalized or None
-        return value
+        return _normalize_optional_text(value)
+
+    @field_validator("description", mode="before")
+    @classmethod
+    def normalize_description(cls, value: str | None) -> str | None:
+        return _normalize_optional_text(value)
 
     @field_validator("subscription_end_date", mode="before")
     @classmethod
     def normalize_subscription_end_date(cls, value: object) -> object:
-        if value is None:
-            return None
-        if isinstance(value, str):
-            normalized = value.strip()
-            return normalized or None
-        return value
+        return _normalize_subscription_end_date_value(value)
 
     @field_validator("lat")
     @classmethod

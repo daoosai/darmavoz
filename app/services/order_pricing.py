@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from dataclasses import dataclass
-from math import asin, cos, radians, sin, sqrt
+from math import asin, cos, isfinite, radians, sin, sqrt
 from uuid import UUID
 
 import httpx
@@ -23,6 +23,7 @@ from app.services.pickup_points import public_pickup_point_filters
 logger = logging.getLogger(__name__)
 MARKETPLACE_POINT_TYPES = ("quarry", "accumulator", "warehouse", "supplier")
 ROUTE_BUILD_ERROR_MESSAGE = "Не удалось построить маршрут до вашего адреса."
+CALCULATION_DATA_ERROR_MESSAGE = "Не удалось рассчитать маршрут. Проверьте адрес доставки."
 
 
 def resolve_min_delivery_price(
@@ -32,6 +33,17 @@ def resolve_min_delivery_price(
     if point_type in {"accumulator", "warehouse", "supplier"}:
         return round(float(delivery_option.min_price_warehouse), 2)
     return round(float(delivery_option.min_price_quarry), 2)
+
+
+def has_valid_coordinates(lat: float | None, lon: float | None) -> bool:
+    return (
+        isinstance(lat, (float, int))
+        and isinstance(lon, (float, int))
+        and isfinite(float(lat))
+        and isfinite(float(lon))
+        and -90 <= float(lat) <= 90
+        and -180 <= float(lon) <= 180
+    )
 
 
 @dataclass(slots=True)
@@ -237,8 +249,13 @@ async def calculate_client_order_options(
         )
     if delivery_option.delivery_rate_per_km is None:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="Для выбранного типа машины не настроен тариф доставки.",
+        )
+    if not has_valid_coordinates(delivery_lat, delivery_lon):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=CALCULATION_DATA_ERROR_MESSAGE,
         )
     selected_point: Quarry | None = None
     selected_point_price: float | None = None
@@ -289,13 +306,21 @@ async def calculate_client_order_options(
             media_by_point.get(quarry.id, []),
         )
         for quarry, price in quarry_rows
-        if float(price if price is not None else material.price or 0) > 0
+        if (
+            float(price if price is not None else material.price or 0) > 0
+            and has_valid_coordinates(quarry.lat, quarry.lon)
+        )
     ]
     if not priced_rows:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT if quarry_id is not None else status.HTTP_404_NOT_FOUND,
+            status_code=status.HTTP_400_BAD_REQUEST
+            if quarry_id is not None
+            else status.HTTP_404_NOT_FOUND,
             detail=(
-                "В выбранной точке не установлена цена на этот материал."
+                CALCULATION_DATA_ERROR_MESSAGE
+                if selected_point is not None
+                and not has_valid_coordinates(selected_point.lat, selected_point.lon)
+                else "В выбранной точке не установлена цена на этот материал."
                 if quarry_id is not None
                 else "Подходящие точки не найдены."
             ),

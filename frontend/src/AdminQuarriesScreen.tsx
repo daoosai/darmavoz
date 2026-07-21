@@ -524,6 +524,7 @@ function EditQuarryModal({
   const [isSaving, setIsSaving] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const usesOwnerPhone = Boolean(formData.owner_user_id);
   const pointTitle =
@@ -532,6 +533,7 @@ function EditQuarryModal({
       : "карьер";
 
   const mapContainerRef = React.useRef<HTMLDivElement | null>(null);
+  const addressContainerRef = React.useRef<HTMLDivElement | null>(null);
   const mapRef = React.useRef<any>(null);
   const markerRef = React.useRef<any>(null);
   const lastGeocodedAddressRef = React.useRef(
@@ -583,6 +585,17 @@ function EditQuarryModal({
         markerRef.current = null;
       }
     };
+  }, []);
+
+  React.useEffect(() => {
+    const handleDocumentMouseDown = (event: MouseEvent) => {
+      if (!addressContainerRef.current?.contains(event.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleDocumentMouseDown);
+    return () => document.removeEventListener("mousedown", handleDocumentMouseDown);
   }, []);
 
   React.useEffect(() => {
@@ -1378,11 +1391,13 @@ function EnhancedEditQuarryModal({
   const [isSaving, setIsSaving] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const usesOwnerPhone = Boolean(formData.owner_user_id);
   const pointTitle = formData.point_type === "accumulator" ? "накопитель" : "карьер";
 
   const mapContainerRef = React.useRef<HTMLDivElement | null>(null);
+  const addressContainerRef = React.useRef<HTMLDivElement | null>(null);
   const mapRef = React.useRef<any>(null);
   const markerRef = React.useRef<any>(null);
   const blurTimeoutRef = React.useRef<number | null>(null);
@@ -1431,6 +1446,17 @@ function EnhancedEditQuarryModal({
         markerRef.current = null;
       }
     };
+  }, []);
+
+  React.useEffect(() => {
+    const handleDocumentMouseDown = (event: MouseEvent) => {
+      if (!addressContainerRef.current?.contains(event.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleDocumentMouseDown);
+    return () => document.removeEventListener("mousedown", handleDocumentMouseDown);
   }, []);
 
   React.useEffect(() => {
@@ -1507,8 +1533,10 @@ function EnhancedEditQuarryModal({
     setFormData((current) => ({ ...current, address: value }));
     if (!value.trim()) {
       setSuggestions([]);
+      setShowSuggestions(false);
       return;
     }
+    setShowSuggestions(true);
     const results = await fetch2gisAddressSuggestions(value);
     setSuggestions(
       results
@@ -1529,6 +1557,7 @@ function EnhancedEditQuarryModal({
   const handleSuggestionSelect = async (suggestion: AddressSuggestion) => {
     const address = suggestion.label.trim();
     setSuggestions([]);
+    setShowSuggestions(false);
     if (typeof suggestion.lat === "number" && typeof suggestion.lon === "number") {
       lastGeocodedAddressRef.current = address.toLowerCase();
       setFormData((current) => ({
@@ -1931,13 +1960,14 @@ function EnhancedEditQuarryModal({
             />
           </div>
 
-          <div className="flex flex-col gap-1.5 relative">
+          <div ref={addressContainerRef} className="flex flex-col gap-1.5 relative">
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Адрес</label>
             <div className="relative">
               <input
                 type="text"
                 value={formData.address}
                 onChange={handleAddressChange}
+                onFocus={() => setShowSuggestions(true)}
                 onBlur={() => {
                   blurTimeoutRef.current = window.setTimeout(() => {
                     void syncAddressCoordinates();
@@ -1951,7 +1981,7 @@ function EnhancedEditQuarryModal({
                 </div>
               ) : null}
             </div>
-            {suggestions.length > 0 ? (
+            {showSuggestions && suggestions.length > 0 ? (
               <ul className="absolute z-[9999] top-full mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-2xl max-h-48 overflow-y-auto">
                 {suggestions.map((suggestion, index) => (
                   <li
@@ -1961,8 +1991,8 @@ function EnhancedEditQuarryModal({
                         window.clearTimeout(blurTimeoutRef.current);
                         blurTimeoutRef.current = null;
                       }
+                      void handleSuggestionSelect(suggestion);
                     }}
-                    onClick={() => void handleSuggestionSelect(suggestion)}
                     className="px-4 py-3 hover:bg-slate-50 cursor-pointer border-b border-gray-100 last:border-0 text-sm"
                   >
                     {suggestion.label}

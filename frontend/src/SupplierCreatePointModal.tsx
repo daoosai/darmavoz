@@ -88,6 +88,7 @@ export default function SupplierCreatePointModal({ token, point, onClose, onSave
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
+  const addressContainerRef = useRef<HTMLDivElement | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
@@ -111,6 +112,17 @@ export default function SupplierCreatePointModal({ token, point, onClose, onSave
     }, 300);
     return () => window.clearTimeout(timeoutId);
   }, [form.address]);
+
+  useEffect(() => {
+    const handleDocumentMouseDown = (event: MouseEvent) => {
+      if (!addressContainerRef.current?.contains(event.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleDocumentMouseDown);
+    return () => document.removeEventListener("mousedown", handleDocumentMouseDown);
+  }, []);
 
   useEffect(() => {
     const mapgl = (window as any).mapgl;
@@ -325,7 +337,7 @@ export default function SupplierCreatePointModal({ token, point, onClose, onSave
 
           <section className="rounded-xl bg-white p-5 shadow-sm">
             <label className="text-sm font-bold text-gray-900">Адрес</label>
-            <div className="relative mt-2">
+            <div ref={addressContainerRef} className="relative mt-2">
               <Search className="absolute left-3 top-3.5 h-5 w-5 text-gray-400" />
               <input
                 value={form.address}
@@ -341,7 +353,15 @@ export default function SupplierCreatePointModal({ token, point, onClose, onSave
               {showSuggestions && suggestions.length > 0 ? (
                 <div className="absolute z-30 mt-2 max-h-56 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white p-1 shadow-xl">
                   {suggestions.map((item, index) => (
-                    <button key={item.id || index} type="button" onClick={() => void selectSuggestion(item)} className="flex w-full items-start gap-2 rounded-lg px-3 py-3 text-left text-sm text-gray-700 hover:bg-sky-50">
+                    <button
+                      key={item.id || index}
+                      type="button"
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        void selectSuggestion(item);
+                      }}
+                      className="flex w-full items-start gap-2 rounded-lg px-3 py-3 text-left text-sm text-gray-700 hover:bg-sky-50"
+                    >
                       <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-sky-500" />{suggestionLabel(item)}
                     </button>
                   ))}

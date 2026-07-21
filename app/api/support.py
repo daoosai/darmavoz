@@ -4,7 +4,7 @@ from pathlib import Path
 from uuid import UUID
 
 from botocore.exceptions import ClientError
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from jose import JWTError, jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -515,20 +515,6 @@ async def add_operator_support_message(
         user=current_user,
     )
     return _ticket_payload(ticket, actor)
-
-
-@router.delete("/support/tickets/{ticket_id}", status_code=status.HTTP_204_NO_CONTENT)
-@router.delete("/admin/support/tickets/{ticket_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_operator_support_ticket(
-    ticket_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_logist_user),
-) -> Response:
-    del current_user
-    ticket = await _get_ticket(db, ticket_id)
-    await db.delete(ticket)
-    await db.commit()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post(

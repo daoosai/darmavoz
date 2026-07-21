@@ -30,6 +30,8 @@ from app.models.models import (
     OrderOffer,
     OrderStatus,
     Role,
+    SupportMessage,
+    SupportTicket,
     User,
     Vehicle,
     quarry_materials,
@@ -155,6 +157,24 @@ async def get_admin_statistics(
         total_drivers=int(total_drivers or 0),
         active_drivers=int(active_drivers or 0),
     )
+
+
+@router.delete("/support/tickets/{ticket_id}")
+async def delete_support_ticket(
+    ticket_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_logist_user),
+) -> dict[str, bool]:
+    del current_user
+
+    ticket = await db.get(SupportTicket, ticket_id)
+    if ticket is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Обращение не найдено")
+
+    await db.execute(delete(SupportMessage).where(SupportMessage.ticket_id == ticket_id))
+    await db.delete(ticket)
+    await db.commit()
+    return {"ok": True}
 
 
 class AdminMeOut(BaseModel):

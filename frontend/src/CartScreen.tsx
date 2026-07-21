@@ -18,7 +18,7 @@ import {
   useAddressStore,
   useClientOrdersStore,
 } from "./store";
-import { baseURL, resolveMediaUrl } from "./utils";
+import { baseURL, extractApiErrorMessage, resolveMediaUrl } from "./utils";
 import toast from "react-hot-toast";
 import { MaterialProps } from "./MaterialDetailScreen";
 import PickupPointMapScreen, { PickupPointSelection } from "./PickupPointMapScreen";
@@ -41,7 +41,12 @@ interface MarketplaceCalculation {
   alternatives: MarketplaceOption[];
 }
 
-type CalculationResult = MarketplaceCalculation | { error: true };
+type CalculationErrorResult = {
+  error: true;
+  errorText?: string;
+};
+
+type CalculationResult = MarketplaceCalculation | CalculationErrorResult;
 
 interface MapContext {
   itemId: string;
@@ -52,6 +57,9 @@ interface MapContext {
 const isMarketplaceCalculation = (
   result: CalculationResult | undefined,
 ): result is MarketplaceCalculation => Boolean(result && "best_option" in result);
+
+const DEFAULT_CALCULATION_ERROR_TEXT =
+  "Доставка этого материала по вашему адресу временно невозможна: подходящие точки не найдены.";
 
 const MIN_VOLUME_M3 = 5;
 const VOLUME_STEP_M3 = 1;
@@ -76,6 +84,31 @@ const getMarketplaceImageUrl = (option: MarketplaceOption) =>
       ?? option.media_files?.find((media) => Boolean(media.public_url))?.public_url
       ?? option.image_url,
   );
+
+const getCalculationErrorText = (result: CalculationResult | undefined) => {
+  if (!result || isMarketplaceCalculation(result)) return null;
+  const normalized = result.errorText?.trim();
+  return normalized || null;
+};
+
+const parseErrorResponse = async (
+  response: Response,
+  fallbackMessage: string,
+) => {
+  const data = await response.clone().json().catch(() => null);
+  if (data) {
+    return extractApiErrorMessage(
+      { status: response.status, data },
+      fallbackMessage,
+    );
+  }
+
+  const text = await response.text().catch(() => "");
+  return extractApiErrorMessage(
+    { status: response.status, detail: text || undefined },
+    fallbackMessage,
+  );
+};
 
 export default function CartScreen({
   onGoToHome,
@@ -188,10 +221,19 @@ export default function CartScreen({
           },
         );
 
-        if (!geoRes.ok) throw new Error("Geocode error");
+        if (!geoRes.ok) {
+          const errorText = await parseErrorResponse(
+            geoRes,
+            "Не удалось определить координаты адреса доставки.",
+          );
+          throw new Error(errorText);
+        }
 
         const geoData = await geoRes.json();
         const { lat, lon } = geoData;
+        if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lon))) {
+          throw new Error("Не удалось определить координаты адреса доставки.");
+        }
         setDeliveryCoords({ lat, lon });
 
         // Fetch calculation for each item
@@ -215,17 +257,25 @@ export default function CartScreen({
           if (res.ok) {
             newResults[item.id] = await res.json();
           } else {
-            newResults[item.id] = { error: true };
+            const errorText = await parseErrorResponse(
+              res,
+              DEFAULT_CALCULATION_ERROR_TEXT,
+            );
+            newResults[item.id] = { error: true, errorText };
           }
         }
         setCalcResults(newResults);
       } catch (e) {
         setDeliveryCoords(null);
         console.error("Calculation error", e);
+        const errorText = extractApiErrorMessage(
+          e,
+          "Ошибка расчета стоимости",
+        );
         // If geocode fails or network fails, we can also set error state
         const errResults: Record<string, CalculationResult> = {};
         for (const item of cartItems) {
-          errResults[item.id] = { error: true };
+          errResults[item.id] = { error: true, errorText };
         }
         setCalcResults(errResults);
       } finally {
@@ -356,6 +406,10 @@ export default function CartScreen({
   const hasCalculationError = hasCalculations && cartItems.some(
     (item) => !isMarketplaceCalculation(calcResults[item.id]),
   );
+  const calculationErrorText = cartItems
+    .map((item) => getCalculationErrorText(calcResults[item.id]))
+    .find((message): message is string => Boolean(message))
+    || DEFAULT_CALCULATION_ERROR_TEXT;
 
   const totalDeliveryCost = cartItems.reduce((acc, item) => {
     const res = calcResults[item.id];
@@ -544,7 +598,7 @@ export default function CartScreen({
           </div>
         ) : hasCalculationError ? (
           <div className="p-4 bg-orange-50 text-orange-700 rounded-xl text-sm mt-4">
-            Доставка этого материала по вашему адресу временно невозможна: подходящие точки не найдены.
+            {calculationErrorText}
           </div>
         ) : hasCalculations ? (
           <div className="flex flex-col gap-5">

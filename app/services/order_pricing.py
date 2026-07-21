@@ -22,6 +22,7 @@ from app.services.pickup_points import public_pickup_point_filters
 
 logger = logging.getLogger(__name__)
 MARKETPLACE_POINT_TYPES = ("quarry", "accumulator", "warehouse", "supplier")
+ROUTE_BUILD_ERROR_MESSAGE = "Не удалось построить маршрут до вашего адреса."
 
 
 def resolve_min_delivery_price(
@@ -91,7 +92,23 @@ def get_straight_distance_km(lat_a: float, lon_a: float, lat_b: float, lon_b: fl
     return radius_km * arc
 
 
-async def get_2gis_route_distance(lat_a: float, lon_a: float, lat_b: float, lon_b: float) -> float:
+def _resolve_route_distance_failure(*, strict: bool, fallback_km: float) -> float:
+    if strict:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=ROUTE_BUILD_ERROR_MESSAGE,
+        )
+    return fallback_km
+
+
+async def get_2gis_route_distance(
+    lat_a: float,
+    lon_a: float,
+    lat_b: float,
+    lon_b: float,
+    *,
+    strict: bool = False,
+) -> float:
     fallback_km = round(get_straight_distance_km(lat_a, lon_a, lat_b, lon_b) * 1.3, 2)
     log_context = {
         "lat_a": lat_a,
@@ -121,7 +138,7 @@ async def get_2gis_route_distance(lat_a: float, lon_a: float, lat_b: float, lon_
 
     if not settings.TWOGIS_API_KEY:
         logger.error("2gis_distance_fallback: TWOGIS_API_KEY is not configured", extra=log_context)
-        return fallback_km
+        return _resolve_route_distance_failure(strict=strict, fallback_km=fallback_km)
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
@@ -136,7 +153,7 @@ async def get_2gis_route_distance(lat_a: float, lon_a: float, lat_b: float, lon_
             )
     except httpx.HTTPError:
         logger.exception("2gis_distance_fallback_request_error", extra=log_context)
-        return fallback_km
+        return _resolve_route_distance_failure(strict=strict, fallback_km=fallback_km)
 
     response_text = response.text
     if response.status_code != status.HTTP_200_OK:
@@ -146,7 +163,7 @@ async def get_2gis_route_distance(lat_a: float, lon_a: float, lat_b: float, lon_
             response_text,
             extra=log_context,
         )
-        return fallback_km
+        return _resolve_route_distance_failure(strict=strict, fallback_km=fallback_km)
 
     try:
         response_data = response.json()
@@ -158,7 +175,7 @@ async def get_2gis_route_distance(lat_a: float, lon_a: float, lat_b: float, lon_
                 response_text,
                 extra=log_context,
             )
-            return fallback_km
+            return _resolve_route_distance_failure(strict=strict, fallback_km=fallback_km)
 
         routes = response_data.get("result")
         if not isinstance(routes, list) or not routes:
@@ -174,7 +191,7 @@ async def get_2gis_route_distance(lat_a: float, lon_a: float, lat_b: float, lon_
             "2gis_distance_fallback_parse_error",
             extra={**log_context, "response_text": response_text},
         )
-        return fallback_km
+        return _resolve_route_distance_failure(strict=strict, fallback_km=fallback_km)
 
 
 async def calculate_client_order_pricing(
@@ -211,12 +228,18 @@ async def calculate_client_order_options(
 ) -> list[ClientOrderPricing]:
     material = await session.get(Material, material_id)
     if material is None or not material.is_active:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Material not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Материал недоступен.")
     delivery_option = await session.get(DeliveryOption, delivery_option_id)
     if delivery_option is None or not delivery_option.is_active:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Delivery option not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Выбранный тип машины недоступен.",
+        )
     if delivery_option.delivery_rate_per_km is None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Delivery rate is not configured")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Для выбранного типа машины не настроен тариф доставки.",
+        )
     selected_point: Quarry | None = None
     selected_point_price: float | None = None
     if quarry_id is not None:
@@ -235,7 +258,7 @@ async def calculate_client_order_options(
         if selected_point_match is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Pickup point not found for material",
+                detail="Выбранный карьер/накопитель временно недоступен.",
             )
         selected_point, selected_point_price = selected_point_match
         quarry_rows = [(selected_point, selected_point_price)]
@@ -272,20 +295,21 @@ async def calculate_client_order_options(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT if quarry_id is not None else status.HTTP_404_NOT_FOUND,
             detail=(
-                "Material price is not configured for pickup point"
+                "В выбранной точке не установлена цена на этот материал."
                 if quarry_id is not None
-                else "No active pickup point found for material"
+                else "Подходящие точки не найдены."
             ),
         )
 
     distances = await asyncio.gather(
         *(
-            get_2gis_route_distance(
-                quarry.lat,
-                quarry.lon,
-                delivery_lat,
-                delivery_lon,
-            )
+                    get_2gis_route_distance(
+                        quarry.lat,
+                        quarry.lon,
+                        delivery_lat,
+                        delivery_lon,
+                        strict=quarry_id is not None,
+                    )
             for quarry, _price, _media_files in priced_rows
         )
     )

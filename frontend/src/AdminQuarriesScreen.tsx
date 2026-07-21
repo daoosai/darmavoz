@@ -1560,25 +1560,32 @@ function EnhancedEditQuarryModal({
     const address = suggestion.label.trim();
     setSuggestions([]);
     setShowSuggestions(false);
+    setFormData((current) => ({
+      ...current,
+      address,
+    }));
+
     if (typeof suggestion.lat === "number" && typeof suggestion.lon === "number") {
       lastGeocodedAddressRef.current = address.toLowerCase();
       setFormData((current) => ({
         ...current,
-        address,
         lat: stringifyCoordinate(suggestion.lat),
         lon: stringifyCoordinate(suggestion.lon),
       }));
       return;
     }
 
-    const coords = await geocodeAddress(address);
-    lastGeocodedAddressRef.current = address.toLowerCase();
-    setFormData((current) => ({
-      ...current,
-      address,
-      lat: stringifyCoordinate(coords.lat),
-      lon: stringifyCoordinate(coords.lon),
-    }));
+    try {
+      const coords = await geocodeAddress(address);
+      lastGeocodedAddressRef.current = address.toLowerCase();
+      setFormData((current) => ({
+        ...current,
+        lat: stringifyCoordinate(coords.lat),
+        lon: stringifyCoordinate(coords.lon),
+      }));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось определить координаты по адресу");
+    }
   };
 
   const toggleMaterial = (id: string) => {

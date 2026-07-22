@@ -1,7 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Loader2, MapPin, X } from "lucide-react";
 import toast from "react-hot-toast";
-import { fetch2gisAddressSuggestions, withTyumenBias } from "./addressSearch";
+import {
+  fetch2gisAddressSuggestions,
+  get2gisSuggestionLabel,
+  withTyumenBias,
+} from "./addressSearch";
 import { baseURL } from "./utils";
 
 interface CreateOrderModalProps {
@@ -364,14 +368,15 @@ export default function LogistCreateOrderModal({
         }
 
         if (!cancelled) {
+          const bestOption = data.best_option;
           const materialCost =
             computedMaterialCost ||
-            Number(data.material_cost ?? data.total_amount ?? 0);
-          const deliveryCost = Number(data.delivery_cost ?? 0);
+            Number(bestOption?.material_cost ?? 0);
+          const deliveryCost = Number(bestOption?.delivery_cost ?? 0);
           setCalculationResult({
-            quarry_id: data.quarry_id,
-            quarry_name: data.quarry_name,
-            mileage_km: Number(data.mileage_km ?? data.distance ?? 0),
+            quarry_id: bestOption?.quarry_id,
+            quarry_name: bestOption?.quarry_name,
+            mileage_km: Number(bestOption?.distance ?? 0),
             material_cost: materialCost,
             delivery_cost: deliveryCost,
             estimated_total_amount: materialCost + deliveryCost,
@@ -438,7 +443,7 @@ export default function LogistCreateOrderModal({
 
   const fetch2GISSuggests = async (query: string) => {
     const items = await fetch2gisAddressSuggestions(query);
-    return items.map((item: any) => item.search_attributes?.suggested_text);
+    return items.map((item: any) => get2gisSuggestionLabel(item));
   };
 
   const handleDeliveryChange = async (

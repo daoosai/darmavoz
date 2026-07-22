@@ -24,6 +24,7 @@ jobs:
       - name: Build frontend
         working-directory: frontend
         env:
+          VITE_APP_VERSION: 2.5.0
           VITE_2GIS_KEY: ${{ secrets.VITE_2GIS_KEY }}
         run: |
           set -euo pipefail
@@ -77,8 +78,11 @@ jobs:
           tar -xf /tmp/frontend-prod.tar -C /opt/daoos-kit/sites/darmavoz/frontend
           rm -f /tmp/frontend-prod.tar
           cp -a "${DEPLOY_DIR}/static/." /opt/daoos-kit/sites/darmavoz/static/
-          docker rm -f darmavoz_backend || true
-          docker compose -f "${DEPLOY_DIR}/docker-compose.yml" up -d --build --force-recreate backend
+
+          # Обновление Backend и Миграции
+          docker compose -f "${DEPLOY_DIR}/docker-compose.yml" up -d --build --force-recreate darmavoz_backend
+
+          # Ожидание старта и накатывание миграций
           sleep 5
-          docker compose -f "${DEPLOY_DIR}/docker-compose.yml" exec -T backend alembic upgrade head 
+          docker exec darmavoz_backend alembic upgrade head
           EOF

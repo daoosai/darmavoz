@@ -30,13 +30,20 @@ import {
 } from "lucide-react";
 import AdminProfileScreen from "./AdminProfileScreen";
 import AdminQuarriesScreen from "./AdminQuarriesScreen";
+import AdminSuppliersScreen from "./AdminSuppliersScreen";
+import AdminCategoriesPanel from "./AdminCategoriesPanel";
 import { DriverHistoryModal } from "./components/admin/DriverHistoryModal";
 import toast from "react-hot-toast";
 import { logoutCurrentSession } from "./pushAuth";
+import AdminEquipmentScreen from "./AdminEquipmentScreen";
+import SupportScreen from "./SupportScreen";
 
 interface AdminCategory {
   id: string;
   name: string;
+  slug: string;
+  sort_order: number;
+  is_active: boolean;
 }
 
 interface AdminMediaFile {
@@ -48,6 +55,7 @@ interface AdminMediaFile {
 
 interface AdminMaterial {
   id: string;
+  category_id?: string | null;
   name: string;
   description: string;
   price: number;
@@ -65,7 +73,8 @@ interface AdminDeliveryOption {
   capacity_m3: number;
   base_price: number;
   delivery_rate_per_km?: number;
-  min_delivery_price?: number;
+  min_price_quarry?: number;
+  min_price_warehouse?: number;
   is_active: boolean;
   media_files?: AdminMediaFile[];
   primary_image_url?: string;
@@ -138,6 +147,11 @@ interface PendingModerationRequest {
   vehicle_plate_url?: string | null;
 }
 
+interface AdminEquipmentApplicationAlert {
+  id: string;
+  status: "new" | "in_progress" | "closed" | "completed" | "rejected" | "cancelled";
+}
+
 interface AdminDashboardScreenProps {
   onLogout: () => void;
 }
@@ -147,7 +161,7 @@ export default function AdminDashboardScreen({
 }: AdminDashboardScreenProps) {
   const { token } = useAuthStore();
   const [activeTab, setActiveTab] = useState<
-    "materials" | "quarries" | "delivery" | "drivers" | "moderation" | "profile"
+    "materials" | "quarries" | "delivery" | "drivers" | "moderation" | "suppliers" | "equipment" | "support" | "profile"
   >("materials");
 
   const [materials, setMaterials] = useState<AdminMaterial[]>([]);
@@ -194,6 +208,9 @@ export default function AdminDashboardScreen({
   const [drivers, setDrivers] = useState<AdminDriver[]>([]);
   const [pendingRequests, setPendingRequests] = useState<
     PendingModerationRequest[]
+  >([]);
+  const [equipmentApplications, setEquipmentApplications] = useState<
+    AdminEquipmentApplicationAlert[]
   >([]);
   const [driverActiveOverrides, setDriverActiveOverrides] = useState<
     Record<string, boolean>
@@ -321,6 +338,13 @@ export default function AdminDashboardScreen({
   const [previewMain, setPreviewMain] = useState<string | null>(null);
   const [previewLeft, setPreviewLeft] = useState<string | null>(null);
   const [previewPlate, setPreviewPlate] = useState<string | null>(null);
+
+  const newEquipmentApplicationsCount = equipmentApplications.filter(
+    (item) => item.status === "new",
+  ).length;
+  const activeEquipmentApplicationsCount = equipmentApplications.filter(
+    (item) => item.status === "new" || item.status === "in_progress",
+  ).length;
 
   const sortedDeliveryOptions = useMemo(() => {
     return [...deliveryOptions].sort(
@@ -452,7 +476,9 @@ export default function AdminDashboardScreen({
   const fetchCategories = async () => {
     if (!token) return;
     try {
-      const res = await fetch(`${baseURL}/catalog/categories/`);
+      const res = await fetch(`${baseURL}/admin/categories/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (res.ok) {
         const data = await res.json();
         setCategories(Array.isArray(data) ? data : data.results || []);
@@ -660,6 +686,24 @@ export default function AdminDashboardScreen({
     }
   };
 
+  const fetchEquipmentApplications = async (silent = true) => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${baseURL}/admin/equipment-applications`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        throw new Error("Не удалось загрузить заявки на спецтехнику");
+      }
+      const data = await res.json();
+      setEquipmentApplications(Array.isArray(data) ? data : data.results || []);
+    } catch (err) {
+      if (!silent) {
+        toast.error("Не удалось загрузить заявки на спецтехнику");
+      }
+    }
+  };
+
   const fetchLiveCars = async () => {
     if (!token) return;
     setIsLoadingCars(true);
@@ -710,6 +754,17 @@ export default function AdminDashboardScreen({
   ]);
 
   useEffect(() => {
+    if (!token) return;
+
+    void fetchEquipmentApplications(true);
+    const intervalId = window.setInterval(() => {
+      void fetchEquipmentApplications(true);
+    }, 30000);
+
+    return () => window.clearInterval(intervalId);
+  }, [token]);
+
+  useEffect(() => {
     fetchCategories();
     if (activeTab === "materials" && materials.length === 0) {
       fetchMaterials();
@@ -720,6 +775,8 @@ export default function AdminDashboardScreen({
       if (deliveryOptions.length === 0) fetchDeliveryOptions(true);
     } else if (activeTab === "moderation" && pendingRequests.length === 0) {
       fetchPendingRequests();
+    } else if (activeTab === "equipment") {
+      void fetchEquipmentApplications(false);
     }
   }, [activeTab]);
 
@@ -870,10 +927,11 @@ export default function AdminDashboardScreen({
         unit: editingMaterial.unit || "м3",
         min_volume: Number(editingMaterial.min_volume || 1),
         is_active: editingMaterial.is_active ?? true,
+        category_id: editingMaterial.category_id || null,
       };
 
-      if (!isEdit) {
-        payload.category_id = categories.length > 0 ? categories[0].id : null;
+      if (false && !payload.category_id) {
+        throw new Error("Сначала создайте категорию материалов");
       }
 
       const res = await fetch(url, {
@@ -920,7 +978,8 @@ export default function AdminDashboardScreen({
         delivery_rate_per_km: editingDelivery.delivery_rate_per_km
           ? Number(editingDelivery.delivery_rate_per_km)
           : null,
-        min_delivery_price: Number(editingDelivery.min_delivery_price || 5000),
+        min_price_quarry: Number(editingDelivery.min_price_quarry ?? 5000),
+        min_price_warehouse: Number(editingDelivery.min_price_warehouse ?? 3000),
         is_active: editingDelivery.is_active ?? true,
         sort_order: 10,
       };
@@ -1300,6 +1359,7 @@ export default function AdminDashboardScreen({
         unit: "м3",
         min_volume: 1,
         price: 0,
+        category_id: categories[0]?.id,
       });
       setIsMaterialModalOpen(true);
     }
@@ -1327,7 +1387,8 @@ export default function AdminDashboardScreen({
       setEditingDelivery({
         is_active: true,
         capacity_m3: 0,
-        min_delivery_price: 5000,
+        min_price_quarry: 5000,
+        min_price_warehouse: 3000,
       });
       setIsDeliveryModalOpen(true);
     }
@@ -1433,7 +1494,8 @@ export default function AdminDashboardScreen({
   return (
     <div className="flex flex-col h-screen bg-slate-50 relative overflow-hidden text-slate-800">
       {/* Header */}
-      <div className="bg-white px-6 py-4 shadow-sm z-10 sticky top-0 border-b border-slate-100 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+      <div className="bg-white px-6 py-4 shadow-sm z-10 sticky top-0 border-b border-slate-100 flex flex-col gap-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center justify-between sm:justify-start gap-6">
           <div>
             <h1 className="text-2xl font-black text-[#2DB0E6] tracking-tight">
@@ -1452,7 +1514,7 @@ export default function AdminDashboardScreen({
         </div>
 
         <div className="hidden sm:flex flex-1 sm:justify-center">
-          <div className="bg-slate-100 p-1 rounded-xl flex w-full sm:w-auto">
+          <div className="bg-slate-100 p-1 rounded-xl flex w-full sm:w-auto overflow-x-auto">
             <button
               onClick={() => setActiveTab("materials")}
               className={`flex-1 sm:w-auto flex-shrink-0 whitespace-nowrap py-2 px-3 text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2 ${
@@ -1473,7 +1535,7 @@ export default function AdminDashboardScreen({
               }`}
             >
               <Map className="w-4 h-4" />
-              Карьеры
+              Точки
             </button>
             <button
               onClick={() => setActiveTab("delivery")}
@@ -1542,6 +1604,34 @@ export default function AdminDashboardScreen({
           <LogOut className="w-4 h-4" />
           <span>Выйти</span>
         </button>
+        </div>
+        {activeEquipmentApplicationsCount > 0 ? (
+          <div className="w-full rounded-2xl border border-sky-200 bg-[linear-gradient(135deg,rgba(239,246,255,1)_0%,rgba(255,251,235,1)_100%)] px-4 py-3 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 rounded-2xl bg-sky-500/10 p-2 text-sky-600">
+                  <Clock className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-black text-slate-900">
+                    У вас есть активные заявки на спецтехнику
+                  </p>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Новых: {newEquipmentApplicationsCount}. В работе:{" "}
+                    {Math.max(activeEquipmentApplicationsCount - newEquipmentApplicationsCount, 0)}.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab("equipment")}
+                className="inline-flex items-center justify-center rounded-xl bg-sky-500 px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-sky-600"
+              >
+                Перейти
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {/* Main Content */}
@@ -1549,6 +1639,11 @@ export default function AdminDashboardScreen({
         <div className="max-w-6xl mx-auto flex flex-col gap-6">
           {activeTab === "materials" ? (
             <>
+              <AdminCategoriesPanel
+                token={token || ""}
+                categories={categories}
+                onChanged={fetchCategories}
+              />
               <div className="flex justify-between items-center bg-white p-5 rounded-2xl shadow-sm border border-slate-100 mb-2">
                 <h2 className="text-xl font-bold text-slate-800">Материалы</h2>
                 <div className="flex items-center gap-3">
@@ -2134,7 +2229,8 @@ export default function AdminDashboardScreen({
                               <th className="px-6 py-4">Фото</th>
                               <th className="px-6 py-4">Название</th>
                               <th className="px-6 py-4">Кубатура (м³)</th>
-                              <th className="px-6 py-4">Минимальная доставка</th>
+                              <th className="px-6 py-4">Минималка с карьера</th>
+                              <th className="px-6 py-4">Минималка с накопителя</th>
                               <th className="px-6 py-4">Ставка за км</th>
                               <th className="px-6 py-4">Статус</th>
                               <th className="px-6 py-4 text-right">Действия</th>
@@ -2159,11 +2255,11 @@ export default function AdminDashboardScreen({
                                       <img
                                         src={imgUrl}
                                         alt={opt.title}
-                                        className="w-24 h-16 object-contain rounded-md border border-slate-200 bg-slate-50 p-1"
+                                        className="w-28 h-20 object-contain rounded-lg border border-slate-200 bg-slate-50 p-1"
                                       />
                                     ) : (
-                                      <div className="w-24 h-16 rounded-md border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-300">
-                                        <ImageIcon className="w-5 h-5" />
+                                      <div className="w-28 h-20 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-300">
+                                        <ImageIcon className="w-7 h-7" />
                                       </div>
                                     )}
                                   </td>
@@ -2174,7 +2270,10 @@ export default function AdminDashboardScreen({
                                     {opt.capacity_m3} м³
                                   </td>
                                   <td className="px-6 py-4 text-sm font-medium">
-                                    {opt.min_delivery_price ?? 5000} ₽
+                                    {opt.min_price_quarry ?? 5000} ₽
+                                  </td>
+                                  <td className="px-6 py-4 text-sm font-medium">
+                                    {opt.min_price_warehouse ?? 3000} ₽
                                   </td>
                                   <td className="px-6 py-4 text-sm font-medium whitespace-nowrap">
                                     {opt.delivery_rate_per_km
@@ -2261,11 +2360,11 @@ export default function AdminDashboardScreen({
                                   <img
                                     src={imgUrl}
                                     alt={opt.title}
-                                    className="shrink-0 w-24 h-16 object-contain rounded-md border border-slate-200 bg-slate-50 p-1"
+                                    className="shrink-0 w-28 h-20 object-contain rounded-lg border border-slate-200 bg-slate-50 p-1"
                                   />
                                 ) : (
-                                  <div className="shrink-0 w-24 h-16 rounded-md border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-300">
-                                    <ImageIcon className="w-5 h-5" />
+                                  <div className="shrink-0 w-28 h-20 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-300">
+                                    <ImageIcon className="w-7 h-7" />
                                   </div>
                                 )}
                                 <div className="flex flex-col gap-1 min-w-0">
@@ -2277,8 +2376,10 @@ export default function AdminDashboardScreen({
                                       Кубатура: {opt.capacity_m3} м³
                                     </span>
                                     <span className="text-sm text-slate-500">
-                                      Минимальная доставка:{" "}
-                                      {opt.min_delivery_price ?? 5000} ₽
+                                      Минималка с карьера: {opt.min_price_quarry ?? 5000} ₽
+                                    </span>
+                                    <span className="text-sm text-slate-500">
+                                      Минималка с накопителя: {opt.min_price_warehouse ?? 3000} ₽
                                     </span>
                                     <span className="text-sm text-slate-500">
                                       Ставка за км:{" "}
@@ -2911,14 +3012,32 @@ export default function AdminDashboardScreen({
             </>
           ) : activeTab === "quarries" ? (
             <AdminQuarriesScreen materials={materials} />
+          ) : activeTab === "suppliers" ? (
+            <AdminSuppliersScreen />
+          ) : activeTab === "equipment" ? (
+            <AdminEquipmentScreen
+              onApplicationsChanged={(applications) =>
+                setEquipmentApplications(
+                  applications.map(({ id, status }) => ({ id, status })),
+                )
+              }
+            />
+          ) : activeTab === "support" ? (
+            <SupportScreen operatorMode />
           ) : activeTab === "profile" ? (
-            <AdminProfileScreen onLogout={handleLogout} />
+            <AdminProfileScreen
+              onLogout={handleLogout}
+              onOpenSuppliers={() => setActiveTab("suppliers")}
+              onOpenEquipment={() => setActiveTab("equipment")}
+              onOpenSupport={() => setActiveTab("support")}
+              equipmentNewCount={newEquipmentApplicationsCount}
+            />
           ) : null}
         </div>
       </div>
 
       {/* Mobile Bottom Navigation Menu */}
-      <div className="sm:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex z-50 h-[68px] justify-around items-center px-2 pb-safe">
+      <div className="sm:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex z-50 h-[68px] justify-start items-center px-2 pb-safe overflow-x-auto">
         <button
           onClick={() => setActiveTab("materials")}
           className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${
@@ -2947,7 +3066,7 @@ export default function AdminDashboardScreen({
           >
             <Map className="w-6 h-6" />
           </div>
-          <span className="text-[10px] font-bold">Карьеры</span>
+          <span className="text-[10px] font-bold">Точки</span>
         </button>
         <button
           onClick={() => setActiveTab("delivery")}
@@ -3059,6 +3178,29 @@ export default function AdminDashboardScreen({
                   }
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
                 />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Категория
+                </label>
+                <select
+                  value={editingMaterial.category_id || ""}
+                  onChange={(event) =>
+                    setEditingMaterial({
+                      ...editingMaterial,
+                      category_id: event.target.value,
+                    })
+                  }
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 font-medium outline-none focus:border-[#2DB0E6] focus:ring-2 focus:ring-[#2DB0E6]/20"
+                >
+                  <option value="" disabled>Выберите категорию</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}{category.is_active ? "" : " (скрыта)"}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="flex flex-col gap-1.5">
@@ -3300,18 +3442,39 @@ export default function AdminDashboardScreen({
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                    Минимальная доставка (₽)
+                    Минималка с карьера (₽)
                   </label>
                   <input
                     type="number"
                     step="0.01"
                     min="0"
                     placeholder="Например, 5000"
-                    value={editingDelivery.min_delivery_price ?? ""}
+                    value={editingDelivery.min_price_quarry ?? ""}
                     onChange={(e) =>
                       setEditingDelivery({
                         ...editingDelivery,
-                        min_delivery_price: e.target.value
+                        min_price_quarry: e.target.value
+                          ? parseFloat(e.target.value)
+                          : undefined,
+                      })
+                    }
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    Минималка с накопителя (₽)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="Например, 3000"
+                    value={editingDelivery.min_price_warehouse ?? ""}
+                    onChange={(e) =>
+                      setEditingDelivery({
+                        ...editingDelivery,
+                        min_price_warehouse: e.target.value
                           ? parseFloat(e.target.value)
                           : undefined,
                       })

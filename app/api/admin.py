@@ -16,6 +16,7 @@ from app.integrations.avito.client import AvitoAPIClient
 from app.integrations.avito.management import AvitoManagementService
 from app.models.models import (
     CartItem,
+    Category,
     DeliveryOption,
     Dialogue,
     Driver,
@@ -29,12 +30,17 @@ from app.models.models import (
     OrderOffer,
     OrderStatus,
     Role,
+    SupportMessage,
+    SupportTicket,
     User,
     Vehicle,
     quarry_materials,
 )
 from app.schemas.client import ClientFcmTokenIn, ClientFcmTokenOut
 from app.schemas.catalog import (
+    CategoryCreate,
+    CategoryOut,
+    CategoryUpdate,
     DeliveryOptionCreate,
     DeliveryOptionOut,
     DeliveryOptionUpdate,
@@ -54,6 +60,7 @@ from app.schemas.driver import (
     VehicleOut,
 )
 from app.schemas.order import OrderDeleteOut, OrderOut, OrderUpdate
+from app.schemas.supplier import AdminSupplierOut
 from app.security.auth import (
     get_current_admin_user,
     get_current_logist_user,
@@ -74,6 +81,26 @@ EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 def _error_detail(code: str, message: str) -> dict[str, str]:
     return {"code": code, "message": message}
+
+
+async def _unique_category_slug(
+    db: AsyncSession,
+    name: str,
+    *,
+    exclude_id: UUID | None = None,
+) -> str:
+    base_slug = re.sub(r"[^a-z0-9а-яё]+", "-", name.casefold()).strip("-")
+    base_slug = base_slug or f"category-{uuid4().hex[:8]}"
+    slug = base_slug
+    suffix = 2
+    while True:
+        stmt = select(Category.id).where(Category.slug == slug)
+        if exclude_id is not None:
+            stmt = stmt.where(Category.id != exclude_id)
+        if await db.scalar(stmt) is None:
+            return slug
+        slug = f"{base_slug}-{suffix}"
+        suffix += 1
 
 
 @router.get("/stats")
@@ -132,6 +159,24 @@ async def get_admin_statistics(
     )
 
 
+@router.delete("/support/tickets/{ticket_id}")
+async def delete_support_ticket(
+    ticket_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_logist_user),
+) -> dict[str, bool]:
+    del current_user
+
+    ticket = await db.get(SupportTicket, ticket_id)
+    if ticket is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Обращение не найдено")
+
+    await db.execute(delete(SupportMessage).where(SupportMessage.ticket_id == ticket_id))
+    await db.delete(ticket)
+    await db.commit()
+    return {"ok": True}
+
+
 class AdminMeOut(BaseModel):
     username: str
     email: str | None = None
@@ -188,6 +233,37 @@ async def update_admin_me(
         email=current_admin.email,
         role=current_admin.role.name if current_admin.role else None,
     )
+
+
+@router.get("/suppliers", response_model=list[AdminSupplierOut])
+async def list_admin_suppliers(
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+) -> list[AdminSupplierOut]:
+    del current_admin
+    result = await db.execute(
+        select(User)
+        .join(Role)
+        .options(selectinload(User.pickup_points))
+        .where(Role.name == "supplier")
+        .order_by(func.coalesce(User.display_name, User.username))
+    )
+    suppliers = result.scalars().unique().all()
+    return [
+        AdminSupplierOut(
+            id=supplier.id,
+            full_name=(supplier.display_name or None),
+            phone=supplier.username,
+            is_active=supplier.is_active,
+            pickup_points=list(supplier.pickup_points or []),
+            active_point_names=[
+                point.name
+                for point in supplier.pickup_points
+                if point.is_active
+            ],
+        )
+        for supplier in suppliers
+    ]
 
 
 @router.get("/logist-area")
@@ -1341,6 +1417,89 @@ async def register_avito_webhook(
         return await service.register_webhook(request.webhook_url)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/categories/", response_model=list[CategoryOut])
+async def get_all_categories(
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    del current_admin
+    result = await db.execute(
+        select(Category).order_by(Category.sort_order.asc(), Category.name.asc())
+    )
+    return list(result.scalars().all())
+
+
+@router.post("/categories/", response_model=CategoryOut, status_code=status.HTTP_201_CREATED)
+async def create_category(
+    category_in: CategoryCreate,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    del current_admin
+    category = Category(
+        **category_in.model_dump(),
+        slug=await _unique_category_slug(db, category_in.name),
+    )
+    db.add(category)
+    await db.commit()
+    await db.refresh(category)
+    return category
+
+
+@router.patch("/categories/{category_id}", response_model=CategoryOut)
+async def update_category(
+    category_id: UUID,
+    category_update: CategoryUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    del current_admin
+    category = await db.get(Category, category_id)
+    if category is None:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    changes = category_update.model_dump(exclude_unset=True)
+    if "name" in changes:
+        category.slug = await _unique_category_slug(
+            db,
+            changes["name"],
+            exclude_id=category.id,
+        )
+    for key, value in changes.items():
+        setattr(category, key, value)
+
+    await db.commit()
+    await db.refresh(category)
+    return category
+
+
+@router.delete("/categories/{category_id}", response_model=DeleteResult)
+async def delete_category(
+    category_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    del current_admin
+    category = await db.get(Category, category_id)
+    if category is None:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    linked_material_id = await db.scalar(
+        select(Material.id).where(Material.category_id == category.id).limit(1)
+    )
+    if linked_material_id is not None:
+        category.is_active = False
+        await db.commit()
+        return DeleteResult(
+            action="hidden",
+            detail="Category hidden because it contains materials",
+        )
+
+    await db.delete(category)
+    await db.commit()
+    return DeleteResult(action="deleted", detail="Category deleted")
 
 
 @router.get("/materials/", response_model=list[MaterialOut])

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   X,
   MapPin,
@@ -10,10 +11,15 @@ import {
   CheckCircle2,
   Circle,
 } from "lucide-react";
-import { fetch2gisAddressSuggestions, withTyumenBias } from "./addressSearch";
+import {
+  fetch2gisAddressSuggestions,
+  get2gisSuggestionLabel,
+  withTyumenBias,
+} from "./addressSearch";
 import { baseURL, handleApiError } from "./utils";
 import { useAuthStore, useAddressStore } from "./store";
 import toast from "react-hot-toast";
+import SwipeableBottomSheet from "./SwipeableBottomSheet";
 
 interface Address {
   id?: string;
@@ -28,14 +34,29 @@ interface Address {
 interface ClientAddressBottomSheetProps {
   isOpen: boolean;
   onClose: () => void;
+  dismissible?: boolean;
+  closeOnSelect?: boolean;
+  overlayZIndexClassName?: string;
+  sheetZIndexClassName?: string;
+  onAddressConfirmed?: (address: {
+    address: string;
+    lat: number | null;
+    lon: number | null;
+  }) => void;
 }
 
 export default function ClientAddressBottomSheet({
   isOpen,
   onClose,
+  dismissible = true,
+  closeOnSelect = false,
+  overlayZIndexClassName = "z-[9999]",
+  sheetZIndexClassName = "z-[10000]",
+  onAddressConfirmed,
 }: ClientAddressBottomSheetProps) {
   const { token, role } = useAuthStore();
-  const { selectedAddress, setSelectedAddress } = useAddressStore();
+  const { selectedAddress, setSelectedAddress, clearSelectedAddress } =
+    useAddressStore();
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
@@ -58,6 +79,17 @@ export default function ClientAddressBottomSheet({
       fetchAddresses();
     }
   }, [isOpen, token, role, isAdding]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (token && role === "client") return;
+
+    setAddresses([]);
+    setLocalSelectedId(null);
+    setEditingAddressId(null);
+    setIsAdding(true);
+    setNewAddress(selectedAddress || "");
+  }, [isOpen, token, role, selectedAddress]);
 
   useEffect(() => {
     let mapInstance: any = null;
@@ -134,7 +166,7 @@ export default function ClientAddressBottomSheet({
 
   const fetch2GISSuggests = async (query: string) => {
     const items = await fetch2gisAddressSuggestions(query);
-    return items.map((item: any) => item.search_attributes?.suggested_text);
+    return items.map((item: any) => get2gisSuggestionLabel(item));
   };
 
   const handleAddressChange = async (
@@ -181,6 +213,8 @@ export default function ClientAddressBottomSheet({
         setAddresses(addressList);
 
         if (addressList.length === 0) {
+          clearSelectedAddress();
+          setLocalSelectedId(null);
           setIsAdding(true);
         } else {
           const match = selectedAddress
@@ -189,10 +223,7 @@ export default function ClientAddressBottomSheet({
           if (match) {
             setLocalSelectedId(match.id);
           } else {
-            const def =
-              addressList.find((a: any) => a.is_default) || addressList[0];
-            setSelectedAddress(def.full_address);
-            setLocalSelectedId(def.id);
+            setLocalSelectedId(null);
           }
         }
       }
@@ -208,6 +239,11 @@ export default function ClientAddressBottomSheet({
       const selectedAddr = addresses.find((a) => a.id === localSelectedId);
       if (selectedAddr) {
         setSelectedAddress(selectedAddr.full_address);
+        onAddressConfirmed?.({
+          address: selectedAddr.full_address,
+          lat: selectedAddr.lat ?? null,
+          lon: selectedAddr.lon ?? null,
+        });
       }
     }
     onClose();
@@ -216,11 +252,21 @@ export default function ClientAddressBottomSheet({
   const handleDeleteAddress = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     try {
+      const deletedAddress = addresses.find((item) => item.id === id);
       const res = await fetch(`${baseURL}/client/addresses/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
+        if (localSelectedId === id) {
+          setLocalSelectedId(null);
+        }
+        if (
+          deletedAddress?.full_address &&
+          selectedAddress === deletedAddress.full_address
+        ) {
+          clearSelectedAddress();
+        }
         toast.success("Адрес удален");
         fetchAddresses();
       } else {
@@ -244,6 +290,21 @@ export default function ClientAddressBottomSheet({
     if (!addressToSave.trim()) return;
     setIsSubmitting(true);
     try {
+      if (!token || role !== "client") {
+        setSelectedAddress(addressToSave);
+        onAddressConfirmed?.({
+          address: addressToSave,
+          lat,
+          lon,
+        });
+        toast.success("Адрес выбран");
+        setNewAddress("");
+        setNewComment("");
+        setSuggestions([]);
+        if (closeOnSelect) onClose();
+        return;
+      }
+
       const method = editingAddressId ? "PUT" : "POST";
       const url = editingAddressId
         ? `${baseURL}/client/addresses/${editingAddressId}`
@@ -268,11 +329,17 @@ export default function ClientAddressBottomSheet({
       if (res.ok) {
         toast.success(editingAddressId ? "Адрес обновлен!" : "Адрес добавлен!");
         setSelectedAddress(addressToSave);
+        onAddressConfirmed?.({
+          address: addressToSave,
+          lat,
+          lon,
+        });
         setNewAddress("");
         setNewComment("");
         setEditingAddressId(null);
         setIsAdding(false);
-        fetchAddresses();
+        if (closeOnSelect) onClose();
+        else fetchAddresses();
       } else {
         toast.error("Не удалось сохранить адрес");
       }
@@ -294,24 +361,21 @@ export default function ClientAddressBottomSheet({
 
   if (!isOpen) return null;
 
-  return (
-    <>
-      <div
-        className="fixed inset-0 z-[60] bg-slate-900/40 backdrop-blur-sm transition-opacity"
-        onClick={onClose}
-      />
-      <div
-        className={`fixed inset-x-0 bottom-0 z-[70] bg-white rounded-t-[32px] shadow-2xl transform transition-transform duration-300 ease-out flex flex-col max-h-[95vh] ${isAdding ? "h-[95vh]" : "h-auto"} sm:max-w-xl sm:mx-auto`}
-      >
-        <div className="w-full flex justify-center pt-3 pb-1 shrink-0">
-          <div className="w-12 h-1.5 bg-slate-200 rounded-full"></div>
-        </div>
-
+  const sheet = (
+    <SwipeableBottomSheet
+      isOpen={isOpen}
+      onClose={onClose}
+      containerClassName="fixed inset-0 z-[9999] flex items-end justify-center"
+      overlayClassName={`fixed inset-0 z-[9999] bg-slate-900/40 backdrop-blur-sm ${overlayZIndexClassName}`}
+      sheetClassName={`fixed inset-x-0 bottom-0 z-[10000] flex w-full max-h-[95vh] flex-col rounded-t-[32px] bg-white shadow-2xl sm:mx-auto sm:max-w-xl ${sheetZIndexClassName} ${isAdding ? "h-[95vh]" : "h-auto"}`}
+      closeOnOverlayClick={dismissible}
+      enableDragToClose={dismissible}
+    >
         <div className="px-6 pb-4 pt-2 flex items-center justify-between shrink-0 border-b border-slate-50">
           <h2 className="text-[20px] font-bold text-slate-900 leading-tight">
             {isAdding ? "Укажите адрес" : "Мои адреса"}
           </h2>
-          {!isAdding && (
+          {!isAdding && dismissible && (
             <button
               onClick={onClose}
               className="p-2 text-slate-400 hover:text-slate-600 bg-slate-50 hover:bg-slate-100 transition-colors rounded-full -mr-2"
@@ -480,7 +544,12 @@ export default function ClientAddressBottomSheet({
             </div>
           )}
         </div>
-      </div>
-    </>
+    </SwipeableBottomSheet>
   );
+
+  if (typeof document === "undefined") {
+    return sheet;
+  }
+
+  return createPortal(sheet, document.body);
 }

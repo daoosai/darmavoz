@@ -12,8 +12,9 @@ from pydantic import (
     model_validator,
 )
 
-from app.schemas.catalog import DeliveryOptionOut, MaterialOut
+from app.schemas.catalog import DeliveryOptionOut, MaterialOut, MediaFileOut
 from app.schemas.driver import DriverResponse
+from app.services.storage import normalize_public_url
 
 
 CalculationSource = Literal["yandex_auto", "manual", "osrm_auto"]
@@ -48,6 +49,11 @@ class CheckoutRequest(BaseModel):
     delivery_lon: float | None = Field(default=None, validation_alias=AliasChoices("delivery_lon", "deliveryLon"))
     quarry_id: UUID | None = Field(default=None, validation_alias=AliasChoices("quarry_id", "quarryId"))
     mileage_km: float | None = Field(default=None, validation_alias=AliasChoices("mileage_km", "mileageKm"))
+    expected_material_unit_price: float | None = Field(
+        default=None,
+        gt=0,
+        validation_alias=AliasChoices("expected_material_unit_price", "expectedMaterialUnitPrice"),
+    )
     notes: str | None = None
     source: str | None = "mobile"
     quantity: int = Field(default=1, ge=1)
@@ -117,6 +123,7 @@ class CheckoutRequest(BaseModel):
 
 class ClientOrderCalculationRequest(BaseModel):
     material_id: UUID
+    quarry_id: UUID | None = None
     delivery_option_id: UUID
     delivery_lat: float
     delivery_lon: float
@@ -139,23 +146,27 @@ class ClientOrderCalculationRequest(BaseModel):
         return value
 
 
-class ClientOrderCalculationOut(BaseModel):
+class ClientOrderCalculationOptionOut(BaseModel):
     quarry_id: UUID
     quarry_name: str
-    mileage_km: float
+    point_type: str
+    rating: float = 5.0
+    distance: float
     material_cost: float
     delivery_cost: float
     total_amount: float
+    primary_image_url: str | None = None
+    media_files: list[MediaFileOut] = Field(default_factory=list)
 
-    @computed_field(return_type=float)
-    @property
-    def estimated_total_amount(self) -> float:
-        return round((self.total_amount or 0.0) + (self.delivery_cost or 0.0), 2)
+    @field_validator("primary_image_url")
+    @classmethod
+    def normalize_pickup_point_image_url(cls, value: str | None) -> str | None:
+        return normalize_public_url(value)
 
-    @computed_field(return_type=float)
-    @property
-    def distance(self) -> float:
-        return round(self.mileage_km, 2)
+
+class ClientOrderCalculationOut(BaseModel):
+    best_option: ClientOrderCalculationOptionOut
+    alternatives: list[ClientOrderCalculationOptionOut] = Field(default_factory=list)
 
 
 class LogistOrderCreate(BaseModel):
@@ -450,6 +461,7 @@ class OrderOut(BaseModel):
     driver_id: UUID | None = None
     delivery_option_id: UUID | None = None
     quarry_id: UUID | None = None
+    pickup_point_type: str | None = None
     current_offer_id: UUID | None = None
     address: str | None = None
     pickup_address: str | None = None
@@ -483,6 +495,11 @@ class OrderOut(BaseModel):
     @property
     def estimated_total_amount(self) -> float:
         return round((self.total_amount or 0.0) + (self.delivery_cost or 0.0), 2)
+
+    @computed_field(return_type=float)
+    @property
+    def total_price(self) -> float:
+        return self.estimated_total_amount
 
 
 class DriverOrderOut(OrderOut):

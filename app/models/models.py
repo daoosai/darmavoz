@@ -1,20 +1,25 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime, time
 from enum import Enum
 from typing import List, Optional
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Column,
+    Date,
     DateTime,
     Enum as SQLEnum,
     Float,
     ForeignKey,
     Integer,
+    Numeric,
     String,
     Table,
     Text,
+    Time,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -30,6 +35,24 @@ quarry_materials = Table(
     Base.metadata,
     Column("quarry_id", UUID(as_uuid=True), ForeignKey("quarries.id"), primary_key=True),
     Column("material_id", UUID(as_uuid=True), ForeignKey("materials.id"), primary_key=True),
+    Column("price", Numeric(12, 2), nullable=True),
+    Column("is_active", Boolean, nullable=False, default=True, server_default="true"),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+)
+
+
+quarry_delivery_options = Table(
+    "quarry_delivery_options",
+    Base.metadata,
+    Column("quarry_id", UUID(as_uuid=True), ForeignKey("quarries.id"), primary_key=True),
+    Column(
+        "delivery_option_id",
+        UUID(as_uuid=True),
+        ForeignKey("delivery_options.id"),
+        primary_key=True,
+    ),
+    Column("is_active", Boolean, nullable=False, default=True, server_default="true"),
 )
 
 
@@ -48,6 +71,7 @@ class User(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     username: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    display_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     email: Mapped[Optional[str]] = mapped_column(String(255), unique=True, index=True, nullable=True)
     hashed_password: Mapped[str] = mapped_column(String(255))
     role_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("roles.id"))
@@ -61,6 +85,11 @@ class User(Base):
         uselist=False,
         foreign_keys="Driver.user_id",
     )
+    pickup_points: Mapped[List["Quarry"]] = relationship(
+        "Quarry",
+        back_populates="owner",
+        foreign_keys="Quarry.owner_user_id",
+    )
 
 
 class Client(Base):
@@ -69,7 +98,7 @@ class Client(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255))
     email: Mapped[Optional[str]] = mapped_column(String(255), unique=True, index=True, nullable=True)
-    phone: Mapped[str] = mapped_column(String(20), unique=True, index=True, nullable=False)
+    phone: Mapped[Optional[str]] = mapped_column(String(20), unique=True, index=True, nullable=True)
     fcm_token: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     external_source: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
@@ -221,7 +250,7 @@ class Material(Base):
     __tablename__ = "materials"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    category_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("categories.id"))
+    category_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("categories.id"), nullable=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
@@ -231,13 +260,27 @@ class Material(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
-    category: Mapped["Category"] = relationship("Category", back_populates="materials")
+    category: Mapped[Optional["Category"]] = relationship("Category", back_populates="materials")
+    quarry_links: Mapped[List["QuarryMaterial"]] = relationship(
+        "QuarryMaterial",
+        back_populates="material",
+        cascade="all, delete-orphan",
+        overlaps="materials,quarries",
+    )
     quarries: Mapped[List["Quarry"]] = relationship(
         "Quarry",
         secondary=quarry_materials,
         back_populates="materials",
+        overlaps="quarry_links,material_links,material,quarry",
     )
     cart_items: Mapped[List["CartItem"]] = relationship("CartItem", back_populates="material")
+
+
+class PickupPointType(str, Enum):
+    quarry = "quarry"
+    accumulator = "accumulator"
+    warehouse = "warehouse"
+    supplier = "supplier"
 
 
 class Quarry(Base):
@@ -245,17 +288,95 @@ class Quarry(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    short_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    point_type: Mapped[str] = mapped_column(
+        SQLEnum(
+            "quarry",
+            "accumulator",
+            "warehouse",
+            "supplier",
+            name="pickup_point_type",
+        ),
+        default=PickupPointType.quarry.value,
+        nullable=False,
+    )
     address: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    contact_phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     lat: Mapped[float] = mapped_column(Float, nullable=False)
     lon: Mapped[float] = mapped_column(Float, nullable=False)
+    min_delivery_price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
+    rating: Mapped[float] = mapped_column(Float, default=5.0, server_default="5.0", nullable=False)
+    subscription_end_date: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+    )
+    owner_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("users.id"), nullable=True, index=True
+    )
+    moderation_status: Mapped[str] = mapped_column(
+        SQLEnum(
+            "incomplete",
+            "pending_moderation",
+            "approved",
+            "rejected",
+            "suspended",
+            name="moderation_status",
+        ),
+        default="incomplete",
+        nullable=False,
+    )
+    moderation_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    moderated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    moderated_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
+    material_links: Mapped[List["QuarryMaterial"]] = relationship(
+        "QuarryMaterial",
+        back_populates="quarry",
+        cascade="all, delete-orphan",
+        overlaps="materials,quarries",
+    )
     materials: Mapped[List["Material"]] = relationship(
         "Material",
         secondary=quarry_materials,
         back_populates="quarries",
+        overlaps="material_links,quarry_links,material,quarry",
+    )
+    delivery_options: Mapped[List["DeliveryOption"]] = relationship(
+        "DeliveryOption",
+        secondary=quarry_delivery_options,
+        back_populates="quarries",
+    )
+    owner: Mapped[Optional["User"]] = relationship(
+        "User", back_populates="pickup_points", foreign_keys=[owner_user_id]
+    )
+    moderated_by: Mapped[Optional["User"]] = relationship(
+        "User", foreign_keys=[moderated_by_user_id]
     )
     orders: Mapped[List["Order"]] = relationship("Order", back_populates="quarry")
+
+
+class QuarryMaterial(Base):
+    __table__ = quarry_materials
+
+    quarry: Mapped["Quarry"] = relationship(
+        "Quarry",
+        back_populates="material_links",
+        overlaps="materials,quarries",
+    )
+    material: Mapped["Material"] = relationship(
+        "Material",
+        back_populates="quarry_links",
+        overlaps="materials,quarries",
+    )
 
 
 class CartItem(Base):
@@ -264,6 +385,9 @@ class CartItem(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     session_key: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
     material_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("materials.id"))
+    quarry_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("quarries.id"), nullable=True
+    )
     volume: Mapped[float] = mapped_column(Float, nullable=False)
     unit_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     amount: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
@@ -273,6 +397,15 @@ class CartItem(Base):
     )
 
     material: Mapped["Material"] = relationship("Material", back_populates="cart_items")
+    quarry: Mapped[Optional["Quarry"]] = relationship("Quarry")
+
+    @property
+    def pickup_point_name(self) -> str | None:
+        return self.quarry.name if self.quarry is not None else None
+
+    @property
+    def pickup_point_type(self) -> str | None:
+        return self.quarry.point_type if self.quarry is not None else None
 
 
 class DeliveryOption(Base):
@@ -284,13 +417,23 @@ class DeliveryOption(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     base_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     delivery_rate_per_km: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    min_delivery_price: Mapped[float] = mapped_column(Float, default=5000.0, nullable=False)
+    min_price_quarry: Mapped[float] = mapped_column(
+        Float, default=5000.0, server_default="5000", nullable=False
+    )
+    min_price_warehouse: Mapped[float] = mapped_column(
+        Float, default=3000.0, server_default="3000", nullable=False
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     image_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
     orders: Mapped[List["Order"]] = relationship("Order", back_populates="delivery_option")
     vehicles: Mapped[List["Vehicle"]] = relationship("Vehicle", back_populates="delivery_option")
+    quarries: Mapped[List["Quarry"]] = relationship(
+        "Quarry",
+        secondary=quarry_delivery_options,
+        back_populates="delivery_options",
+    )
 
 
 class MediaFile(Base):
@@ -309,6 +452,207 @@ class MediaFile(Base):
     slot_key: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     is_primary: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SpecialEquipmentType(Base):
+    __tablename__ = "special_equipment_types"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    slug: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    listings: Mapped[List["SpecialEquipmentListing"]] = relationship(
+        "SpecialEquipmentListing", back_populates="equipment_type"
+    )
+
+
+class SpecialEquipmentListing(Base):
+    __tablename__ = "special_equipment_listings"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    equipment_type_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("special_equipment_types.id"), nullable=False, index=True
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    tariffs: Mapped[list[dict]] = mapped_column(
+        JSONB, default=list, nullable=False, server_default="[]"
+    )
+    city: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    district: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
+    is_deleted: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        index=True,
+        server_default=text("false"),
+    )
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    equipment_type: Mapped["SpecialEquipmentType"] = relationship(
+        "SpecialEquipmentType", back_populates="listings"
+    )
+    created_by: Mapped["User"] = relationship("User", foreign_keys=[created_by_user_id])
+    applications: Mapped[List["SpecialEquipmentApplication"]] = relationship(
+        "SpecialEquipmentApplication", back_populates="listing"
+    )
+
+
+class SpecialEquipmentApplication(Base):
+    __tablename__ = "special_equipment_applications"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    listing_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("special_equipment_listings.id"), nullable=False, index=True
+    )
+    client_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clients.id"), nullable=False, index=True)
+    listing_title_snapshot: Mapped[str] = mapped_column(String(255), nullable=False)
+    contact_phone: Mapped[str] = mapped_column(String(20), nullable=False)
+    object_address: Mapped[str] = mapped_column(String(1000), nullable=False)
+    requested_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    requested_time: Mapped[time] = mapped_column(Time, nullable=False)
+    duration_value: Mapped[float] = mapped_column(Float, nullable=False)
+    duration_unit: Mapped[str] = mapped_column(String(20), nullable=False)
+    comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    total_price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
+    reject_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    cancel_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="new", nullable=False, index=True)
+    processed_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    closed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("duration_value > 0", name="ck_special_equipment_application_duration"),
+        CheckConstraint(
+            "duration_unit IN ('hours', 'shifts')",
+            name="ck_special_equipment_application_duration_unit",
+        ),
+        CheckConstraint(
+            "status IN ('new', 'in_progress', 'closed', 'completed', 'rejected', 'cancelled')",
+            name="ck_special_equipment_application_status",
+        ),
+        CheckConstraint(
+            "status <> 'rejected' OR (reject_reason IS NOT NULL AND btrim(reject_reason) <> '')",
+            name="ck_special_equipment_application_reject_reason",
+        ),
+        CheckConstraint(
+            "status <> 'cancelled' OR (cancel_reason IS NOT NULL AND btrim(cancel_reason) <> '')",
+            name="ck_special_equipment_application_cancel_reason",
+        ),
+    )
+
+    listing: Mapped["SpecialEquipmentListing"] = relationship(
+        "SpecialEquipmentListing", back_populates="applications"
+    )
+    client: Mapped["Client"] = relationship("Client")
+    processed_by: Mapped[Optional["User"]] = relationship(
+        "User", foreign_keys=[processed_by_user_id]
+    )
+
+
+class SupportTicket(Base):
+    __tablename__ = "support_tickets"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    client_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("clients.id"), nullable=True, index=True
+    )
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("users.id"), nullable=True, index=True
+    )
+    subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    category: Mapped[str] = mapped_column(String(50), default="general", nullable=False, index=True)
+    context_type: Mapped[str] = mapped_column(String(50), default="general", nullable=False)
+    context_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="new", nullable=False, index=True)
+    assigned_to_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    closed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "(client_id IS NOT NULL AND user_id IS NULL) OR "
+            "(client_id IS NULL AND user_id IS NOT NULL)",
+            name="ck_support_ticket_single_author",
+        ),
+        CheckConstraint(
+            "status IN ('new', 'in_progress', 'closed')",
+            name="ck_support_ticket_status",
+        ),
+        CheckConstraint(
+            "context_type IN ('general', 'order', 'pickup_point', 'equipment_listing', 'user')",
+            name="ck_support_ticket_context_type",
+        ),
+    )
+
+    client: Mapped[Optional["Client"]] = relationship("Client", foreign_keys=[client_id])
+    user: Mapped[Optional["User"]] = relationship("User", foreign_keys=[user_id])
+    assigned_to: Mapped[Optional["User"]] = relationship(
+        "User", foreign_keys=[assigned_to_user_id]
+    )
+    messages: Mapped[List["SupportMessage"]] = relationship(
+        "SupportMessage", back_populates="ticket", cascade="all, delete-orphan"
+    )
+
+
+class SupportMessage(Base):
+    __tablename__ = "support_messages"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    ticket_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("support_tickets.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    author_client_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("clients.id"), nullable=True
+    )
+    author_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    attachment_url: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    is_read: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint(
+            "(author_client_id IS NOT NULL AND author_user_id IS NULL) OR "
+            "(author_client_id IS NULL AND author_user_id IS NOT NULL)",
+            name="ck_support_message_single_author",
+        ),
+    )
+
+    ticket: Mapped["SupportTicket"] = relationship("SupportTicket", back_populates="messages")
+    author_client: Mapped[Optional["Client"]] = relationship(
+        "Client", foreign_keys=[author_client_id]
+    )
+    author_user: Mapped[Optional["User"]] = relationship(
+        "User", foreign_keys=[author_user_id]
+    )
 
 
 class OrderStatus(str, Enum):
@@ -437,6 +781,10 @@ class Order(Base):
     @property
     def quarry_name(self) -> str | None:
         return self.quarry.name if self.quarry is not None else None
+
+    @property
+    def pickup_point_type(self) -> str | None:
+        return self.quarry.point_type if self.quarry is not None else None
 
 
 class OrderItem(Base):

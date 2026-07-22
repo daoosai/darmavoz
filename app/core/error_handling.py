@@ -4,20 +4,23 @@ import string
 from collections.abc import Iterable
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 logger = logging.getLogger(__name__)
 
 ERROR_CODE_LENGTH = 6
 ERROR_CODE_ALPHABET = string.ascii_uppercase + string.digits
+GENERIC_SERVER_ERROR_DETAIL = "Внутренняя ошибка сервера. Повторите попытку позже"
 CUSTOM_ERROR_STATUSES = {
     status.HTTP_400_BAD_REQUEST,
     status.HTTP_404_NOT_FOUND,
     status.HTTP_409_CONFLICT,
     status.HTTP_422_UNPROCESSABLE_ENTITY,
+    status.HTTP_500_INTERNAL_SERVER_ERROR,
 }
 
 DETAIL_TRANSLATIONS = {
@@ -42,9 +45,10 @@ DETAIL_TRANSLATIONS = {
 
 DEFAULT_STATUS_DETAILS = {
     status.HTTP_400_BAD_REQUEST: "Запрос содержит некорректные данные",
-    status.HTTP_404_NOT_FOUND: "Запрошенные данные не найдены",
-    status.HTTP_409_CONFLICT: "Конфликт данных. Проверьте корректность введенных значений",
+    status.HTTP_404_NOT_FOUND: "Ресурс не найден",
+    status.HTTP_409_CONFLICT: "Конфликт данных. Проверьте корректность введённых значений",
     status.HTTP_422_UNPROCESSABLE_ENTITY: "Проверьте корректность заполнения полей запроса",
+    status.HTTP_500_INTERNAL_SERVER_ERROR: GENERIC_SERVER_ERROR_DETAIL,
 }
 
 
@@ -59,7 +63,9 @@ def _stringify_validation_errors(items: Iterable[Any]) -> str:
             loc = item.get("loc")
             msg = item.get("msg")
             if isinstance(loc, (list, tuple)) and isinstance(msg, str):
-                field_name = ".".join(str(part) for part in loc if part not in {"body", "query", "path"})
+                field_name = ".".join(
+                    str(part) for part in loc if part not in {"body", "query", "path"}
+                )
                 messages.append(f"{field_name}: {msg}" if field_name else msg)
                 continue
             if isinstance(msg, str):
@@ -90,7 +96,10 @@ def _translate_detail(detail: Any, status_code: int) -> str:
     raw_detail = _extract_detail_text(detail)
     normalized_detail = raw_detail.lower()
 
-    if any(token in normalized_detail for token in ("users_username_key", "drivers_phone_key", "duplicate key", "already exists")):
+    if any(
+        token in normalized_detail
+        for token in ("users_username_key", "drivers_phone_key", "duplicate key", "already exists")
+    ):
         return "Пользователь с таким номером уже зарегистрирован"
     if any(token in normalized_detail for token in ("inactive", "blocked", "suspended", "deactivated")):
         return "Ваш профиль заблокирован. Обратитесь в поддержку."
@@ -105,7 +114,12 @@ def _translate_detail(detail: Any, status_code: int) -> str:
     return DEFAULT_STATUS_DETAILS.get(status_code, "Произошла ошибка при обработке запроса")
 
 
-def _error_response(status_code: int, detail: Any, *, headers: dict[str, str] | None = None) -> JSONResponse:
+def _error_response(
+    status_code: int,
+    detail: Any,
+    *,
+    headers: dict[str, str] | None = None,
+) -> JSONResponse:
     return JSONResponse(
         status_code=status_code,
         content={
@@ -134,10 +148,25 @@ def register_exception_handlers(app: FastAPI) -> None:
         logger.exception("integrity_error", exc_info=exc)
         return _error_response(status.HTTP_409_CONFLICT, str(exc.orig) or str(exc))
 
-    @app.exception_handler(HTTPException)
+    @app.exception_handler(SQLAlchemyError)
+    async def sqlalchemy_exception_handler(
+        request: Request,
+        exc: SQLAlchemyError,
+    ) -> JSONResponse:
+        logger.exception(
+            "sqlalchemy_error",
+            extra={"path": str(request.url.path)},
+            exc_info=exc,
+        )
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"detail": GENERIC_SERVER_ERROR_DETAIL},
+        )
+
+    @app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(
         request: Request,
-        exc: HTTPException,
+        exc: StarletteHTTPException,
     ) -> JSONResponse:
         del request
         if exc.status_code in CUSTOM_ERROR_STATUSES:
@@ -161,8 +190,5 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={
-                "error_code": generate_error_code(),
-                "detail": "Внутренняя ошибка сервера. Сообщите код ошибки в поддержку.",
-            },
+            content={"detail": GENERIC_SERVER_ERROR_DETAIL},
         )

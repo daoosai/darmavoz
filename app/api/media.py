@@ -8,7 +8,7 @@ from sqlalchemy import and_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
-from app.models.models import DeliveryOption, Driver, Material, MediaFile, ModerationStatus, Order, User, Vehicle
+from app.models.models import DeliveryOption, Driver, Material, MediaFile, ModerationStatus, Order, Quarry, SpecialEquipmentListing, User, Vehicle
 from app.schemas.media import (
     ConfirmUploadRequest,
     ConfirmUploadResponse,
@@ -37,6 +37,8 @@ def _get_entity_model(entity_type: str):
         "delivery_option": DeliveryOption,
         "order": Order,
         "vehicle": Vehicle,
+        "quarry": Quarry,
+        "equipment_listing": SpecialEquipmentListing,
     }
     return model_map[entity_type]
 
@@ -90,6 +92,17 @@ async def _resolve_media_entity_context(
             raise HTTPException(status_code=400, detail="entity_id is required")
         entity = await _ensure_entity_exists(entity_type, entity_id, db)
         return entity_type, entity_id, entity if entity_type == "vehicle" else None
+
+    if role_name == "supplier":
+        if entity_type != "quarry" or entity_id is None:
+            raise HTTPException(
+                status_code=403,
+                detail="Suppliers can upload media only for their pickup points",
+            )
+        point = await db.get(Quarry, entity_id)
+        if point is None or point.owner_user_id != current_user.id:
+            raise HTTPException(status_code=404, detail="Pickup point not found")
+        return "quarry", entity_id, None
 
     if role_name != "driver":
         raise HTTPException(status_code=403, detail="Not enough permissions to manage media")
@@ -297,13 +310,20 @@ async def delete_media(
 async def make_media_primary(
     media_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_admin: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_user),
 ) -> dict[str, bool]:
-    del current_admin
     result = await db.execute(select(MediaFile).where(MediaFile.id == media_id))
     media_file = result.scalar_one_or_none()
     if media_file is None:
         raise HTTPException(status_code=404, detail="Media file not found")
+
+    await _resolve_media_entity_context(
+        db=db,
+        current_user=current_user,
+        entity_type=media_file.entity_type,
+        entity_id=media_file.entity_id,
+        slot_key=media_file.slot_key,
+    )
 
     await db.execute(
         update(MediaFile)

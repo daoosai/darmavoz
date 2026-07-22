@@ -9,6 +9,7 @@ import {
   PackageCheck,
   History,
   PhoneCall,
+  Headphones,
 } from "lucide-react";
 import { NotificationToggle } from "./components/shared/NotificationToggle";
 import { logoutCurrentSession } from "./pushAuth";
@@ -24,10 +25,12 @@ interface ClientData {
 
 interface ClientProfileScreenProps {
   onOpenAddresses?: () => void;
+  onOpenSupport?: () => void;
 }
 
 export default function ClientProfileScreen({
   onOpenAddresses,
+  onOpenSupport,
 }: ClientProfileScreenProps) {
   const { token } = useAuthStore();
   const [client, setClient] = useState<ClientData | null>(null);
@@ -121,16 +124,16 @@ export default function ClientProfileScreen({
 
   if (isLoading) {
     return (
-      <div className="flex-1 flex justify-center items-center h-full bg-slate-50">
+      <div className="flex-1 flex justify-center items-center h-full bg-gray-50">
         <Loader2 className="w-8 h-8 text-[#2DB0E6] animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-68px)] bg-slate-50 pb-4 overflow-hidden">
+    <div className="flex min-h-[calc(100vh-68px)] flex-col bg-gray-50 pb-24">
       {/* Gradient Header */}
-      <div className="bg-gradient-to-r from-[#2DB0E6] to-[#1D99D4] text-white p-6 pb-10 rounded-b-[32px] shadow-md relative z-10 flex items-center gap-4">
+      <div className="bg-gradient-to-r from-[#2DB0E6] to-[#1D99D4] text-white p-6 pb-10 rounded-b-[32px] shadow-md flex items-center gap-4">
         <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center shrink-0 backdrop-blur-sm">
           <User className="w-8 h-8 text-white" />
         </div>
@@ -151,7 +154,7 @@ export default function ClientProfileScreen({
       </div>
 
       {/* Mini Dashboard */}
-      <div className="grid grid-cols-2 gap-4 px-4 -mt-4 relative z-20">
+      <div className="grid grid-cols-2 gap-4 px-4 -mt-4">
         <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-col gap-2">
           <div className="flex items-center gap-2">
             <PackageCheck className="w-5 h-5 text-[#2DB0E6]" />
@@ -199,15 +202,25 @@ export default function ClientProfileScreen({
             Позвонить диспетчеру
           </span>
         </button>
+
+        <button
+          onClick={onOpenSupport}
+          className="w-full bg-white p-4 rounded-2xl shadow-sm flex items-center gap-4 active:scale-[0.98] transition-transform"
+        >
+          <div className="w-10 h-10 rounded-full bg-sky-50 flex items-center justify-center shrink-0">
+            <Headphones className="w-5 h-5 text-sky-500" />
+          </div>
+          <span className="font-semibold text-slate-800 text-left flex-1">
+            Поддержка
+          </span>
+        </button>
       </div>
       <div className="px-4">
         <NotificationToggle role="client" />
       </div>
 
-      <div className="flex-1"></div>
-
       {/* Footer Area */}
-      <div className="px-4 mt-8 mt-auto pt-6 flex flex-col items-center">
+      <div className="px-4 mt-8 pt-6 flex flex-col items-center bg-transparent">
         <button
           onClick={async () => await logoutCurrentSession()}
           className="w-full bg-white border border-slate-200 text-slate-600 font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 active:bg-slate-50 transition-colors"

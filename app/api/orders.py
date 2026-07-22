@@ -103,6 +103,7 @@ async def checkout_order(
         delivery_lat=payload.delivery_lat,
         delivery_lon=payload.delivery_lon,
         mileage_km=payload.mileage_km,
+        expected_material_unit_price=payload.expected_material_unit_price,
     )
 
 

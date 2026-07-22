@@ -7,10 +7,108 @@ import {
   MapPin,
   Minus,
   Plus,
+  Truck,
 } from "lucide-react";
-import { useAuthStore, useCartStore, useAddressStore } from "./store";
-import { getImageUrl, baseURL } from "./utils";
+import {
+  findDeliveryOptionForVolume,
+  getDeliveryOptionsForVolume,
+  normalizeClientOrderSummary,
+  useAuthStore,
+  useCartStore,
+  useAddressStore,
+  useClientOrdersStore,
+} from "./store";
+import { baseURL, extractApiErrorMessage, resolveMediaUrl } from "./utils";
 import toast from "react-hot-toast";
+import { MaterialProps } from "./MaterialDetailScreen";
+import PickupPointMapScreen, { PickupPointSelection } from "./PickupPointMapScreen";
+
+interface MarketplaceOption {
+  quarry_id: string;
+  quarry_name: string;
+  point_type: string;
+  distance: number;
+  delivery_cost: number;
+  material_cost: number;
+  total_amount: number;
+  primary_image_url?: string | null;
+  image_url?: string | null;
+  media_files?: Array<{ public_url?: string | null }>;
+}
+
+interface MarketplaceCalculation {
+  best_option: MarketplaceOption;
+  alternatives: MarketplaceOption[];
+}
+
+type CalculationErrorResult = {
+  error: true;
+  errorText?: string;
+};
+
+type CalculationResult = MarketplaceCalculation | CalculationErrorResult;
+
+interface MapContext {
+  itemId: string;
+  material: MaterialProps;
+  deliveryOptionId: string;
+}
+
+const isMarketplaceCalculation = (
+  result: CalculationResult | undefined,
+): result is MarketplaceCalculation => Boolean(result && "best_option" in result);
+
+const DEFAULT_CALCULATION_ERROR_TEXT =
+  "Доставка этого материала по вашему адресу временно невозможна: подходящие точки не найдены.";
+
+const MIN_VOLUME_M3 = 5;
+const VOLUME_STEP_M3 = 1;
+
+const getCartItemVolume = (item: ReturnType<typeof useCartStore.getState>["cartItems"][number]) =>
+  Number(item.volume ?? item.deliveryOption.capacity_m3 * item.quantity);
+
+const getImageUrl = (url?: string | null) => {
+  if (!url) return null;
+  if (/^https?:\/\//i.test(url)) return url;
+
+  const baseUrl = import.meta.env.VITE_S3_URL || import.meta.env.VITE_API_BASE_URL;
+  if (baseUrl) {
+    return `${baseUrl.replace(/\/$/, "")}/${url.replace(/^\//, "")}`;
+  }
+  return resolveMediaUrl(url);
+};
+
+const getMarketplaceImageUrl = (option: MarketplaceOption) =>
+  getImageUrl(
+    option.primary_image_url
+      ?? option.media_files?.find((media) => Boolean(media.public_url))?.public_url
+      ?? option.image_url,
+  );
+
+const getCalculationErrorText = (result: CalculationResult | undefined) => {
+  if (!result || isMarketplaceCalculation(result)) return null;
+  const normalized = result.errorText?.trim();
+  return normalized || null;
+};
+
+const parseErrorResponse = async (
+  response: Response,
+  fallbackMessage: string,
+) => {
+  const data = await response.clone().json().catch(() => null);
+  if (data) {
+    return extractApiErrorMessage(
+      { status: response.status, data },
+      fallbackMessage,
+    );
+  }
+
+  const text = await response.text().catch(() => "");
+  return extractApiErrorMessage(
+    { status: response.status, detail: text || undefined },
+    fallbackMessage,
+  );
+};
 
 export default function CartScreen({
   onGoToHome,
@@ -28,15 +126,19 @@ export default function CartScreen({
     removeFromCart,
     getTotalPrice,
     clearCart,
-    increaseQuantity,
-    decreaseQuantity,
+    updateItemVolume,
   } = useCartStore();
   const { role, token } = useAuthStore();
+  const setOrders = useClientOrdersStore((state) => state.setOrders);
   const { selectedAddress, setSelectedAddress } = useAddressStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [globalAddress, setGlobalAddress] = useState(selectedAddress);
-  const [calcResults, setCalcResults] = useState<Record<string, any>>({});
+  const [calcResults, setCalcResults] = useState<Record<string, CalculationResult>>({});
+  const [deliveryCoords, setDeliveryCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
+  const [preferredPointIds, setPreferredPointIds] = useState<Record<string, string>>({});
+  const [mapContext, setMapContext] = useState<MapContext | null>(null);
+  const [draftVolumes, setDraftVolumes] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (!token || role !== "client") {
@@ -48,6 +150,55 @@ export default function CartScreen({
   useEffect(() => {
     setGlobalAddress(selectedAddress);
   }, [selectedAddress]);
+
+  useEffect(() => {
+    setDraftVolumes((current) => {
+      const next: Record<string, number> = {};
+      cartItems.forEach((item) => {
+        next[item.id] = current[item.id] ?? getCartItemVolume(item);
+      });
+      const currentKeys = Object.keys(current);
+      const nextKeys = Object.keys(next);
+      const isUnchanged =
+        currentKeys.length === nextKeys.length &&
+        nextKeys.every((key) => current[key] === next[key]);
+      return isUnchanged ? current : next;
+    });
+  }, [cartItems]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      cartItems.forEach((item) => {
+        const draftVolume = draftVolumes[item.id];
+        if (draftVolume == null || draftVolume === getCartItemVolume(item)) return;
+        updateItemVolume(item.id, draftVolume);
+      });
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [cartItems, draftVolumes, updateItemVolume]);
+
+  const changeDraftVolume = (
+    item: ReturnType<typeof useCartStore.getState>["cartItems"][number],
+    direction: number,
+  ) => {
+    const deliveryOptions = getDeliveryOptionsForVolume([
+      item.deliveryOption,
+      ...(item.material.delivery_options || []),
+    ]);
+    const maxVolume = Number(deliveryOptions.at(-1)?.capacity_m3 || MIN_VOLUME_M3);
+    const currentVolume = draftVolumes[item.id] ?? getCartItemVolume(item);
+    const nextVolume = Math.min(
+      maxVolume,
+      Math.max(MIN_VOLUME_M3, currentVolume + direction * VOLUME_STEP_M3),
+    );
+    if (
+      nextVolume === currentVolume ||
+      !findDeliveryOptionForVolume(deliveryOptions, nextVolume)
+    ) {
+      return;
+    }
+    setDraftVolumes((current) => ({ ...current, [item.id]: nextVolume }));
+  };
 
   useEffect(() => {
     const calculateDelivery = async () => {
@@ -70,13 +221,23 @@ export default function CartScreen({
           },
         );
 
-        if (!geoRes.ok) throw new Error("Geocode error");
+        if (!geoRes.ok) {
+          const errorText = await parseErrorResponse(
+            geoRes,
+            "Не удалось определить координаты адреса доставки.",
+          );
+          throw new Error(errorText);
+        }
 
         const geoData = await geoRes.json();
         const { lat, lon } = geoData;
+        if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lon))) {
+          throw new Error("Не удалось определить координаты адреса доставки.");
+        }
+        setDeliveryCoords({ lat, lon });
 
         // Fetch calculation for each item
-        const newResults: Record<string, any> = {};
+        const newResults: Record<string, CalculationResult> = {};
         for (const item of cartItems) {
           const res = await fetch(`${baseURL}/client/orders/calculate`, {
             method: "POST",
@@ -89,21 +250,32 @@ export default function CartScreen({
               delivery_option_id: item.deliveryOption.id,
               delivery_lat: lat,
               delivery_lon: lon,
+              quantity: item.quantity,
+              quarry_id: preferredPointIds[item.id] || item.pickupPoint?.id || undefined,
             }),
           });
           if (res.ok) {
             newResults[item.id] = await res.json();
           } else {
-            newResults[item.id] = { error: true };
+            const errorText = await parseErrorResponse(
+              res,
+              DEFAULT_CALCULATION_ERROR_TEXT,
+            );
+            newResults[item.id] = { error: true, errorText };
           }
         }
         setCalcResults(newResults);
       } catch (e) {
+        setDeliveryCoords(null);
         console.error("Calculation error", e);
+        const errorText = extractApiErrorMessage(
+          e,
+          "Ошибка расчета стоимости",
+        );
         // If geocode fails or network fails, we can also set error state
-        const errResults: Record<string, any> = {};
+        const errResults: Record<string, CalculationResult> = {};
         for (const item of cartItems) {
-          errResults[item.id] = { error: true };
+          errResults[item.id] = { error: true, errorText };
         }
         setCalcResults(errResults);
       } finally {
@@ -113,11 +285,40 @@ export default function CartScreen({
 
     const timer = setTimeout(calculateDelivery, 800);
     return () => clearTimeout(timer);
-  }, [globalAddress, cartItems, token, role]);
+  }, [globalAddress, cartItems, token, role, preferredPointIds]);
 
   const handleAddressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setGlobalAddress(e.target.value);
     setSelectedAddress(e.target.value);
+  };
+
+  const selectMarketplaceOption = (itemId: string, selected: MarketplaceOption) => {
+    setPreferredPointIds((current) => ({
+      ...current,
+      [itemId]: selected.quarry_id,
+    }));
+    setCalcResults((currentResults) => {
+      const current = currentResults[itemId];
+      if (!isMarketplaceCalculation(current)) return currentResults;
+      const allOptions = [current.best_option, ...current.alternatives];
+      return {
+        ...currentResults,
+        [itemId]: {
+          best_option: selected,
+          alternatives: allOptions.filter((option) => option.quarry_id !== selected.quarry_id),
+        },
+      };
+    });
+  };
+
+  const selectPointFromMap = (point: PickupPointSelection) => {
+    if (!mapContext) return;
+    setPreferredPointIds((current) => ({
+      ...current,
+      [mapContext.itemId]: point.id,
+    }));
+    setMapContext(null);
+    toast.success("Точка выбрана, пересчитываем стоимость");
   };
 
   const handleCheckout = async () => {
@@ -131,8 +332,16 @@ export default function CartScreen({
     try {
       setIsSubmitting(true);
 
-      const requests = cartItems.map((item) =>
-        fetch(`${baseURL}/orders/checkout`, {
+      const requests = cartItems.map((item) => {
+        const calculation = calcResults[item.id];
+        const selectedOption = isMarketplaceCalculation(calculation)
+          ? calculation.best_option
+          : null;
+        const orderedVolume = item.deliveryOption.capacity_m3 * item.quantity;
+        const expectedMaterialUnitPrice = selectedOption && orderedVolume > 0
+          ? selectedOption.material_cost / orderedVolume
+          : item.pickupPoint?.price;
+        return fetch(`${baseURL}/orders/checkout`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -145,16 +354,36 @@ export default function CartScreen({
             notes: item.comment || "",
             source: "web",
             quantity: item.quantity,
-            quarry_id: calcResults[item.id]?.quarry_id,
-            mileage_km: calcResults[item.id]?.mileage_km,
+            quarry_id: selectedOption?.quarry_id || item.pickupPoint?.id,
+            mileage_km: selectedOption?.distance,
+            delivery_lat: deliveryCoords?.lat,
+            delivery_lon: deliveryCoords?.lon,
+            expected_material_unit_price: expectedMaterialUnitPrice,
           }),
-        }),
-      );
+        });
+      });
 
       const responses = await Promise.all(requests);
       const hasErrors = responses.some((res) => !res.ok);
 
       if (!hasErrors) {
+        try {
+          const ordersResponse = await fetch(`${baseURL}/clients/me/orders`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          });
+          if (ordersResponse.ok) {
+            const ordersData = await ordersResponse.json();
+            setOrders(
+              Array.isArray(ordersData)
+                ? ordersData.map(normalizeClientOrderSummary)
+                : [],
+            );
+          }
+        } catch (refreshError) {
+          console.error("Orders refresh error", refreshError);
+        }
         toast.success("Заказ успешно оформлен");
         clearCart();
         setGlobalAddress("");
@@ -174,30 +403,34 @@ export default function CartScreen({
 
   const totalMaterialCost = getTotalPrice();
   const hasCalculations = Object.keys(calcResults).length > 0;
-  const hasCalculationError = cartItems.some(
-    (item) => calcResults[item.id]?.error,
+  const hasCalculationError = hasCalculations && cartItems.some(
+    (item) => !isMarketplaceCalculation(calcResults[item.id]),
   );
+  const calculationErrorText = cartItems
+    .map((item) => getCalculationErrorText(calcResults[item.id]))
+    .find((message): message is string => Boolean(message))
+    || DEFAULT_CALCULATION_ERROR_TEXT;
 
   const totalDeliveryCost = cartItems.reduce((acc, item) => {
     const res = calcResults[item.id];
-    const safeDeliveryPrice = Number(res?.delivery_cost) || 0;
-    return acc + safeDeliveryPrice * item.quantity;
+    return acc + (isMarketplaceCalculation(res) ? Number(res.best_option.delivery_cost) || 0 : 0);
   }, 0);
 
   const finalTotal = Math.round(
     hasCalculations && !isCalculating && !hasCalculationError
       ? cartItems.reduce((acc, item) => {
           const res = calcResults[item.id];
-          if (!res || res.error) return acc;
-          const safeMaterialPrice =
-            Number(res.material_cost ?? res.total_amount) || 0;
-          const safeDeliveryPrice = Number(res.delivery_cost) || 0;
-          const safeEstimated =
-            Number(res.estimated_total_amount) ||
-            safeMaterialPrice + safeDeliveryPrice;
-          return acc + safeEstimated * item.quantity;
+          if (!isMarketplaceCalculation(res)) return acc;
+          return acc + (Number(res.best_option.total_amount) || 0);
         }, 0)
       : totalMaterialCost,
+  );
+  const cartItemGroups = Object.values(
+    cartItems.reduce<Record<string, (typeof cartItems)[number][]>>((groups, item) => {
+      const materialId = item.material.id;
+      groups[materialId] = [...(groups[materialId] || []), item];
+      return groups;
+    }, {}),
   );
 
   if (!token || role !== "client") {
@@ -228,76 +461,94 @@ export default function CartScreen({
   }
 
   return (
-    <div className="flex flex-col bg-slate-50 pb-56 min-h-[calc(100vh-68px)]">
+    <div className="flex flex-col bg-slate-50 pb-28 min-h-[calc(100vh-68px)]">
       <div className="flex-1 p-4 space-y-4">
         <h2 className="text-2xl font-bold text-slate-900 mb-4 pt-2">Корзина</h2>
 
         {/* List of items */}
         <div className="flex flex-col gap-4 mb-6">
-          {cartItems.map((item) => (
-            <div
-              key={item.id}
-              className="bg-white p-3 rounded-[24px] flex flex-row items-start shadow-sm border border-slate-100"
-            >
-              <div className="w-[80px] h-[80px] bg-slate-100 rounded-[16px] overflow-hidden shrink-0 flex items-center justify-center">
-                {getImageUrl(item.material) !== "/placeholder.jpg" ? (
-                  <img
-                    src={getImageUrl(item.material)}
-                    alt={item.material?.name}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <ImageIcon className="w-6 h-6 text-slate-300" />
-                )}
-              </div>
-              <div className="flex flex-col justify-between flex-1 ml-3 h-[80px]">
-                <div className="flex justify-between items-start">
-                  <h3 className="font-bold text-[16px] text-slate-900 leading-tight line-clamp-1">
-                    {item.material?.name}
-                  </h3>
-                  <button
-                    onClick={() => removeFromCart(item.id)}
-                    className="p-1 -mt-1 -mr-1 text-slate-400 hover:text-red-500 hover:bg-slate-50 transition-colors rounded-full"
-                  >
-                    <X className="w-4 h-4" strokeWidth={2.5} />
-                  </button>
+          {cartItems.map((item) => {
+            const draftVolume = draftVolumes[item.id] ?? getCartItemVolume(item);
+            const deliveryOptions = getDeliveryOptionsForVolume([
+              item.deliveryOption,
+              ...(item.material.delivery_options || []),
+            ]);
+            const displayedOption = findDeliveryOptionForVolume(deliveryOptions, draftVolume) || item.deliveryOption;
+            const maxVolume = Number(deliveryOptions.at(-1)?.capacity_m3 || displayedOption.capacity_m3);
+            const vehicleImageUrl = resolveMediaUrl(
+              displayedOption.primary_image_url
+                || displayedOption.media_files?.[0]?.public_url
+                || displayedOption.image_url,
+            );
+
+            return (
+              <div
+                key={item.id}
+                className="flex flex-row items-start rounded-[24px] border border-slate-100 bg-white p-3 shadow-sm"
+              >
+                <div className="flex h-[80px] w-[80px] shrink-0 items-center justify-center overflow-hidden rounded-[16px] bg-slate-100">
+                  {vehicleImageUrl ? (
+                    <img
+                      src={vehicleImageUrl}
+                      alt={displayedOption.title}
+                      className="h-full w-full object-contain p-1"
+                    />
+                  ) : (
+                    <Truck className="h-8 w-8 text-slate-300" />
+                  )}
                 </div>
-
-                <div className="text-[14px] text-slate-500 line-clamp-1">
-                  {item.deliveryOption.title} ({item.deliveryOption.capacity_m3}{" "}
-                  м³)
-                </div>
-
-                {item.comment && (
-                  <div className="text-[13px] italic text-slate-400 line-clamp-1 mt-0.5">
-                    {item.comment}
-                  </div>
-                )}
-
-                <div className="flex justify-end items-end mt-auto">
-                  <div className="flex items-center gap-2.5 bg-slate-50 rounded-full px-2 py-0.5 border border-slate-100 mb-1">
+                <div className="ml-3 flex min-h-[80px] flex-1 flex-col justify-between">
+                  <div className="flex items-start justify-between">
+                    <h3 className="line-clamp-1 text-[16px] font-bold leading-tight text-slate-900">
+                      {item.material?.name}
+                    </h3>
                     <button
-                      onClick={() => decreaseQuantity(item.id)}
-                      disabled={item.quantity <= 1}
-                      className="p-0.5 text-slate-400 hover:text-[#2DB0E6] disabled:opacity-50 disabled:hover:text-slate-400 transition-colors"
+                      onClick={() => removeFromCart(item.id)}
+                      className="-mr-1 -mt-1 rounded-full p-1 text-slate-400 transition-colors hover:bg-slate-50 hover:text-red-500"
                     >
-                      <Minus className="w-4 h-4" />
-                    </button>
-                    <span className="text-sm font-semibold text-slate-700 w-4 text-center">
-                      {item.quantity}
-                    </span>
-                    <button
-                      onClick={() => increaseQuantity(item.id)}
-                      disabled={item.quantity >= 10}
-                      className="p-0.5 text-slate-400 hover:text-[#2DB0E6] disabled:opacity-50 disabled:hover:text-slate-400 transition-colors"
-                    >
-                      <Plus className="w-4 h-4" />
+                      <X className="h-4 w-4" strokeWidth={2.5} />
                     </button>
                   </div>
+
+                  <div className="line-clamp-1 text-[14px] text-slate-500">
+                    {displayedOption.title} (машина до {displayedOption.capacity_m3} м³)
+                  </div>
+
+                  {item.comment && (
+                    <div className="mt-0.5 line-clamp-1 text-[13px] italic text-slate-400">
+                      {item.comment}
+                    </div>
+                  )}
+
+                  <div className="mt-2 flex justify-end">
+                    <div className="inline-flex items-center rounded-full border border-sky-100 bg-sky-50 p-1">
+                      <button
+                        type="button"
+                        onClick={() => changeDraftVolume(item, -VOLUME_STEP_M3)}
+                        disabled={draftVolume <= MIN_VOLUME_M3}
+                        aria-label={`Уменьшить объём ${item.material.name}`}
+                        className="grid h-7 w-7 place-items-center rounded-full bg-white text-sky-700 shadow-sm transition-colors disabled:cursor-not-allowed disabled:text-slate-300"
+                      >
+                        <Minus className="h-4 w-4" />
+                      </button>
+                      <span className="min-w-[68px] px-2 text-center text-sm font-bold text-sky-700">
+                        {draftVolume} м³
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => changeDraftVolume(item, VOLUME_STEP_M3)}
+                        disabled={draftVolume >= maxVolume}
+                        aria-label={`Увеличить объём ${item.material.name}`}
+                        className="grid h-7 w-7 place-items-center rounded-full bg-white text-sky-700 shadow-sm transition-colors disabled:cursor-not-allowed disabled:text-slate-300"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Global Address Field */}
@@ -330,110 +581,192 @@ export default function CartScreen({
           </button>
         </div>
 
-        {/* Calculation Result / Receipt */}
+        {/* Marketplace calculation result */}
         {!globalAddress.trim() ? (
           <div className="p-4 bg-blue-50 text-blue-700 rounded-xl text-sm mt-4">
-            💡 Укажите адрес доставки, чтобы мы рассчитали стоимость и подобрали ближайший карьер.
+            {Object.values(preferredPointIds).some(Boolean) ||
+            cartItems.some((item) => Boolean(item.pickupPoint?.id))
+              ? "Укажите адрес доставки."
+              : "💡 Укажите адрес доставки, чтобы мы сравнили цены всех доступных точек."}
+          </div>
+        ) : isCalculating ? (
+          <div className="flex flex-col items-center justify-center gap-3 rounded-[24px] border border-slate-100 bg-white py-10 shadow-sm">
+            <Loader2 className="h-7 w-7 animate-spin text-[#2DB0E6]" />
+            <span className="text-sm font-medium text-slate-500">
+              Сравниваем доступные варианты...
+            </span>
           </div>
         ) : hasCalculationError ? (
           <div className="p-4 bg-orange-50 text-orange-700 rounded-xl text-sm mt-4">
-            Доставка этого материала по вашему адресу временно невозможна (нет активных карьеров).
+            {calculationErrorText}
           </div>
-        ) : (
-          (hasCalculations || isCalculating) && (
-            <div className="bg-white rounded-[24px] p-5 shadow-sm border border-slate-100 flex flex-col gap-4 mt-2">
-              <h3 className="font-semibold text-slate-800 text-[16px]">
-                Заказ
-              </h3>
+        ) : hasCalculations ? (
+          <div className="flex flex-col gap-5">
+            {cartItemGroups.map((group) => {
+              const representativeItem = group[0];
+              const calculatedItems = group.flatMap((item) => {
+                const calculation = calcResults[item.id];
+                return isMarketplaceCalculation(calculation)
+                  ? [{ item, calculation }]
+                  : [];
+              });
+              if (calculatedItems.length === 0) return null;
 
-              {isCalculating ? (
-                <div className="flex justify-center items-center py-6 flex-col gap-3">
-                  <Loader2 className="w-6 h-6 animate-spin text-[#2DB0E6]" />
-                  <span className="text-sm text-slate-500 font-medium">
-                    Вычисляем стоимость...
-                  </span>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-4">
-                  {cartItems.map((item) => {
-                    const res = calcResults[item.id];
-                    if (!res || res.error) return null;
+              const best = calculatedItems[0].calculation.best_option;
+              const pointIds = new Set(
+                calculatedItems.map(({ calculation }) => calculation.best_option.quarry_id),
+              );
+              const totalVolume = group.reduce(
+                (sum, item) =>
+                  sum +
+                  Number(
+                    item.volume ?? item.deliveryOption.capacity_m3 * item.quantity,
+                  ),
+                0,
+              );
+              const aggregate = calculatedItems.reduce(
+                (totals, { calculation }) => ({
+                  materialCost: totals.materialCost + calculation.best_option.material_cost,
+                  deliveryCost: totals.deliveryCost + calculation.best_option.delivery_cost,
+                  totalAmount: totals.totalAmount + calculation.best_option.total_amount,
+                }),
+                { materialCost: 0, deliveryCost: 0, totalAmount: 0 },
+              );
+              const groupAlternatives = calculatedItems.flatMap(({ item, calculation }) =>
+                calculation.alternatives.map((option) => ({ item, option })),
+              );
+              const lockedPointId =
+                preferredPointIds[representativeItem.id] || representativeItem.pickupPoint?.id;
+              const isUserSelectedPoint =
+                pointIds.size === 1 &&
+                Boolean(lockedPointId) &&
+                best.quarry_id === lockedPointId;
+              const pointTitle = pointIds.size === 1
+                ? best.quarry_name
+                : `Подобрано точек: ${pointIds.size}`;
+              const pointSubtitle = pointIds.size === 1
+                ? `${Number(best.distance).toFixed(1)} км от вашего адреса`
+                : "Маршрут рассчитан отдельно для каждой машины";
+              const bestImageUrl = getMarketplaceImageUrl(best);
 
-                    const distanceKm = res.distance_km || res.mileage_km;
-                    const safeMaterialPrice =
-                      Number(res.material_cost ?? res.total_amount) || 0;
-                    const safeDeliveryPrice = Number(res.delivery_cost) || 0;
-                    const safeEstimated =
-                      Number(res.estimated_total_amount) ||
-                      safeMaterialPrice + safeDeliveryPrice;
+              return (
+                <section key={representativeItem.material.id} className="rounded-[24px] border border-slate-100 bg-white p-4 shadow-sm">
+                  <div className="mb-3 flex items-start justify-between gap-3 px-1">
+                    <div>
+                      <h3 className="font-bold text-slate-900">{representativeItem.material.name}</h3>
+                      <p className="text-xs text-slate-500">
+                        {totalVolume} м³ · {group.map((item) => item.deliveryOption.title).join(", ")}
+                      </p>
+                    </div>
+                  </div>
 
-                    const deliveryCost = Math.round(
-                      safeDeliveryPrice * item.quantity,
-                    );
-                    const totalAmount = Math.round(
-                      safeMaterialPrice * item.quantity,
-                    );
-                    const estimatedTotalAmount = Math.round(
-                      safeEstimated * item.quantity,
-                    );
-                    const loadingPoint = res.loading_point || res.quarry_name;
-                    const volume =
-                      item.deliveryOption.capacity_m3 * item.quantity;
-
-                    return (
-                      <div
-                        key={item.id}
-                        className="flex flex-col gap-2 pb-5 border-b border-slate-100 last:border-0 last:pb-0"
-                      >
-                        <div className="flex justify-between items-start text-slate-900 mb-1">
-                          <span className="font-bold text-[16px] leading-tight pr-2">
-                            {item.material.name}
-                          </span>
-                          <span className="font-bold text-[16px] whitespace-nowrap">
-                            {totalAmount.toLocaleString("ru-RU")} ₽
-                          </span>
-                        </div>
-
-                        <div className="flex flex-col gap-2 text-[14px] text-slate-600 bg-slate-50/50 p-3 rounded-xl border border-slate-50">
-                          <div className="flex justify-between items-start">
-                            <span>Объем машины:</span>
-                            <span className="font-medium text-slate-800">
-                              {volume} м³
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-start">
-                            <span>Ближайший карьер:</span>
-                            <span className="font-medium text-slate-800 text-right max-w-[65%] leading-tight">
-                              {loadingPoint}
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-start">
-                            <span>
-                              Доставка:{" "}
-                              <span className="text-slate-500 text-[13px]">
-                                ({distanceKm} км)
-                              </span>
-                            </span>
-                            <span className="font-medium text-slate-800">
-                              {deliveryCost.toLocaleString("ru-RU")} ₽
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex justify-between text-[16px] font-bold text-slate-900 mt-1 pl-1 pr-1">
-                          <span>К оплате:</span>
-                          <span className="text-[#2DB0E6] text-[18px]">
-                            {estimatedTotalAmount.toLocaleString("ru-RU")} ₽
-                          </span>
-                        </div>
+                  <div className="rounded-2xl bg-white p-4 text-slate-900 shadow-sm">
+                    <div className="mb-3 inline-flex rounded-full bg-sky-100 px-3 py-1 text-xs font-bold uppercase tracking-wide text-sky-700">
+                      {isUserSelectedPoint ? "ВЫ ВЫБРАЛИ" : "ВЫГОДНЫЙ ВАРИАНТ"}
+                    </div>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h4 className="truncate text-lg font-black leading-tight">{pointTitle}</h4>
+                        <p className="mt-1 text-sm text-slate-500">{pointSubtitle}</p>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )
-        )}
+                      {pointIds.size === 1 && (
+                        <span className="rounded-full bg-sky-50 px-2 py-1 text-[11px] font-semibold text-sky-700">
+                          {best.point_type === "quarry" ? "Карьер" : "Накопитель"}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-4 grid h-32 w-full place-items-center overflow-hidden rounded-xl bg-slate-100">
+                      {bestImageUrl ? (
+                        <img
+                          src={bestImageUrl}
+                          alt={best.quarry_name}
+                          className="h-32 w-full object-cover"
+                        />
+                      ) : (
+                        <ImageIcon className="h-8 w-8 text-slate-400" />
+                      )}
+                    </div>
+                    <div className="mt-4 grid grid-cols-3 gap-2 border-t border-sky-100 pt-3 text-center">
+                      <div>
+                        <span className="block text-[10px] text-slate-500">Материал</span>
+                        <strong className="text-sm text-slate-900">{Math.round(aggregate.materialCost).toLocaleString("ru-RU")} ₽</strong>
+                      </div>
+                      <div>
+                        <span className="block text-[10px] text-slate-500">Доставка</span>
+                        <strong className="text-sm text-slate-900">{Math.round(aggregate.deliveryCost).toLocaleString("ru-RU")} ₽</strong>
+                      </div>
+                      <div>
+                        <span className="block text-[10px] text-slate-500">Итого</span>
+                        <strong className="text-base text-sky-600">{Math.round(aggregate.totalAmount).toLocaleString("ru-RU")} ₽</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  {groupAlternatives.length > 0 && (
+                    <div className="mt-4">
+                      <h4 className="mb-2 px-1 text-sm font-bold text-slate-800">Другие варианты</h4>
+                      <div className="hide-scrollbar -mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-4">
+                        {groupAlternatives.map(({ item, option }) => {
+                          const optionImageUrl = getMarketplaceImageUrl(option);
+
+                          return (
+                            <article key={`${item.id}-${option.quarry_id}`} className="w-72 shrink-0 snap-start rounded-2xl border border-gray-100 bg-white p-4 shadow-sm flex flex-col justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-slate-200">
+                                  {optionImageUrl ? (
+                                    <img
+                                      src={optionImageUrl}
+                                      alt={option.quarry_name}
+                                      className="h-full w-full object-cover"
+                                    />
+                                  ) : (
+                                    <ImageIcon className="h-5 w-5 text-slate-400" />
+                                  )}
+                                </div>
+                                <div className="min-w-0">
+                                  <h5 className="line-clamp-2 text-sm font-bold text-slate-900">{option.quarry_name}</h5>
+                                  <p className="mt-1 text-xs text-slate-500">{Number(option.distance).toFixed(1)} км от вашего адреса</p>
+                                  <p className="mt-1 truncate text-[10px] font-semibold text-sky-600">{item.deliveryOption.title}</p>
+                                </div>
+                              </div>
+                              <div className="mt-3 flex items-end justify-between gap-3">
+                                <div>
+                                  <span className="block text-[10px] uppercase text-slate-400">Итого</span>
+                                  <strong className="text-base text-slate-900">{Math.round(option.total_amount).toLocaleString("ru-RU")} ₽</strong>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => selectMarketplaceOption(item.id, option)}
+                                  className="rounded-xl bg-[#2DB0E6] px-3 py-2 text-xs font-bold text-white hover:bg-[#209ccf]"
+                                >
+                                  Выбрать
+                                </button>
+                              </div>
+                            </article>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setMapContext({
+                        itemId: representativeItem.id,
+                        material: representativeItem.material,
+                        deliveryOptionId: representativeItem.deliveryOption.id,
+                      })
+                    }
+                    className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-bold text-sky-700 transition-colors hover:bg-sky-100"
+                  >
+                    <MapPin className="h-4 w-4" />
+                    Посмотреть все точки на карте
+                  </button>
+                </section>
+              );
+            })}
+          </div>
+        ) : null}
       </div>
 
       {/* Sticky Bottom Bar */}
@@ -475,6 +808,15 @@ export default function CartScreen({
           </>
         )}
       </div>
+
+      {mapContext && (
+        <PickupPointMapScreen
+          material={mapContext.material}
+          deliveryLocation={deliveryCoords}
+          onClose={() => setMapContext(null)}
+          onSelect={selectPointFromMap}
+        />
+      )}
     </div>
   );
 }

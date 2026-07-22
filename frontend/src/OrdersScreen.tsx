@@ -1,35 +1,48 @@
 import React, { useState, useEffect, useRef } from "react";
 import PullToRefresh from "react-simple-pull-to-refresh";
-import { Package, MapPin, Calendar, Truck, List, Info, User as UserIcon, Phone, Search, UserCheck, CheckCircle, ChevronDown } from "lucide-react";
-import {  clientOrderStatusColors, baseURL } from "./utils";
-import { getOrderStatusText } from "./utils/statusMapper";
-import { useAuthStore } from "./store";
+import { Package, MapPin, Calendar, Truck, List, Info, User as UserIcon, Phone, Search, UserCheck, CheckCircle, ChevronDown, ArrowLeft, Wrench, X } from "lucide-react";
+import toast from "react-hot-toast";
+import { clientOrderStatusColors, baseURL, extractApiErrorMessage, resolveMediaUrl } from "./utils";
+import { getOrderStatusText, getOrderStepIndex } from "./utils/statusMapper";
+import { ClientOrderSummary, normalizeClientOrderSummary, useAuthStore, useClientOrdersStore } from "./store";
 import { motion, AnimatePresence } from "motion/react";
 
-interface ClientOrder {
+type ClientOrder = ClientOrderSummary;
+
+interface EquipmentApplication {
   id: string;
-  status: string;
-  address: string;
-  total_amount: number;
+  listing_id: string;
+  listing_title_snapshot: string;
+  object_address: string;
+  requested_date: string;
+  requested_time: string;
+  duration_value: number;
+  duration_unit: "hours" | "shifts";
+  total_price?: number | null;
+  status: "new" | "in_progress" | "closed" | "completed" | "rejected" | "cancelled";
+  reject_reason?: string | null;
+  cancel_reason?: string | null;
+  primary_image_url?: string | null;
   created_at: string;
-  driver?: {
-    name: string;
-    phone: string;
-    vehicle?: {
-      brand?: string;
-      plate_number?: string;
-      title?: string;
-    };
-  };
-  items?: {
-    material: { name: string };
-    quantity: number;
-  }[];
-  delivery_option?: {
-    capacity_m3: number;
-    title: string;
-  };
 }
+
+const equipmentStatusLabels: Record<EquipmentApplication["status"], string> = {
+  new: "Новая",
+  in_progress: "В работе",
+  closed: "Завершена",
+  completed: "Завершена",
+  rejected: "Отклонена",
+  cancelled: "Отменена",
+};
+
+const equipmentStatusClasses: Record<EquipmentApplication["status"], string> = {
+  new: "bg-amber-100 text-amber-700",
+  in_progress: "bg-sky-100 text-sky-700",
+  closed: "bg-emerald-100 text-emerald-700",
+  completed: "bg-emerald-100 text-emerald-700",
+  rejected: "bg-rose-100 text-rose-700",
+  cancelled: "bg-rose-100 text-rose-700",
+};
 
 const activeStatuses = [
   "created", "searching_driver", "offered_to_driver", "no_driver_found",
@@ -37,16 +50,6 @@ const activeStatuses = [
   "heading_to_pickup", "arrived_at_pickup", "loading",
   "heading_to_client"
 ];
-
-const getStepIndex = (status: string) => {
-  if (status === 'created') return 0;
-  if (['searching_driver', 'offered_to_driver', 'no_driver_found'].includes(status)) return 1;
-  if (['driver_assigned', 'driver_accepted'].includes(status)) return 2;
-  if (['heading_to_pickup', 'arrived_at_pickup', 'loading'].includes(status)) return 3;
-  if (status === 'heading_to_client') return 4;
-  if (status === 'completed' || status === 'delivered') return 5;
-  return -1;
-};
 
 const formatDate = (dateString: string) => {
   try {
@@ -61,8 +64,105 @@ const formatDate = (dateString: string) => {
   }
 };
 
+const formatEquipmentApplicationPrice = (value?: number | null) =>
+  value == null ? "По договорённости" : `${Number(value).toLocaleString("ru-RU")} ₽`;
+
+const getOrderDisplayAmount = (
+  order: Pick<ClientOrder, "total_price" | "estimated_total_amount" | "total_amount" | "delivery_cost">,
+) => {
+  if (typeof order.total_price === "number") return order.total_price;
+  if (typeof order.estimated_total_amount === "number") return order.estimated_total_amount;
+  if (order.total_amount == null && order.delivery_cost == null) return null;
+  return Number(order.total_amount ?? 0) + Number(order.delivery_cost ?? 0);
+};
+
+const formatOrderDisplayAmount = (
+  order: Pick<ClientOrder, "total_price" | "estimated_total_amount" | "total_amount" | "delivery_cost">,
+) => {
+  const amount = getOrderDisplayAmount(order);
+  return amount == null ? "..." : `${amount.toLocaleString("ru-RU")} ₽`;
+};
+
+const EquipmentApplicationProgress = ({ application }: { application: EquipmentApplication }) => {
+  if (application.status === "rejected" || application.status === "cancelled") {
+    return (
+      <div className="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-center text-sm font-bold text-rose-700">
+        {application.status === "rejected" ? "Заявка отклонена" : "Заявка отменена"}
+      </div>
+    );
+  }
+
+  const steps = ["Новая", "В работе", "Завершена"];
+  const currentStep = application.status === "new" ? 0 : application.status === "in_progress" ? 1 : 2;
+  const progress = `${(currentStep / (steps.length - 1)) * 100}%`;
+
+  return (
+    <div className="mt-5 px-1">
+      <div className="relative">
+        <div className="absolute left-3 right-3 top-3 h-1 overflow-hidden rounded-full bg-slate-100">
+          <motion.div
+            className="h-full rounded-full bg-[linear-gradient(90deg,#38bdf8_0%,#0ea5e9_45%,#7dd3fc_100%)] bg-[length:200%_100%]"
+            style={{ width: progress }}
+            animate={{ backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"] }}
+            transition={{ repeat: Infinity, duration: 2.8, ease: "easeInOut" }}
+          />
+        </div>
+        <div className="relative flex justify-between">
+          {steps.map((step, index) => (
+            <div key={step} className="flex w-20 flex-col items-center text-center">
+              <div
+                className={`relative grid h-7 w-7 place-items-center rounded-full border-2 text-[10px] font-black transition-all ${
+                  index <= currentStep
+                    ? "border-sky-500 bg-sky-500 text-white"
+                    : "border-slate-200 bg-white text-slate-400"
+                } ${index === currentStep ? "shadow-lg shadow-sky-200 ring-4 ring-sky-100" : ""}`}
+              >
+                {index === currentStep ? (
+                  <motion.span
+                    className="absolute inset-[-4px] rounded-full bg-sky-200/70"
+                    animate={{ scale: [1, 1.2, 1], opacity: [0.55, 0.15, 0.55] }}
+                    transition={{ repeat: Infinity, duration: 1.8, ease: "easeInOut" }}
+                  />
+                ) : null}
+                <span className="relative">{index + 1}</span>
+              </div>
+              <span
+                className={`mt-2 text-[10px] font-bold ${
+                  index <= currentStep ? "text-sky-700" : "text-slate-400"
+                } ${index === currentStep ? "animate-pulse" : ""}`}
+              >
+                {step}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const EquipmentHistoryCard = ({ application }: { application: EquipmentApplication }) => {
+  const statusLabel = application.status === "rejected"
+    ? "Отклонён"
+    : application.status === "cancelled"
+      ? "Отменён"
+      : "Завершён";
+  return (
+    <article className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div><p className="text-xs font-bold uppercase tracking-wide text-slate-400">Заявка #{application.id.slice(0, 8).toUpperCase()}</p><h3 className="mt-1 text-lg font-black text-slate-900">{application.listing_title_snapshot}</h3></div>
+        <span className={`shrink-0 rounded-full px-3 py-1 text-[10px] font-bold ${equipmentStatusClasses[application.status]}`}>{statusLabel}</span>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-3 text-sm"><div><p className="text-xs text-slate-400">Дата</p><p className="mt-1 font-bold text-slate-700">{formatDate(application.requested_date)}</p></div><div><p className="text-xs text-slate-400">Сумма</p><p className="mt-1 font-bold text-slate-700">{formatEquipmentApplicationPrice(application.total_price)}</p></div></div>
+      <p className="mt-3 flex items-start gap-2 text-sm text-slate-600"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />{application.object_address}</p>
+      {application.reject_reason && <p className="mt-3 rounded-xl bg-rose-50 p-3 text-sm text-rose-700"><span className="font-bold">Причина отказа:</span> {application.reject_reason}</p>}
+      {application.cancel_reason && <p className="mt-3 rounded-xl bg-rose-50 p-3 text-sm text-rose-700"><span className="font-bold">Причина отмены:</span> {application.cancel_reason}</p>}
+    </article>
+  );
+};
+
 const ActiveOrderCard: React.FC<{ order: ClientOrder }> = ({ order }) => {
-  const stepIndex = getStepIndex(order.status);
+  const stepIndex = getOrderStepIndex(order.status);
   
   const renderCentralAnimation = () => {
     if (stepIndex === 1) {
@@ -307,12 +407,30 @@ const HistoryOrderCard = ({ order }: { order: ClientOrder }) => {
   );
 };
 
-export default function OrdersScreen({ onOpenAuth }: { onOpenAuth?: () => void }) {
+export default function OrdersScreen({
+  onOpenAuth,
+  focusedOrderId,
+  onBackToOrders,
+}: {
+  onOpenAuth?: () => void;
+  focusedOrderId?: string | null;
+  onBackToOrders?: () => void;
+}) {
   const { role, token } = useAuthStore();
-  const [orders, setOrders] = useState<ClientOrder[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const {
+    orders,
+    isLoading,
+    setOrders,
+    setIsLoading,
+    clearOrders,
+  } = useClientOrdersStore();
 
-  const [activeTab, setActiveTab] = useState<'current' | 'history'>('current');
+  const [activeTab, setActiveTab] = useState<'current' | 'history' | 'equipment'>('current');
+  const [equipmentApplications, setEquipmentApplications] = useState<EquipmentApplication[]>([]);
+  const [equipmentApplicationsLoading, setEquipmentApplicationsLoading] = useState(true);
+  const [cancellingApplication, setCancellingApplication] = useState<EquipmentApplication | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelling, setCancelling] = useState(false);
   const [recentlyCompletedIds, setRecentlyCompletedIds] = useState<string[]>([]);
   const prevOrdersRef = useRef<ClientOrder[]>([]);
 
@@ -331,7 +449,7 @@ export default function OrdersScreen({ onOpenAuth }: { onOpenAuth?: () => void }
       });
       if (res.ok) {
         const data = await res.json();
-        setOrders(data);
+        setOrders(Array.isArray(data) ? data.map(normalizeClientOrderSummary) : []);
       }
     } catch (err) {
       console.error(err);
@@ -340,13 +458,70 @@ export default function OrdersScreen({ onOpenAuth }: { onOpenAuth?: () => void }
     }
   };
 
+  const fetchEquipmentApplications = async (silent = false) => {
+    if (role !== "client" || !token) {
+      setEquipmentApplications([]);
+      setEquipmentApplicationsLoading(false);
+      return;
+    }
+    if (!silent) setEquipmentApplicationsLoading(true);
+    try {
+      const response = await fetch(`${baseURL}/client/equipment-applications`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) setEquipmentApplications(await response.json());
+    } catch (error) {
+      console.error(error);
+    } finally {
+      if (!silent) setEquipmentApplicationsLoading(false);
+    }
+  };
+
+  const cancelEquipmentApplication = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!cancellingApplication || !cancelReason.trim() || !token) return;
+    setCancelling(true);
+    try {
+      const response = await fetch(`${baseURL}/client/equipment-applications/${cancellingApplication.id}/cancel`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ cancel_reason: cancelReason }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось отменить заявку"));
+      setEquipmentApplications((previous) => previous.map((item) => item.id === data.id ? data : item));
+      setCancellingApplication(null);
+      setCancelReason("");
+      toast.success("Заявка отменена");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось отменить заявку");
+    } finally {
+      setCancelling(false);
+    }
+  };
+
   useEffect(() => {
-    fetchOrders();
-    const intervalId = setInterval(() => {
-        fetchOrders();
-    }, 5000);
-    return () => clearInterval(intervalId);
+    if (role !== "client") {
+      clearOrders();
+      setEquipmentApplications([]);
+      setEquipmentApplicationsLoading(false);
+      return;
+    }
+    if (orders.length === 0) void fetchOrders();
+    void fetchEquipmentApplications();
   }, [role, token]);
+
+  useEffect(() => {
+    if (role !== "client" || !token) return;
+    const timer = window.setInterval(() => {
+      void fetchEquipmentApplications(true);
+    }, 8000);
+    return () => window.clearInterval(timer);
+  }, [role, token]);
+
+  useEffect(() => {
+    if (focusedOrderId) setActiveTab("current");
+  }, [focusedOrderId]);
 
   useEffect(() => {
     const prevOrders = prevOrdersRef.current;
@@ -374,10 +549,10 @@ export default function OrdersScreen({ onOpenAuth }: { onOpenAuth?: () => void }
   }, [orders, recentlyCompletedIds]);
 
   const handleRefresh = async () => {
-    await fetchOrders();
+    await Promise.all([fetchOrders(), fetchEquipmentApplications()]);
   };
 
-  if (isLoading && orders.length === 0) {
+  if (isLoading && orders.length === 0 && equipmentApplicationsLoading) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center h-full min-h-[50vh] gap-3 opacity-60">
         <List className="w-12 h-12 text-slate-300 animate-pulse" />
@@ -410,37 +585,33 @@ export default function OrdersScreen({ onOpenAuth }: { onOpenAuth?: () => void }
     );
   }
 
-  const displayActiveOrders = orders.filter(o => 
-     activeStatuses.includes(o.status) || recentlyCompletedIds.includes(o.id)
-  );
+  const displayActiveOrders = focusedOrderId
+    ? orders.filter((order) => order.id === focusedOrderId)
+    : orders.filter(o => activeStatuses.includes(o.status) || recentlyCompletedIds.includes(o.id));
   const displayHistoryOrders = orders.filter(o => 
      !activeStatuses.includes(o.status) && !recentlyCompletedIds.includes(o.id)
   );
-
-  if (orders.length === 0) {
-    return (
-      <div className="h-full">
-        <PullToRefresh onRefresh={handleRefresh} pullingContent={""} refreshingContent={<div className="p-4 text-center text-slate-500 text-sm">Обновление...</div>}>
-          <div className="flex-1 flex flex-col items-center justify-center p-6 text-center min-h-[70vh]">
-            <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mb-5 border border-slate-100">
-              <Package className="w-10 h-10 text-slate-300" />
-            </div>
-            <h3 className="text-[22px] font-bold text-slate-900 mb-2">
-              У вас пока нет заказов
-            </h3>
-            <p className="text-base text-slate-500 max-w-[280px]">
-              Здесь будет отображаться история ваших покупок и активные доставки.
-            </p>
-          </div>
-        </PullToRefresh>
-      </div>
-    );
-  }
+  const activeEquipmentApplications = equipmentApplications.filter(
+    (application) => application.status === "new" || application.status === "in_progress",
+  );
+  const historyEquipmentApplications = equipmentApplications.filter(
+    (application) => !["new", "in_progress"].includes(application.status),
+  );
 
   return (
-    <div className="h-full bg-slate-50 flex flex-col">
-      {/* Tabs */}
-      <div className="px-4 pt-4 pb-2 bg-slate-50 relative z-10">
+    <div className="min-h-[calc(100vh-68px)] bg-gray-50 flex flex-col">
+      {/* Tabs / focused order navigation */}
+      <div className="px-4 pt-4 pb-2 bg-gray-50 relative z-10">
+        {focusedOrderId ? (
+          <button
+            type="button"
+            onClick={onBackToOrders}
+            className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Все заказы
+          </button>
+        ) : (
         <div className="flex bg-slate-200/50 p-1 rounded-2xl">
           <button
             onClick={() => setActiveTab('current')}
@@ -453,6 +624,23 @@ export default function OrdersScreen({ onOpenAuth }: { onOpenAuth?: () => void }
             Текущие
           </button>
           <button
+            onClick={() => setActiveTab('equipment')}
+            className={`flex-1 rounded-xl px-2 py-3 text-xs font-bold leading-tight transition-all ${
+              activeTab === 'equipment'
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <span className="relative inline-flex items-center justify-center">
+              <span>Заявки на технику</span>
+              {activeEquipmentApplications.length > 0 ? (
+                <span className="absolute -right-4 -top-2 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-black text-white shadow-sm">
+                  {activeEquipmentApplications.length}
+                </span>
+              ) : null}
+            </span>
+          </button>
+          <button
             onClick={() => setActiveTab('history')}
             className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${
               activeTab === 'history'
@@ -463,13 +651,60 @@ export default function OrdersScreen({ onOpenAuth }: { onOpenAuth?: () => void }
             История
           </button>
         </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-hidden relative">
         <PullToRefresh onRefresh={handleRefresh} pullingContent={""} refreshingContent={<div className="p-4 text-center text-slate-500 text-sm">Обновление...</div>}>
-          <div className="px-4 pb-24 pt-4 min-h-screen">
+          <div className="min-h-screen bg-gray-50 px-4 pb-24 pt-4">
             <AnimatePresence mode="wait">
-              {activeTab === 'current' ? (
+              {activeTab === 'equipment' ? (
+                <motion.div
+                  key="equipment"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  {equipmentApplicationsLoading ? (
+                    <p className="py-16 text-center text-sm text-slate-400">Загрузка заявок...</p>
+                  ) : activeEquipmentApplications.length > 0 ? (
+                    <div className="flex flex-col gap-4">
+                      {activeEquipmentApplications.map((application) => (
+                        <article key={application.id} className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm">
+                          <div className="flex gap-3">
+                            {application.primary_image_url ? (
+                              <img src={resolveMediaUrl(application.primary_image_url) || "/placeholder.jpg"} alt={application.listing_title_snapshot} className="h-20 w-24 shrink-0 rounded-xl bg-slate-100 object-contain" />
+                            ) : (
+                              <div className="grid h-20 w-24 shrink-0 place-items-center rounded-xl bg-slate-100"><Wrench className="h-7 w-7 text-slate-300" /></div>
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold ${equipmentStatusClasses[application.status]}`}>{equipmentStatusLabels[application.status]}</span>
+                              <div className="mt-2 flex items-start justify-between gap-3">
+                                <h3 className="min-w-0 flex-1 font-black text-slate-900">{application.listing_title_snapshot}</h3>
+                                <span className="shrink-0 text-sm font-black text-slate-900">{formatEquipmentApplicationPrice(application.total_price)}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="mt-3 space-y-2 text-sm text-slate-600">
+                            <p className="flex items-start gap-2"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />{application.object_address}</p>
+                            <p className="flex items-center gap-2"><Calendar className="h-4 w-4 shrink-0 text-slate-400" />{formatDate(application.requested_date)}, {application.requested_time.slice(0, 5)} · {application.duration_value} {application.duration_unit === "hours" ? "ч." : "смен"}</p>
+                          </div>
+                          <EquipmentApplicationProgress application={application} />
+                          {application.reject_reason && <p className="mt-3 rounded-xl bg-rose-50 p-3 text-sm text-rose-700"><span className="font-bold">Причина отказа:</span> {application.reject_reason}</p>}
+                          {application.cancel_reason && <p className="mt-3 rounded-xl bg-rose-50 p-3 text-sm text-rose-700"><span className="font-bold">Причина отмены:</span> {application.cancel_reason}</p>}
+                          {(application.status === "new" || application.status === "in_progress") && <button onClick={() => { setCancellingApplication(application); setCancelReason(""); }} className="mt-4 w-full rounded-xl bg-rose-50 p-3 text-sm font-bold text-rose-700 transition hover:bg-rose-100">Отменить заявку</button>}
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex min-h-[40vh] flex-col items-center justify-center p-6 text-center opacity-60">
+                      <Wrench className="mb-4 h-12 w-12 text-slate-300" />
+                      <p className="font-medium text-slate-500">Заявок на технику пока нет</p>
+                    </div>
+                  )}
+                </motion.div>
+              ) : activeTab === 'current' ? (
                 <motion.div
                   key="current"
                   initial={{ opacity: 0, x: -20 }}
@@ -500,7 +735,7 @@ export default function OrdersScreen({ onOpenAuth }: { onOpenAuth?: () => void }
                   exit={{ opacity: 0, x: 20 }}
                   transition={{ duration: 0.2 }}
                 >
-                  {displayHistoryOrders.length > 0 ? (
+                  {displayHistoryOrders.length > 0 || historyEquipmentApplications.length > 0 ? (
                     <div className="flex flex-col gap-3">
                       <AnimatePresence>
                           {displayHistoryOrders.map(order => (
@@ -514,6 +749,7 @@ export default function OrdersScreen({ onOpenAuth }: { onOpenAuth?: () => void }
                               </motion.div>
                           ))}
                       </AnimatePresence>
+                      {historyEquipmentApplications.map((application) => <div key={application.id}><EquipmentHistoryCard application={application} /></div>)}
                     </div>
                   ) : (
                     <div className="flex flex-col items-center justify-center p-6 text-center min-h-[40vh] opacity-60">
@@ -527,6 +763,7 @@ export default function OrdersScreen({ onOpenAuth }: { onOpenAuth?: () => void }
           </div>
         </PullToRefresh>
       </div>
+      {cancellingApplication && <div className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-900/50 sm:items-center sm:p-4"><form onSubmit={cancelEquipmentApplication} className="w-full max-w-md rounded-t-3xl bg-white p-6 shadow-2xl sm:rounded-3xl"><div className="mb-5 flex items-center justify-between"><div><p className="text-xs font-bold text-rose-600">ОТМЕНА ЗАЯВКИ</p><h3 className="text-xl font-black">{cancellingApplication.listing_title_snapshot}</h3></div><button type="button" onClick={() => setCancellingApplication(null)} className="rounded-full bg-slate-100 p-2"><X className="h-5 w-5" /></button></div><label className="block text-sm font-bold">Причина отмены<textarea autoFocus required rows={5} maxLength={5000} value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} className="mt-2 w-full resize-none rounded-xl bg-slate-100 p-3 font-normal outline-none" /></label><div className="mt-5 flex gap-2"><button type="button" onClick={() => setCancellingApplication(null)} className="flex-1 rounded-xl bg-slate-100 p-3 font-bold text-slate-600">Назад</button><button disabled={cancelling || !cancelReason.trim()} className="flex-1 rounded-xl bg-rose-600 p-3 font-bold text-white disabled:opacity-50">{cancelling ? "Отменяем..." : "Отменить заявку"}</button></div></form></div>}
     </div>
   );
 }

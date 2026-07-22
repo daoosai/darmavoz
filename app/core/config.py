@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     S3_PRESIGN_ENDPOINT: str | None = None
     S3_PRESIGN_TTL_SECONDS: int = 900
     S3_PREFIX: str = "prod"
-    CORS_ORIGINS: str = "http://localhost,https://localhost,capacitor://localhost,https://test.darmavoz.ru,https://darmavoz.ru"
+    CORS_ORIGINS: str = "http://localhost,https://localhost,capacitor://localhost"
     MEDIA_MAX_FILE_SIZE_BYTES: int = 10485760
     DISPATCH_POLL_INTERVAL_SECONDS: int = 5
     DISPATCH_OFFER_TIMEOUT_SECONDS: int = 120
@@ -52,21 +52,26 @@ class Settings(BaseSettings):
     DISPATCH_LOCK_TTL_SECONDS: int = 30
     DRIVER_TEST_USERNAME: str = "driver1"
     DRIVER_TEST_PASSWORD: str = "driver123"
-    ANDROID_VERSION: str = "2.4.5"
-    IOS_VERSION: str = "2.4.5"
-    WEB_VERSION: str = "2.4.5"
+    ANDROID_VERSION: str = "2.5.0"
+    IOS_VERSION: str = "2.5.0"
+    WEB_VERSION: str = "2.5.0"
     APK_DOWNLOAD_URL: str = "/static/darmavoz.apk"
     APK_FORCE_UPDATE: bool = False
     SMTP_HOST: str | None = None
     SMTP_PORT: int = 465
     SMTP_USER: str | None = None
     SMTP_PASSWORD: str | None = None
+    SMTP_FROM_EMAIL: str | None = None
+    ADMIN_EMAIL: str | None = None
     FIREBASE_CREDENTIALS_PATH: str = "/app/firebase-key.json"
     SMSC_LOGIN: str | None = Field(default=None, validation_alias=AliasChoices("SMSC_LOGIN"))
     SMSC_PASSWORD: str | None = Field(default=None, validation_alias=AliasChoices("SMSC_PASSWORD"))
     SMSRU_API_KEY: str | None = None
     USE_REAL_SMS: bool = False
-    TWOGIS_API_KEY: str | None = None
+    TWOGIS_API_KEY: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("TWOGIS_API_KEY", "VITE_2GIS_KEY"),
+    )
     YANDEX_GEOCODER_API_KEY: str | None = None
     YANDEX_ROUTER_API_KEY: str | None = None
 

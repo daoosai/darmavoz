@@ -27,6 +27,7 @@ from app.models.models import (
     OrderOfferStatus,
     OrderStatus,
     Vehicle,
+    quarry_materials,
 )
 from app.schemas.order import (
     DispatchHistoryAttemptOut,
@@ -36,10 +37,11 @@ from app.schemas.order import (
     OrderHistoryOut,
 )
 from app.services.notifications import (
-    schedule_client_driver_assigned_notification,
-    schedule_client_heading_to_client_notification,
-    schedule_client_order_completed_notification,
-    schedule_client_order_created_notification,
+    schedule_client_completed_status_notification,
+    schedule_client_driver_assigned_status_notification,
+    schedule_client_heading_to_client_status_notification,
+    schedule_client_heading_to_pickup_status_notification,
+    schedule_client_searching_driver_status_notification,
     schedule_driver_manual_assignment_notification,
     schedule_driver_new_order_notification,
     schedule_driver_order_cancelled_notification,
@@ -50,6 +52,7 @@ from app.services.notifications import (
     schedule_logist_timeout_notification,
 )
 from app.services.order_pricing import calculate_client_order_pricing, resolve_min_delivery_price
+from app.services.pickup_points import is_pickup_point_publicly_available
 from app.services.redis_client import enqueue_dispatch_order
 from app.utils.phones import normalize_phone
 
@@ -448,6 +451,7 @@ async def create_checkout_order(
     delivery_lat: float | None = None,
     delivery_lon: float | None = None,
     mileage_km: float | None = None,
+    expected_material_unit_price: float | None = None,
 ) -> Order:
     if client_id is None:
         client = await get_or_create_guest_client(session)
@@ -496,19 +500,18 @@ async def create_checkout_order(
     delivery_cost: float | None = None
     route_calculated_at: datetime | None = None
     calculation_source: str | None = None
+    pricing = None
+    point_material_total: float | None = None
+    point_unit_price: float | None = None
 
     if quarry_id is not None:
         selected_quarry = await session.get(Quarry, quarry_id)
-        if selected_quarry is None or not selected_quarry.is_active:
+        if selected_quarry is None or not is_pickup_point_publicly_available(
+            selected_quarry
+        ):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Quarry not found")
 
-        if resolved_mileage_km is None:
-            if resolved_delivery_lat is None or resolved_delivery_lon is None:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail="mileage_km or delivery coordinates are required when quarry_id is provided",
-                )
-
+        if resolved_delivery_lat is not None and resolved_delivery_lon is not None:
             pricing = await calculate_client_order_pricing(
                 session,
                 material_id=material_id,
@@ -520,6 +523,12 @@ async def create_checkout_order(
             )
             selected_quarry = pricing.quarry
             resolved_mileage_km = pricing.mileage_km
+        elif resolved_mileage_km is None:
+            if resolved_delivery_lat is None or resolved_delivery_lon is None:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="mileage_km or delivery coordinates are required when quarry_id is provided",
+                )
 
         if delivery_option.delivery_rate_per_km is None:
             raise HTTPException(
@@ -528,10 +537,33 @@ async def create_checkout_order(
             )
 
         delivery_rate_per_km_snapshot = round(float(delivery_option.delivery_rate_per_km), 2)
-        delivery_cost = max(
-            round(resolved_mileage_km * delivery_rate_per_km_snapshot, 2),
-            resolve_min_delivery_price(delivery_option),
-        )
+        if pricing is not None:
+            delivery_cost = pricing.delivery_cost
+            point_material_total = pricing.material_cost
+            point_unit_price = pricing.material_unit_price
+        else:
+            offer_price = await session.scalar(
+                select(quarry_materials.c.price).where(
+                    quarry_materials.c.quarry_id == selected_quarry.id,
+                    quarry_materials.c.material_id == material_id,
+                    quarry_materials.c.is_active.is_(True),
+                )
+            )
+            unit_price = float(offer_price if offer_price is not None else material.price or 0)
+            if unit_price <= 0:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="MATERIAL_NOT_AVAILABLE_AT_POINT",
+                )
+            point_material_total = round(
+                unit_price * float(delivery_option.capacity_m3) * quantity,
+                2,
+            )
+            point_unit_price = unit_price
+            delivery_cost = max(
+                round(resolved_mileage_km * delivery_rate_per_km_snapshot, 2),
+                resolve_min_delivery_price(delivery_option, selected_quarry.point_type),
+            )
         route_calculated_at = utcnow()
         calculation_source = "yandex_auto"
     elif (
@@ -549,14 +581,23 @@ async def create_checkout_order(
         )
         selected_quarry = pricing.quarry
         resolved_mileage_km = pricing.mileage_km
+        point_material_total = pricing.material_cost
+        point_unit_price = pricing.material_unit_price
         if pricing.delivery_option.delivery_rate_per_km is not None:
             delivery_rate_per_km_snapshot = round(float(pricing.delivery_option.delivery_rate_per_km), 2)
-            delivery_cost = max(
-                round(resolved_mileage_km * delivery_rate_per_km_snapshot, 2),
-                resolve_min_delivery_price(pricing.delivery_option),
-            )
+            delivery_cost = pricing.delivery_cost
         route_calculated_at = utcnow()
         calculation_source = "yandex_auto"
+
+    if (
+        expected_material_unit_price is not None
+        and point_unit_price is not None
+        and abs(point_unit_price - expected_material_unit_price) > 0.005
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="PRICE_CHANGED",
+        )
 
     order = await build_order(
         session,
@@ -578,13 +619,14 @@ async def create_checkout_order(
         mileage_km=resolved_mileage_km,
         delivery_rate_per_km_snapshot=delivery_rate_per_km_snapshot,
         delivery_cost=delivery_cost,
+        total_amount=point_material_total,
         calculation_source=calculation_source,
         route_calculated_at=route_calculated_at,
         quarry_id=selected_quarry.id if selected_quarry is not None else None,
     )
 
     await session.commit()
-    schedule_client_order_created_notification(order)
+    schedule_client_searching_driver_status_notification(order)
     await enqueue_order_for_dispatch_safe(order.id)
     return await get_order_by_id(session, order.id)
 
@@ -597,8 +639,13 @@ async def _resolve_logist_order_quarry(
 ) -> Quarry | None:
     result = await session.execute(
         select(Quarry)
-        .join(Quarry.materials)
-        .where(Quarry.is_active.is_(True), Material.id == material_id)
+        .join(quarry_materials, quarry_materials.c.quarry_id == Quarry.id)
+        .where(
+            Quarry.is_active.is_(True),
+            Quarry.moderation_status == ModerationStatus.approved.value,
+            quarry_materials.c.material_id == material_id,
+            quarry_materials.c.is_active.is_(True),
+        )
         .order_by(Quarry.name.asc())
     )
     quarries = list(result.scalars().unique().all())
@@ -635,6 +682,11 @@ async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate)
     resolved_delivery_cost = 0.0
     resolved_total_amount = round(payload.total_amount, 2) if payload.total_amount is not None else None
     resolved_calculation_source: str | None = None
+    selected_quarry = (
+        await session.get(Quarry, resolved_quarry_id)
+        if resolved_quarry_id is not None
+        else None
+    )
 
     if payload.calculation_source == "manual":
         resolved_calculation_source = "manual"
@@ -653,7 +705,10 @@ async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate)
         if resolved_mileage_km is not None and raw_delivery_rate is not None:
             resolved_delivery_cost = max(
                 round(resolved_mileage_km * delivery_rate_per_km, 2),
-                resolve_min_delivery_price(delivery_option),
+                resolve_min_delivery_price(
+                    delivery_option,
+                    selected_quarry.point_type if selected_quarry is not None else "quarry",
+                ),
             )
     elif resolved_delivery_lat is not None and resolved_delivery_lon is not None:
         pricing = await calculate_client_order_pricing(
@@ -706,7 +761,7 @@ async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate)
         route_calculated_at=route_calculated_at,
     )
     await session.commit()
-    schedule_client_order_created_notification(order)
+    schedule_client_searching_driver_status_notification(order)
     if payload.driver_id is not None:
         return await assign_order_to_driver_manually(
             session,
@@ -794,7 +849,7 @@ async def assign_order_to_driver_manually(session: AsyncSession, *, order_id: UU
     await add_event(session, order.id, "driver_assigned_manual", f"Driver {driver_id} assigned manually")
     await session.commit()
     refreshed_order = await get_order_by_id(session, order.id)
-    schedule_client_driver_assigned_notification(refreshed_order)
+    schedule_client_driver_assigned_status_notification(refreshed_order)
     schedule_driver_manual_assignment_notification(refreshed_order, driver.id)
     return refreshed_order
 
@@ -1429,7 +1484,7 @@ async def accept_offer(session: AsyncSession, *, offer_id: UUID, driver_id: UUID
     await add_event(session, order.id, "driver_assigned", f"Driver {driver_id} accepted the order")
     await session.commit()
     refreshed_order = await get_order_by_id(session, order.id)
-    schedule_client_driver_assigned_notification(refreshed_order)
+    schedule_client_driver_assigned_status_notification(refreshed_order)
     return refreshed_order
 
 
@@ -1626,10 +1681,12 @@ async def set_driver_order_status(
     await session.commit()
 
     refreshed_order = await get_order_by_id(session, order.id)
+    if target_status == OrderStatus.heading_to_pickup.value:
+        schedule_client_heading_to_pickup_status_notification(refreshed_order)
     if target_status == OrderStatus.heading_to_client.value:
-        schedule_client_heading_to_client_notification(refreshed_order)
+        schedule_client_heading_to_client_status_notification(refreshed_order)
     if target_status == OrderStatus.completed.value:
-        schedule_client_order_completed_notification(refreshed_order)
+        schedule_client_completed_status_notification(refreshed_order)
     return refreshed_order
 
 

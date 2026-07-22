@@ -5,8 +5,7 @@ export const baseURL =
   import.meta.env.VITE_API_URL ||
   "/api/v1";
 
-export const APP_VERSION = import.meta.env.VITE_APP_VERSION || "2.4.5";
-
+export const APP_VERSION = import.meta.env.VITE_APP_VERSION || "2.5.0";
 
 export const orderStatusColors: Record<string, string> = {
   created: "bg-gray-200 text-gray-700 border border-gray-300",
@@ -76,14 +75,57 @@ const formatValidationErrors = (detail: any[]): string | null => {
   return messages.join(", ");
 };
 
+const RUSSIAN_FALLBACKS_BY_STATUS: Record<number, string> = {
+  400: "Неверный запрос",
+  401: "Требуется авторизация",
+  403: "Нет доступа",
+  404: "Ресурс не найден",
+  405: "Метод запроса не поддерживается",
+  422: "Проверьте правильность заполнения полей",
+  500: "Ошибка сервера",
+};
+
+const getStatusCode = (source: any): number | null => {
+  const statusCode = source?.status ?? source?.response?.status ?? source?.response?.data?.status;
+  return typeof statusCode === "number" ? statusCode : null;
+};
+
+const getRussianStatusFallback = (statusCode: number | null, fallbackMessage: string) => {
+  if (statusCode == null) return fallbackMessage;
+  if (statusCode >= 500) return RUSSIAN_FALLBACKS_BY_STATUS[500];
+  return RUSSIAN_FALLBACKS_BY_STATUS[statusCode] || fallbackMessage;
+};
+
+const containsCyrillic = (value: string) => /[А-Яа-яЁё]/.test(value);
+const containsEnglish = (value: string) => /[A-Za-z]/.test(value);
+
+const sanitizeApiMessage = (
+  message: string | null | undefined,
+  statusCode: number | null,
+  fallbackMessage: string,
+) => {
+  const normalized = message?.trim();
+  if (!normalized) {
+    return getRussianStatusFallback(statusCode, fallbackMessage);
+  }
+  if (containsCyrillic(normalized)) {
+    return normalized;
+  }
+  if (containsEnglish(normalized)) {
+    return getRussianStatusFallback(statusCode, fallbackMessage);
+  }
+  return normalized;
+};
+
 export const extractApiErrorMessage = (
   source: any,
-  fallbackMessage: string = "РќРµ СѓРґР°Р»РѕСЃСЊ РІС‹РїРѕР»РЅРёС‚СЊ РґРµР№СЃС‚РІРёРµ",
+  fallbackMessage: string = "Не удалось выполнить действие",
 ): string => {
   if (!source) {
     return fallbackMessage;
   }
 
+  const statusCode = getStatusCode(source);
   const detail =
     source.detail ??
     source.response?.data?.detail ??
@@ -91,20 +133,25 @@ export const extractApiErrorMessage = (
     source.error?.detail;
 
   if (Array.isArray(detail)) {
-    return formatValidationErrors(detail) || fallbackMessage;
+    const validationMessage = formatValidationErrors(detail);
+    return sanitizeApiMessage(validationMessage, statusCode ?? 422, fallbackMessage);
   }
 
   if (typeof detail === "string" && detail.trim()) {
-    return detail.trim();
+    return sanitizeApiMessage(detail, statusCode, fallbackMessage);
   }
 
   if (detail && typeof detail === "object") {
     if (typeof detail.message === "string" && detail.message.trim()) {
-      return detail.message.trim();
+      return sanitizeApiMessage(detail.message, statusCode, fallbackMessage);
     }
     if (typeof detail.msg === "string" && detail.msg.trim()) {
-      return detail.msg.trim();
+      return sanitizeApiMessage(detail.msg, statusCode, fallbackMessage);
     }
+  }
+
+  if (statusCode != null) {
+    return getRussianStatusFallback(statusCode, fallbackMessage);
   }
 
   const message =
@@ -114,7 +161,7 @@ export const extractApiErrorMessage = (
     source.error?.message;
 
   if (typeof message === "string" && message.trim()) {
-    return message.trim();
+    return sanitizeApiMessage(message, statusCode, fallbackMessage);
   }
 
   return fallbackMessage;
@@ -122,41 +169,43 @@ export const extractApiErrorMessage = (
 
 export const handleApiError = (
   error: any,
-  fallbackMessage: string = "РќРµ СѓРґР°Р»РѕСЃСЊ РІС‹РїРѕР»РЅРёС‚СЊ РґРµР№СЃС‚РІРёРµ",
+  fallbackMessage: string = "Не удалось выполнить действие",
 ): string => {
   if (!error) return fallbackMessage;
 
-  const msg = extractApiErrorMessage(error, fallbackMessage);
-  const lowerMsg = msg.toLowerCase();
+  const statusCode = getStatusCode(error);
+  const rawMessage =
+    error?.message ??
+    error?.response?.data?.detail ??
+    error?.response?.data?.message ??
+    "";
+  const lowerRawMessage = typeof rawMessage === "string" ? rawMessage.toLowerCase() : "";
 
-  // 1. РћС€РёР±РєР° СЃРµС‚Рё (Failed to fetch / Network Error)
   if (
-    (error instanceof TypeError && lowerMsg.includes("fetch")) ||
-    msg === "Failed to fetch" ||
-    msg === "Network Error" ||
-    lowerMsg.includes("failed to fetch") ||
-    lowerMsg.includes("network error")
+    (error instanceof TypeError && lowerRawMessage.includes("fetch")) ||
+    rawMessage === "Failed to fetch" ||
+    rawMessage === "Network Error" ||
+    lowerRawMessage.includes("failed to fetch") ||
+    lowerRawMessage.includes("network error")
   ) {
-    return "РћС€РёР±РєР° СЃРµС‚Рё. РџСЂРѕРІРµСЂСЊС‚Рµ РїРѕРґРєР»СЋС‡РµРЅРёРµ Рє РёРЅС‚РµСЂРЅРµС‚Сѓ.";
+    return "Ошибка сети. Проверьте подключение к интернету.";
   }
 
-  // 2. РћС€РёР±РєР° СЃРµСЂРІРµСЂР° (500+)
-  if (error.response?.status >= 500 || error.status >= 500) {
-    return "РЎРµСЂРІРµСЂ РІСЂРµРјРµРЅРЅРѕ РЅРµРґРѕСЃС‚СѓРїРµРЅ. РњС‹ СѓР¶Рµ С‡РёРЅРёРј!";
+  if ((statusCode ?? 0) >= 500) {
+    return "Ошибка сервера. Попробуйте позже.";
   }
 
-  // 3. РўР°Р№РјР°СѓС‚
   if (
     error.code === "ECONNABORTED" ||
-    lowerMsg.includes("timeout") ||
+    lowerRawMessage.includes("timeout") ||
     error.name === "AbortError"
   ) {
-    return "РџСЂРµРІС‹С€РµРЅРѕ РІСЂРµРјСЏ РѕР¶РёРґР°РЅРёСЏ РѕС‚РІРµС‚Р° РѕС‚ СЃРµСЂРІРµСЂР°.";
+    return "Превышено время ожидания ответа от сервера.";
   }
 
-  // Fallback, if there's random English text or message, return fallback Message
-  if (/[A-Za-z]/.test(msg)) {
-    return fallbackMessage;
+  const msg = extractApiErrorMessage(error, getRussianStatusFallback(statusCode, fallbackMessage));
+  if (containsEnglish(msg)) {
+    return getRussianStatusFallback(statusCode, fallbackMessage);
   }
 
   return msg || fallbackMessage;
@@ -184,16 +233,19 @@ export const attemptStatusMap: Record<string, string> = {
 };
 
 export const translateReason = (reason: string | undefined | null) => {
-  if (!reason) return 'Причина не указана';
-  const r = reason.toLowerCase();
-  if (r.includes('manual assignment')) return 'Назначено логистом вручную';
-  if (r.includes('driver declined') || r.includes('rejected') || r === 'manual') return 'Отказ водителя';
-  if (r.includes('timeout') || r.includes('expired')) return 'Время ожидания истекло';
-  if (r.includes('cancelled by client')) return 'Отменено клиентом';
-  if (r.includes('cancelled by logist')) return 'Отменено логистом';
+  if (!reason) return "Причина не указана";
+  const normalizedReason = reason.toLowerCase();
+  if (normalizedReason.includes("manual assignment")) return "Назначено логистом вручную";
+  if (normalizedReason.includes("driver declined") || normalizedReason.includes("rejected") || normalizedReason === "manual") {
+    return "Отказ водителя";
+  }
+  if (normalizedReason.includes("timeout") || normalizedReason.includes("expired")) {
+    return "Время ожидания истекло";
+  }
+  if (normalizedReason.includes("cancelled by client")) return "Отменено клиентом";
+  if (normalizedReason.includes("cancelled by logist")) return "Отменено логистом";
   return reason;
 };
-
 
 export const clientOrderStatusColors: Record<string, string> = {
   created: "bg-gray-100 text-gray-700 border border-gray-200",
@@ -221,3 +273,23 @@ export const getImageUrl = (item: MaterialProps | DeliveryOption) => {
   );
 };
 
+export const resolveMediaUrl = (imageUrl?: string | null) => {
+  if (!imageUrl) return null;
+  if (/^(https?:|data:|blob:)/i.test(imageUrl)) return imageUrl;
+
+  try {
+    const runtimeOrigin =
+      typeof window === "undefined" ? "http://localhost" : window.location.origin;
+    const configuredMediaBase =
+      import.meta.env.VITE_S3_URL ||
+      import.meta.env.VITE_API_BASE_URL ||
+      baseURL;
+    const mediaBaseUrl = new URL(configuredMediaBase, runtimeOrigin);
+    if (!mediaBaseUrl.pathname.endsWith("/")) {
+      mediaBaseUrl.pathname += "/";
+    }
+    return new URL(imageUrl, mediaBaseUrl).toString();
+  } catch {
+    return imageUrl;
+  }
+};

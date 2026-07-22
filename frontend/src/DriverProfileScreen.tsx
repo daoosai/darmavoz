@@ -11,6 +11,7 @@ import {
   Truck,
   User as UserIcon,
   Phone,
+  Headphones,
   Star,
   AlertCircle,
   Camera,
@@ -68,10 +69,12 @@ export default function DriverProfileScreen({
   onLogout,
   onProfileUpdate,
   hasActiveOrder,
+  onOpenSupport,
 }: {
   onLogout: () => void;
   onProfileUpdate?: () => void;
   hasActiveOrder?: boolean;
+  onOpenSupport?: () => void;
 }) {
   const { token } = useAuthStore();
   const [profile, setProfile] = useState<DriverProfile | null>(null);
@@ -742,6 +745,19 @@ export default function DriverProfileScreen({
             История заказов
           </button>
         )}
+        {onOpenSupport ? (
+          <button
+            type="button"
+            onClick={onOpenSupport}
+            className="w-full h-14 bg-white active:bg-slate-50 text-slate-800 font-bold text-lg rounded-2xl flex items-center justify-between px-6 border border-slate-200 shadow-sm"
+          >
+            <span className="flex items-center gap-3">
+              <Headphones className="w-5 h-5 text-sky-500" />
+              Поддержка
+            </span>
+            <span className="text-sky-600 text-sm">Открыть</span>
+          </button>
+        ) : null}
         <NotificationToggle role="driver" />
         <button
           onClick={async () => {

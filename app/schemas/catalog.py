@@ -41,6 +41,22 @@ class CategoryOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class CategoryCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    is_active: bool = True
+    sort_order: int = 0
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+
+class CategoryUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    is_active: bool | None = None
+    sort_order: int | None = None
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+
 class MaterialCreate(BaseModel):
     name: str
     description: str | None = None
@@ -48,7 +64,7 @@ class MaterialCreate(BaseModel):
     unit: str
     min_volume: float = 1.0
     image_url: str | None = None
-    category_id: UUID
+    category_id: UUID | None = None
     is_active: bool = True
     sort_order: int = 0
 
@@ -72,7 +88,8 @@ class DeliveryOptionOut(BaseModel):
     description: str | None = None
     base_price: float | None = None
     delivery_rate_per_km: float | None = None
-    min_delivery_price: float = 5000.0
+    min_price_quarry: float = 5000.0
+    min_price_warehouse: float = 3000.0
     is_active: bool
     sort_order: int
     image_url: str | None = None
@@ -95,7 +112,7 @@ class MaterialOut(BaseModel):
     unit: str
     min_volume: float
     image_url: str | None = None
-    category_id: UUID
+    category_id: UUID | None = None
     is_active: bool = True
     sort_order: int = 0
     primary_image_url: str | None = None
@@ -112,6 +129,7 @@ class MaterialOut(BaseModel):
 
 class CartItemCreate(BaseModel):
     material_id: UUID
+    quarry_id: UUID | None = None
     volume: float
 
 
@@ -122,6 +140,9 @@ class CartItemUpdate(BaseModel):
 class CartItemOut(BaseModel):
     id: UUID
     material_id: UUID
+    quarry_id: UUID | None = None
+    pickup_point_name: str | None = None
+    pickup_point_type: str | None = None
     volume: float
     unit_price: float | None = None
     amount: float | None = None
@@ -136,7 +157,8 @@ class DeliveryOptionCreate(BaseModel):
     description: str | None = None
     base_price: float | None = None
     delivery_rate_per_km: float | None = None
-    min_delivery_price: float = 5000.0
+    min_price_quarry: float = Field(default=5000.0, ge=0)
+    min_price_warehouse: float = Field(default=3000.0, ge=0)
     is_active: bool = True
     sort_order: int = 0
 
@@ -157,7 +179,8 @@ class DeliveryOptionUpdate(BaseModel):
     description: str | None = None
     base_price: float | None = None
     delivery_rate_per_km: float | None = None
-    min_delivery_price: float | None = None
+    min_price_quarry: float | None = Field(default=None, ge=0)
+    min_price_warehouse: float | None = Field(default=None, ge=0)
     is_active: bool | None = None
     sort_order: int | None = None
 

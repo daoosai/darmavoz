@@ -1,14 +1,22 @@
 import json
+import secrets
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy import func
 from sqlalchemy.orm import selectinload
 
 from app.db.database import get_db
-from app.models.models import Driver, ModerationStatus, Role, User, Vehicle
+from app.models.models import Client, Driver, ModerationStatus, Role, User, Vehicle
+from app.schemas.email_auth import (
+    EmailAuthResponse,
+    EmailSendCodeRequest,
+    EmailSendCodeResponse,
+    EmailVerifyCodeRequest,
+)
 from app.schemas.driver import (
     DriverRegisterRequest,
     DriverRegistrationResponse,
@@ -18,6 +26,7 @@ from app.schemas.driver import (
 from app.schemas.token import Token
 from app.security.auth import get_password_hash, verify_password
 from app.security.jwt import create_access_token
+from app.services.auth_email_service import send_auth_email_code
 from app.services.redis_client import get_redis
 from app.services.sms_service import generate_otp_code, normalize_sms_phone, send_auth_sms_code
 from app.utils.phones import normalize_phone, normalize_phone_like_username
@@ -30,6 +39,8 @@ DRIVER_LOGIN_CODE_KEY_PREFIX = "otp:driver_login"
 DRIVER_LOGIN_PENDING_KEY_PREFIX = "otp:driver_login_pending"
 DRIVER_REGISTER_CODE_KEY_PREFIX = "otp:driver_register"
 DRIVER_REGISTER_PENDING_KEY_PREFIX = "otp:driver_register_pending"
+EMAIL_AUTH_CODE_TTL_SECONDS = 300
+EMAIL_AUTH_CODE_KEY_PREFIX = "otp:email"
 
 
 def _error_detail(code: str, message: str) -> dict[str, str]:
@@ -71,6 +82,59 @@ def _driver_register_code_key(phone: str) -> str:
 
 def _driver_register_pending_key(phone: str) -> str:
     return f"{DRIVER_REGISTER_PENDING_KEY_PREFIX}:{phone}"
+
+
+def _email_auth_code_key(scope: str, email: str) -> str:
+    return f"{EMAIL_AUTH_CODE_KEY_PREFIX}:{scope}:{email}"
+
+
+def _default_client_name_from_email(email: str) -> str:
+    local_part = email.split("@", 1)[0].strip()
+    normalized = local_part.replace(".", " ").replace("_", " ").replace("-", " ").strip()
+    return normalized[:255] or "Клиент"
+
+
+def _build_email_auth_response(*, user: User) -> EmailAuthResponse:
+    role_name = user.role.name if user.role else ""
+    return EmailAuthResponse(
+        access_token=create_access_token(
+            data={
+                "sub": user.username,
+                "role": role_name,
+            }
+        ),
+        role=role_name,
+        driver_id=user.driver_profile.id if user.driver_profile else None,
+    )
+
+
+async def _get_or_create_supplier_role(db: AsyncSession) -> Role:
+    role = await db.scalar(select(Role).where(Role.name == "supplier"))
+    if role is None:
+        role = Role(name="supplier", description="Pickup point owner")
+        db.add(role)
+        await db.flush()
+    return role
+
+
+async def _get_user_by_email(db: AsyncSession, email: str) -> User | None:
+    result = await db.execute(
+        select(User)
+        .where(func.lower(User.email) == email)
+        .options(selectinload(User.role), selectinload(User.driver_profile))
+    )
+    return result.scalar_one_or_none()
+
+
+async def _get_client_by_email(db: AsyncSession, email: str) -> Client | None:
+    return await db.scalar(select(Client).where(func.lower(Client.email) == email))
+
+
+def _ensure_user_can_authenticate(user: User) -> None:
+    if not user.is_active:
+        raise _blocked_profile_exception()
+    if user.driver_profile is not None and user.driver_profile.moderation_status == ModerationStatus.suspended.value:
+        raise _blocked_profile_exception()
 
 
 async def _ensure_driver_phone_is_available(db: AsyncSession, normalized_phone: str) -> None:
@@ -165,6 +229,117 @@ async def _issue_driver_login_code(*, normalized_phone: str, user_id: str) -> Dr
     await redis.setex(_driver_login_code_key(normalized_phone), DRIVER_AUTH_CODE_TTL_SECONDS, stored_code)
     await redis.setex(_driver_login_pending_key(normalized_phone), DRIVER_AUTH_CODE_TTL_SECONDS, user_id)
     return DriverSmsChallengeResponse(status="sms_sent", phone=normalized_phone)
+
+
+@router.post("/email/send-code", response_model=EmailSendCodeResponse)
+async def send_email_code(
+    payload: EmailSendCodeRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+) -> EmailSendCodeResponse:
+    normalized_email = payload.email
+    is_new_user: bool | None = None
+
+    if payload.auth_scope == "client":
+        client = await _get_client_by_email(db, normalized_email)
+        is_new_user = client is None
+    elif payload.auth_scope == "supplier":
+        user = await _get_user_by_email(db, normalized_email)
+        if user is not None and (user.role is None or user.role.name != "supplier"):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Этот email уже используется в другом аккаунте")
+        is_new_user = user is None
+    else:
+        user = await _get_user_by_email(db, normalized_email)
+        if user is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь с таким email не найден")
+        _ensure_user_can_authenticate(user)
+
+    code = generate_otp_code()
+    await get_redis().setex(
+        _email_auth_code_key(payload.auth_scope, normalized_email),
+        EMAIL_AUTH_CODE_TTL_SECONDS,
+        code,
+    )
+    background_tasks.add_task(send_auth_email_code, to_email=normalized_email, code=code)
+
+    return EmailSendCodeResponse(
+        email=normalized_email,
+        is_new_user=is_new_user,
+    )
+
+
+@router.post("/email/verify", response_model=EmailAuthResponse)
+async def verify_email_code(
+    payload: EmailVerifyCodeRequest,
+    db: AsyncSession = Depends(get_db),
+) -> EmailAuthResponse:
+    normalized_email = payload.email
+    redis = get_redis()
+    saved_code = await redis.get(_email_auth_code_key(payload.auth_scope, normalized_email))
+
+    if saved_code is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Код истек или не запрашивался")
+    if payload.code.strip() != saved_code:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неверный код")
+
+    if payload.auth_scope == "client":
+        client = await _get_client_by_email(db, normalized_email)
+        if client is None:
+            client = Client(
+                name=_default_client_name_from_email(normalized_email),
+                email=normalized_email,
+                phone=None,
+            )
+            db.add(client)
+            await db.commit()
+            await db.refresh(client)
+
+        await redis.delete(_email_auth_code_key(payload.auth_scope, normalized_email))
+        return EmailAuthResponse(
+            access_token=create_access_token(
+                data={
+                    "sub": normalized_email,
+                    "role": "client",
+                    "client_id": str(client.id),
+                }
+            ),
+            role="client",
+            client_id=client.id,
+        )
+
+    if payload.auth_scope == "supplier":
+        user = await _get_user_by_email(db, normalized_email)
+        if user is None:
+            role = await _get_or_create_supplier_role(db)
+            user = User(
+                username=normalized_email,
+                email=normalized_email,
+                hashed_password=get_password_hash(secrets.token_urlsafe(32)),
+                role_id=role.id,
+                is_active=True,
+            )
+            db.add(user)
+            try:
+                await db.commit()
+            except IntegrityError as exc:
+                await db.rollback()
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Этот email уже используется в другом аккаунте") from exc
+            await db.refresh(user)
+            user = await _get_user_by_email(db, normalized_email)
+        elif user.role is None or user.role.name != "supplier":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Этот email уже используется в другом аккаунте")
+
+        _ensure_user_can_authenticate(user)
+        await redis.delete(_email_auth_code_key(payload.auth_scope, normalized_email))
+        return _build_email_auth_response(user=user)
+
+    user = await _get_user_by_email(db, normalized_email)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь с таким email не найден")
+
+    _ensure_user_can_authenticate(user)
+    await redis.delete(_email_auth_code_key(payload.auth_scope, normalized_email))
+    return _build_email_auth_response(user=user)
 
 
 @router.post("/driver/register", response_model=DriverSmsChallengeResponse, status_code=status.HTTP_202_ACCEPTED)

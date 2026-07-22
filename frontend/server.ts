@@ -3,8 +3,7 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 
 const API_BASE_URL =
-  process.env.VITE_API_BASE_URL ||
-  "https://test.darmavoz.ru/api/v1";
+  process.env.VITE_API_BASE_URL || "/api/v1";
 
 async function startServer() {
   const app = express();
@@ -104,7 +103,7 @@ async function startServer() {
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server running on port ${PORT}`);
   });
 }
 

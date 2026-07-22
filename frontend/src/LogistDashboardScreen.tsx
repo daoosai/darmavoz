@@ -30,6 +30,8 @@ import {
   ChevronDown,
   ClipboardList,
   Layers,
+  Wrench,
+  Headphones,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import UpdateBanner from "./UpdateBanner";
@@ -40,6 +42,8 @@ import LogistCreateOrderModal from "./LogistCreateOrderModal";
 import LogistEditOrderModal from "./LogistEditOrderModal";
 import { OrdersFilterBar } from "./components/admin/OrdersFilterBar";
 import { logoutCurrentSession } from "./pushAuth";
+import AdminEquipmentScreen from "./AdminEquipmentScreen";
+import SupportScreen from "./SupportScreen";
 
 interface AdminOrder {
   id: string;
@@ -156,7 +160,7 @@ export default function LogistDashboardScreen({
   onLogout,
 }: LogistDashboardScreenProps) {
   const { token } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<"orders" | "drivers" | "profile">(
+  const [activeTab, setActiveTab] = useState<"orders" | "drivers" | "equipment" | "support" | "profile">(
     "orders",
   );
   const [orders, setOrders] = useState<AdminOrder[]>([]);
@@ -513,7 +517,7 @@ export default function LogistDashboardScreen({
         </div>
 
         <div className="hidden sm:flex flex-1 sm:justify-center">
-          <div className="bg-slate-100 p-1 rounded-xl flex w-full sm:w-auto">
+          <div className="bg-slate-100 p-1 rounded-xl flex w-full sm:w-auto overflow-x-auto">
             <button
               onClick={() => setActiveTab("orders")}
               className={`flex-1 sm:w-32 py-2 text-sm font-bold rounded-lg transition-colors flex justify-center items-center gap-2 ${
@@ -533,6 +537,26 @@ export default function LogistDashboardScreen({
               }`}
             >
               Водители
+            </button>
+            <button
+              onClick={() => setActiveTab("equipment")}
+              className={`flex-1 sm:w-32 py-2 text-sm font-bold rounded-lg transition-colors flex justify-center items-center gap-2 ${
+                activeTab === "equipment"
+                  ? "bg-white text-slate-800 shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              <Wrench className="h-4 w-4" /> Заявки
+            </button>
+            <button
+              onClick={() => setActiveTab("support")}
+              className={`flex-1 sm:w-32 py-2 text-sm font-bold rounded-lg transition-colors flex justify-center items-center gap-2 ${
+                activeTab === "support"
+                  ? "bg-white text-slate-800 shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              <Headphones className="h-4 w-4" /> Поддержка
             </button>
             <button
               onClick={() => setActiveTab("profile")}
@@ -1097,6 +1121,10 @@ export default function LogistDashboardScreen({
                 </div>
               )}
             </>
+          ) : activeTab === "equipment" ? (
+            <AdminEquipmentScreen applicationsOnly />
+          ) : activeTab === "support" ? (
+            <SupportScreen operatorMode />
           ) : activeTab === "profile" ? (
             <AdminProfileScreen onLogout={handleLogout} />
           ) : null}
@@ -1134,6 +1162,20 @@ export default function LogistDashboardScreen({
             <Truck className="w-6 h-6" />
           </div>
           <span className="text-[10px] font-bold">Водители</span>
+        </button>
+        <button
+          onClick={() => setActiveTab("equipment")}
+          className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${activeTab === "equipment" ? "text-[#2DB0E6]" : "text-gray-400"}`}
+        >
+          <div className={`p-1.5 rounded-xl ${activeTab === "equipment" ? "bg-[#2DB0E6]/10" : ""}`}><Wrench className="w-6 h-6" /></div>
+          <span className="text-[10px] font-bold">Техника</span>
+        </button>
+        <button
+          onClick={() => setActiveTab("support")}
+          className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${activeTab === "support" ? "text-[#2DB0E6]" : "text-gray-400"}`}
+        >
+          <div className={`p-1.5 rounded-xl ${activeTab === "support" ? "bg-[#2DB0E6]/10" : ""}`}><Headphones className="w-6 h-6" /></div>
+          <span className="text-[10px] font-bold">Поддержка</span>
         </button>
         <button
           onClick={() => setActiveTab("profile")}

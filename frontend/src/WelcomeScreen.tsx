@@ -44,14 +44,14 @@ export default function WelcomeScreen({
 
           <button
             onClick={onSelectEmployee}
-            className="w-full rounded-2xl border-2 border-[#2DB0E6] bg-white py-4 text-lg font-bold text-[#2DB0E6] shadow-sm transition-colors active:bg-blue-50"
+            className="w-full rounded-2xl border border-slate-200 bg-white py-4 text-lg font-bold text-[#2DB0E6] shadow-sm transition-colors active:bg-blue-50"
           >
             Вход для сотрудников
           </button>
 
           <button
             onClick={onSelectDriverRegister}
-            className="mt-2 w-full rounded-2xl border-2 border-[#2DB0E6] bg-[#2DB0E6] py-4 text-lg font-bold text-white shadow-sm transition-colors active:bg-blue-700"
+            className="mt-2 w-full rounded-2xl bg-[#2DB0E6] py-4 text-lg font-bold text-white shadow-sm transition-colors active:bg-blue-700"
           >
             Регистрация водителя
           </button>

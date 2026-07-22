@@ -8,24 +8,25 @@ logger = logging.getLogger(__name__)
 
 
 def send_email(*, to_email: str, subject: str, body: str) -> None:
-    smtp_user = settings.SMTP_USER
-    if not smtp_user:
-        logger.info("Mock Email: Уведомление для админа сгенерировано (SMTP не настроен)")
+    smtp_host = settings.SMTP_HOST
+    smtp_user = settings.SMTP_USER or ""
+    if not smtp_host:
+        logger.info("Mock Email: уведомление сгенерировано (SMTP не настроен)")
         return
 
     message = EmailMessage()
     message["Subject"] = subject
-    message["From"] = smtp_user
+    message["From"] = settings.SMTP_FROM_EMAIL or smtp_user or "no-reply@darmavoz.local"
     message["To"] = to_email
     message.set_content(body)
 
-    smtp_host = settings.SMTP_HOST or "localhost"
     smtp_port = settings.SMTP_PORT or 465
     smtp_password = settings.SMTP_PASSWORD or ""
 
     if smtp_port == 465:
         with smtplib.SMTP_SSL(smtp_host, smtp_port) as smtp:
-            smtp.login(smtp_user, smtp_password)
+            if smtp_user:
+                smtp.login(smtp_user, smtp_password)
             smtp.send_message(message)
         return
 
@@ -36,7 +37,8 @@ def send_email(*, to_email: str, subject: str, body: str) -> None:
             smtp.ehlo()
         except smtplib.SMTPNotSupportedError:
             logger.info("SMTP server does not support STARTTLS, continuing without it")
-        smtp.login(smtp_user, smtp_password)
+        if smtp_user:
+            smtp.login(smtp_user, smtp_password)
         smtp.send_message(message)
 
 

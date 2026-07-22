@@ -1,3 +1,4 @@
+from math import asin, cos, isfinite, radians, sin, sqrt
 from typing import Any
 
 import logging
@@ -12,6 +13,8 @@ router = APIRouter()
 TYUMEN_CITY_NAME = "Тюмень"
 TYUMEN_LOCATION = "65.534328,57.152286"
 TYUMEN_BOUND = "65.10,56.95,65.95,57.45"
+GEOCODE_FALLBACK_ERROR_MESSAGE = "Не удалось рассчитать маршрут. Проверьте адрес доставки."
+ROUTE_DISTANCE_FALLBACK_FACTOR = 1.3
 
 
 def _extract_2gis_error(payload: dict[str, Any]) -> str | None:
@@ -38,6 +41,102 @@ def _prepare_tyumen_address(address: str) -> str:
     if TYUMEN_CITY_NAME.casefold() in normalized.casefold():
         return normalized
     return f"{TYUMEN_CITY_NAME} {normalized}"
+
+
+def _parse_coordinate(value: Any) -> float | None:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if isfinite(parsed) else None
+
+
+def _get_straight_distance_km(lat_a: float, lon_a: float, lat_b: float, lon_b: float) -> float:
+    radius_km = 6371.0
+    delta_lat = radians(lat_b - lat_a)
+    delta_lon = radians(lon_b - lon_a)
+    lat_a_rad = radians(lat_a)
+    lat_b_rad = radians(lat_b)
+    haversine = (
+        sin(delta_lat / 2) ** 2
+        + cos(lat_a_rad) * cos(lat_b_rad) * sin(delta_lon / 2) ** 2
+    )
+    arc = 2 * asin(sqrt(haversine))
+    return radius_km * arc
+
+
+def _build_route_distance_fallback(
+    pickup_lat: float,
+    pickup_lon: float,
+    delivery_lat: float,
+    delivery_lon: float,
+) -> dict[str, Any]:
+    fallback_km = round(
+        _get_straight_distance_km(
+            pickup_lat,
+            pickup_lon,
+            delivery_lat,
+            delivery_lon,
+        ) * ROUTE_DISTANCE_FALLBACK_FACTOR,
+        2,
+    )
+    return {
+        "distance_km": fallback_km,
+        "geometry": [
+            {"lat": pickup_lat, "lon": pickup_lon},
+            {"lat": delivery_lat, "lon": delivery_lon},
+        ],
+    }
+
+
+async def _fallback_geocode(address: str) -> dict[str, float]:
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(
+                "https://nominatim.openstreetmap.org/search",
+                params={
+                    "q": _prepare_tyumen_address(address),
+                    "format": "jsonv2",
+                    "limit": 1,
+                    "addressdetails": 0,
+                    "accept-language": "ru",
+                },
+                headers={
+                    "Accept": "application/json",
+                    "User-Agent": "darmavoz-test-geocoder/1.0",
+                },
+            )
+            response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=GEOCODE_FALLBACK_ERROR_MESSAGE,
+        ) from exc
+
+    try:
+        items = response.json()
+        if not isinstance(items, list) or not items:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=GEOCODE_FALLBACK_ERROR_MESSAGE,
+            )
+
+        lat = _parse_coordinate(items[0].get("lat"))
+        lon = _parse_coordinate(items[0].get("lon"))
+        if lat is None or lon is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=GEOCODE_FALLBACK_ERROR_MESSAGE,
+            )
+
+        return {"lat": lat, "lon": lon}
+    except HTTPException:
+        raise
+    except (ValueError, TypeError, KeyError, IndexError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=GEOCODE_FALLBACK_ERROR_MESSAGE,
+        ) from exc
 
 
 def _parse_wkt_linestring(linestring: str) -> list[dict[str, float]]:
@@ -111,10 +210,8 @@ async def geocode_address(
     address: str = Query(..., min_length=1, max_length=500),
 ) -> dict[str, float]:
     if not settings.TWOGIS_API_KEY:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="TWOGIS_API_KEY is not configured",
-        )
+        logger.warning("2GIS key is not configured, using fallback geocoder")
+        return await _fallback_geocode(address)
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
@@ -131,19 +228,15 @@ async def geocode_address(
             )
             response.raise_for_status()
     except httpx.HTTPError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="2GIS geocoder is unavailable",
-        ) from exc
+        logger.warning("2GIS geocoder is unavailable, using fallback geocoder: %s", exc)
+        return await _fallback_geocode(address)
 
     try:
         data = response.json()
         geocoder_error = _extract_2gis_error(data)
         if geocoder_error:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=geocoder_error,
-            )
+            logger.warning("2GIS geocoder returned business error, using fallback geocoder: %s", geocoder_error)
+            return await _fallback_geocode(address)
 
         items = data["result"]["items"]
         if not items:
@@ -160,10 +253,8 @@ async def geocode_address(
     except HTTPException:
         raise
     except (KeyError, ValueError, TypeError, IndexError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Invalid response from 2GIS geocoder",
-        ) from exc
+        logger.warning("Invalid 2GIS geocoder response, using fallback geocoder: %s", exc)
+        return await _fallback_geocode(address)
 
 
 @router.get("/route-distance")
@@ -174,9 +265,12 @@ async def get_route_distance(
     delivery_lon: float = Query(..., ge=-180, le=180),
 ) -> dict[str, Any]:
     if not settings.TWOGIS_API_KEY:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="TWOGIS_API_KEY is not configured",
+        logger.warning("2GIS key is not configured, using fallback route distance")
+        return _build_route_distance_fallback(
+            pickup_lat,
+            pickup_lon,
+            delivery_lat,
+            delivery_lon,
         )
 
     payload = {
@@ -207,57 +301,81 @@ async def get_route_distance(
                 headers={"Accept": "application/json"},
             )
     except httpx.HTTPError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="2GIS router is unavailable",
-        ) from exc
+        logger.warning("2GIS router is unavailable, using fallback route distance: %s", exc)
+        return _build_route_distance_fallback(
+            pickup_lat,
+            pickup_lon,
+            delivery_lat,
+            delivery_lon,
+        )
 
     if response.status_code != status.HTTP_200_OK:
         logger.error(f"2GIS Routing Error: {response.status_code} - {response.text}")
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="2GIS router is unavailable",
+        return _build_route_distance_fallback(
+            pickup_lat,
+            pickup_lon,
+            delivery_lat,
+            delivery_lon,
         )
 
     try:
         data = response.json()
         if data.get("status") and data["status"] != "OK":
             router_error = _extract_2gis_error(data) or data["status"]
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=router_error,
+            logger.warning(
+                "2GIS router returned business error, using fallback route distance: %s",
+                router_error,
+            )
+            return _build_route_distance_fallback(
+                pickup_lat,
+                pickup_lon,
+                delivery_lat,
+                delivery_lon,
             )
 
         router_error = _extract_2gis_error(data)
         if router_error:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=router_error,
+            logger.warning(
+                "2GIS router returned business message, using fallback route distance: %s",
+                router_error,
+            )
+            return _build_route_distance_fallback(
+                pickup_lat,
+                pickup_lon,
+                delivery_lat,
+                delivery_lon,
             )
 
         routes = data["result"]
         if not routes:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Route not found",
+            logger.warning("2GIS router returned no routes, using fallback route distance")
+            return _build_route_distance_fallback(
+                pickup_lat,
+                pickup_lon,
+                delivery_lat,
+                delivery_lon,
             )
 
         route = routes[0]
         total_distance_m = float(route["total_distance"])
         if total_distance_m <= 0:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Route not found",
+            logger.warning("2GIS router returned non-positive distance, using fallback route distance")
+            return _build_route_distance_fallback(
+                pickup_lat,
+                pickup_lon,
+                delivery_lat,
+                delivery_lon,
             )
 
         return {
             "distance_km": round(total_distance_m / 1000.0, 2),
             "geometry": _collect_route_geometry(route),
         }
-    except HTTPException:
-        raise
     except (KeyError, ValueError, TypeError, IndexError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Invalid response from 2GIS router",
-        ) from exc
+        logger.warning("Invalid 2GIS router response, using fallback route distance: %s", exc)
+        return _build_route_distance_fallback(
+            pickup_lat,
+            pickup_lon,
+            delivery_lat,
+            delivery_lon,
+        )

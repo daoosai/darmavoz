@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 480" role="img" aria-labelledby="title desc">
+  <title id="title">Small dump truck</title>
+  <desc id="desc">Detailed illustration of a compact blue dump truck</desc>
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f0f9ff"/>
+      <stop offset="1" stop-color="#ffffff"/>
+    </linearGradient>
+    <linearGradient id="cab" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#38bdf8"/>
+      <stop offset="1" stop-color="#0284c7"/>
+    </linearGradient>
+    <linearGradient id="bed" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fbbf24"/>
+      <stop offset="1" stop-color="#d97706"/>
+    </linearGradient>
+    <radialGradient id="tire">
+      <stop offset="0" stop-color="#64748b"/>
+      <stop offset=".45" stop-color="#334155"/>
+      <stop offset="1" stop-color="#0f172a"/>
+    </radialGradient>
+    <filter id="shadow" x="-20%" y="-40%" width="140%" height="180%">
+      <feGaussianBlur stdDeviation="12"/>
+    </filter>
+  </defs>
+  <rect width="800" height="480" rx="42" fill="url(#sky)"/>
+  <ellipse cx="402" cy="394" rx="310" ry="28" fill="#0f172a" opacity=".14" filter="url(#shadow)"/>
+  <path d="M107 333h560l31 31-20 31H123l-30-28 14-34Z" fill="#334155"/>
+  <path d="M112 326h484v37H112z" fill="#475569"/>
+  <path d="m173 140 352 20 59 181H189l-45-169 29-32Z" fill="url(#bed)"/>
+  <path d="m173 140 352 20 14 42-355-18-11-44Z" fill="#fde68a" opacity=".65"/>
+  <path d="m189 203 351 17M203 254l354 13M218 306l355 8" fill="none" stroke="#92400e" stroke-width="10" opacity=".34"/>
+  <path d="M157 151 130 331h61l-18-178-16-2Z" fill="#92400e"/>
+  <path d="M552 216h92l62 75v77H531V241l21-25Z" fill="url(#cab)"/>
+  <path d="M577 231h58l43 61H565l12-61Z" fill="#dbeafe"/>
+  <path d="M579 238h51l32 45h-92l9-45Z" fill="#7dd3fc" opacity=".55"/>
+  <path d="M543 299h158v69H543z" fill="#0284c7"/>
+  <path d="M672 309h31v24h-31z" rx="5" fill="#f8fafc"/>
+  <path d="M540 343h174v27H540z" fill="#0369a1"/>
+  <path d="M705 353h33v31h-33z" rx="7" fill="#fbbf24"/>
+  <path d="M534 360h205v20H534z" rx="8" fill="#64748b"/>
+  <path d="M263 176 231 331M375 188l-22 143M485 197l-12 134" stroke="#b45309" stroke-width="8" opacity=".45"/>
+  <g>
+    <circle cx="221" cy="374" r="66" fill="url(#tire)"/>
+    <circle cx="221" cy="374" r="28" fill="#cbd5e1"/>
+    <circle cx="221" cy="374" r="12" fill="#64748b"/>
+    <circle cx="613" cy="374" r="66" fill="url(#tire)"/>
+    <circle cx="613" cy="374" r="28" fill="#cbd5e1"/>
+    <circle cx="613" cy="374" r="12" fill="#64748b"/>
+  </g>
+  <path d="M258 350h293" stroke="#1e293b" stroke-width="18" stroke-linecap="round"/>
+  <path d="M151 333h424" stroke="#94a3b8" stroke-width="8" opacity=".8"/>
+</svg>

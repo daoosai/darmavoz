@@ -102,12 +102,22 @@ interface CartState {
 
 export type UserRole = "driver" | "logist" | "admin" | "client" | "supplier" | null;
 
+export interface CurrentUserProfile {
+  id: string;
+  name: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  phone?: string | null;
+}
+
 interface AuthState {
   token: string | null;
   role: UserRole;
   driverId: string | null;
+  currentUser: CurrentUserProfile | null;
   login: (token: string, role: UserRole, driverId?: string) => void;
   logout: () => void;
+  setCurrentUser: (currentUser: CurrentUserProfile | null) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -116,13 +126,16 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       role: null,
       driverId: null,
-      login: (token, role, driverId) => set({ token, role, driverId: driverId || null }),
+      currentUser: null,
+      login: (token, role, driverId) =>
+        set({ token, role, driverId: driverId || null, currentUser: null }),
       logout: () => {
-        set({ token: null, role: null, driverId: null });
+        set({ token: null, role: null, driverId: null, currentUser: null });
         useAddressStore.getState().clearSelectedAddress();
         useClientOrdersStore.getState().clearOrders();
         localStorage.removeItem('address-storage');
       },
+      setCurrentUser: (currentUser) => set({ currentUser }),
     }),
     {
       name: "auth-storage", // unique name

@@ -112,6 +112,7 @@ export default function PickupPointMapScreen({
   deliveryLocation,
 }: Props) {
   const { selectedAddress: currentDeliveryAddress } = useAddressStore();
+  const addressSelectionCommittedRef = useRef(false);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const markerRefs = useRef<any[]>([]);
@@ -428,8 +429,11 @@ export default function PickupPointMapScreen({
   }, [activePointId, filter, isLocationResolved, points, userLocation, selectedDeliveryLocation]);
 
   const handleAddressSheetClose = () => {
+    const latestSelectedAddress = useAddressStore.getState().selectedAddress.trim();
+    const wasAddressConfirmed = addressSelectionCommittedRef.current;
+    addressSelectionCommittedRef.current = false;
     setIsAddressSheetOpen(false);
-    if (!currentDeliveryAddress.trim()) {
+    if (!wasAddressConfirmed && !latestSelectedAddress) {
       onClose();
     }
   };
@@ -690,6 +694,7 @@ export default function PickupPointMapScreen({
         overlayZIndexClassName="z-[9999]"
         sheetZIndexClassName="z-[10000]"
         onAddressConfirmed={({ address, lat, lon }) => {
+          addressSelectionCommittedRef.current = true;
           if (lat != null && lon != null) {
             setSelectedDeliveryLocation({ lat, lon });
           } else if (address.trim()) {

@@ -26,6 +26,10 @@ interface EquipmentApplication {
   created_at: string;
 }
 
+type HistoryItem =
+  | { kind: "order"; id: string; createdAt: string; order: ClientOrder }
+  | { kind: "equipment"; id: string; createdAt: string; application: EquipmentApplication };
+
 const equipmentStatusLabels: Record<EquipmentApplication["status"], string> = {
   new: "Новая",
   in_progress: "В работе",
@@ -81,6 +85,11 @@ const formatOrderDisplayAmount = (
 ) => {
   const amount = getOrderDisplayAmount(order);
   return amount == null ? "..." : `${amount.toLocaleString("ru-RU")} ₽`;
+};
+
+const getHistoryTimestamp = (value?: string | null) => {
+  const timestamp = value ? new Date(value).getTime() : 0;
+  return Number.isNaN(timestamp) ? 0 : timestamp;
 };
 
 const EquipmentApplicationProgress = ({ application }: { application: EquipmentApplication }) => {
@@ -597,6 +606,20 @@ export default function OrdersScreen({
   const historyEquipmentApplications = equipmentApplications.filter(
     (application) => !["new", "in_progress"].includes(application.status),
   );
+  const sortedHistoryItems: HistoryItem[] = [
+    ...displayHistoryOrders.map((order) => ({
+      kind: "order" as const,
+      id: order.id,
+      createdAt: order.created_at,
+      order,
+    })),
+    ...historyEquipmentApplications.map((application) => ({
+      kind: "equipment" as const,
+      id: application.id,
+      createdAt: application.created_at || application.requested_date,
+      application,
+    })),
+  ].sort((first, second) => getHistoryTimestamp(second.createdAt) - getHistoryTimestamp(first.createdAt));
 
   return (
     <div className="min-h-[calc(100vh-68px)] bg-gray-50 flex flex-col">
@@ -735,21 +758,24 @@ export default function OrdersScreen({
                   exit={{ opacity: 0, x: 20 }}
                   transition={{ duration: 0.2 }}
                 >
-                  {displayHistoryOrders.length > 0 || historyEquipmentApplications.length > 0 ? (
+                  {sortedHistoryItems.length > 0 ? (
                     <div className="flex flex-col gap-3">
                       <AnimatePresence>
-                          {displayHistoryOrders.map(order => (
+                          {sortedHistoryItems.map((item) => (
                               <motion.div
-                                  key={order.id}
+                                  key={`${item.kind}-${item.id}`}
                                   initial={{ opacity: 0, y: 10 }}
                                   animate={{ opacity: 1, y: 0 }}
                                   layout
                               >
-                                  <HistoryOrderCard order={order} />
+                                  {item.kind === "order" ? (
+                                    <HistoryOrderCard order={item.order} />
+                                  ) : (
+                                    <EquipmentHistoryCard application={item.application} />
+                                  )}
                               </motion.div>
                           ))}
                       </AnimatePresence>
-                      {historyEquipmentApplications.map((application) => <div key={application.id}><EquipmentHistoryCard application={application} /></div>)}
                     </div>
                   ) : (
                     <div className="flex flex-col items-center justify-center p-6 text-center min-h-[40vh] opacity-60">

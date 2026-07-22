@@ -27,6 +27,7 @@ import {
 import toast from "react-hot-toast";
 import { logoutCurrentSession } from "./pushAuth";
 import SupportScreen from "./SupportScreen";
+import { handleOpenNavigator } from "./openNavigator";
 
 export interface DriverOrder {
   id: string;
@@ -874,51 +875,10 @@ export const DriverOrderCard: React.FC<{
         ? "Накопитель"
         : "Карьер";
 
-    const isIOS = /iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent);
-    if (isToClient && address) {
-      if (isIOS) {
-        window.open(
-          `https://2gis.ru/routeSearch/rsType/car/to/${encodeURIComponent(address)}`,
-          "_blank",
-        );
-        return;
-      }
-
-      const isAndroid = /Android/i.test(navigator.userAgent);
-      if (isAndroid) {
-        window.location.href = `geo:0,0?q=${encodeURIComponent(address)}`;
-        return;
-      }
-
-      window.open(
-        `https://2gis.ru/routeSearch/rsType/car/to/${encodeURIComponent(address)}`,
-        "_blank",
-      );
-      return;
-    }
-
-    if (lat == null || lon == null) {
+    const opened = handleOpenNavigator({ lat, lon, address, label });
+    if (!opened) {
       toast.error("Нет данных для построения маршрута");
-      return;
     }
-
-    if (isIOS) {
-      window.open(
-        `https://2gis.ru/routeSearch/rsType/car/to/${lon},${lat}`,
-        "_blank",
-      );
-      return;
-    }
-
-    const isAndroid = /Android/i.test(navigator.userAgent);
-    if (isAndroid) {
-      window.location.href = `geo:${lat},${lon}?q=${lat},${lon}(${encodeURIComponent(label)})`;
-      return;
-    }
-
-    const destinationUrl = `https://2gis.ru/routeSearch/rsType/car/to/${lon},${lat}`;
-
-    window.open(destinationUrl, "_blank");
   };
 
 

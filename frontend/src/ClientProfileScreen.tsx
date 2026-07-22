@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { NotificationToggle } from "./components/shared/NotificationToggle";
 import { logoutCurrentSession } from "./pushAuth";
-import { baseURL, APP_VERSION, handleApiError } from "./utils";
+import { baseURL, APP_VERSION, extractApiErrorMessage, handleApiError } from "./utils";
 import { useAuthStore } from "./store";
 import toast from "react-hot-toast";
 
@@ -21,6 +21,8 @@ interface ClientData {
   id: string;
   name: string;
   phone: string;
+  first_name?: string | null;
+  last_name?: string | null;
 }
 
 interface ClientProfileScreenProps {
@@ -32,8 +34,18 @@ export default function ClientProfileScreen({
   onOpenAddresses,
   onOpenSupport,
 }: ClientProfileScreenProps) {
-  const { token } = useAuthStore();
-  const [client, setClient] = useState<ClientData | null>(null);
+  const { token, currentUser, setCurrentUser } = useAuthStore();
+  const [client, setClient] = useState<ClientData | null>(
+    currentUser
+      ? {
+          id: currentUser.id,
+          name: currentUser.name,
+          phone: currentUser.phone || "",
+          first_name: currentUser.first_name,
+          last_name: currentUser.last_name,
+        }
+      : null,
+  );
   const [stats, setStats] = useState({ active: 0, total: 0 });
   const [isLoading, setIsLoading] = useState(true);
 
@@ -41,6 +53,17 @@ export default function ClientProfileScreen({
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    setClient((previous) => ({
+      id: currentUser.id,
+      name: currentUser.name,
+      phone: currentUser.phone || previous?.phone || "",
+      first_name: currentUser.first_name,
+      last_name: currentUser.last_name,
+    }));
+  }, [currentUser]);
 
   const fetchData = async () => {
     try {
@@ -54,7 +77,9 @@ export default function ClientProfileScreen({
       ]);
 
       if (clientRes.ok) {
-        setClient(await clientRes.json());
+        const profile = await clientRes.json();
+        setClient(profile);
+        setCurrentUser(profile);
       }
 
       if (ordersRes.ok) {
@@ -84,15 +109,15 @@ export default function ClientProfileScreen({
   }, [token]);
 
   const openEditModal = () => {
-    const parts = (client?.name || "").split(" ");
-    setFirstName(parts[0] || "");
-    setLastName(parts.slice(1).join(" ") || "");
+    setFirstName(client?.first_name || client?.name.split(" ")[0] || "");
+    setLastName(client?.last_name || client?.name.split(" ").slice(1).join(" ") || "");
     setIsEditModalOpen(true);
   };
 
   const handleSaveProfile = async () => {
-    const newName = `${firstName.trim()} ${lastName.trim()}`.trim();
-    if (!newName) {
+    const normalizedFirstName = firstName.trim();
+    const normalizedLastName = lastName.trim();
+    if (!normalizedFirstName) {
       toast.error("Имя не может быть пустым");
       return;
     }
@@ -105,18 +130,30 @@ export default function ClientProfileScreen({
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ name: newName }),
+        body: JSON.stringify({
+          first_name: normalizedFirstName,
+          last_name: normalizedLastName || null,
+        }),
       });
 
-      if (res.ok) {
-        toast.success("Данные обновлены");
-        setIsEditModalOpen(false);
-        fetchData();
-      } else {
-        toast.error("Ошибка при сохранении");
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(
+          extractApiErrorMessage(errorData, "Ошибка при сохранении"),
+        );
       }
+
+      const updatedProfile = await res.json();
+      setClient(updatedProfile);
+      setCurrentUser(updatedProfile);
+      toast.success("Данные обновлены");
+      setIsEditModalOpen(false);
     } catch (e: any) {
-      toast.error(handleApiError(e, "Сетевая ошибка"));
+      toast.error(
+        e instanceof Error
+          ? e.message
+          : handleApiError(e, "Сетевая ошибка"),
+      );
     } finally {
       setIsSubmitting(false);
     }

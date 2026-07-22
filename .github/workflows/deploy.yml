@@ -80,7 +80,7 @@ jobs:
           cp -a "${DEPLOY_DIR}/static/." /opt/daoos-kit/sites/darmavoz/static/
 
           # Обновление Backend и Миграции
-          docker compose -f "${DEPLOY_DIR}/docker-compose.yml" up -d --build --force-recreate darmavoz_backend
+          docker compose -f "${DEPLOY_DIR}/docker-compose.yml" up -d --build --force-recreate backend
 
           # Ожидание старта и накатывание миграций
           sleep 5

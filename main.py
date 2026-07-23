@@ -1,3 +1,4 @@
+import mimetypes
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -20,6 +21,8 @@ from app.services.redis_client import close_redis
 logger = logging.getLogger(__name__)
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 WEB_DIR = Path(__file__).resolve().parent / "web"
+
+mimetypes.add_type("application/vnd.android.package-archive", ".apk")
 
 
 @asynccontextmanager
@@ -149,11 +152,13 @@ async def ping():
 
 
 if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static-files")
+
     @app.get("/demo", include_in_schema=False)
     async def demo_page():
         return FileResponse(STATIC_DIR / "index.html")
 
-    app.mount("/demo", StaticFiles(directory=STATIC_DIR, html=True), name="static")
+    app.mount("/demo", StaticFiles(directory=STATIC_DIR, html=True), name="static-demo")
 
 
 @app.get("/health")

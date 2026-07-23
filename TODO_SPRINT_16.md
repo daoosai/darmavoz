@@ -18,9 +18,9 @@
 
 ## 3. CI/CD & VERSIONING
 
-- [ ] Создать скрипт единого версионирования, например `scripts/sync_version.js`, который берёт версию из `frontend/package.json` и синхронизирует её с Android, iOS и backend-конфигурацией.
-- [ ] Отрефакторить Android workflow: убрать хардкод версий и вынести общие шаги подготовки в начало pipeline.
-- [ ] Создать новый workflow `.github/workflows/build-ipa-test.yml` для iOS: `macos-latest`, `npm run build`, `npx cap sync ios`, сборка через `xcodebuild` без подписи.
+- [x] Создать скрипт единого версионирования, например `scripts/sync_version.js`, который берёт версию из `frontend/package.json` и синхронизирует её с Android, iOS и backend-конфигурацией.
+- [x] Отрефакторить Android workflow: убрать хардкод версий и вынести общие шаги подготовки в начало pipeline.
+- [x] Создать новый workflow `.github/workflows/build-ios-test.yml` для iOS: `macos-latest`, `npm run build`, `npx cap sync ios`, сборка через `xcodebuild` без подписи.
 
 ## 4. QA & УТВЕРЖДЕНИЕ
 

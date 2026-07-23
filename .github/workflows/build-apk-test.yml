@@ -9,7 +9,7 @@ jobs:
   build-test-apk:
     runs-on: ubuntu-latest
     env:
-      APK_REMOTE_DIR: /opt/darmavoz_test/backend/static
+      APK_REMOTE_DIR: /opt/darmavoz_test_deploy/static
       APK_REMOTE_NAME: darmavoz-test.apk
       VITE_2GIS_KEY: ${{ secrets.VITE_2GIS_KEY }}
 
@@ -107,23 +107,15 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            mkdir -p /opt/darmavoz_test/backend/static
-            mkdir -p /opt/daoos-kit/sites/darmavoz_test/static
+            set -euo pipefail
+            mkdir -p "${APK_REMOTE_DIR}"
 
       - name: Copy APK to server
-        uses: appleboy/scp-action@v0.1.7
+        uses: appleboy/scp-action@master
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: "darmavoz-test.apk"
-          target: "/opt/darmavoz_test/backend/static/"
-
-      - name: Publish APK to test static
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            cp /opt/darmavoz_test/backend/static/darmavoz-test.apk /opt/daoos-kit/sites/darmavoz_test/static/darmavoz-test.apk
+          target: "${{ env.APK_REMOTE_DIR }}/"
+          overwrite: true

@@ -10,6 +10,7 @@ jobs:
   build-android:
     runs-on: ubuntu-latest
     env:
+      APK_REMOTE_DIR: /opt/darmavoz_deploy/static
       VITE_2GIS_KEY: ${{ secrets.VITE_2GIS_KEY }}
 
     steps:
@@ -79,9 +80,22 @@ jobs:
           ./gradlew assembleDebug
           mv app/build/outputs/apk/debug/app-debug.apk "${{ github.workspace }}/darmavoz.apk"
 
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
+      - name: Prepare remote APK directory
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          name: darmavoz-apk
-          path: darmavoz.apk
-          if-no-files-found: error
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -euo pipefail
+            mkdir -p "${APK_REMOTE_DIR}"
+
+      - name: Copy APK to server
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "darmavoz.apk"
+          target: "${{ env.APK_REMOTE_DIR }}/"
+          overwrite: true

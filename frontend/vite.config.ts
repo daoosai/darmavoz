@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [
-      react(), 
+      react(),
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
@@ -27,16 +27,16 @@ export default defineConfig(({ mode }) => {
             {
               src: '/icon-192x192.png',
               sizes: '192x192',
-              type: 'image/png'
+              type: 'image/png',
             },
             {
               src: '/icon-512x512.png',
               sizes: '512x512',
-              type: 'image/png'
-            }
-          ]
-        }
-      })
+              type: 'image/png',
+            },
+          ],
+        },
+      }),
     ],
     resolve: {
       alias: {
@@ -47,16 +47,18 @@ export default defineConfig(({ mode }) => {
       chunkSizeWarningLimit: 1200,
     },
     server: {
-      ...(proxyTarget ? {
-        proxy: {
-          '/api/v1': {
-            target: proxyTarget,
-            changeOrigin: true
+      ...(proxyTarget
+        ? {
+            proxy: {
+              '/api/v1': {
+                target: proxyTarget,
+                changeOrigin: true,
+              },
+            },
           }
-        }
-      } : {}),
+        : {}),
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
+      // Do not modify: file watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},

@@ -2,15 +2,15 @@
 
 ## 1. ⚙️ BACKEND (SMS Tech Debt & Configs)
 
-- [ ] Удалить легаси-переменные `SMSC_LOGIN` и `SMSC_PASSWORD` из `app/core/config.py`.
-- [ ] Переписать `test_sms.py` под логику `SMS.ru`.
-- [ ] Очистить логи и имена переменных от упоминаний `smsc` и заменить их на `sms_auth`.
-- [ ] Обновить `PROJECT_STATE.md`: указать, что рабочий стек проекта — `FastAPI + React/Capacitor`, а папка `mobile` является deprecated Flutter legacy.
+- [x] Удалить легаси-переменные `SMSC_LOGIN` и `SMSC_PASSWORD` из `app/core/config.py`.
+- [x] Переписать `test_sms.py` под логику `SMS.ru`.
+- [x] Очистить логи и имена переменных от упоминаний `smsc` и заменить их на `sms_auth`.
+- [x] Обновить `PROJECT_STATE.md`: указать, что рабочий стек проекта — `FastAPI + React/Capacitor`, а папка `mobile` является deprecated Flutter legacy.
 
 ## 2. FRONTEND & MOBILE (PWA + Capacitor iOS)
 
-- [ ] Починить кодировку UTF-8 в `frontend/index.html`, `frontend/capacitor.config.ts`, `frontend/vite.config.ts`.
-- [ ] Добавить Apple meta-теги в `frontend/index.html`: `apple-mobile-web-app-title`, `viewport-fit=cover`, `lang="ru"`.
+- [x] Починить кодировку UTF-8 в `frontend/index.html`, `frontend/capacitor.config.ts`, `frontend/vite.config.ts`.
+- [x] Добавить Apple meta-теги в `frontend/index.html`: `apple-mobile-web-app-title`, `viewport-fit=cover`, `lang="ru"`.
 - [ ] Обновить PWA manifest через `vite-plugin-pwa`: добавить описание, ориентацию и корректные иконки.
 - [ ] Добавить пакет `@capacitor/assets` в `frontend/package.json` и создать npm-скрипт `assets:generate`.
 - [ ] Установить `@capacitor/ios` и выполнить `npx cap add ios` в `frontend`.

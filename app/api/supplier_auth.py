@@ -44,7 +44,7 @@ async def register_supplier(
     stored_code = await send_auth_sms_code(
         phone_number=normalize_sms_phone(phone),
         code=code,
-        log_prefix="supplier_register_smsc",
+        log_prefix="supplier_register_sms_auth",
     )
     redis = get_redis()
     await redis.setex(f"{CODE_PREFIX}:{phone}", TTL_SECONDS, stored_code)

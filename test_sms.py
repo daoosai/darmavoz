@@ -1,51 +1,130 @@
-from pathlib import Path
-import os
-import sys
+from unittest.mock import Mock
 
-import httpx
+import pytest
 
-
-def load_env_value(*names: str) -> str | None:
-    env_path = Path('.env')
-    if env_path.exists():
-        for raw_line in env_path.read_text(encoding='utf-8').splitlines():
-            line = raw_line.strip()
-            if not line or line.startswith('#') or '=' not in line:
-                continue
-            key, value = line.split('=', 1)
-            key = key.strip()
-            if key in names:
-                value = value.strip()
-                if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
-                    value = value[1:-1]
-                if value:
-                    return value
-    for name in names:
-        value = os.getenv(name)
-        if value:
-            return value
-    return None
+from app.services import sms_service
 
 
-login = load_env_value('SMSC_LOGIN')
-password = load_env_value('SMSC_PASSWORD')
-if not login or not password:
-    raise SystemExit('SMSC credentials not found in .env')
+class DummyAsyncClient:
+    def __init__(self, response):
+        self._response = response
+        self.calls: list[tuple[str, dict]] = []
 
-phone = os.getenv('SMS_DEBUG_PHONE', '79990000001')
-url = 'https://smsc.ru/sys/send.php'
-params = {
-    'login': login,
-    'psw': password,
-    'phones': phone,
-    'mes': 'Код входа 1234',
-    'fmt': 3,
-    'charset': 'utf-8',
-}
+    async def __aenter__(self):
+        return self
 
-try:
-    response = httpx.get(url, params=params, timeout=20.0)
-    print(response.text)
-except Exception as exc:
-    print(f'REQUEST_FAILED: {exc}', file=sys.stderr)
-    raise
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    async def post(self, url, data):
+        self.calls.append((url, data))
+        return self._response
+
+
+@pytest.mark.asyncio
+async def test_send_auth_sms_code_uses_smsru_payload(monkeypatch):
+    response = Mock()
+    response.raise_for_status.return_value = None
+    response.json.return_value = {
+        "status": "OK",
+        "status_code": 100,
+        "sms": {
+            "79990000001": {
+                "status": "OK",
+                "status_code": 100,
+                "sms_id": "12345",
+            }
+        },
+    }
+
+    client = DummyAsyncClient(response)
+
+    monkeypatch.setattr(sms_service.settings, "USE_REAL_SMS", True)
+    monkeypatch.setattr(sms_service.settings, "SMSRU_API_KEY", "test-api-key")
+    monkeypatch.setattr(sms_service.httpx, "AsyncClient", lambda timeout: client)
+
+    result = await sms_service.send_auth_sms_code(
+        phone_number="79990000001",
+        code="1234",
+        log_prefix="test_sms_auth",
+    )
+
+    assert result == "1234"
+    assert client.calls == [
+        (
+            sms_service.SMSRU_SEND_URL,
+            {
+                "api_id": "test-api-key",
+                "to": "79990000001",
+                "msg": "1234 — код для входа в приложение Дармавоз. Никому не сообщайте код.",
+                "from": "DARMAVOZ.RU",
+                "json": 1,
+            },
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_send_auth_sms_code_accepts_json_status_100(monkeypatch):
+    response = Mock()
+    response.raise_for_status.return_value = None
+    response.json.return_value = {
+        "status": "OK",
+        "status_code": 100,
+        "sms": {
+            "79990000001": {
+                "status": "OK",
+                "status_code": 100,
+                "sms_id": "67890",
+            }
+        },
+    }
+
+    monkeypatch.setattr(sms_service.settings, "USE_REAL_SMS", True)
+    monkeypatch.setattr(sms_service.settings, "SMSRU_API_KEY", "test-api-key")
+    monkeypatch.setattr(
+        sms_service.httpx,
+        "AsyncClient",
+        lambda timeout: DummyAsyncClient(response),
+    )
+
+    result = await sms_service.send_auth_sms_code(
+        phone_number="79990000001",
+        code="5678",
+        log_prefix="test_sms_auth",
+    )
+
+    assert result == "5678"
+
+
+@pytest.mark.asyncio
+async def test_send_auth_sms_code_returns_fallback_for_non_100_status(monkeypatch):
+    response = Mock()
+    response.raise_for_status.return_value = None
+    response.json.return_value = {
+        "status": "OK",
+        "status_code": 100,
+        "sms": {
+            "79990000001": {
+                "status": "ERROR",
+                "status_code": 201,
+                "status_text": "Invalid sender",
+            }
+        },
+    }
+
+    monkeypatch.setattr(sms_service.settings, "USE_REAL_SMS", True)
+    monkeypatch.setattr(sms_service.settings, "SMSRU_API_KEY", "test-api-key")
+    monkeypatch.setattr(
+        sms_service.httpx,
+        "AsyncClient",
+        lambda timeout: DummyAsyncClient(response),
+    )
+
+    result = await sms_service.send_auth_sms_code(
+        phone_number="79990000001",
+        code="5678",
+        log_prefix="test_sms_auth",
+    )
+
+    assert result == sms_service.FALLBACK_OTP_CODE

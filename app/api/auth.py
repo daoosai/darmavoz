@@ -223,7 +223,7 @@ def _build_driver_registration_response(*, role: Role, user: User, driver: Drive
 async def _issue_driver_login_code(*, normalized_phone: str, user_id: str) -> DriverSmsChallengeResponse:
     code = generate_otp_code()
     sms_phone = normalize_sms_phone(normalized_phone)
-    stored_code = await send_auth_sms_code(phone_number=sms_phone, code=code, log_prefix="driver_login_smsc")
+    stored_code = await send_auth_sms_code(phone_number=sms_phone, code=code, log_prefix="driver_login_sms_auth")
 
     redis = get_redis()
     await redis.setex(_driver_login_code_key(normalized_phone), DRIVER_AUTH_CODE_TTL_SECONDS, stored_code)
@@ -352,7 +352,7 @@ async def driver_register(
 
     code = generate_otp_code()
     sms_phone = normalize_sms_phone(normalized_phone)
-    stored_code = await send_auth_sms_code(phone_number=sms_phone, code=code, log_prefix="driver_register_smsc")
+    stored_code = await send_auth_sms_code(phone_number=sms_phone, code=code, log_prefix="driver_register_sms_auth")
 
     redis = get_redis()
     await redis.setex(_driver_register_code_key(normalized_phone), DRIVER_AUTH_CODE_TTL_SECONDS, stored_code)

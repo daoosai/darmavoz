@@ -9,8 +9,6 @@ jobs:
   build-test-apk:
     runs-on: ubuntu-latest
     env:
-      RELEASE_VERSION: "2.5.0"
-      RELEASE_VERSION_CODE: "250"
       APK_REMOTE_DIR: /opt/darmavoz_test/backend/static
       APK_REMOTE_NAME: darmavoz-test.apk
       VITE_2GIS_KEY: ${{ secrets.VITE_2GIS_KEY }}
@@ -33,28 +31,37 @@ jobs:
           java-version: 21
           cache: gradle
 
+      - name: Derive release version
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./package.json').version")"
+          VERSION_CODE="$(node -p "require('./package.json').version.replace(/\./g, '')")"
+          echo "RELEASE_VERSION=${VERSION}" >> "${GITHUB_ENV}"
+          echo "RELEASE_VERSION_CODE=${VERSION_CODE}" >> "${GITHUB_ENV}"
+
       - name: Install frontend dependencies
         working-directory: frontend
         run: |
           set -euo pipefail
-          npm install
-          npm install -D @capacitor/android @capacitor/assets
+          npm ci
+          npm install -D @capacitor/android
+          npm run version:sync
 
       - name: Prepare test environment (Vite & Capacitor)
         working-directory: frontend
         run: |
           set -euo pipefail
-          # Создаем .env.production, чтобы Vite гарантированно подхватил тестовые ссылки!
           cat > .env.production <<EOF
           VITE_API_BASE_URL=https://test.darmavoz.ru/api/v1
           VITE_API_URL=https://test.darmavoz.ru/api/v1
           VITE_S3_URL=https://test.darmavoz.ru/s3
           VITE_APP_VERSION=${RELEASE_VERSION}
           EOF
-          
-          # Меняем App ID прямо в конфиге Capacitor ДО синхронизации
-          sed -i 's/com\.darmavoz\.app/com.darmavoz.app.test/g' capacitor.config.ts || true
-          sed -i 's/com\.darmavoz\.app/com.darmavoz.app.test/g' capacitor.config.json || true
+
+          # Override app id only inside CI for the test APK package name.
+          sed -i 's/ru\.darmavoz\.app/com.darmavoz.app.test/g' capacitor.config.ts || true
+          sed -i 's/ru\.darmavoz\.app/com.darmavoz.app.test/g' capacitor.config.json || true
 
       - name: Build frontend
         working-directory: frontend
@@ -81,7 +88,6 @@ jobs:
         working-directory: frontend
         env:
           GOOGLE_SERVICES_JSON_TEST: ${{ secrets.GOOGLE_SERVICES_JSON_TEST }}
-        # Кладем JSON только ПОСЛЕ sync, когда папка android/app уже гарантированно готова
         run: echo "$GOOGLE_SERVICES_JSON_TEST" > android/app/google-services.json
 
       - name: Build debug APK

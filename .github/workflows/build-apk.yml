@@ -10,125 +10,78 @@ jobs:
   build-android:
     runs-on: ubuntu-latest
     env:
-      RELEASE_VERSION: "2.5.0"
-      RELEASE_VERSION_CODE: "250"
-      APK_REMOTE_PATH: /opt/darmavoz/static/darmavoz.apk
       VITE_2GIS_KEY: ${{ secrets.VITE_2GIS_KEY }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 22
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Setup Java (JDK 21)
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          distribution: zulu
+          distribution: temurin
           java-version: 21
           cache: gradle
 
-      - name: Prepare release version
-        working-directory: ./frontend
+      - name: Derive release version
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./package.json').version")"
+          VERSION_CODE="$(node -p "require('./package.json').version.replace(/\./g, '')")"
+          echo "RELEASE_VERSION=${VERSION}" >> "${GITHUB_ENV}"
+          echo "RELEASE_VERSION_CODE=${VERSION_CODE}" >> "${GITHUB_ENV}"
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          npm ci
+          npm install -D @capacitor/android
+          npm run version:sync
+
+      - name: Prepare production environment
+        working-directory: frontend
         run: |
           set -euo pipefail
           cat > .env.production <<EOF
+          VITE_API_BASE_URL=https://darmavoz.ru/api/v1
+          VITE_API_URL=https://darmavoz.ru/api/v1
+          VITE_S3_URL=https://darmavoz.ru/s3
           VITE_APP_VERSION=${RELEASE_VERSION}
-          VITE_API_BASE_URL=https://darmavoz.ru/api/v1
-          VITE_API_URL=https://darmavoz.ru/api/v1
-          VITE_S3_URL=https://darmavoz.ru/s3
           EOF
 
-      - name: Install dependencies & Build Web
-        working-directory: ./frontend
-        run: |
-          set -euo pipefail
-          npm install
-          npm install -D @capacitor/cli @capacitor/core @capacitor/android
-          
-          # FORCE production URLs for the APK web bundle.
-          cat > .env.production <<EOF
-          VITE_API_BASE_URL=https://darmavoz.ru/api/v1
-          VITE_API_URL=https://darmavoz.ru/api/v1
-          VITE_S3_URL=https://darmavoz.ru/s3
-          EOF
-          
-          npm run build
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
 
-      - name: Sync Capacitor
-        working-directory: ./frontend
-        run: |
-          set -euo pipefail
-          npx cap sync android
-
-      - name: Install dependencies & Build Web
-        working-directory: ./frontend
-        run: |
-          set -euo pipefail
-          npm install
-          npm install -D @capacitor/cli @capacitor/core @capacitor/android @capacitor/assets
-          
-          # FORCE production URLs for the APK web bundle.
-          cat > .env.production <<EOF
-          VITE_API_BASE_URL=https://darmavoz.ru/api/v1
-          VITE_API_URL=https://darmavoz.ru/api/v1
-          VITE_S3_URL=https://darmavoz.ru/s3
-          EOF
-          
-          npm run build
-
-      - name: Generate Icons & Sync Capacitor
-        working-directory: ./frontend
+      - name: Generate Android assets and sync project
+        working-directory: frontend
         run: |
           set -euo pipefail
           npx capacitor-assets generate --android
           npx cap sync android
 
-      - name: Build APK (Debug)
-        working-directory: ./frontend/android
+      - name: Build debug APK
+        working-directory: frontend/android
         run: |
           set -euo pipefail
           chmod +x gradlew
           export DARMAVOZ_VERSION_NAME="${RELEASE_VERSION}"
           export DARMAVOZ_VERSION_CODE="${RELEASE_VERSION_CODE}"
           ./gradlew assembleDebug
+          mv app/build/outputs/apk/debug/app-debug.apk "${{ github.workspace }}/darmavoz.apk"
 
-      - name: Resolve APK path
-        run: |
-          set -euo pipefail
-          ls -lah frontend/android/app/build/outputs/apk/debug
-          APK_LOCAL_PATH="$(find frontend/android/app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' | sort | head -n1)"
-          test -n "${APK_LOCAL_PATH}"
-          test -f "${APK_LOCAL_PATH}"
-          echo "APK_LOCAL_PATH=${APK_LOCAL_PATH}" >> "${GITHUB_ENV}"
-
-      - name: Prepare APK for upload
-        run: |
-          set -euo pipefail
-          cp "${APK_LOCAL_PATH}" darmavoz.apk
-
-      - name: Ensure APK target directory exists
-        uses: appleboy/ssh-action@v1.0.3
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            set -euo pipefail
-            mkdir -p /opt/darmavoz/static
-            chmod 755 /opt/darmavoz/static
-
-      - name: Upload APK to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "darmavoz.apk"
-          target: "/opt/darmavoz/static/"
-          overwrite: true
+          name: darmavoz-apk
+          path: darmavoz.apk
+          if-no-files-found: error

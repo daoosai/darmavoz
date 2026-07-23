@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [
-      react(), 
+      react(),
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
@@ -20,23 +20,31 @@ export default defineConfig(({ mode }) => {
         manifest: {
           name: 'Дармавоз',
           short_name: 'Дармавоз',
+          description: 'Заказ нерудных материалов и спецтехники',
           theme_color: '#ffffff',
           background_color: '#ffffff',
           display: 'standalone',
+          orientation: 'portrait',
+          lang: 'ru',
           icons: [
             {
               src: '/icon-192x192.png',
               sizes: '192x192',
-              type: 'image/png'
+              type: 'image/png',
             },
             {
               src: '/icon-512x512.png',
               sizes: '512x512',
-              type: 'image/png'
-            }
-          ]
-        }
-      })
+              type: 'image/png',
+            },
+            {
+              src: '/icon-180x180.png',
+              sizes: '180x180',
+              type: 'image/png',
+            },
+          ],
+        },
+      }),
     ],
     resolve: {
       alias: {
@@ -47,16 +55,18 @@ export default defineConfig(({ mode }) => {
       chunkSizeWarningLimit: 1200,
     },
     server: {
-      ...(proxyTarget ? {
-        proxy: {
-          '/api/v1': {
-            target: proxyTarget,
-            changeOrigin: true
+      ...(proxyTarget
+        ? {
+            proxy: {
+              '/api/v1': {
+                target: proxyTarget,
+                changeOrigin: true,
+              },
+            },
           }
-        }
-      } : {}),
+        : {}),
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
+      // Do not modify: file watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},

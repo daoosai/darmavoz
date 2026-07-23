@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.darmavoz.app',
+  appId: 'ru.darmavoz.app',
   appName: 'Дармавоз',
   webDir: 'dist',
 };

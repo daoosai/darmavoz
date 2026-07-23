@@ -59,7 +59,7 @@ async def send_code(
     client_ip = request.client.host if request.client is not None else None
 
     del client_ip
-    code = await send_auth_sms_code(phone_number=sms_phone, code=code, log_prefix="client_smsc")
+    code = await send_auth_sms_code(phone_number=sms_phone, code=code, log_prefix="client_sms_auth")
 
     client = await db.scalar(select(Client).where(Client.phone == normalized_phone))
     is_new_user = client is None

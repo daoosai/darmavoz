@@ -1,36 +1,70 @@
-﻿name: Deploy Production Environment
+name: Deploy Production Environment
 
 on:
-  push:
+  workflow_run:
+    workflows:
+      - Build Android APK
+    types:
+      - completed
     branches:
       - main
   workflow_dispatch:
 
 jobs:
   deploy-prod:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+
+      - name: Derive frontend version
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./package.json').version")"
+          echo "VITE_APP_VERSION=${VERSION}" >> "${GITHUB_ENV}"
 
       - name: Build frontend
         working-directory: frontend
         env:
-          VITE_APP_VERSION: 2.5.0
+          VITE_APP_VERSION: ${{ env.VITE_APP_VERSION }}
           VITE_2GIS_KEY: ${{ secrets.VITE_2GIS_KEY }}
         run: |
           set -euo pipefail
           npm ci
           npm run build
           tar -C dist -cf ../frontend-prod.tar .
+
+      - name: Download APK artifact from build workflow
+        if: github.event_name == 'workflow_run'
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          run_id: ${{ github.event.workflow_run.id }}
+          name: darmavoz-apk
+
+      - name: Download latest APK artifact for manual runs
+        if: github.event_name == 'workflow_dispatch'
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: build-apk.yml
+          branch: main
+          workflow_conclusion: success
+          name: darmavoz-apk
 
       - name: Setup SSH key
         run: |
@@ -45,6 +79,12 @@ jobs:
         run: |
           set -euo pipefail
           scp -i ~/.ssh/github_actions_key frontend-prod.tar "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/tmp/frontend-prod.tar"
+
+      - name: Upload APK bundle
+        run: |
+          set -euo pipefail
+          test -f darmavoz.apk
+          scp -i ~/.ssh/github_actions_key darmavoz.apk "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/tmp/darmavoz.apk"
 
       - name: Deploy backend and frontend to Production
         run: |
@@ -72,11 +112,13 @@ jobs:
             ln -sfn "${SOURCE_DIR}/.env" "${DEPLOY_DIR}/.env"
           fi
 
-          # Распаковка Frontend
-          mkdir -p /opt/daoos-kit/sites/darmavoz/frontend /opt/daoos-kit/sites/darmavoz/static
+          # Распаковка Frontend и публикация APK
+          mkdir -p /opt/daoos-kit/sites/darmavoz/frontend /opt/daoos-kit/sites/darmavoz/static "${DEPLOY_DIR}/static"
           rm -rf /opt/daoos-kit/sites/darmavoz/frontend/*
           tar -xf /tmp/frontend-prod.tar -C /opt/daoos-kit/sites/darmavoz/frontend
           rm -f /tmp/frontend-prod.tar
+          install -m 0644 /tmp/darmavoz.apk "${DEPLOY_DIR}/static/darmavoz.apk"
+          rm -f /tmp/darmavoz.apk
           cp -a "${DEPLOY_DIR}/static/." /opt/daoos-kit/sites/darmavoz/static/
 
           # Обновление Backend и Миграции

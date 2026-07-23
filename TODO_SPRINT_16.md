@@ -11,10 +11,10 @@
 
 - [x] Починить кодировку UTF-8 в `frontend/index.html`, `frontend/capacitor.config.ts`, `frontend/vite.config.ts`.
 - [x] Добавить Apple meta-теги в `frontend/index.html`: `apple-mobile-web-app-title`, `viewport-fit=cover`, `lang="ru"`.
-- [ ] Обновить PWA manifest через `vite-plugin-pwa`: добавить описание, ориентацию и корректные иконки.
-- [ ] Добавить пакет `@capacitor/assets` в `frontend/package.json` и создать npm-скрипт `assets:generate`.
-- [ ] Установить `@capacitor/ios` и выполнить `npx cap add ios` в `frontend`.
-- [ ] Обновить `frontend/capacitor.config.ts`: задать `appId` `ru.darmavoz.app` и корректный `appName`.
+- [x] Обновить PWA manifest через `vite-plugin-pwa`: добавить описание, ориентацию и корректные иконки.
+- [x] Добавить пакет `@capacitor/assets` в `frontend/package.json` и создать npm-скрипт `assets:generate`.
+- [x] Установить `@capacitor/ios` и выполнить `npx cap add ios` в `frontend`.
+- [x] Обновить `frontend/capacitor.config.ts`: задать `appId` `ru.darmavoz.app` и корректный `appName`.
 
 ## 3. CI/CD & VERSIONING
 

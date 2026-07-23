@@ -20,9 +20,12 @@ export default defineConfig(({ mode }) => {
         manifest: {
           name: 'Дармавоз',
           short_name: 'Дармавоз',
+          description: 'Заказ нерудных материалов и спецтехники',
           theme_color: '#ffffff',
           background_color: '#ffffff',
           display: 'standalone',
+          orientation: 'portrait',
+          lang: 'ru',
           icons: [
             {
               src: '/icon-192x192.png',
@@ -32,6 +35,11 @@ export default defineConfig(({ mode }) => {
             {
               src: '/icon-512x512.png',
               sizes: '512x512',
+              type: 'image/png',
+            },
+            {
+              src: '/icon-180x180.png',
+              sizes: '180x180',
               type: 'image/png',
             },
           ],

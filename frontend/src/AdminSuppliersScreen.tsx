@@ -116,31 +116,6 @@ export default function AdminSuppliersScreen() {
       );
       setEditingSupplier(null);
       toast.success("Данные поставщика обновлены");
-      return;
-      const response = await fetch(
-        `${baseURL}/admin/suppliers/${editingSupplier.id}`,
-        {
-          method: "PATCH",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(editForm),
-        },
-      );
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(
-          extractApiErrorMessage(data, "Не удалось обновить поставщика"),
-        );
-      }
-      setSuppliers((current) =>
-        current.map((supplier) =>
-          supplier.id === editingSupplier.id ? data : supplier,
-        ),
-      );
-      setEditingSupplier(null);
-      toast.success("Данные поставщика обновлены");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Ошибка сохранения");
     } finally {
@@ -316,7 +291,7 @@ export default function AdminSuppliersScreen() {
               />
             </label>
             <label className="flex items-center justify-between rounded-xl bg-slate-50 p-4 font-bold text-slate-700">
-              Аккаунт активен
+              Профиль активен
               <input
                 type="checkbox"
                 checked={editForm.is_active}

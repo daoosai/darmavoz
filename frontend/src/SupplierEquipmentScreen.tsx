@@ -25,6 +25,12 @@ interface EquipmentForm {
   district: string;
 }
 
+interface PendingPhotoItem {
+  id: string;
+  file: File;
+  previewUrl: string;
+}
+
 const EMPTY_FORM: EquipmentForm = {
   id: "",
   equipment_type: "",
@@ -62,23 +68,27 @@ export default function SupplierEquipmentScreen({ token }: Props) {
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<EquipmentForm>(EMPTY_FORM);
-  const [pendingPhotos, setPendingPhotos] = useState<File[]>([]);
-  const [pendingPhotoPreviews, setPendingPhotoPreviews] = useState<string[]>([]);
+  const [pendingPhotos, setPendingPhotos] = useState<PendingPhotoItem[]>([]);
+  const pendingPhotoPreviews = pendingPhotos.map((item) => item.previewUrl);
 
   const headers = { Authorization: `Bearer ${token}` };
 
+  const clearPendingPhotos = () => {
+    setPendingPhotos((current) => {
+      current.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+      return [];
+    });
+  };
+
   const closeForm = () => {
     setShowForm(false);
-    setPendingPhotos([]);
+    clearPendingPhotos();
     setForm(EMPTY_FORM);
   };
 
   useEffect(() => {
-    const nextPreviews = pendingPhotos.map((file) => URL.createObjectURL(file));
-    setPendingPhotoPreviews(nextPreviews);
-
     return () => {
-      nextPreviews.forEach((url) => URL.revokeObjectURL(url));
+      pendingPhotos.forEach((item) => URL.revokeObjectURL(item.previewUrl));
     };
   }, [pendingPhotos]);
 
@@ -144,7 +154,7 @@ export default function SupplierEquipmentScreen({ token }: Props) {
     const shiftTariff = listing
       ? getEquipmentTariffs(listing).find((tariff) => tariff.type === "shift")
       : null;
-    setPendingPhotos([]);
+    clearPendingPhotos();
     setForm(
       listing
         ? {
@@ -169,13 +179,22 @@ export default function SupplierEquipmentScreen({ token }: Props) {
     if (!fileList?.length) {
       return;
     }
-    setPendingPhotos((current) => [...current, ...Array.from(fileList)]);
+    const nextItems = Array.from(fileList).map((file, index) => ({
+      id: `${file.name}-${file.size}-${file.lastModified}-${Date.now()}-${index}`,
+      file,
+      previewUrl: URL.createObjectURL(file),
+    }));
+    setPendingPhotos((current) => [...current, ...nextItems]);
   };
 
   const removePendingPhoto = (indexToRemove: number) => {
-    setPendingPhotos((current) =>
-      current.filter((_, index) => index !== indexToRemove),
-    );
+    setPendingPhotos((current) => {
+      const target = current[indexToRemove];
+      if (target) {
+        URL.revokeObjectURL(target.previewUrl);
+      }
+      return current.filter((_, index) => index !== indexToRemove);
+    });
   };
 
   const uploadPhotoFile = async (listingId: string, file: File, isPrimary: boolean) => {
@@ -325,7 +344,7 @@ export default function SupplierEquipmentScreen({ token }: Props) {
       if (pendingPhotos.length > 0) {
         await uploadPhotos(
           savedListing.id,
-          pendingPhotos,
+          pendingPhotos.map((item) => item.file),
           Array.isArray(savedListing.media_files) ? savedListing.media_files.length : 0,
           { showSuccess: false },
         );
@@ -362,7 +381,7 @@ export default function SupplierEquipmentScreen({ token }: Props) {
       if (pendingPhotos.length > 0) {
         await uploadPhotos(
           data.id,
-          pendingPhotos,
+          pendingPhotos.map((item) => item.file),
           Array.isArray(data.media_files) ? data.media_files.length : 0,
           { showSuccess: false },
         );

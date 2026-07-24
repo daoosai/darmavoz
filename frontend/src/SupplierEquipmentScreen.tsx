@@ -61,9 +61,28 @@ const STATUS_META: Record<string, { label: string; className: string }> = {
   },
 };
 
+type ListingsTab = "active" | "moderation" | "archived";
+
+const LISTING_TAB_LABELS: Record<ListingsTab, string> = {
+  active: "Активные",
+  moderation: "На модерации",
+  archived: "Отклоненные / скрытые",
+};
+
+const matchesListingTab = (listing: EquipmentListing, tab: ListingsTab) => {
+  if (tab === "active") {
+    return listing.moderation_status === "approved" && listing.is_active;
+  }
+  if (tab === "moderation") {
+    return listing.moderation_status === "pending_moderation";
+  }
+  return listing.moderation_status === "rejected" || !listing.is_active;
+};
+
 export default function SupplierEquipmentScreen({ token }: Props) {
   const [types, setTypes] = useState<EquipmentTypeItem[]>([]);
   const [listings, setListings] = useState<EquipmentListing[]>([]);
+  const [tab, setTab] = useState<ListingsTab>("active");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -430,6 +449,27 @@ export default function SupplierEquipmentScreen({ token }: Props) {
     );
   }
 
+  const tabCounts: Record<ListingsTab, number> = {
+    active: 0,
+    moderation: 0,
+    archived: 0,
+  };
+
+  listings.forEach((listing) => {
+    if (matchesListingTab(listing, "active")) {
+      tabCounts.active += 1;
+    }
+    if (matchesListingTab(listing, "moderation")) {
+      tabCounts.moderation += 1;
+    }
+    if (matchesListingTab(listing, "archived")) {
+      tabCounts.archived += 1;
+    }
+  });
+
+  const filteredListings = listings.filter((listing) => matchesListingTab(listing, tab));
+  const hasVisibleListings = filteredListings.length > 0;
+
   return (
     <main className="space-y-5 p-4">
       <div className="rounded-3xl bg-gradient-to-br from-sky-500 to-cyan-400 p-5 text-white shadow-lg">
@@ -454,13 +494,29 @@ export default function SupplierEquipmentScreen({ token }: Props) {
         </div>
       </div>
 
-      {listings.length === 0 ? (
+      <div className="flex gap-2 overflow-x-auto rounded-2xl bg-white p-2 shadow-sm">
+        {(["active", "moderation", "archived"] as ListingsTab[]).map((value) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setTab(value)}
+            className={`shrink-0 rounded-xl px-5 py-3 text-sm font-bold transition ${
+              tab === value ? "bg-sky-500 text-white" : "text-slate-500"
+            }`}
+          >
+            {LISTING_TAB_LABELS[value]}
+            {tabCounts[value] ? ` · ${tabCounts[value]}` : ""}
+          </button>
+        ))}
+      </div>
+
+      {listings.length === 0 || !hasVisibleListings ? (
         <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-10 text-center">
           <ImageIcon className="mx-auto h-12 w-12 text-slate-300" />
           <p className="mt-4 font-bold text-slate-700">Объявлений пока нет</p>
         </div>
       ) : (
-        listings.map((listing) => {
+        filteredListings.map((listing) => {
           const status = STATUS_META[listing.moderation_status || "pending_moderation"];
           return (
             <article key={listing.id} className="overflow-hidden rounded-3xl bg-white shadow-sm">

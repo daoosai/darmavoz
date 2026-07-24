@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useState } from "react";
-import { Edit2, ImageIcon, Loader2, Plus, UploadCloud, X } from "lucide-react";
+import { Edit2, ImageIcon, Loader2, Plus, Trash2, UploadCloud, X } from "lucide-react";
 import toast from "react-hot-toast";
 
 import {
@@ -63,6 +63,7 @@ export default function SupplierEquipmentScreen({ token }: Props) {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<EquipmentForm>(EMPTY_FORM);
   const [pendingPhotos, setPendingPhotos] = useState<File[]>([]);
+  const [pendingPhotoPreviews, setPendingPhotoPreviews] = useState<string[]>([]);
 
   const headers = { Authorization: `Bearer ${token}` };
 
@@ -71,6 +72,15 @@ export default function SupplierEquipmentScreen({ token }: Props) {
     setPendingPhotos([]);
     setForm(EMPTY_FORM);
   };
+
+  useEffect(() => {
+    const nextPreviews = pendingPhotos.map((file) => URL.createObjectURL(file));
+    setPendingPhotoPreviews(nextPreviews);
+
+    return () => {
+      nextPreviews.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [pendingPhotos]);
 
   const loadTypes = async () => {
     const urls = [`${baseURL}/equipment/types`, `${baseURL}/catalog/equipment-types`];
@@ -91,6 +101,7 @@ export default function SupplierEquipmentScreen({ token }: Props) {
 
   const loadSupplierListings = async () => {
     const urls = [`${baseURL}/supplier/equipment`, `${baseURL}/supplier/equipment/`];
+    const notFoundPayloads: unknown[] = [];
 
     for (const url of urls) {
       const response = await fetch(url, { headers });
@@ -152,6 +163,19 @@ export default function SupplierEquipmentScreen({ token }: Props) {
           },
     );
     setShowForm(true);
+  };
+
+  const appendPendingPhotos = (fileList: FileList | null) => {
+    if (!fileList?.length) {
+      return;
+    }
+    setPendingPhotos((current) => [...current, ...Array.from(fileList)]);
+  };
+
+  const removePendingPhoto = (indexToRemove: number) => {
+    setPendingPhotos((current) =>
+      current.filter((_, index) => index !== indexToRemove),
+    );
   };
 
   const uploadPhotoFile = async (listingId: string, file: File, isPrimary: boolean) => {
@@ -225,6 +249,60 @@ export default function SupplierEquipmentScreen({ token }: Props) {
     }
   };
 
+  const getSupplierRouteMissingMessage = (mode: "list" | "create" | "update") => {
+    if (mode === "list") {
+      return "На сервере не подключён раздел объявлений поставщика. Требуется обновление backend.";
+    }
+    if (mode === "update") {
+      return "На сервере не подключён маршрут редактирования объявлений поставщика. Требуется обновление backend.";
+    }
+    return "На сервере не подключён маршрут создания объявлений поставщика. Требуется обновление backend.";
+  };
+
+  const requestSupplierEquipmentSave = async (
+    tariffs: Array<{ type: string; price: number; hours: number | null }>,
+  ) => {
+    const urls = form.id
+      ? [
+          `${baseURL}/supplier/equipment/${form.id}`,
+          `${baseURL}/supplier/equipment/${form.id}/`,
+        ]
+      : [`${baseURL}/supplier/equipment`, `${baseURL}/supplier/equipment/`];
+    let lastPayload: unknown = {};
+
+    for (const url of urls) {
+      const response = await fetch(url, {
+        method: form.id ? "PATCH" : "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          equipment_type: form.equipment_type,
+          title: form.title,
+          description: form.description,
+          tariffs,
+          city: form.city || null,
+          district: form.district || null,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) {
+        return data;
+      }
+      if (response.status !== 404) {
+        throw new Error(
+          extractApiErrorMessage(data, "Не удалось сохранить объявление"),
+        );
+      }
+      lastPayload = data;
+    }
+
+    throw new Error(
+      extractApiErrorMessage(
+        lastPayload,
+        getSupplierRouteMissingMessage(form.id ? "update" : "create"),
+      ),
+    );
+  };
+
   const save = async (event: FormEvent) => {
     event.preventDefault();
     setSaving(true);
@@ -243,6 +321,23 @@ export default function SupplierEquipmentScreen({ token }: Props) {
         : []),
     ];
     try {
+      const savedListing = await requestSupplierEquipmentSave(tariffs);
+      if (pendingPhotos.length > 0) {
+        await uploadPhotos(
+          savedListing.id,
+          pendingPhotos,
+          Array.isArray(savedListing.media_files) ? savedListing.media_files.length : 0,
+          { showSuccess: false },
+        );
+      }
+      closeForm();
+      toast.success(
+        pendingPhotos.length > 0
+          ? "Объявление и фото отправлены на модерацию"
+          : "Объявление отправлено на модерацию",
+      );
+      await load();
+      return;
       const response = await fetch(
         `${baseURL}/supplier/equipment${form.id ? `/${form.id}` : ""}`,
         {
@@ -456,20 +551,52 @@ export default function SupplierEquipmentScreen({ token }: Props) {
             </label>
             <label className="block text-sm font-bold">
               Фотографии
-              <input
-                type="file"
-                multiple
-                accept="image/*"
-                onChange={(event) =>
-                  setPendingPhotos(Array.from(event.target.files || []))
-                }
-                className="mt-1 block w-full text-sm font-normal text-slate-500 file:mr-3 file:rounded-xl file:border-0 file:bg-sky-50 file:px-4 file:py-2 file:font-bold file:text-sky-600"
-              />
-              <p className="mt-2 text-xs font-normal text-slate-500">
-                {pendingPhotos.length > 0
-                  ? `Выбрано фотографий: ${pendingPhotos.length}`
-                  : "Можно добавить фото сразу при создании или редактировании"}
-              </p>
+              <div className="mt-2 space-y-3">
+                <label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-sky-200 bg-sky-50/70 px-4 py-6 text-center transition-colors hover:border-sky-300 hover:bg-sky-50">
+                  <UploadCloud className="h-8 w-8 text-sky-500" />
+                  <span className="mt-2 text-sm font-bold text-sky-700">
+                    Добавить фотографии
+                  </span>
+                  <span className="mt-1 text-xs font-normal text-slate-500">
+                    JPG, PNG, WebP. Можно выбрать несколько файлов.
+                  </span>
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={(event) => {
+                      appendPendingPhotos(event.target.files);
+                      event.target.value = "";
+                    }}
+                    className="hidden"
+                  />
+                </label>
+                {pendingPhotoPreviews.length > 0 ? (
+                  <div className="grid grid-cols-3 gap-3">
+                    {pendingPhotoPreviews.map((previewUrl, index) => (
+                      <div key={`${previewUrl}-${index}`} className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
+                        <img
+                          src={previewUrl}
+                          alt={`Фото ${index + 1}`}
+                          className="h-24 w-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removePendingPhoto(index)}
+                          className="absolute right-2 top-2 rounded-full bg-white/95 p-1.5 text-rose-600 shadow-sm"
+                          aria-label={`Удалить фото ${index + 1}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs font-normal text-slate-500">
+                    Можно добавить фото сразу при создании или редактировании объявления.
+                  </p>
+                )}
+              </div>
             </label>
             <label className="block text-sm font-bold">
               Название

@@ -63,11 +63,60 @@ export default function AdminSuppliersScreen() {
     });
   };
 
+  const updateSupplierRequest = async () => {
+    if (!editingSupplier) {
+      throw new Error("Поставщик не выбран");
+    }
+
+    const urls = [
+      `${baseURL}/admin/suppliers/${editingSupplier.id}`,
+      `${baseURL}/admin/suppliers/${editingSupplier.id}/`,
+    ];
+    let lastPayload: unknown = {};
+
+    for (const url of urls) {
+      const response = await fetch(url, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(editForm),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) {
+        return data;
+      }
+      if (response.status !== 404) {
+        throw new Error(
+          extractApiErrorMessage(data, "Не удалось обновить поставщика"),
+        );
+      }
+      lastPayload = data;
+    }
+
+    throw new Error(
+      extractApiErrorMessage(
+        lastPayload,
+        "На сервере не подключён маршрут редактирования поставщиков. Требуется обновление backend.",
+      ),
+    );
+  };
+
   const saveSupplier = async (event: FormEvent) => {
     event.preventDefault();
     if (!editingSupplier) return;
     setIsSaving(true);
     try {
+      const updatedSupplier = await updateSupplierRequest();
+      setSuppliers((current) =>
+        current.map((supplier) =>
+          supplier.id === editingSupplier.id ? updatedSupplier : supplier,
+        ),
+      );
+      setEditingSupplier(null);
+      toast.success("Данные поставщика обновлены");
+      return;
       const response = await fetch(
         `${baseURL}/admin/suppliers/${editingSupplier.id}`,
         {

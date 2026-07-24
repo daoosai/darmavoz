@@ -111,6 +111,8 @@ async def unhandled_exception_handler(
         content={"detail": "Внутренняя ошибка сервера. Повторите попытку позже"},
     )
 
+register_exception_handlers(app)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
@@ -188,3 +190,4 @@ else:
             "version": settings.WEB_VERSION,
             "message": "Server is running",
         }
+from starlette.exceptions import HTTPException as StarletteHTTPException

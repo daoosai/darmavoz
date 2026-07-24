@@ -51,6 +51,7 @@ from app.services.email_service import send_email
 from app.utils.phones import normalize_phone
 
 router = APIRouter()
+supplier_router = APIRouter()
 
 
 def _format_duration_value(value: float) -> str:
@@ -600,7 +601,12 @@ async def delete_equipment_listing(
     return {"ok": True, "result": "hidden"}
 
 
-@router.get("/supplier/equipment", response_model=list[EquipmentListingOut])
+@supplier_router.get("/equipment", response_model=list[EquipmentListingOut])
+@supplier_router.get(
+    "/equipment/",
+    response_model=list[EquipmentListingOut],
+    include_in_schema=False,
+)
 async def list_supplier_equipment(
     db: AsyncSession = Depends(get_db),
     current_supplier: User = Depends(get_current_supplier_user),
@@ -620,10 +626,16 @@ async def list_supplier_equipment(
     return [await _listing_payload(db, item) for item in result.scalars().all()]
 
 
-@router.post(
-    "/supplier/equipment",
+@supplier_router.post(
+    "/equipment",
     response_model=EquipmentListingOut,
     status_code=status.HTTP_201_CREATED,
+)
+@supplier_router.post(
+    "/equipment/",
+    response_model=EquipmentListingOut,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
 )
 async def create_supplier_equipment(
     payload: EquipmentListingCreate,
@@ -654,7 +666,12 @@ async def create_supplier_equipment(
     return await _listing_payload(db, await _get_listing(db, listing.id))
 
 
-@router.patch("/supplier/equipment/{listing_id}", response_model=EquipmentListingOut)
+@supplier_router.patch("/equipment/{listing_id}", response_model=EquipmentListingOut)
+@supplier_router.patch(
+    "/equipment/{listing_id}/",
+    response_model=EquipmentListingOut,
+    include_in_schema=False,
+)
 async def update_supplier_equipment(
     listing_id: UUID,
     payload: EquipmentListingUpdate,

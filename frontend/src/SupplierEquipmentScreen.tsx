@@ -62,22 +62,59 @@ export default function SupplierEquipmentScreen({ token }: Props) {
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<EquipmentForm>(EMPTY_FORM);
+  const [pendingPhotos, setPendingPhotos] = useState<File[]>([]);
 
   const headers = { Authorization: `Bearer ${token}` };
+
+  const closeForm = () => {
+    setShowForm(false);
+    setPendingPhotos([]);
+    setForm(EMPTY_FORM);
+  };
+
+  const loadTypes = async () => {
+    const urls = [`${baseURL}/equipment/types`, `${baseURL}/catalog/equipment-types`];
+
+    for (const url of urls) {
+      const response = await fetch(url);
+      if (response.ok) {
+        const loadedTypes: EquipmentTypeItem[] = await response.json();
+        return loadedTypes.filter((item) => item.is_active);
+      }
+      if (response.status >= 500) {
+        throw new Error("Не удалось загрузить типы техники");
+      }
+    }
+
+    return [];
+  };
+
+  const loadSupplierListings = async () => {
+    const urls = [`${baseURL}/supplier/equipment`, `${baseURL}/supplier/equipment/`];
+
+    for (const url of urls) {
+      const response = await fetch(url, { headers });
+      if (response.ok) {
+        const loadedListings: EquipmentListing[] = await response.json();
+        return Array.isArray(loadedListings) ? loadedListings : [];
+      }
+      if (response.status >= 500) {
+        throw new Error("Не удалось загрузить объявления");
+      }
+    }
+
+    return [];
+  };
 
   const load = async () => {
     setLoading(true);
     try {
-      const [typesResponse, listingsResponse] = await Promise.all([
-        fetch(`${baseURL}/equipment/types`),
-        fetch(`${baseURL}/supplier/equipment`, { headers }),
+      const [loadedTypes, loadedListings] = await Promise.all([
+        loadTypes(),
+        loadSupplierListings(),
       ]);
-      if (!typesResponse.ok || !listingsResponse.ok) {
-        throw new Error("Не удалось загрузить объявления");
-      }
-      const loadedTypes: EquipmentTypeItem[] = await typesResponse.json();
-      setTypes(loadedTypes.filter((item) => item.is_active));
-      setListings(await listingsResponse.json());
+      setTypes(loadedTypes);
+      setListings(loadedListings);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Ошибка загрузки");
     } finally {
@@ -96,6 +133,7 @@ export default function SupplierEquipmentScreen({ token }: Props) {
     const shiftTariff = listing
       ? getEquipmentTariffs(listing).find((tariff) => tariff.type === "shift")
       : null;
+    setPendingPhotos([]);
     setForm(
       listing
         ? {
@@ -114,6 +152,77 @@ export default function SupplierEquipmentScreen({ token }: Props) {
           },
     );
     setShowForm(true);
+  };
+
+  const uploadPhotoFile = async (listingId: string, file: File, isPrimary: boolean) => {
+    const presignResponse = await fetch(`${baseURL}/media/presign-upload`, {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        entity_type: "equipment_listing",
+        entity_id: listingId,
+        file_name: file.name,
+        content_type: file.type,
+        file_size: file.size,
+        is_primary: isPrimary,
+      }),
+    });
+    const presign = await presignResponse.json().catch(() => ({}));
+    if (!presignResponse.ok) {
+      throw new Error(
+        extractApiErrorMessage(presign, "Не удалось подготовить загрузку"),
+      );
+    }
+
+    const uploadResponse = await fetch(presign.upload_url, {
+      method: "PUT",
+      headers: { "Content-Type": file.type },
+      body: file,
+    });
+    if (!uploadResponse.ok) {
+      throw new Error("Не удалось загрузить фотографию");
+    }
+
+    const confirmResponse = await fetch(`${baseURL}/media/confirm`, {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        entity_type: "equipment_listing",
+        entity_id: listingId,
+        object_key: presign.object_key,
+        file_name: file.name,
+        content_type: file.type,
+        file_size: file.size,
+        is_primary: isPrimary,
+      }),
+    });
+    const confirmPayload = await confirmResponse.json().catch(() => ({}));
+    if (!confirmResponse.ok) {
+      throw new Error(
+        extractApiErrorMessage(confirmPayload, "Не удалось подтвердить фотографию"),
+      );
+    }
+  };
+
+  const uploadPhotos = async (
+    listingId: string,
+    files: File[],
+    existingCount = 0,
+    options?: { showSuccess?: boolean },
+  ) => {
+    let currentCount = existingCount;
+    for (const file of files) {
+      await uploadPhotoFile(listingId, file, currentCount === 0);
+      currentCount += 1;
+    }
+
+    if (files.length > 0 && options?.showSuccess !== false) {
+      toast.success(
+        files.length === 1
+          ? "Фотография добавлена"
+          : `Добавлено фотографий: ${files.length}`,
+      );
+    }
   };
 
   const save = async (event: FormEvent) => {
@@ -155,8 +264,20 @@ export default function SupplierEquipmentScreen({ token }: Props) {
           extractApiErrorMessage(data, "Не удалось сохранить объявление"),
         );
       }
-      setShowForm(false);
-      toast.success("Объявление отправлено на модерацию");
+      if (pendingPhotos.length > 0) {
+        await uploadPhotos(
+          data.id,
+          pendingPhotos,
+          Array.isArray(data.media_files) ? data.media_files.length : 0,
+          { showSuccess: false },
+        );
+      }
+      closeForm();
+      toast.success(
+        pendingPhotos.length > 0
+          ? "Объявление и фото отправлены на модерацию"
+          : "Объявление отправлено на модерацию",
+      );
       await load();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Ошибка сохранения");
@@ -167,46 +288,7 @@ export default function SupplierEquipmentScreen({ token }: Props) {
 
   const uploadPhoto = async (listing: EquipmentListing, file: File) => {
     try {
-      const isPrimary = !listing.media_files?.length;
-      const presignResponse = await fetch(`${baseURL}/media/presign-upload`, {
-        method: "POST",
-        headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          entity_type: "equipment_listing",
-          entity_id: listing.id,
-          file_name: file.name,
-          content_type: file.type,
-          file_size: file.size,
-          is_primary: isPrimary,
-        }),
-      });
-      const presign = await presignResponse.json();
-      if (!presignResponse.ok) {
-        throw new Error(
-          extractApiErrorMessage(presign, "Не удалось подготовить загрузку"),
-        );
-      }
-      const uploadResponse = await fetch(presign.upload_url, {
-        method: "PUT",
-        headers: { "Content-Type": file.type },
-        body: file,
-      });
-      if (!uploadResponse.ok) throw new Error("Не удалось загрузить фотографию");
-      const confirmResponse = await fetch(`${baseURL}/media/confirm`, {
-        method: "POST",
-        headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          entity_type: "equipment_listing",
-          entity_id: listing.id,
-          object_key: presign.object_key,
-          file_name: file.name,
-          content_type: file.type,
-          file_size: file.size,
-          is_primary: isPrimary,
-        }),
-      });
-      if (!confirmResponse.ok) throw new Error("Не удалось подтвердить фотографию");
-      toast.success("Фотография добавлена");
+      await uploadPhotos(listing.id, [file], listing.media_files?.length || 0);
       await load();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Ошибка загрузки");
@@ -354,7 +436,7 @@ export default function SupplierEquipmentScreen({ token }: Props) {
               <h2 className="text-xl font-black">
                 {form.id ? "Редактировать объявление" : "Новое объявление"}
               </h2>
-              <button type="button" onClick={() => setShowForm(false)}>
+              <button type="button" onClick={closeForm}>
                 <X />
               </button>
             </div>
@@ -371,6 +453,23 @@ export default function SupplierEquipmentScreen({ token }: Props) {
               <datalist id="supplier-equipment-types">
                 {types.map((item) => <option key={item.id} value={item.name} />)}
               </datalist>
+            </label>
+            <label className="block text-sm font-bold">
+              Фотографии
+              <input
+                type="file"
+                multiple
+                accept="image/*"
+                onChange={(event) =>
+                  setPendingPhotos(Array.from(event.target.files || []))
+                }
+                className="mt-1 block w-full text-sm font-normal text-slate-500 file:mr-3 file:rounded-xl file:border-0 file:bg-sky-50 file:px-4 file:py-2 file:font-bold file:text-sky-600"
+              />
+              <p className="mt-2 text-xs font-normal text-slate-500">
+                {pendingPhotos.length > 0
+                  ? `Выбрано фотографий: ${pendingPhotos.length}`
+                  : "Можно добавить фото сразу при создании или редактировании"}
+              </p>
             </label>
             <label className="block text-sm font-bold">
               Название

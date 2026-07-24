@@ -669,9 +669,9 @@ function MainContent({
                   }}
                   className={`relative flex min-w-0 flex-1 cursor-pointer flex-col items-center gap-1 rounded-xl px-1 py-1.5 transition-all ${
                     isActive && isPriority
-                      ? "-translate-y-1 bg-[#2DB0E6] text-white shadow-[0_6px_16px_rgba(45,176,230,0.30)]"
+                      ? "bg-[#2DB0E6] text-white shadow-[0_6px_16px_rgba(45,176,230,0.30)]"
                       : isPriority
-                        ? "bg-sky-50 text-sky-600 opacity-100"
+                        ? "text-slate-500 opacity-45 hover:opacity-70"
                         : isActive
                           ? "text-[#2DB0E6] opacity-100"
                           : "text-slate-500 opacity-45 hover:opacity-70"
@@ -682,7 +682,7 @@ function MainContent({
                       isActive && isPriority
                         ? "text-white"
                         : isPriority
-                          ? "text-sky-600"
+                          ? "text-slate-500"
                           : isActive
                             ? "text-[#2DB0E6]"
                             : "text-slate-500"
@@ -699,7 +699,7 @@ function MainContent({
                       isActive && isPriority
                         ? "font-bold text-white"
                         : isPriority
-                          ? "font-bold text-sky-600"
+                          ? "font-medium text-slate-500"
                           : isActive
                             ? "font-bold text-[#2DB0E6]"
                             : "font-medium text-slate-500"

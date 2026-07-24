@@ -267,6 +267,11 @@ async def list_admin_suppliers(
 
 
 @router.patch("/suppliers/{supplier_id}", response_model=AdminSupplierOut)
+@router.patch(
+    "/suppliers/{supplier_id}/",
+    response_model=AdminSupplierOut,
+    include_in_schema=False,
+)
 async def update_admin_supplier(
     supplier_id: UUID,
     payload: AdminSupplierUpdate,

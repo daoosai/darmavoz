@@ -131,6 +131,7 @@ app.include_router(admin_quarries.router, prefix="/api/v1/admin", tags=["admin-q
 app.include_router(catalog.router, prefix="/api/v1/catalog", tags=["catalog"])
 app.include_router(pickup_points.router, prefix="/api/v1/catalog/pickup-points", tags=["pickup-points"])
 app.include_router(equipment.router, prefix="/api/v1", tags=["special-equipment"])
+app.include_router(equipment.supplier_router, prefix="/api/v1/supplier", tags=["supplier-equipment"])
 app.include_router(support.router, prefix="/api/v1", tags=["support"])
 app.include_router(support.message_router, prefix="/api/v1")
 app.include_router(supplier_points.router, prefix="/api/v1/supplier", tags=["supplier-points"])

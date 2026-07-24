@@ -28,19 +28,16 @@ export default defineConfig(({ mode }) => {
           lang: 'ru',
           icons: [
             {
-              src: '/icon-192x192.png',
+              src: '/icons/icon-192.webp',
               sizes: '192x192',
-              type: 'image/png',
+              type: 'image/webp',
+              purpose: 'any maskable',
             },
             {
-              src: '/icon-512x512.png',
+              src: '/icons/icon-512.webp',
               sizes: '512x512',
-              type: 'image/png',
-            },
-            {
-              src: '/icon-180x180.png',
-              sizes: '180x180',
-              type: 'image/png',
+              type: 'image/webp',
+              purpose: 'any maskable',
             },
           ],
         },

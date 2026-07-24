@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 import { useAuthStore } from "./store";
 import { baseURL, extractApiErrorMessage, resolveMediaUrl } from "./utils";
 import { EquipmentListing, EquipmentTypeItem, formatEquipmentPrice, getEquipmentTariffs } from "./EquipmentCatalogScreen";
+import ReasonModal from "./components/admin/ReasonModal";
 
 interface Application {
   id: string;
@@ -80,9 +81,11 @@ const getApplicationStatusClass = (status: Application["status"]) =>
 export default function AdminEquipmentScreen({
   applicationsOnly = false,
   onApplicationsChanged,
+  onPendingModerationChanged,
 }: {
   applicationsOnly?: boolean;
   onApplicationsChanged?: (applications: Application[]) => void;
+  onPendingModerationChanged?: (count: number) => void;
 }) {
   const { token, role } = useAuthStore();
   const [tab, setTab] = useState<Tab>(applicationsOnly ? "applications" : "listings");
@@ -94,6 +97,9 @@ export default function AdminEquipmentScreen({
   const [showListingForm, setShowListingForm] = useState(false);
   const [listingForm, setListingForm] = useState<ListingForm>({ ...emptyListing });
   const [newTypeName, setNewTypeName] = useState("");
+  const [rejectingListing, setRejectingListing] = useState<EquipmentListing | null>(null);
+  const [listingRejectReason, setListingRejectReason] = useState("");
+  const [isRejectingListing, setIsRejectingListing] = useState(false);
   const [rejectingApplication, setRejectingApplication] = useState<Application | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [rejecting, setRejecting] = useState(false);
@@ -133,7 +139,13 @@ export default function AdminEquipmentScreen({
       setApplications(loadedApplications);
       onApplicationsChanged?.(loadedApplications);
       if (responses[2]) {
-        setListings(await responses[2].json());
+        const loadedListings: EquipmentListing[] = await responses[2].json();
+        setListings(loadedListings);
+        onPendingModerationChanged?.(
+          loadedListings.filter(
+            (item) => item.moderation_status === "pending_moderation",
+          ).length,
+        );
       }
     } catch {
       toast.error("Не удалось загрузить раздел спецтехники");
@@ -229,19 +241,15 @@ export default function AdminEquipmentScreen({
   const moderateListing = async (
     item: EquipmentListing,
     decision: "approve" | "reject",
+    reason?: string,
   ) => {
-    const reason =
-      decision === "reject"
-        ? window.prompt("Укажите причину отклонения объявления")
-        : null;
-    if (decision === "reject" && !reason?.trim()) return;
     const response = await fetch(
       `${baseURL}/admin/equipment/${item.id}/${decision}`,
       {
         method: "POST",
         headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify(
-          decision === "reject" ? { reason: reason!.trim() } : {},
+          decision === "reject" ? { reason: reason?.trim() || "" } : {},
         ),
       },
     );
@@ -250,10 +258,34 @@ export default function AdminEquipmentScreen({
       toast.error(
         extractApiErrorMessage(data, "Не удалось изменить статус объявления"),
       );
-      return;
+      return false;
     }
     toast.success(decision === "approve" ? "Объявление одобрено" : "Объявление отклонено");
     await load();
+    return true;
+  };
+
+  const openRejectListingModal = (item: EquipmentListing) => {
+    setRejectingListing(item);
+    setListingRejectReason("");
+  };
+
+  const submitListingRejection = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!rejectingListing || !listingRejectReason.trim()) return;
+    setIsRejectingListing(true);
+    try {
+      const success = await moderateListing(
+        rejectingListing,
+        "reject",
+        listingRejectReason,
+      );
+      if (!success) return;
+      setRejectingListing(null);
+      setListingRejectReason("");
+    } finally {
+      setIsRejectingListing(false);
+    }
   };
 
   const updateTariff = (index: number, patch: Partial<ListingTariffForm>) => {
@@ -577,7 +609,7 @@ export default function AdminEquipmentScreen({
                     <div className="flex gap-2">
                       <button
                         type="button"
-                        onClick={() => void moderateListing(item, "reject")}
+                        onClick={() => openRejectListingModal(item)}
                         className="flex-1 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 font-bold text-rose-700"
                       >
                         Отклонить
@@ -1004,59 +1036,41 @@ export default function AdminEquipmentScreen({
         </div>
       )}
 
-      {rejectingApplication && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/50 p-4">
-          <form
-            onSubmit={rejectApplication}
-            className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl"
-          >
-            <div className="mb-5 flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold text-rose-600">ОТКАЗ ОТ ЗАЯВКИ</p>
-                <h3 className="text-xl font-black">
-                  {rejectingApplication.listing_title_snapshot}
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setRejectingApplication(null)}
-                className="rounded-full bg-slate-100 p-2"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
+      <ReasonModal
+        isOpen={Boolean(rejectingListing)}
+        eyebrow="Модерация объявления"
+        title="Причина отклонения"
+        subject={rejectingListing?.title}
+        label="Укажите, что нужно исправить"
+        value={listingRejectReason}
+        placeholder="Например: добавьте фото техники, уточните описание или тарифы."
+        submitLabel="Отклонить"
+        submittingLabel="Отклоняем..."
+        isSubmitting={isRejectingListing}
+        submitDisabled={!listingRejectReason.trim()}
+        onChange={setListingRejectReason}
+        onClose={() => {
+          setRejectingListing(null);
+          setListingRejectReason("");
+        }}
+        onSubmit={submitListingRejection}
+      />
 
-            <label className="block text-sm font-bold">
-              Причина отказа
-              <textarea
-                autoFocus
-                required
-                rows={5}
-                maxLength={5000}
-                value={rejectReason}
-                onChange={(event) => setRejectReason(event.target.value)}
-                className="mt-2 w-full resize-none rounded-xl bg-slate-100 p-3 font-normal outline-none"
-              />
-            </label>
-
-            <div className="mt-5 flex gap-2">
-              <button
-                type="button"
-                onClick={() => setRejectingApplication(null)}
-                className="flex-1 rounded-xl bg-slate-100 p-3 font-bold text-slate-600"
-              >
-                Отмена
-              </button>
-              <button
-                disabled={rejecting || !rejectReason.trim()}
-                className="flex-1 rounded-xl bg-rose-600 p-3 font-bold text-white disabled:opacity-50"
-              >
-                {rejecting ? "Сохраняем..." : "Отклонить"}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+      <ReasonModal
+        isOpen={Boolean(rejectingApplication)}
+        eyebrow="Отказ от заявки"
+        title="Причина отказа"
+        subject={rejectingApplication?.listing_title_snapshot}
+        label="Причина отказа"
+        value={rejectReason}
+        submitLabel="Отклонить"
+        submittingLabel="Сохраняем..."
+        isSubmitting={rejecting}
+        submitDisabled={!rejectReason.trim()}
+        onChange={setRejectReason}
+        onClose={() => setRejectingApplication(null)}
+        onSubmit={rejectApplication}
+      />
     </div>
   );
 }

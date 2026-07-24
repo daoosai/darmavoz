@@ -100,6 +100,7 @@ const statusClasses = {
 const requesterRoleLabels: Record<string, string> = {
   client: "Клиент",
   driver: "Водитель",
+  supplier: "Поставщик",
   admin: "Администратор",
   logist: "Логист",
   operator: "Оператор",
@@ -107,11 +108,24 @@ const requesterRoleLabels: Record<string, string> = {
 const requesterRoleClasses: Record<string, string> = {
   client: "bg-slate-100 text-slate-600",
   driver: "bg-orange-100 text-orange-700",
+  supplier: "bg-slate-200 text-slate-700",
   admin: "bg-violet-100 text-violet-700",
   logist: "bg-sky-100 text-sky-700",
   operator: "bg-emerald-100 text-emerald-700",
 };
 const operatorAuthorRoles = new Set(["admin", "logist", "operator"]);
+const defaultSupportCategories = [
+  { value: "general", label: "Общий вопрос" },
+  { value: "order", label: "Заказ" },
+  { value: "pickup_point", label: "Точка забора" },
+  { value: "equipment", label: "Спецтехника" },
+  { value: "participant", label: "Участник системы" },
+];
+const supplierSupportCategories = [
+  { value: "pickup_point_removal", label: "Удаление точки забора" },
+  { value: "moderation_question", label: "Вопрос по модерации" },
+  { value: "general", label: "Общие вопросы" },
+];
 
 interface MessageGroup {
   dayKey: string;
@@ -225,6 +239,8 @@ export default function SupportScreen({
 
   const endpoint = operatorMode ? `${baseURL}/admin/support/tickets` : `${baseURL}/support/tickets`;
   const headers = { Authorization: `Bearer ${token}` };
+  const supportCategories =
+    role === "supplier" ? supplierSupportCategories : defaultSupportCategories;
   const visibleTickets = operatorMode
     ? tickets
     : tickets.filter((ticket) =>
@@ -870,11 +886,11 @@ export default function SupportScreen({
                       onChange={(event) => setForm({ ...form, category: event.target.value })}
                       className="mt-1 w-full rounded-xl bg-slate-100 p-3 font-normal"
                     >
-                      <option value="general">Общий вопрос</option>
-                      <option value="order">Заказ</option>
-                      <option value="pickup_point">Точка забора</option>
-                      <option value="equipment">Спецтехника</option>
-                      <option value="participant">Участник системы</option>
+                      {supportCategories.map((category) => (
+                        <option key={category.value} value={category.value}>
+                          {category.label}
+                        </option>
+                      ))}
                     </select>
                   </label>
                   <label className="block text-sm font-bold">

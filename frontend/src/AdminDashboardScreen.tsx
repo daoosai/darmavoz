@@ -213,6 +213,8 @@ export default function AdminDashboardScreen({
   const [equipmentApplications, setEquipmentApplications] = useState<
     AdminEquipmentApplicationAlert[]
   >([]);
+  const [pendingEquipmentModerationCount, setPendingEquipmentModerationCount] =
+    useState(0);
   const [driverActiveOverrides, setDriverActiveOverrides] = useState<
     Record<string, boolean>
   >({});
@@ -340,6 +342,9 @@ export default function AdminDashboardScreen({
   const [previewLeft, setPreviewLeft] = useState<string | null>(null);
   const [previewPlate, setPreviewPlate] = useState<string | null>(null);
 
+  const pendingDriversCount = drivers.filter(
+    (driver) => driver.moderation_status === "pending_moderation",
+  ).length;
   const newEquipmentApplicationsCount = equipmentApplications.filter(
     (item) => item.status === "new",
   ).length;
@@ -705,6 +710,28 @@ export default function AdminDashboardScreen({
     }
   };
 
+  const fetchEquipmentModerationCount = async (silent = true) => {
+    if (!token) return;
+    try {
+      const res = await fetch(
+        `${baseURL}/admin/equipment?moderation_status=pending_moderation`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      if (!res.ok) {
+        throw new Error("Не удалось загрузить объявления на модерации");
+      }
+      const data = await res.json();
+      const items = Array.isArray(data) ? data : data.results || [];
+      setPendingEquipmentModerationCount(items.length);
+    } catch (error) {
+      if (!silent) {
+        toast.error("Не удалось загрузить объявления на модерации");
+      }
+    }
+  };
+
   const fetchLiveCars = async () => {
     if (!token) return;
     setIsLoadingCars(true);
@@ -758,8 +785,10 @@ export default function AdminDashboardScreen({
     if (!token) return;
 
     void fetchEquipmentApplications(true);
+    void fetchEquipmentModerationCount(true);
     const intervalId = window.setInterval(() => {
       void fetchEquipmentApplications(true);
+      void fetchEquipmentModerationCount(true);
     }, 30000);
 
     return () => window.clearInterval(intervalId);
@@ -1570,15 +1599,9 @@ export default function AdminDashboardScreen({
             >
               <div className="relative flex items-center justify-center">
                 <ClipboardCheck className="w-4 h-4" />
-                {drivers.filter(
-                  (d) => d.moderation_status === "pending_moderation",
-                ).length > 0 && (
+                {pendingDriversCount > 0 && (
                   <div className="absolute -top-1.5 -right-2 bg-rose-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center shadow-sm">
-                    {
-                      drivers.filter(
-                        (d) => d.moderation_status === "pending_moderation",
-                      ).length
-                    }
+                    {pendingDriversCount}
                   </div>
                 )}
               </div>
@@ -1592,7 +1615,14 @@ export default function AdminDashboardScreen({
                   : "text-slate-500 hover:text-slate-700"
               }`}
             >
-              <Wrench className="w-4 h-4" />
+              <div className="relative flex items-center justify-center">
+                <Wrench className="w-4 h-4" />
+                {pendingEquipmentModerationCount > 0 && (
+                  <div className="absolute -top-1.5 -right-2 min-w-4 rounded-full bg-rose-500 px-1 text-center text-[10px] font-bold leading-4 text-white shadow-sm">
+                    {pendingEquipmentModerationCount > 99 ? "99+" : pendingEquipmentModerationCount}
+                  </div>
+                )}
+              </div>
               Техника
             </button>
             <button
@@ -1640,6 +1670,32 @@ export default function AdminDashboardScreen({
                 className="inline-flex items-center justify-center rounded-xl bg-sky-500 px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-sky-600"
               >
                 Перейти
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {pendingEquipmentModerationCount > 0 ? (
+          <div className="w-full rounded-2xl border border-amber-200 bg-[linear-gradient(135deg,rgba(255,251,235,1)_0%,rgba(255,237,213,1)_100%)] px-4 py-3 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 rounded-2xl bg-amber-500/10 p-2 text-amber-700">
+                  <Wrench className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-black text-slate-900">
+                    Есть объявления, ожидающие модерации
+                  </p>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Сейчас на проверке: {pendingEquipmentModerationCount}.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab("equipment")}
+                className="inline-flex items-center justify-center rounded-xl bg-amber-500 px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-amber-600"
+              >
+                Проверить
               </button>
             </div>
           </div>
@@ -3033,6 +3089,7 @@ export default function AdminDashboardScreen({
                   applications.map(({ id, status }) => ({ id, status })),
                 )
               }
+              onPendingModerationChanged={setPendingEquipmentModerationCount}
             />
           ) : activeTab === "support" ? (
             <SupportScreen operatorMode />
@@ -3122,14 +3179,9 @@ export default function AdminDashboardScreen({
             className={`relative p-1.5 rounded-xl transition-colors ${activeTab === "moderation" ? "bg-[#2DB0E6]/10" : ""}`}
           >
             <ClipboardCheck className="w-6 h-6" />
-            {drivers.filter((d) => d.moderation_status === "pending_moderation")
-              .length > 0 && (
+            {pendingDriversCount > 0 && (
               <div className="absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] font-bold w-3.5 h-3.5 rounded-full flex items-center justify-center shadow-sm">
-                {
-                  drivers.filter(
-                    (d) => d.moderation_status === "pending_moderation",
-                  ).length
-                }
+                {pendingDriversCount}
               </div>
             )}
           </div>
@@ -3144,9 +3196,14 @@ export default function AdminDashboardScreen({
           }`}
         >
           <div
-            className={`p-1.5 rounded-xl transition-colors ${activeTab === "equipment" ? "bg-[#2DB0E6]/10" : ""}`}
+            className={`relative p-1.5 rounded-xl transition-colors ${activeTab === "equipment" ? "bg-[#2DB0E6]/10" : ""}`}
           >
             <Wrench className="w-6 h-6" />
+            {pendingEquipmentModerationCount > 0 && (
+              <div className="absolute -top-1 -right-1 min-w-4 rounded-full bg-rose-500 px-1 text-center text-[9px] font-bold leading-4 text-white shadow-sm">
+                {pendingEquipmentModerationCount > 99 ? "99+" : pendingEquipmentModerationCount}
+              </div>
+            )}
           </div>
           <span className="text-[10px] font-bold">Техника</span>
         </button>

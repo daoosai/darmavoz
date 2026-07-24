@@ -17,6 +17,7 @@ from app.models.models import (
     Driver,
     Order,
     Quarry,
+    Role,
     SpecialEquipmentListing,
     SupportMessage,
     SupportTicket,
@@ -83,9 +84,12 @@ async def get_support_actor(
         return SupportActor(role="client", client=await get_current_client(token=token, db=db))
     user = await get_current_user(token=token, db=db)
     role_name = user.role.name if user.role else ""
-    if role_name != "driver":
-        raise HTTPException(status_code=403, detail="Обращения доступны клиентам и водителям")
-    return SupportActor(role="driver", user=user)
+    if role_name not in {"driver", "supplier"}:
+        raise HTTPException(
+            status_code=403,
+            detail="Обращения доступны клиентам, водителям и поставщикам",
+        )
+    return SupportActor(role=role_name, user=user)
 
 
 async def get_support_session_actor(
@@ -101,10 +105,10 @@ async def get_support_session_actor(
         return SupportActor(role="client", client=await get_current_client(token=token, db=db))
     user = await get_current_user(token=token, db=db)
     role_name = user.role.name if user.role else ""
-    if role_name not in {"driver", "admin", "logist"}:
+    if role_name not in {"driver", "supplier", "admin", "logist"}:
         raise HTTPException(
             status_code=403,
-            detail="Обращения доступны клиентам, водителям, администраторам и логистам",
+            detail="Обращения доступны клиентам, водителям, поставщикам, администраторам и логистам",
         )
     return SupportActor(role=role_name, user=user)
 
@@ -494,8 +498,8 @@ async def list_operator_support_tickets(
         stmt = stmt.where(SupportTicket.category == category)
     if requester_role == "client":
         stmt = stmt.where(SupportTicket.client_id.is_not(None))
-    elif requester_role == "driver":
-        stmt = stmt.where(SupportTicket.user_id.is_not(None))
+    elif requester_role:
+        stmt = stmt.join(SupportTicket.user).join(User.role).where(Role.name == requester_role)
     result = await db.execute(stmt.order_by(SupportTicket.updated_at.desc()))
     return [_ticket_payload(item, actor) for item in result.scalars().unique().all()]
 

@@ -35,8 +35,15 @@ def _headers(token: str) -> dict[str, str]:
 
 @pytest.mark.asyncio
 async def test_custom_equipment_supplier_moderation_and_legacy_compatibility(
-    client, session_factory
+    client, session_factory, monkeypatch
 ):
+    sent_emails: list[dict[str, str]] = []
+    monkeypatch.setattr(
+        "app.api.equipment.send_email",
+        lambda **kwargs: sent_emails.append(kwargs),
+    )
+    monkeypatch.setattr("app.api.equipment.settings.ADMIN_EMAIL", "admin@example.test")
+
     admin, admin_token = await _create_user(session_factory, "admin")
     _logist, logist_token = await _create_user(session_factory, "logist")
     supplier, supplier_token = await _create_user(
@@ -87,6 +94,13 @@ async def test_custom_equipment_supplier_moderation_and_legacy_compatibility(
     assert supplier_listing["equipment_type_id"] is None
     assert supplier_listing["owner_user_id"] == str(supplier.id)
     assert supplier_listing["moderation_status"] == "pending_moderation"
+    assert sent_emails == [
+        {
+            "to_email": "admin@example.test",
+            "subject": "Объявление спецтехники ожидает модерации",
+            "body": 'Поставщик добавил объявление: Гусеничный мульчер "Мульчер для расчистки". Требуется проверка.',
+        }
+    ]
 
     public_before_approval = await client.get("/api/v1/equipment")
     assert public_before_approval.status_code == 200
@@ -120,6 +134,11 @@ async def test_custom_equipment_supplier_moderation_and_legacy_compatibility(
     assert supplier_edit.status_code == 200
     assert supplier_edit.json()["moderation_status"] == "pending_moderation"
     assert supplier_edit.json()["moderation_comment"] is None
+    assert sent_emails[-1] == {
+        "to_email": "admin@example.test",
+        "subject": "Объявление спецтехники ожидает модерации",
+        "body": 'Поставщик изменил объявление: Гусеничный мульчер "Мульчер после изменения". Требуется проверка.',
+    }
 
     hidden_after_edit = await client.get(f"/api/v1/equipment/{listing_id}")
     assert hidden_after_edit.status_code == 404

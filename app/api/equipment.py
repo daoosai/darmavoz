@@ -259,6 +259,31 @@ def _reset_supplier_listing_moderation(listing: SpecialEquipmentListing) -> None
         listing.moderated_by_user_id = None
 
 
+def _schedule_supplier_listing_moderation_email(
+    background_tasks: BackgroundTasks,
+    listing: SpecialEquipmentListing,
+    *,
+    action: str,
+) -> None:
+    if (
+        not settings.ADMIN_EMAIL
+        or listing.moderation_status != ModerationStatus.pending_moderation.value
+    ):
+        return
+
+    equipment_type = (listing.equipment_type or "Спецтехника").strip() or "Спецтехника"
+    listing_title = (listing.title or "Без названия").strip() or "Без названия"
+    background_tasks.add_task(
+        send_email,
+        to_email=settings.ADMIN_EMAIL,
+        subject="Объявление спецтехники ожидает модерации",
+        body=(
+            f'Поставщик {action} объявление: {equipment_type} "{listing_title}". '
+            "Требуется проверка."
+        ),
+    )
+
+
 def _calculate_application_total(
     listing: SpecialEquipmentListing,
     duration_unit: str,
@@ -639,6 +664,7 @@ async def list_supplier_equipment(
 )
 async def create_supplier_equipment(
     payload: EquipmentListingCreate,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_supplier: User = Depends(get_current_supplier_user),
 ):
@@ -663,6 +689,11 @@ async def create_supplier_equipment(
     )
     db.add(listing)
     await db.commit()
+    _schedule_supplier_listing_moderation_email(
+        background_tasks,
+        listing,
+        action="добавил",
+    )
     return await _listing_payload(db, await _get_listing(db, listing.id))
 
 
@@ -675,6 +706,7 @@ async def create_supplier_equipment(
 async def update_supplier_equipment(
     listing_id: UUID,
     payload: EquipmentListingUpdate,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_supplier: User = Depends(get_current_supplier_user),
 ):
@@ -699,6 +731,11 @@ async def update_supplier_equipment(
         setattr(listing, field, value)
     _reset_supplier_listing_moderation(listing)
     await db.commit()
+    _schedule_supplier_listing_moderation_email(
+        background_tasks,
+        listing,
+        action="изменил",
+    )
     return await _listing_payload(db, await _get_listing(db, listing.id))
 
 

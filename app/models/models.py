@@ -468,7 +468,7 @@ class SpecialEquipmentType(Base):
     )
 
     listings: Mapped[List["SpecialEquipmentListing"]] = relationship(
-        "SpecialEquipmentListing", back_populates="equipment_type"
+        "SpecialEquipmentListing", back_populates="equipment_type_ref"
     )
 
 
@@ -476,8 +476,9 @@ class SpecialEquipmentListing(Base):
     __tablename__ = "special_equipment_listings"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    equipment_type_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("special_equipment_types.id"), nullable=False, index=True
+    equipment_type: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    equipment_type_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("special_equipment_types.id"), nullable=True, index=True
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
@@ -496,15 +497,42 @@ class SpecialEquipmentListing(Base):
     )
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    owner_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("users.id"), nullable=True, index=True
+    )
+    moderation_status: Mapped[str] = mapped_column(
+        SQLEnum(
+            "incomplete",
+            "pending_moderation",
+            "approved",
+            "rejected",
+            "suspended",
+            name="moderation_status",
+        ),
+        default="pending_moderation",
+        nullable=False,
+        index=True,
+    )
+    moderation_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    moderated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    moderated_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    equipment_type: Mapped["SpecialEquipmentType"] = relationship(
+    equipment_type_ref: Mapped[Optional["SpecialEquipmentType"]] = relationship(
         "SpecialEquipmentType", back_populates="listings"
     )
     created_by: Mapped["User"] = relationship("User", foreign_keys=[created_by_user_id])
+    owner: Mapped[Optional["User"]] = relationship("User", foreign_keys=[owner_user_id])
+    moderated_by: Mapped[Optional["User"]] = relationship(
+        "User", foreign_keys=[moderated_by_user_id]
+    )
     applications: Mapped[List["SpecialEquipmentApplication"]] = relationship(
         "SpecialEquipmentApplication", back_populates="listing"
     )

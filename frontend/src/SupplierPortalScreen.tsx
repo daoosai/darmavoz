@@ -4,6 +4,7 @@ import { logoutCurrentSession } from "./pushAuth";
 import { useAuthStore } from "./store";
 import SupplierBottomNav, { type SupplierTab } from "./SupplierBottomNav";
 import SupplierDashboardScreen from "./SupplierDashboardScreen";
+import SupplierEquipmentScreen from "./SupplierEquipmentScreen";
 import SupplierProfileScreen from "./SupplierProfileScreen";
 import SupplierRegisterScreen from "./SupplierRegisterScreen";
 
@@ -24,6 +25,8 @@ export default function SupplierPortalScreen({ onBack }: { onBack: () => void })
             token={token}
             onRequireProfile={() => setActiveTab("profile")}
           />
+        ) : activeTab === "equipment" ? (
+          <SupplierEquipmentScreen token={token} />
         ) : (
           <SupplierProfileScreen token={token} onLogout={handleLogout} />
         )}

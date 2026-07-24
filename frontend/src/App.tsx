@@ -659,6 +659,7 @@ function MainContent({
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
+              const isPriority = ["orders", "cart", "promotions"].includes(tab.id);
               return (
                 <button
                   key={tab.id}
@@ -666,12 +667,26 @@ function MainContent({
                     onClearFocusedOrder();
                     setActiveTab(tab.id);
                   }}
-                  className={`flex flex-col items-center gap-1 transition-opacity cursor-pointer relative ${
-                    isActive ? "opacity-100" : "opacity-40 hover:opacity-70"
+                  className={`relative flex min-w-0 flex-1 cursor-pointer flex-col items-center gap-1 rounded-xl px-1 py-1.5 transition-all ${
+                    isActive && isPriority
+                      ? "-translate-y-1 bg-[#2DB0E6] text-white shadow-[0_6px_16px_rgba(45,176,230,0.30)]"
+                      : isPriority
+                        ? "bg-sky-50 text-sky-600 opacity-100"
+                        : isActive
+                          ? "text-[#2DB0E6] opacity-100"
+                          : "text-slate-500 opacity-45 hover:opacity-70"
                   }`}
                 >
                   <Icon
-                    className={`w-5 h-5 ${isActive ? "text-[#2DB0E6]" : "text-slate-500"}`}
+                    className={`h-5 w-5 ${
+                      isActive && isPriority
+                        ? "text-white"
+                        : isPriority
+                          ? "text-sky-600"
+                          : isActive
+                            ? "text-[#2DB0E6]"
+                            : "text-slate-500"
+                    }`}
                     strokeWidth={isActive ? 2.5 : 2}
                   />
                   {tab.badge !== undefined && (
@@ -680,7 +695,15 @@ function MainContent({
                     </span>
                   )}
                   <span
-                    className={`text-[10px] leading-none ${isActive ? "font-bold text-[#2DB0E6]" : "font-medium text-slate-500"}`}
+                    className={`whitespace-nowrap text-[10px] leading-none ${
+                      isActive && isPriority
+                        ? "font-bold text-white"
+                        : isPriority
+                          ? "font-bold text-sky-600"
+                          : isActive
+                            ? "font-bold text-[#2DB0E6]"
+                            : "font-medium text-slate-500"
+                    }`}
                   >
                     {tab.label}
                   </span>

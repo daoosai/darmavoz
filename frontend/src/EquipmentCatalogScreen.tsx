@@ -23,7 +23,8 @@ export interface EquipmentTariff {
 
 export interface EquipmentListing {
   id: string;
-  equipment_type_id: string;
+  equipment_type: string;
+  equipment_type_id?: string | null;
   equipment_type_name: string;
   title: string;
   description: string;
@@ -36,6 +37,11 @@ export interface EquipmentListing {
   sort_order: number;
   primary_image_url?: string | null;
   media_files?: { id: string; public_url: string; is_primary?: boolean }[];
+  owner_user_id?: string | null;
+  owner_name?: string | null;
+  owner_phone?: string | null;
+  moderation_status?: "incomplete" | "pending_moderation" | "approved" | "rejected" | "suspended";
+  moderation_comment?: string | null;
 }
 
 interface EquipmentApplicationSummary {

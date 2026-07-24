@@ -22,7 +22,7 @@ interface Application {
   primary_image_url?: string;
 }
 
-type Tab = "listings" | "types" | "applications";
+type Tab = "listings" | "moderation" | "types" | "applications";
 type ApplicationsTab = "active" | "history";
 
 interface ListingTariffForm {
@@ -33,7 +33,7 @@ interface ListingTariffForm {
 
 interface ListingForm {
   id: string;
-  equipment_type_id: string;
+  equipment_type: string;
   title: string;
   description: string;
   tariffs: ListingTariffForm[];
@@ -45,7 +45,7 @@ interface ListingForm {
 
 const emptyListing: ListingForm = {
   id: "",
-  equipment_type_id: "",
+  equipment_type: "",
   title: "",
   description: "",
   tariffs: [{ type: "hour", price: "", hours: "" }],
@@ -84,7 +84,7 @@ export default function AdminEquipmentScreen({
   applicationsOnly?: boolean;
   onApplicationsChanged?: (applications: Application[]) => void;
 }) {
-  const { token } = useAuthStore();
+  const { token, role } = useAuthStore();
   const [tab, setTab] = useState<Tab>(applicationsOnly ? "applications" : "listings");
   const [applicationsTab, setApplicationsTab] = useState<ApplicationsTab>("active");
   const [types, setTypes] = useState<EquipmentTypeItem[]>([]);
@@ -100,6 +100,10 @@ export default function AdminEquipmentScreen({
 
   const headers = { Authorization: `Bearer ${token}` };
   const activeTypes = types.filter((item) => item.is_active);
+  const canManageTypes = role === "admin";
+  const pendingListings = listings.filter(
+    (item) => item.moderation_status === "pending_moderation",
+  );
   const activeApplications = applications.filter((item) => item.status === "new" || item.status === "in_progress");
   const historyApplications = applications.filter((item) => item.status === "completed" || item.status === "rejected" || item.status === "cancelled");
   const visibleApplications = applicationsTab === "active" ? activeApplications : historyApplications;
@@ -109,9 +113,7 @@ export default function AdminEquipmentScreen({
     try {
       const requests: Promise<Response>[] = [
         fetch(
-          applicationsOnly
-            ? `${baseURL}/equipment/types`
-            : `${baseURL}/admin/equipment-types`,
+          canManageTypes ? `${baseURL}/admin/equipment-types` : `${baseURL}/equipment/types`,
           { headers },
         ),
         fetch(`${baseURL}/admin/equipment-applications`, { headers }),
@@ -198,16 +200,11 @@ export default function AdminEquipmentScreen({
   };
 
   const openListing = (item?: EquipmentListing) => {
-    const equipmentTypeId =
-      item && activeTypes.some((type) => type.id === item.equipment_type_id)
-        ? item.equipment_type_id
-        : activeTypes[0]?.id || "";
-
     setListingForm(
       item
         ? {
             id: item.id,
-            equipment_type_id: equipmentTypeId,
+            equipment_type: item.equipment_type || item.equipment_type_name,
             title: item.title,
             description: item.description,
             tariffs: getEquipmentTariffs(item).map((tariff) => ({
@@ -222,11 +219,41 @@ export default function AdminEquipmentScreen({
           }
         : {
             ...emptyListing,
-            equipment_type_id: equipmentTypeId,
+            equipment_type: activeTypes[0]?.name || "",
             tariffs: emptyListing.tariffs.map((tariff) => ({ ...tariff })),
           },
     );
     setShowListingForm(true);
+  };
+
+  const moderateListing = async (
+    item: EquipmentListing,
+    decision: "approve" | "reject",
+  ) => {
+    const reason =
+      decision === "reject"
+        ? window.prompt("Укажите причину отклонения объявления")
+        : null;
+    if (decision === "reject" && !reason?.trim()) return;
+    const response = await fetch(
+      `${baseURL}/admin/equipment/${item.id}/${decision}`,
+      {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify(
+          decision === "reject" ? { reason: reason!.trim() } : {},
+        ),
+      },
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      toast.error(
+        extractApiErrorMessage(data, "Не удалось изменить статус объявления"),
+      );
+      return;
+    }
+    toast.success(decision === "approve" ? "Объявление одобрено" : "Объявление отклонено");
+    await load();
   };
 
   const updateTariff = (index: number, patch: Partial<ListingTariffForm>) => {
@@ -438,7 +465,8 @@ export default function AdminEquipmentScreen({
         <div className="flex gap-2 overflow-x-auto rounded-2xl bg-white p-2 shadow-sm">
           {[
             ["listings", "Объявления"],
-            ["types", "Типы техники"],
+            ["moderation", `На модерации${pendingListings.length ? ` · ${pendingListings.length}` : ""}`],
+            ...(canManageTypes ? [["types", "Типы техники"]] : []),
             ["applications", "Заявки"],
           ].map(([value, label]) => (
             <button
@@ -454,7 +482,7 @@ export default function AdminEquipmentScreen({
         </div>
       )}
 
-      {tab === "types" && (
+      {tab === "types" && canManageTypes && (
         <div className="rounded-3xl bg-white p-5 shadow-sm">
           <h2 className="text-xl font-black">Типы спецтехники</h2>
           <div className="mt-4 flex gap-2">
@@ -502,6 +530,71 @@ export default function AdminEquipmentScreen({
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {tab === "moderation" && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-2xl font-black">Объявления на модерации</h2>
+            <p className="text-sm text-slate-500">
+              Проверка объявлений, созданных поставщиками
+            </p>
+          </div>
+          {pendingListings.length === 0 ? (
+            <p className="rounded-2xl bg-white p-10 text-center text-slate-500 shadow-sm">
+              Новых объявлений на модерации нет
+            </p>
+          ) : (
+            <div className="grid gap-4 lg:grid-cols-2">
+              {pendingListings.map((item) => (
+                <article key={item.id} className="overflow-hidden rounded-3xl bg-white shadow-sm">
+                  {item.primary_image_url ? (
+                    <img
+                      src={resolveMediaUrl(item.primary_image_url) || "/placeholder.jpg"}
+                      className="h-52 w-full bg-slate-100 object-contain"
+                      alt={item.title}
+                    />
+                  ) : (
+                    <div className="flex h-40 items-center justify-center bg-slate-100">
+                      <ImageIcon className="h-10 w-10 text-slate-300" />
+                    </div>
+                  )}
+                  <div className="space-y-3 p-5">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wide text-amber-600">
+                        На модерации
+                      </p>
+                      <h3 className="text-xl font-black text-slate-900">{item.title}</h3>
+                      <p className="font-bold text-sky-600">{item.equipment_type_name}</p>
+                    </div>
+                    <p className="text-sm text-slate-600">{item.description}</p>
+                    <div className="rounded-xl bg-slate-50 p-3 text-sm">
+                      <p className="font-bold">{item.owner_name || "Поставщик"}</p>
+                      {item.owner_phone ? <p className="text-slate-500">{item.owner_phone}</p> : null}
+                      <p className="mt-1">{formatEquipmentPrice(item)}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void moderateListing(item, "reject")}
+                        className="flex-1 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 font-bold text-rose-700"
+                      >
+                        Отклонить
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void moderateListing(item, "approve")}
+                        className="flex-1 rounded-xl bg-emerald-500 px-4 py-3 font-bold text-white shadow-sm"
+                      >
+                        Одобрить
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -555,6 +648,21 @@ export default function AdminEquipmentScreen({
 
                 <div className="p-4">
                   <p className="text-xs font-bold text-sky-600">{item.equipment_type_name}</p>
+                  <span
+                    className={`mt-1 inline-flex rounded-full px-2 py-1 text-[10px] font-black uppercase ${
+                      item.moderation_status === "approved"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : item.moderation_status === "rejected"
+                          ? "bg-rose-100 text-rose-700"
+                          : "bg-amber-100 text-amber-700"
+                    }`}
+                  >
+                    {item.moderation_status === "approved"
+                      ? "Одобрено"
+                      : item.moderation_status === "rejected"
+                        ? "Отклонено"
+                        : "На модерации"}
+                  </span>
                   <div className="flex justify-between gap-2">
                     <div>
                       <h3 className="text-lg font-black">{item.title}</h3>
@@ -727,20 +835,21 @@ export default function AdminEquipmentScreen({
             <div className="space-y-4">
               <label className="block text-sm font-bold">
                 Тип
-                <select
+                <input
                   required
-                  value={listingForm.equipment_type_id}
+                  list="admin-equipment-types"
+                  value={listingForm.equipment_type}
                   onChange={(event) =>
-                    setListingForm({ ...listingForm, equipment_type_id: event.target.value })
+                    setListingForm({ ...listingForm, equipment_type: event.target.value })
                   }
                   className="mt-1 w-full rounded-xl bg-slate-100 p-3 font-normal"
-                >
+                  placeholder="Например, Автокран"
+                />
+                <datalist id="admin-equipment-types">
                   {activeTypes.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                    </option>
+                    <option key={item.id} value={item.name} />
                   ))}
-                </select>
+                </datalist>
               </label>
 
               <label className="block text-sm font-bold">

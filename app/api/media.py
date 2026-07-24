@@ -15,7 +15,7 @@ from app.schemas.media import (
     PresignUploadRequest,
     PresignUploadResponse,
 )
-from app.security.auth import get_current_admin_user, get_current_user
+from app.security.auth import get_current_user
 from app.services.storage import (
     StorageNotConfiguredError,
     StorageValidationError,
@@ -85,20 +85,30 @@ async def _resolve_media_entity_context(
     slot_key: str | None,
 ) -> tuple[str, UUID, Vehicle | None]:
     role_name = current_user.role.name if current_user.role else None
-    if role_name == "admin":
+    if role_name in {"admin", "logist"}:
         if entity_type is None:
             raise HTTPException(status_code=400, detail="entity_type is required")
         if entity_id is None:
             raise HTTPException(status_code=400, detail="entity_id is required")
+        if role_name == "logist" and entity_type != "equipment_listing":
+            raise HTTPException(
+                status_code=403,
+                detail="Logists can manage media only for equipment listings",
+            )
         entity = await _ensure_entity_exists(entity_type, entity_id, db)
         return entity_type, entity_id, entity if entity_type == "vehicle" else None
 
     if role_name == "supplier":
-        if entity_type != "quarry" or entity_id is None:
+        if entity_id is None or entity_type not in {"quarry", "equipment_listing"}:
             raise HTTPException(
                 status_code=403,
-                detail="Suppliers can upload media only for their pickup points",
+                detail="Suppliers can upload media only for their own entities",
             )
+        if entity_type == "equipment_listing":
+            listing = await db.get(SpecialEquipmentListing, entity_id)
+            if listing is None or listing.owner_user_id != current_user.id:
+                raise HTTPException(status_code=404, detail="Equipment listing not found")
+            return "equipment_listing", entity_id, None
         point = await db.get(Quarry, entity_id)
         if point is None or point.owner_user_id != current_user.id:
             raise HTTPException(status_code=404, detail="Pickup point not found")
@@ -132,6 +142,29 @@ async def _load_vehicle_media(db: AsyncSession, vehicle_id: UUID) -> list[MediaF
         .order_by(MediaFile.created_at.asc())
     )
     return list(result.scalars().all())
+
+
+async def _reset_supplier_equipment_moderation(
+    db: AsyncSession,
+    current_user: User,
+    *,
+    entity_type: str,
+    entity_id: UUID,
+) -> None:
+    role_name = current_user.role.name if current_user.role else None
+    if role_name != "supplier" or entity_type != "equipment_listing":
+        return
+    listing = await db.get(SpecialEquipmentListing, entity_id)
+    if listing is None:
+        return
+    if listing.moderation_status in {
+        ModerationStatus.approved.value,
+        ModerationStatus.rejected.value,
+    }:
+        listing.moderation_status = ModerationStatus.pending_moderation.value
+        listing.moderation_comment = None
+        listing.moderated_at = None
+        listing.moderated_by_user_id = None
 
 
 @router.post("/presign-upload", response_model=PresignUploadResponse)
@@ -268,6 +301,12 @@ async def confirm_upload(
         if linked_driver is not None and linked_driver.moderation_status != ModerationStatus.suspended.value:
             set_incomplete_moderation(linked_driver)
 
+    await _reset_supplier_equipment_moderation(
+        db,
+        current_user,
+        entity_type=entity_type,
+        entity_id=entity_id,
+    )
     await db.commit()
     await db.refresh(media_file)
     logger.info("Confirmed media %s, Public URL: %s", media_file.id, media_file.public_url)
@@ -278,13 +317,23 @@ async def confirm_upload(
 async def delete_media(
     media_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_admin: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_user),
 ) -> dict[str, bool]:
-    del current_admin
+    role_name = current_user.role.name if current_user.role else None
+    if role_name not in {"admin", "logist", "supplier"}:
+        raise HTTPException(status_code=403, detail="Media deletion is not allowed")
+
     result = await db.execute(select(MediaFile).where(MediaFile.id == media_id))
     media_file = result.scalar_one_or_none()
     if media_file is None:
         raise HTTPException(status_code=404, detail="Media file not found")
+    await _resolve_media_entity_context(
+        db=db,
+        current_user=current_user,
+        entity_type=media_file.entity_type,
+        entity_id=media_file.entity_id,
+        slot_key=media_file.slot_key,
+    )
 
     try:
         storage = get_storage_service()
@@ -302,6 +351,12 @@ async def delete_media(
     await db.delete(media_file)
     await db.flush()
     await _sync_entity_image_url(entity_type, entity_id, db)
+    await _reset_supplier_equipment_moderation(
+        db,
+        current_user,
+        entity_type=entity_type,
+        entity_id=entity_id,
+    )
     await db.commit()
     return {"ok": True}
 
@@ -337,5 +392,11 @@ async def make_media_primary(
     )
     media_file.is_primary = True
     await _sync_entity_image_url(media_file.entity_type, media_file.entity_id, db)
+    await _reset_supplier_equipment_moderation(
+        db,
+        current_user,
+        entity_type=media_file.entity_type,
+        entity_id=media_file.entity_id,
+    )
     await db.commit()
     return {"ok": True}

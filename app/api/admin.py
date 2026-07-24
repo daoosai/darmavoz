@@ -60,7 +60,7 @@ from app.schemas.driver import (
     VehicleOut,
 )
 from app.schemas.order import OrderDeleteOut, OrderOut, OrderUpdate
-from app.schemas.supplier import AdminSupplierOut
+from app.schemas.supplier import AdminSupplierOut, AdminSupplierUpdate
 from app.security.auth import (
     get_current_admin_user,
     get_current_logist_user,
@@ -264,6 +264,82 @@ async def list_admin_suppliers(
         )
         for supplier in suppliers
     ]
+
+
+@router.patch("/suppliers/{supplier_id}", response_model=AdminSupplierOut)
+async def update_admin_supplier(
+    supplier_id: UUID,
+    payload: AdminSupplierUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+) -> AdminSupplierOut:
+    del current_admin
+    supplier = await db.scalar(
+        select(User)
+        .join(Role)
+        .options(selectinload(User.pickup_points))
+        .where(User.id == supplier_id, Role.name == "supplier")
+    )
+    if supplier is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_error_detail("SUPPLIER_NOT_FOUND", "Поставщик не найден"),
+        )
+
+    changed = payload.model_fields_set
+    if "phone" in changed and payload.phone is not None:
+        normalized_phone = normalize_phone(payload.phone)
+        phone_taken = await db.scalar(
+            select(User.id).where(
+                User.username == normalized_phone,
+                User.id != supplier.id,
+            )
+        )
+        if phone_taken is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=_error_detail(
+                    "SUPPLIER_PHONE_ALREADY_EXISTS",
+                    "Пользователь с таким телефоном уже существует",
+                ),
+            )
+        supplier.username = normalized_phone
+    if "full_name" in changed:
+        supplier.display_name = payload.full_name
+    if "is_active" in changed and payload.is_active is not None:
+        supplier.is_active = payload.is_active
+
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_error_detail(
+                "SUPPLIER_PHONE_ALREADY_EXISTS",
+                "Пользователь с таким телефоном уже существует",
+            ),
+        ) from exc
+    supplier = await db.scalar(
+        select(User)
+        .options(selectinload(User.pickup_points))
+        .where(User.id == supplier_id)
+    )
+    if supplier is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_error_detail("SUPPLIER_NOT_FOUND", "Поставщик не найден"),
+        )
+    return AdminSupplierOut(
+        id=supplier.id,
+        full_name=supplier.display_name or None,
+        phone=supplier.username,
+        is_active=supplier.is_active,
+        pickup_points=list(supplier.pickup_points or []),
+        active_point_names=[
+            point.name for point in supplier.pickup_points if point.is_active
+        ],
+    )
 
 
 @router.get("/logist-area")

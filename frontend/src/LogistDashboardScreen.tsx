@@ -546,7 +546,7 @@ export default function LogistDashboardScreen({
                   : "text-slate-500 hover:text-slate-700"
               }`}
             >
-              <Wrench className="h-4 w-4" /> Заявки
+              <Wrench className="h-4 w-4" /> Спецтехника
             </button>
             <button
               onClick={() => setActiveTab("support")}
@@ -1122,7 +1122,7 @@ export default function LogistDashboardScreen({
               )}
             </>
           ) : activeTab === "equipment" ? (
-            <AdminEquipmentScreen applicationsOnly />
+            <AdminEquipmentScreen />
           ) : activeTab === "support" ? (
             <SupportScreen operatorMode />
           ) : activeTab === "profile" ? (

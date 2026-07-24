@@ -10,6 +10,9 @@ from app.schemas.catalog import MediaFileOut
 TariffType = Literal["hour", "shift"]
 ApplicationStatus = Literal["new", "in_progress", "closed", "completed", "rejected", "cancelled"]
 DurationUnit = Literal["hours", "shifts"]
+ModerationStatusValue = Literal[
+    "incomplete", "pending_moderation", "approved", "rejected", "suspended"
+]
 
 
 class EquipmentTypeCreate(BaseModel):
@@ -103,7 +106,8 @@ def _normalize_tariffs(tariffs: list[EquipmentTariff]) -> list[EquipmentTariff]:
 
 
 class EquipmentListingBase(BaseModel):
-    equipment_type_id: UUID
+    equipment_type: str | None = Field(default=None, min_length=1, max_length=255)
+    equipment_type_id: UUID | None = None
     title: str = Field(min_length=1, max_length=255)
     description: str = Field(min_length=1, max_length=10000)
     tariffs: list[EquipmentTariff] = Field(min_length=1, max_length=2)
@@ -116,6 +120,8 @@ class EquipmentListingBase(BaseModel):
 
     @model_validator(mode="after")
     def validate_tariffs(self):
+        if self.equipment_type is None and self.equipment_type_id is None:
+            raise ValueError("equipment_type or equipment_type_id is required")
         self.tariffs = _normalize_tariffs(self.tariffs)
         return self
 
@@ -125,6 +131,7 @@ class EquipmentListingCreate(EquipmentListingBase):
 
 
 class EquipmentListingUpdate(BaseModel):
+    equipment_type: str | None = Field(default=None, min_length=1, max_length=255)
     equipment_type_id: UUID | None = None
     title: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = Field(default=None, min_length=1, max_length=10000)
@@ -145,7 +152,8 @@ class EquipmentListingUpdate(BaseModel):
 
 class EquipmentListingOut(BaseModel):
     id: UUID
-    equipment_type_id: UUID
+    equipment_type: str
+    equipment_type_id: UUID | None = None
     equipment_type_name: str
     title: str
     description: str
@@ -156,6 +164,9 @@ class EquipmentListingOut(BaseModel):
     sort_order: int
     media_files: list[MediaFileOut] = Field(default_factory=list)
     primary_image_url: str | None = None
+    owner_user_id: UUID | None = None
+    moderation_status: ModerationStatusValue
+    moderation_comment: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -163,6 +174,23 @@ class EquipmentListingOut(BaseModel):
     @classmethod
     def validate_output_tariffs(cls, value: object) -> list[dict]:
         return _sanitize_tariffs_for_output(value)
+
+
+class OperatorEquipmentListingOut(EquipmentListingOut):
+    owner_name: str | None = None
+    owner_phone: str | None = None
+
+
+class EquipmentModerationDecision(BaseModel):
+    comment: str | None = Field(default=None, max_length=5000)
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+
+class EquipmentModerationRejection(BaseModel):
+    reason: str = Field(min_length=1, max_length=5000)
+
+    model_config = ConfigDict(str_strip_whitespace=True)
 
 
 class EquipmentApplicationCreate(BaseModel):

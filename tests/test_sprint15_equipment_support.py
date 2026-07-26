@@ -321,8 +321,85 @@ async def test_operator_reply_sends_push_to_driver_ticket_author(
             "ticket_id": uuid.UUID(ticket_id),
             "client_id": None,
             "driver_id": driver_id,
+            "user_id": None,
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_operator_reply_sends_push_to_supplier_ticket_author(
+    client, session_factory, monkeypatch
+):
+    supplier_user, supplier_token = await _create_user(session_factory, "supplier")
+    _logist, logist_token = await _create_user(session_factory, "logist")
+    monkeypatch.setattr(
+        "app.api.support.send_support_operator_notification", lambda *args, **kwargs: None
+    )
+    reply_notifications: list[dict[str, uuid.UUID | None]] = []
+    monkeypatch.setattr(
+        "app.api.support.send_support_reply_notification",
+        lambda **kwargs: reply_notifications.append(kwargs),
+    )
+
+    create_response = await client.post(
+        "/api/v1/support/tickets",
+        headers={"Authorization": f"Bearer {supplier_token}"},
+        json={
+            "subject": "Вопрос поставщика",
+            "category": "moderation_question",
+            "context_type": "general",
+            "message": "Нужен ответ поддержки по объявлению",
+        },
+    )
+    assert create_response.status_code == 201
+    ticket_id = create_response.json()["id"]
+
+    reply_response = await client.post(
+        f"/api/v1/admin/support/tickets/{ticket_id}/messages",
+        headers={"Authorization": f"Bearer {logist_token}"},
+        json={"text": "Ответили по модерации"},
+    )
+    assert reply_response.status_code == 200
+    assert reply_notifications == [
+        {
+            "ticket_id": uuid.UUID(ticket_id),
+            "client_id": None,
+            "driver_id": None,
+            "user_id": supplier_user.id,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_support_message_is_saved_even_if_operator_push_schedule_fails(
+    client, session_factory, monkeypatch
+):
+    _supplier_user, supplier_token = await _create_user(session_factory, "supplier")
+    monkeypatch.setattr(
+        "app.services.notifications.schedule_push_to_logists",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("push broken")),
+    )
+
+    create_response = await client.post(
+        "/api/v1/support/tickets",
+        headers={"Authorization": f"Bearer {supplier_token}"},
+        json={
+            "subject": "Проблема с тикетом",
+            "category": "general",
+            "context_type": "general",
+            "message": "Сообщение должно сохраниться даже без пуша",
+        },
+    )
+    assert create_response.status_code == 201
+    ticket_id = create_response.json()["id"]
+
+    reply_response = await client.post(
+        f"/api/v1/support/tickets/{ticket_id}/messages",
+        headers={"Authorization": f"Bearer {supplier_token}"},
+        json={"text": "Повторное сообщение без пуша"},
+    )
+    assert reply_response.status_code == 200
+    assert reply_response.json()["messages"][-1]["author_role"] == "supplier"
 
 
 @pytest.mark.asyncio

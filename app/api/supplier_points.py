@@ -7,9 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
 from app.models.models import ModerationStatus, Quarry, User
+from app.schemas.client import ClientFcmTokenIn, ClientFcmTokenOut
 from app.schemas.quarry import QuarryCreate, QuarryMaterialOfferIn, QuarryOut, QuarryUpdate
 from app.schemas.supplier import SupplierProfileOut, SupplierProfileUpdate
 from app.security.auth import get_current_supplier_user
+from app.services.fcm_tokens import detach_fcm_token_from_other_entities
 from app.services.notifications import schedule_pickup_point_moderation_notification
 from app.services.pickup_points import (
     default_delivery_option_ids,
@@ -69,6 +71,44 @@ async def update_supplier_profile(
         email=current_user.email,
         display_name=current_user.display_name,
     )
+
+
+@router.post("/me/fcm-token", response_model=ClientFcmTokenOut)
+async def save_supplier_fcm_token(
+    payload: ClientFcmTokenIn,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_supplier_user),
+) -> ClientFcmTokenOut:
+    normalized_token = payload.token.strip()
+    logger.info(
+        "supplier_fcm_token_save_requested",
+        extra={
+            "user_id": str(current_user.id),
+            "token_prefix": normalized_token[:24],
+        },
+    )
+    await detach_fcm_token_from_other_entities(
+        db,
+        normalized_token,
+        keep_user_id=current_user.id,
+    )
+    current_user.fcm_token = normalized_token
+    await db.commit()
+    return ClientFcmTokenOut(ok=True, token=current_user.fcm_token)
+
+
+@router.delete("/me/fcm-token", response_model=ClientFcmTokenOut)
+async def delete_supplier_fcm_token(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_supplier_user),
+) -> ClientFcmTokenOut:
+    logger.info(
+        "supplier_fcm_token_deleted",
+        extra={"user_id": str(current_user.id)},
+    )
+    current_user.fcm_token = None
+    await db.commit()
+    return ClientFcmTokenOut(ok=True, token=None)
 
 
 @router.get("/points", response_model=list[QuarryOut])

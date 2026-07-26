@@ -211,6 +211,33 @@ async def send_push_to_client(
         )
 
 
+async def send_push_to_user(
+    user_id: UUID,
+    title: str,
+    body: str,
+    data: dict[str, str] | None = None,
+) -> bool:
+    async with AsyncSessionLocal() as session:
+        user = await session.scalar(select(User).where(User.id == user_id))
+        if user is None:
+            logger.warning("push_user_not_found", extra={"user_id": str(user_id)})
+            return False
+
+        async def clear_token() -> None:
+            user.fcm_token = None
+            await session.commit()
+
+        return await _send_push_with_token_cleanup(
+            entity_name="user",
+            entity_id=user_id,
+            token=user.fcm_token,
+            clear_token=clear_token,
+            title=title,
+            body=body,
+            data=data,
+        )
+
+
 async def send_push_to_logists(
     title: str,
     body: str,
@@ -278,6 +305,18 @@ def schedule_push_to_client(
     asyncio.create_task(
         send_push_to_client(client_id, title, body, data),
         name=f"push-client-{client_id}",
+    )
+
+
+def schedule_push_to_user(
+    user_id: UUID,
+    title: str,
+    body: str,
+    data: dict[str, str] | None = None,
+) -> None:
+    asyncio.create_task(
+        send_push_to_user(user_id, title, body, data),
+        name=f"push-user-{user_id}",
     )
 
 

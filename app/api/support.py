@@ -170,20 +170,24 @@ def _validate_ticket_open_for_message(ticket: SupportTicket) -> None:
 async def _resolve_support_reply_target(
     db: AsyncSession,
     ticket: SupportTicket,
-) -> tuple[UUID | None, UUID | None]:
+) -> tuple[UUID | None, UUID | None, UUID | None]:
     if ticket.client_id is not None:
-        return ticket.client_id, None
+        return ticket.client_id, None, None
 
     if ticket.user is not None:
         driver_profile = _get_loaded_driver_profile(ticket.user)
         if driver_profile is not None:
-            return None, driver_profile.id
+            return None, driver_profile.id, None
+        if ticket.user.role is not None and ticket.user.role.name == "supplier":
+            return None, None, ticket.user.id
 
     if ticket.user_id is None:
-        return None, None
+        return None, None, None
 
     driver_id = await db.scalar(select(Driver.id).where(Driver.user_id == ticket.user_id))
-    return None, driver_id
+    if driver_id is not None:
+        return None, driver_id, None
+    return None, None, ticket.user_id
 
 
 def _get_loaded_driver_profile(user: User | None) -> Driver | None:
@@ -542,12 +546,13 @@ async def add_operator_support_message(
     ticket.updated_at = datetime.now(timezone.utc)
     await db.commit()
     ticket = await _get_ticket(db, ticket.id)
-    client_id, driver_id = await _resolve_support_reply_target(db, ticket)
+    client_id, driver_id, user_id = await _resolve_support_reply_target(db, ticket)
     background_tasks.add_task(
         send_support_reply_notification,
         ticket_id=ticket.id,
         client_id=client_id,
         driver_id=driver_id,
+        user_id=user_id,
     )
     actor = SupportActor(
         role=current_user.role.name if current_user.role else "operator",

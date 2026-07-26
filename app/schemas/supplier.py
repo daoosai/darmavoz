@@ -1,22 +1,23 @@
+from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class SupplierProfileOut(BaseModel):
-    phone: str | None = None
-    email: str | None = None
-    display_name: str | None = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    display_name: Optional[str] = None
 
 
 class SupplierProfileUpdate(BaseModel):
-    display_name: str | None = Field(default=None, max_length=255)
+    display_name: Optional[str] = Field(default=None, max_length=255)
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
     @field_validator("display_name")
     @classmethod
-    def normalize_display_name(cls, value: str | None) -> str | None:
+    def normalize_display_name(cls, value: Optional[str]) -> Optional[str]:
         return value or None
 
 
@@ -30,7 +31,7 @@ class AdminSupplierPointOut(BaseModel):
 
 class AdminSupplierOut(BaseModel):
     id: UUID
-    full_name: str | None = None
+    full_name: Optional[str] = None
     phone: str
     is_active: bool
     pickup_points: list[AdminSupplierPointOut] = Field(default_factory=list)
@@ -38,15 +39,15 @@ class AdminSupplierOut(BaseModel):
 
 
 class AdminSupplierUpdate(BaseModel):
-    full_name: str | None = Field(default=None, max_length=255)
-    phone: str | None = Field(default=None, min_length=10, max_length=20)
-    is_active: bool | None = None
+    full_name: Optional[str] = Field(default=None, max_length=255)
+    phone: Optional[str] = Field(default=None, min_length=10, max_length=20)
+    is_active: Optional[bool] = None
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
     @field_validator("full_name")
     @classmethod
-    def normalize_full_name(cls, value: str | None) -> str | None:
+    def normalize_full_name(cls, value: Optional[str]) -> Optional[str]:
         return value or None
 
     @model_validator(mode="after")

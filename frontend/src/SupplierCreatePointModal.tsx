@@ -53,6 +53,15 @@ const initialForm = {
   description: "",
 };
 
+const buildSupplierPointPayload = (form: typeof initialForm) => ({
+  point_type: form.point_type,
+  name: form.name.trim(),
+  short_name: form.name.trim(),
+  address: form.address.trim(),
+  description: normalizeOptionalText(form.description),
+  material_offers: [],
+});
+
 const suggestionLabel = (item: any): string =>
   item.full_name || item.address_name || item.name || item.search_attributes?.suggested_text || "";
 
@@ -202,6 +211,7 @@ export default function SupplierCreatePointModal({ token, point, onClose, onSave
 
     setIsBusy(true);
     try {
+      const payload = buildSupplierPointPayload(form);
       const response = await fetch(
         isEditing ? `${baseURL}/supplier/points/${point!.id}` : `${baseURL}/supplier/points`,
         {
@@ -210,16 +220,7 @@ export default function SupplierCreatePointModal({ token, point, onClose, onSave
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({
-            point_type: form.point_type,
-            name,
-            short_name: name,
-            address,
-            description: normalizeOptionalText(form.description),
-            lat: null,
-            lon: null,
-            material_offers: [],
-          }),
+          body: JSON.stringify(payload),
         },
       );
       const data = await response.json().catch(() => ({}));

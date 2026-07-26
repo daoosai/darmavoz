@@ -71,6 +71,8 @@ jobs:
 
           cd "${SOURCE_DIR}"
           git fetch origin develop
+          DEPLOY_REF="$(git rev-parse FETCH_HEAD)"
+          echo "Deploying commit ${DEPLOY_REF}"
 
           # САМОИСЦЕЛЕНИЕ GIT WORKTREE (Убиваем зомби-папки)
           git worktree prune || true
@@ -80,14 +82,16 @@ jobs:
               git worktree remove --force "${DEPLOY_DIR}" || true
               rm -rf "${DEPLOY_DIR}"
               git worktree prune || true
-              git worktree add --detach "${DEPLOY_DIR}" origin/develop
+              git worktree add --detach "${DEPLOY_DIR}" "${DEPLOY_REF}"
             else
-              git -C "${DEPLOY_DIR}" checkout --detach origin/develop
+              git -C "${DEPLOY_DIR}" checkout --detach "${DEPLOY_REF}"
             fi
           else
             rm -rf "${DEPLOY_DIR}"
-            git worktree add --detach "${DEPLOY_DIR}" origin/develop
+            git worktree add --detach "${DEPLOY_DIR}" "${DEPLOY_REF}"
           fi
+
+          echo "Runtime worktree commit $(git -C "${DEPLOY_DIR}" rev-parse HEAD)"
 
           if [ -f "${SOURCE_DIR}/.env" ]; then
             ln -sfn "${SOURCE_DIR}/.env" "${DEPLOY_DIR}/.env"
@@ -128,7 +132,7 @@ jobs:
 
           for attempt in $(seq 1 30); do
             if curl --fail --silent --show-error http://127.0.0.1:8001/health >/dev/null; then
-              exit 0
+              break
             fi
             if [ "${attempt}" -eq 30 ]; then
               docker logs --tail 200 backend_test >&2 || true
@@ -137,4 +141,19 @@ jobs:
             fi
             sleep 2
           done
+
+          python3 - <<'PY'
+          import json
+          import urllib.request
+
+          with urllib.request.urlopen("http://127.0.0.1:8001/openapi.json", timeout=15) as response:
+              openapi = json.load(response)
+
+          quarry_create = openapi["components"]["schemas"]["QuarryCreate"]
+          required_fields = set(quarry_create.get("required", []))
+          if "lat" in required_fields or "lon" in required_fields:
+              raise SystemExit(
+                  f"QuarryCreate still requires coordinates after deploy: {sorted(required_fields)}"
+              )
+          PY
           EOF

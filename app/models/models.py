@@ -303,8 +303,8 @@ class Quarry(Base):
     address: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     contact_phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    lat: Mapped[float] = mapped_column(Float, nullable=False)
-    lon: Mapped[float] = mapped_column(Float, nullable=False)
+    lat: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    lon: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     min_delivery_price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
     rating: Mapped[float] = mapped_column(Float, default=5.0, server_default="5.0", nullable=False)
     subscription_end_date: Mapped[Optional[datetime]] = mapped_column(

@@ -237,7 +237,12 @@ async def submit_supplier_point(
     current_user: User = Depends(get_current_supplier_user),
 ) -> dict:
     point = await _owned_point(db, current_user, point_id)
-    await validate_point_can_be_approved(db, point)
+    await validate_point_can_be_approved(
+        db,
+        point,
+        require_materials=False,
+        require_coordinates=False,
+    )
     point.moderation_status = ModerationStatus.pending_moderation.value
     point.moderation_comment = None
     await db.commit()

@@ -1,16 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Loader2, MapPin, Plus, Search, X } from "lucide-react";
+import { ImagePlus, Loader2, MapPin, Search, X } from "lucide-react";
 import toast from "react-hot-toast";
 
-import { fetch2gisAddressSuggestions, withTyumenBias } from "./addressSearch";
+import { fetch2gisAddressSuggestions } from "./addressSearch";
 import { baseURL, extractApiErrorMessage } from "./utils";
-
-interface Material {
-  id: string;
-  name: string;
-  unit: string;
-  price?: number | null;
-}
 
 type EditablePointType = "quarry" | "accumulator";
 
@@ -21,8 +14,8 @@ export interface SupplierPoint {
   short_name?: string | null;
   address: string;
   description?: string | null;
-  lat: number;
-  lon: number;
+  lat: number | null;
+  lon: number | null;
   moderation_status: string;
   moderation_comment?: string | null;
   primary_image_url?: string | null;
@@ -45,18 +38,19 @@ interface Props {
   onSaved: (point: SupplierPoint) => void;
 }
 
-const TYUMEN_CENTER: [number, number] = [65.534328, 57.152286];
-
 const normalizeEditablePointType = (value?: SupplierPoint["point_type"]): EditablePointType =>
   value === "accumulator" ? "accumulator" : "quarry";
+
+const normalizeOptionalText = (value: string) => {
+  const normalized = value.trim();
+  return normalized || null;
+};
 
 const initialForm = {
   point_type: "quarry" as EditablePointType,
   name: "",
   address: "",
   description: "",
-  lat: "",
-  lon: "",
 };
 
 const suggestionLabel = (item: any): string =>
@@ -71,35 +65,14 @@ export default function SupplierCreatePointModal({ token, point, onClose, onSave
           name: point.name,
           address: point.address || "",
           description: point.description || "",
-          lat: String(point.lat),
-          lon: String(point.lon),
         }
       : initialForm,
   );
-  const [materials, setMaterials] = useState<Material[]>([]);
-  const [offerPrices, setOfferPrices] = useState<Record<string, string>>(() =>
-    Object.fromEntries(
-      (point?.material_offers || [])
-        .filter((offer) => offer.is_active)
-        .map((offer) => [offer.material_id, String(offer.price)]),
-    ),
-  );
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [isGeocoding, setIsGeocoding] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const addressContainerRef = useRef<HTMLDivElement | null>(null);
-  const mapContainerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<any>(null);
-  const markerRef = useRef<any>(null);
-  const draggedCoordinatesRef = useRef<[number, number] | null>(null);
-
-  useEffect(() => {
-    fetch(`${baseURL}/catalog/materials/`)
-      .then((response) => (response.ok ? response.json() : []))
-      .then((data) => setMaterials(Array.isArray(data) ? data : []))
-      .catch(() => toast.error("Не удалось загрузить материалы"));
-  }, []);
 
   useEffect(() => {
     const query = form.address.trim();
@@ -124,167 +97,155 @@ export default function SupplierCreatePointModal({ token, point, onClose, onSave
     return () => document.removeEventListener("mousedown", handleDocumentMouseDown);
   }, []);
 
-  useEffect(() => {
-    const mapgl = (window as any).mapgl;
-    const key = import.meta.env.VITE_2GIS_KEY;
-    if (!mapgl || !key || !mapContainerRef.current || mapRef.current) return;
-
-    const map = new mapgl.Map(mapContainerRef.current, {
-      center: TYUMEN_CENTER,
-      zoom: 12,
-      key,
-    });
-    const marker = new mapgl.Marker(map, { coordinates: TYUMEN_CENTER });
-    mapRef.current = map;
-    markerRef.current = marker;
-
-    let dragging = false;
-    const dragStart = () => {
-      dragging = true;
-      map.setOption("disableDragging", true);
+  const uploadMediaFiles = async (
+    pointId: string,
+    files: File[],
+    initialMedia: NonNullable<SupplierPoint["media_files"]> = [],
+  ) => {
+    let nextMedia = [...initialMedia];
+    const headers = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
     };
-    const dragMove = (event: MouseEvent | TouchEvent) => {
-      if (!dragging) return;
-      const pointer = event instanceof MouseEvent ? event : event.changedTouches[0];
-      const coordinates = map.unproject([pointer.clientX, pointer.clientY]) as [number, number];
-      draggedCoordinatesRef.current = coordinates;
-      marker.setCoordinates(coordinates);
-    };
-    const dragEnd = () => {
-      if (!dragging) return;
-      dragging = false;
-      map.setOption("disableDragging", false);
-      const coordinates = draggedCoordinatesRef.current;
-      if (coordinates) {
-        setForm((current) => ({
-          ...current,
-          lon: coordinates[0].toFixed(6),
-          lat: coordinates[1].toFixed(6),
-        }));
+
+    for (const file of files) {
+      const isPrimary = nextMedia.length === 0;
+      const presignResponse = await fetch(`${baseURL}/media/presign-upload`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          file_name: file.name,
+          content_type: file.type,
+          file_size: file.size,
+          entity_type: "quarry",
+          entity_id: pointId,
+          is_primary: isPrimary,
+        }),
+      });
+      const presign = await presignResponse.json().catch(() => ({}));
+      if (!presignResponse.ok) {
+        throw new Error(extractApiErrorMessage(presign, "Не удалось подготовить загрузку фотографии"));
       }
-    };
 
-    marker.on("mousedown", dragStart);
-    marker.on("touchstart", dragStart);
-    document.addEventListener("mousemove", dragMove);
-    document.addEventListener("touchmove", dragMove);
-    document.addEventListener("mouseup", dragEnd);
-    document.addEventListener("touchend", dragEnd);
-
-    return () => {
-      document.removeEventListener("mousemove", dragMove);
-      document.removeEventListener("touchmove", dragMove);
-      document.removeEventListener("mouseup", dragEnd);
-      document.removeEventListener("touchend", dragEnd);
-      marker.destroy();
-      map.destroy();
-      markerRef.current = null;
-      mapRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    const lat = Number(form.lat);
-    const lon = Number(form.lon);
-    if (!markerRef.current || !mapRef.current || !Number.isFinite(lat) || !Number.isFinite(lon)) return;
-    const coordinates: [number, number] = [lon, lat];
-    markerRef.current.setCoordinates(coordinates);
-    mapRef.current.setCenter(coordinates);
-  }, [form.lat, form.lon]);
-
-  const geocodeAddress = async (address: string): Promise<[number, number]> => {
-    setIsGeocoding(true);
-    try {
-      const response = await fetch(
-        `${baseURL}/geo/geocode?address=${encodeURIComponent(withTyumenBias(address))}`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok || !Number.isFinite(Number(data.lat)) || !Number.isFinite(Number(data.lon))) {
-        throw new Error(extractApiErrorMessage(data, "Не удалось определить координаты адреса"));
+      const uploadResponse = await fetch(presign.upload_url, {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      if (!uploadResponse.ok) {
+        throw new Error("Не удалось загрузить фотографию");
       }
-      return [Number(data.lon), Number(data.lat)];
-    } finally {
-      setIsGeocoding(false);
+
+      const confirmResponse = await fetch(`${baseURL}/media/confirm`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          entity_type: "quarry",
+          entity_id: pointId,
+          object_key: presign.object_key,
+          file_name: file.name,
+          content_type: file.type,
+          file_size: file.size,
+          is_primary: isPrimary,
+        }),
+      });
+      const confirmed = await confirmResponse.json().catch(() => ({}));
+      if (!confirmResponse.ok || !confirmed.media_file) {
+        throw new Error("Не удалось подтвердить фотографию");
+      }
+
+      nextMedia = [...nextMedia, confirmed.media_file];
     }
+
+    return nextMedia;
   };
 
-  const selectSuggestion = async (item: any) => {
-    const address = suggestionLabel(item);
-    setForm((current) => ({ ...current, address }));
+  const selectSuggestion = (item: any) => {
+    setForm((current) => ({
+      ...current,
+      address: suggestionLabel(item),
+    }));
     setShowSuggestions(false);
-    try {
-      const itemLat = Number(item.point?.lat);
-      const itemLon = Number(item.point?.lon);
-      const [lon, lat] = Number.isFinite(itemLat) && Number.isFinite(itemLon)
-        ? [itemLon, itemLat]
-        : await geocodeAddress(address);
-      setForm((current) => ({ ...current, address, lat: lat.toFixed(6), lon: lon.toFixed(6) }));
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось определить координаты");
-    }
   };
 
-  const toggleMaterial = (materialId: string) => {
-    setOfferPrices((current) => {
-      if (!(materialId in current)) {
-        const material = materials.find((item) => item.id === materialId);
-        return { ...current, [materialId]: String(material?.price ?? "") };
-      }
-      const next = { ...current };
-      delete next[materialId];
-      return next;
-    });
+  const handleSelectFiles = (files: FileList | null) => {
+    if (!files?.length) return;
+    setPendingFiles((current) => [...current, ...Array.from(files)]);
+  };
+
+  const removePendingFile = (index: number) => {
+    setPendingFiles((current) => current.filter((_, fileIndex) => fileIndex !== index));
   };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const materialOffers = Object.entries(offerPrices).map(([materialId, price]) => ({
-      material_id: materialId,
-      price: Number(price),
-      is_active: true,
-    }));
-    if (!materialOffers.length || materialOffers.some((offer) => offer.price <= 0)) {
-      toast.error("Выберите хотя бы один материал и укажите цену");
+    const name = form.name.trim();
+    const address = form.address.trim();
+
+    if (!name) {
+      toast.error("Укажите название точки");
       return;
     }
-
-    let lat = Number(form.lat);
-    let lon = Number(form.lon);
-    const hasCoordinates = Number.isFinite(lat) && Number.isFinite(lon) && form.lat !== "" && form.lon !== "";
-    if (!form.address.trim() && !hasCoordinates) {
-      toast.error("Укажите адрес или координаты точки");
+    if (!address) {
+      toast.error("Укажите адрес точки");
       return;
     }
 
     setIsBusy(true);
     try {
-      if (!hasCoordinates) {
-        [lon, lat] = await geocodeAddress(form.address);
-      }
       const response = await fetch(
         isEditing ? `${baseURL}/supplier/points/${point!.id}` : `${baseURL}/supplier/points`,
         {
           method: isEditing ? "PATCH" : "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
           body: JSON.stringify({
-            ...form,
-            address: form.address.trim(),
-            description: form.description || null,
-            lat,
-            lon,
-            material_offers: materialOffers,
+            point_type: form.point_type,
+            name,
+            short_name: name,
+            address,
+            description: normalizeOptionalText(form.description),
+            lat: null,
+            lon: null,
+            material_offers: [],
           }),
         },
       );
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(
-          extractApiErrorMessage(data, isEditing ? "Не удалось сохранить изменения" : "Не удалось создать точку"),
+          extractApiErrorMessage(
+            data,
+            isEditing ? "Не удалось сохранить изменения" : "Не удалось создать точку",
+          ),
         );
       }
-      onSaved(data);
-      toast.success(isEditing ? "Изменения отправлены на модерацию" : "Точка добавлена в черновики");
+
+      let savedPoint = data as SupplierPoint;
+      if (pendingFiles.length > 0 && savedPoint.id) {
+        const uploadedMedia = await uploadMediaFiles(
+          savedPoint.id,
+          pendingFiles,
+          savedPoint.media_files || [],
+        );
+        savedPoint = {
+          ...savedPoint,
+          media_files: uploadedMedia,
+          primary_image_url:
+            uploadedMedia.find((media) => media.is_primary)?.public_url ||
+            uploadedMedia[0]?.public_url ||
+            null,
+        };
+      }
+
+      onSaved(savedPoint);
+      toast.success(
+        isEditing
+          ? "Изменения сохранены и отправлены на повторную модерацию"
+          : "Анкета точки сохранена",
+      );
     } catch (error) {
       toast.error(
         error instanceof Error
@@ -298,116 +259,180 @@ export default function SupplierCreatePointModal({ token, point, onClose, onSave
     }
   };
 
+  const existingMedia = point?.media_files || [];
+
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-900/50 backdrop-blur-sm">
-      <div className="min-h-screen bg-gray-50 sm:mx-auto sm:my-6 sm:min-h-0 sm:max-w-xl sm:rounded-2xl">
-        <header className="sticky top-0 z-20 flex items-center justify-between border-b border-gray-200 bg-white/95 px-5 py-4 backdrop-blur sm:rounded-t-2xl">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 backdrop-blur-sm">
+      <div className="min-h-screen bg-slate-50 sm:mx-auto sm:my-6 sm:min-h-0 sm:max-w-xl sm:rounded-3xl">
+        <header className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:rounded-t-3xl">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-500">
-              {isEditing ? "Редактирование" : "Новая карточка"}
+              {isEditing ? "Редактирование" : "Новая анкета"}
             </p>
-            <h2 className="text-2xl font-black text-gray-900">
-              {isEditing ? point!.name : "Точка забора"}
+            <h2 className="text-2xl font-black text-slate-900">
+              {isEditing ? point!.name : "Добавить точку"}
             </h2>
           </div>
-          <button onClick={onClose} className="rounded-full bg-gray-100 p-3 text-gray-700 hover:bg-gray-200" aria-label="Закрыть">
+          <button
+            onClick={onClose}
+            className="rounded-full bg-slate-100 p-3 text-slate-700 hover:bg-slate-200"
+            aria-label="Закрыть"
+            type="button"
+          >
             <X className="h-5 w-5" />
           </button>
         </header>
 
         <form onSubmit={submit} className="space-y-5 p-5 pb-12">
-          <section className="rounded-xl bg-white p-5 shadow-sm">
-            <label className="text-sm font-bold text-gray-900">Тип точки</label>
+          <section className="rounded-2xl bg-white p-5 shadow-sm">
+            <label className="text-sm font-bold text-slate-900">Тип точки</label>
             <select
               value={form.point_type}
               onChange={(event) =>
-                setForm({ ...form, point_type: event.target.value as EditablePointType })
+                setForm((current) => ({
+                  ...current,
+                  point_type: event.target.value as EditablePointType,
+                }))
               }
-              className="mt-2 w-full rounded-xl border border-gray-200 p-3 text-gray-900 outline-none focus:border-sky-500"
+              className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-slate-900 outline-none focus:border-sky-500"
             >
               <option value="quarry">Карьер</option>
               <option value="accumulator">Накопитель</option>
             </select>
           </section>
 
-          <section className="space-y-3 rounded-xl bg-white p-5 shadow-sm">
-            <input required placeholder="Название точки" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full rounded-xl border border-gray-200 p-3 text-gray-900 outline-none focus:border-sky-500" />
-            <textarea placeholder="Описание" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="min-h-24 w-full rounded-xl border border-gray-200 p-3 text-gray-900 outline-none focus:border-sky-500" />
-          </section>
-
-          <section className="rounded-xl bg-white p-5 shadow-sm">
-            <label className="text-sm font-bold text-gray-900">Адрес</label>
-            <div ref={addressContainerRef} className="relative mt-2">
-              <Search className="absolute left-3 top-3.5 h-5 w-5 text-gray-400" />
+          <section className="space-y-3 rounded-2xl bg-white p-5 shadow-sm">
+            <div>
+              <label className="text-sm font-bold text-slate-900">Название</label>
               <input
-                value={form.address}
-                onFocus={() => setShowSuggestions(true)}
-                onChange={(event) => {
-                  setForm({ ...form, address: event.target.value });
-                  setShowSuggestions(true);
-                }}
-                placeholder="Начните вводить адрес"
-                className="w-full rounded-xl border border-gray-200 py-3 pl-11 pr-3 text-gray-900 outline-none focus:border-sky-500"
+                required
+                placeholder="Например, Карьер Северный"
+                value={form.name}
+                onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-slate-900 outline-none focus:border-sky-500"
               />
-              {isGeocoding ? <Loader2 className="absolute right-3 top-3.5 h-5 w-5 animate-spin text-sky-500" /> : null}
-              {showSuggestions && suggestions.length > 0 ? (
-                <div className="absolute z-30 mt-2 max-h-56 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white p-1 shadow-xl">
-                  {suggestions.map((item, index) => (
-                    <button
-                      key={item.id || index}
-                      type="button"
-                      onMouseDown={(event) => {
-                        event.preventDefault();
-                        void selectSuggestion(item);
-                      }}
-                      className="flex w-full items-start gap-2 rounded-lg px-3 py-3 text-left text-sm text-gray-700 hover:bg-sky-50"
-                    >
-                      <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-sky-500" />{suggestionLabel(item)}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
             </div>
-            <p className="mt-2 text-xs text-gray-500">Адрес можно не указывать, если координаты отмечены на карте.</p>
+
+            <div ref={addressContainerRef} className="relative">
+              <label className="text-sm font-bold text-slate-900">Текстовый адрес</label>
+              <div className="relative mt-2">
+                <Search className="absolute left-3 top-3.5 h-5 w-5 text-slate-400" />
+                <input
+                  value={form.address}
+                  onFocus={() => setShowSuggestions(true)}
+                  onChange={(event) => {
+                    setForm((current) => ({ ...current, address: event.target.value }));
+                    setShowSuggestions(true);
+                  }}
+                  placeholder="Укажите адрес точки"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-3 text-slate-900 outline-none focus:border-sky-500"
+                />
+                {showSuggestions && suggestions.length > 0 ? (
+                  <div className="absolute z-30 mt-2 max-h-56 w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1 shadow-xl">
+                    {suggestions.map((item, index) => (
+                      <button
+                        key={item.id || index}
+                        type="button"
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                          selectSuggestion(item);
+                        }}
+                        className="flex w-full items-start gap-2 rounded-xl px-3 py-3 text-left text-sm text-slate-700 hover:bg-sky-50"
+                      >
+                        <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-sky-500" />
+                        {suggestionLabel(item)}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+              <p className="mt-2 text-xs text-slate-500">
+                Координаты поставит администратор на этапе модерации.
+              </p>
+            </div>
+
+            <div>
+              <label className="text-sm font-bold text-slate-900">Описание</label>
+              <textarea
+                placeholder="Коротко опишите точку, режим работы и особенности подъезда"
+                value={form.description}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, description: event.target.value }))
+                }
+                className="mt-2 min-h-28 w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-slate-900 outline-none focus:border-sky-500"
+              />
+            </div>
           </section>
 
-          <section className="rounded-xl bg-white p-5 shadow-sm">
-            <div className="mb-3 flex items-center gap-2 font-bold text-gray-900"><MapPin className="h-5 w-5 text-sky-500" />Координаты</div>
-            <div ref={mapContainerRef} className="h-64 w-full overflow-hidden rounded-xl bg-gray-100" />
-            {!import.meta.env.VITE_2GIS_KEY ? <p className="mt-2 text-sm text-red-600">Ключ карты 2ГИС не настроен</p> : null}
-            <p className="mt-2 text-xs text-gray-500">Перетащите маркер, чтобы уточнить место погрузки.</p>
-            <div className="mt-3 grid grid-cols-2 gap-3">
-              <input type="number" step="any" placeholder="Широта" aria-label="Широта" value={form.lat} onChange={(e) => setForm({ ...form, lat: e.target.value })} className="rounded-xl border border-gray-200 p-3 text-gray-900 outline-none focus:border-sky-500" />
-              <input type="number" step="any" placeholder="Долгота" aria-label="Долгота" value={form.lon} onChange={(e) => setForm({ ...form, lon: e.target.value })} className="rounded-xl border border-gray-200 p-3 text-gray-900 outline-none focus:border-sky-500" />
+          <section className="rounded-2xl bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Фотографии</h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  Добавьте фото точки. Основное фото выберется автоматически.
+                </p>
+              </div>
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-sky-400 hover:text-sky-600">
+                <ImagePlus className="h-4 w-4" />
+                Добавить
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(event) => handleSelectFiles(event.target.files)}
+                />
+              </label>
             </div>
-          </section>
 
-          <section className="rounded-xl bg-white p-5 shadow-sm">
-            <h3 className="font-bold text-gray-900">Материалы и цены</h3>
-            <p className="mt-1 text-sm text-gray-500">Можно выбрать несколько позиций.</p>
-            <div className="mt-4 space-y-3">
-              {materials.map((material) => {
-                const selected = material.id in offerPrices;
-                return (
-                  <div key={material.id} className="flex items-center gap-3 rounded-xl border border-gray-200 p-3">
-                    <button type="button" onClick={() => toggleMaterial(material.id)} className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${selected ? "bg-sky-500 text-white" : "bg-gray-100 text-gray-400"}`}>
-                      <Plus className={`h-4 w-4 ${selected ? "rotate-45" : ""}`} />
-                    </button>
-                    <span className="min-w-0 flex-1 font-semibold text-gray-900">{material.name}</span>
-                    {selected ? (
-                      <label className="flex items-center gap-1 text-sm text-gray-500">
-                        <input required type="number" min="0.01" step="0.01" value={offerPrices[material.id]} onChange={(e) => setOfferPrices({ ...offerPrices, [material.id]: e.target.value })} className="w-24 rounded-lg border border-gray-200 p-2 text-right text-gray-900 outline-none focus:border-sky-500" />
-                        ₽/{material.unit}
-                      </label>
+            {existingMedia.length > 0 ? (
+              <div className="mt-4 grid grid-cols-3 gap-3">
+                {existingMedia.map((media) => (
+                  <div key={media.id} className="relative aspect-square overflow-hidden rounded-2xl bg-slate-100">
+                    <img src={media.public_url} alt="Фото точки" className="h-full w-full object-cover" />
+                    {media.is_primary ? (
+                      <span className="absolute left-2 top-2 rounded-full bg-slate-900/80 px-2 py-1 text-[10px] font-bold text-white">
+                        Основное
+                      </span>
                     ) : null}
                   </div>
-                );
-              })}
-            </div>
+                ))}
+              </div>
+            ) : null}
+
+            {pendingFiles.length > 0 ? (
+              <div className="mt-4 space-y-2">
+                {pendingFiles.map((file, index) => (
+                  <div
+                    key={`${file.name}-${index}`}
+                    className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm"
+                  >
+                    <span className="truncate font-medium text-slate-700">{file.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => removePendingFile(index)}
+                      className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-500 hover:text-rose-600"
+                    >
+                      Убрать
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            {existingMedia.length === 0 && pendingFiles.length === 0 ? (
+              <div className="mt-4 rounded-2xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">
+                Фото пока не добавлены
+              </div>
+            ) : null}
           </section>
 
-          <button disabled={isBusy} className="flex w-full items-center justify-center rounded-xl bg-sky-500 py-4 text-lg font-black text-white hover:bg-sky-600 disabled:opacity-50">
-            {isBusy ? <Loader2 className="h-5 w-5 animate-spin" /> : isEditing ? "Сохранить изменения" : "Сохранить точку"}
+          <button
+            disabled={isBusy}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-sky-500 py-4 text-lg font-black text-white hover:bg-sky-600 disabled:opacity-50"
+          >
+            {isBusy ? <Loader2 className="h-5 w-5 animate-spin" /> : null}
+            {isEditing ? "Сохранить анкету" : "Создать анкету"}
           </button>
         </form>
       </div>

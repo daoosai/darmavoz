@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Truck,
   Wrench,
+  X,
 } from "lucide-react";
 import { MaterialProps } from "./MaterialDetailScreen";
 import OrdersScreen from "./OrdersScreen";
@@ -441,6 +442,8 @@ function MainContent({
   const [showAddressSheet, setShowAddressSheet] = useState(false);
   const [serviceDirection, setServiceDirection] = useState<"delivery" | "equipment">("delivery");
   const [mapMaterial, setMapMaterial] = useState<MaterialProps | null>(null);
+  const [materialActionChoice, setMaterialActionChoice] = useState<MaterialProps | null>(null);
+  const [quickBuyMaterial, setQuickBuyMaterial] = useState<MaterialProps | null>(null);
   const [selectedPickupPoint, setSelectedPickupPoint] =
     useState<PickupPointSelection | null>(null);
 
@@ -455,6 +458,9 @@ function MainContent({
   const handleClientAuthenticated = () => {
     onClearFocusedOrder();
     setActiveTab("home");
+    if (quickBuyMaterial) {
+      setShowAddressSheet(true);
+    }
   };
 
   const closeMaterialSheet = () => {
@@ -462,9 +468,30 @@ function MainContent({
     setSelectedPickupPoint(null);
   };
 
+  const closeMaterialActionChoice = () => {
+    setMaterialActionChoice(null);
+  };
+
   const openDeliveryMap = (material: MaterialProps) => {
+    setMaterialActionChoice(null);
     setSelectedPickupPoint(null);
     setMapMaterial(material);
+  };
+
+  const startQuickBuy = (material: MaterialProps) => {
+    closeMaterialActionChoice();
+    setSelectedPickupPoint(null);
+    if (role !== "client" || !token) {
+      setQuickBuyMaterial(material);
+      setShowAuthSheet(true);
+      return;
+    }
+    if (!selectedAddress) {
+      setQuickBuyMaterial(material);
+      setShowAddressSheet(true);
+      return;
+    }
+    setSelectedMaterial(material);
   };
 
   const handlePickupPointSelected = (point: PickupPointSelection) => {
@@ -473,6 +500,17 @@ function MainContent({
     setSelectedMaterial(mapMaterial);
     setMapMaterial(null);
   };
+
+  useEffect(() => {
+    if (!quickBuyMaterial) return;
+    if (role !== "client" || !token) return;
+    if (!selectedAddress) return;
+    setSelectedPickupPoint(null);
+    setSelectedMaterial(quickBuyMaterial);
+    setQuickBuyMaterial(null);
+    setShowAddressSheet(false);
+    setShowAuthSheet(false);
+  }, [quickBuyMaterial, role, selectedAddress, setSelectedMaterial, token]);
 
   return (
     <div className="min-h-screen w-full bg-slate-100 flex sm:items-center justify-center text-slate-900">
@@ -606,7 +644,7 @@ function MainContent({
                       <ProductCard
                         key={material.id}
                         material={material}
-                        onClick={() => openDeliveryMap(material)}
+                        onClick={() => setMaterialActionChoice(material)}
                       />
                     ))
                 )}
@@ -717,6 +755,13 @@ function MainContent({
           </div>
         </nav>
 
+        <QuickBuyChoiceModal
+          material={materialActionChoice}
+          onClose={closeMaterialActionChoice}
+          onQuickBuy={startQuickBuy}
+          onChooseOnMap={openDeliveryMap}
+        />
+
         {/* Bottom Sheet */}
         <MaterialBottomSheet
           material={selectedMaterial}
@@ -744,7 +789,73 @@ function MainContent({
         <ClientAddressBottomSheet
           isOpen={showAddressSheet}
           onClose={() => setShowAddressSheet(false)}
+          closeOnSelect={Boolean(quickBuyMaterial)}
         />
+      </div>
+    </div>
+  );
+}
+
+function QuickBuyChoiceModal({
+  material,
+  onClose,
+  onQuickBuy,
+  onChooseOnMap,
+}: {
+  material: MaterialProps | null;
+  onClose: () => void;
+  onQuickBuy: (material: MaterialProps) => void;
+  onChooseOnMap: (material: MaterialProps) => void;
+}) {
+  if (!material) return null;
+
+  return (
+    <div className="fixed inset-0 z-[102] flex items-end justify-center bg-slate-900/45 backdrop-blur-sm sm:items-center">
+      <div className="relative w-full rounded-t-[32px] bg-white px-5 pb-8 pt-6 shadow-2xl sm:max-w-md sm:rounded-[32px]">
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-4 top-4 rounded-full bg-slate-100 p-2 text-slate-500 hover:bg-slate-200"
+          aria-label="Закрыть"
+        >
+          <X className="h-5 w-5" />
+        </button>
+
+        <div className="mb-6 pr-12">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-500">
+            {material.name}
+          </p>
+          <h3 className="mt-2 text-2xl font-black text-slate-900">
+            Как хотите оформить заказ?
+          </h3>
+          <p className="mt-2 text-sm text-slate-500">
+            Можно сразу перейти к доставке или выбрать конкретный карьер на карте.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-3">
+          <button
+            type="button"
+            onClick={() => onQuickBuy(material)}
+            className="rounded-2xl bg-sky-500 px-5 py-4 text-left text-white shadow-[0_12px_30px_rgba(14,165,233,0.28)] transition hover:bg-sky-600"
+          >
+            <span className="block text-lg font-black">Купить с доставкой</span>
+            <span className="mt-1 block text-sm text-sky-50">
+              Сначала адрес, потом кубатура и быстрый расчёт в корзине.
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onChooseOnMap(material)}
+            className="rounded-2xl border border-slate-200 bg-white px-5 py-4 text-left text-slate-900 transition hover:border-sky-200 hover:bg-sky-50"
+          >
+            <span className="block text-lg font-black">Выбрать карьер на карте</span>
+            <span className="mt-1 block text-sm text-slate-500">
+              Откроется карта точек и старый сценарий выбора.
+            </span>
+          </button>
+        </div>
       </div>
     </div>
   );

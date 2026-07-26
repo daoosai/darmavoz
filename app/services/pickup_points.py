@@ -299,16 +299,28 @@ async def pickup_point_payload(
     return payload
 
 
-async def validate_point_can_be_approved(db: AsyncSession, point: Quarry) -> None:
+async def validate_point_can_be_approved(
+    db: AsyncSession,
+    point: Quarry,
+    *,
+    require_materials: bool = True,
+    require_media: bool = True,
+    require_coordinates: bool = True,
+) -> None:
     payload = await pickup_point_payload(db, point)
     missing: list[str] = []
-    if not payload["material_offers"] or not any(
-        offer["is_active"] and offer["price"] is not None and float(offer["price"]) > 0
-        for offer in payload["material_offers"]
+    if require_materials and (
+        not payload["material_offers"]
+        or not any(
+            offer["is_active"] and offer["price"] is not None and float(offer["price"]) > 0
+            for offer in payload["material_offers"]
+        )
     ):
         missing.append("хотя бы один активный материал с ценой")
-    if not payload["media_files"]:
+    if require_media and not payload["media_files"]:
         missing.append("фотография")
+    if require_coordinates and (payload["lat"] is None or payload["lon"] is None):
+        missing.append("координаты")
     if missing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

@@ -20,8 +20,8 @@ export interface Quarry {
   description?: string;
   contact_phone?: string | null;
   subscription_end_date?: string | null;
-  lat: number;
-  lon: number;
+  lat: number | null;
+  lon: number | null;
   min_delivery_price?: number;
   moderation_status?: string;
   is_active: boolean;
@@ -202,6 +202,11 @@ export default function AdminQuarriesScreen({
     action: "approve" | "reject",
     reason?: string,
   ) => {
+    const point = quarries.find((item) => item.id === pointId);
+    if (action === "approve" && (point?.lat == null || point?.lon == null)) {
+      toast.error("Укажите координаты на карте перед одобрением");
+      return false;
+    }
     setIsModerating(true);
     try {
       const response = await fetch(`${baseURL}/admin/pickup-points/${pointId}/${action}`, {

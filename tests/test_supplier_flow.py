@@ -88,8 +88,8 @@ async def test_supplier_auth_creates_only_user_and_allows_multiple_points(
         "point_type": "quarry",
         "address": "Test address",
         "description": None,
-        "lat": 57.15,
-        "lon": 65.53,
+        "lat": None,
+        "lon": None,
         "material_offers": [],
     }
     unauthorized = await client.post("/api/v1/supplier/points", json=point_payload)
@@ -122,6 +122,15 @@ async def test_supplier_auth_creates_only_user_and_allows_multiple_points(
         },
         headers=headers,
     )
+    assert first_point.status_code == 201
+    assert second_point.status_code == 201
+    assert first_point.json()["lat"] is None
+    assert first_point.json()["lon"] is None
+    assert {
+        first_point.json()["owner_user_id"],
+        second_point.json()["owner_user_id"],
+    } == {first_point.json()["owner_user_id"]}
+
     warehouse_point = await client.post(
         "/api/v1/supplier/points",
         json={
@@ -143,16 +152,8 @@ async def test_supplier_auth_creates_only_user_and_allows_multiple_points(
         headers=headers,
     )
 
-    assert first_point.status_code == 201
-    assert second_point.status_code == 201
-    assert warehouse_point.status_code == 201
-    assert supplier_point.status_code == 201
-    assert {
-        first_point.json()["owner_user_id"],
-        second_point.json()["owner_user_id"],
-        warehouse_point.json()["owner_user_id"],
-        supplier_point.json()["owner_user_id"],
-    } == {first_point.json()["owner_user_id"]}
+    assert warehouse_point.status_code == 422
+    assert supplier_point.status_code == 422
 
     async with session_factory() as session:
         stored_point = await session.get(Quarry, UUID(first_point.json()["id"]))
@@ -174,8 +175,6 @@ async def test_supplier_auth_creates_only_user_and_allows_multiple_points(
     assert {point["name"] for point in points.json()} == {
         "Updated test point",
         "Test accumulator",
-        "Test warehouse",
-        "Test supplier",
     }
 
     async with session_factory() as session:
@@ -261,6 +260,92 @@ async def test_admin_approve_returns_clear_400_for_incomplete_point(
     assert response.status_code == 400
     assert "активный материал" in response.json()["detail"]
     assert "фотография" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_supplier_can_submit_pending_point_without_coords_but_admin_cannot_approve_it(
+    client,
+    session_factory,
+    monkeypatch,
+    admin_token,
+):
+    fake_redis = FakeRedis()
+
+    async def fake_send_sms(**_kwargs) -> str:
+        return "0000"
+
+    monkeypatch.setattr("app.api.supplier_auth.get_redis", lambda: fake_redis)
+    monkeypatch.setattr("app.api.supplier_auth.send_auth_sms_code", fake_send_sms)
+
+    challenge = await client.post(
+        "/api/v1/auth/supplier/register",
+        json={"phone": "+7 (999) 555-01-11"},
+    )
+    assert challenge.status_code == 202
+
+    verification = await client.post(
+        "/api/v1/auth/supplier/register/verify",
+        json={"phone": "+79995550111", "code": "0000"},
+    )
+    assert verification.status_code == 200
+
+    headers = {"Authorization": f"Bearer {verification.json()['access_token']}"}
+    profile = await client.patch(
+        "/api/v1/supplier/me",
+        json={"display_name": "Supplier Without Coords"},
+        headers=headers,
+    )
+    assert profile.status_code == 200
+
+    created = await client.post(
+        "/api/v1/supplier/points",
+        json={
+            "name": "Pending quarry",
+            "short_name": "Pending quarry",
+            "point_type": "quarry",
+            "address": "Tyumen",
+            "description": "Point without coordinates",
+            "lat": None,
+            "lon": None,
+            "material_offers": [],
+        },
+        headers=headers,
+    )
+    assert created.status_code == 201
+    point_id = created.json()["id"]
+
+    async with session_factory() as session:
+        session.add(
+            MediaFile(
+                entity_type="quarry",
+                entity_id=UUID(point_id),
+                bucket="test-media",
+                object_key=f"supplier/{uuid4().hex}-primary.jpg",
+                public_url="https://cdn.example/pending-quarry-primary.jpg",
+                content_type="image/jpeg",
+                file_name="primary.jpg",
+                file_size=1024,
+                is_primary=True,
+            )
+        )
+        await session.commit()
+
+    submit = await client.post(
+        f"/api/v1/supplier/points/{point_id}/submit",
+        headers=headers,
+    )
+    assert submit.status_code == 200
+    assert submit.json()["moderation_status"] == ModerationStatus.pending_moderation.value
+    assert submit.json()["lat"] is None
+    assert submit.json()["lon"] is None
+
+    approve = await client.post(
+        f"/api/v1/admin/pickup-points/{point_id}/approve",
+        json={"comment": None},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert approve.status_code == 400
+    assert "координаты" in approve.json()["detail"]
 
 
 @pytest.mark.asyncio

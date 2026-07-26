@@ -22,6 +22,13 @@ def _normalize_optional_text(value: object) -> object:
     return value
 
 
+def _normalize_optional_coordinate_value(value: object) -> object:
+    normalized = _normalize_optional_text(value)
+    if normalized is None:
+        return None
+    return normalized
+
+
 def _normalize_subscription_end_date_value(value: object) -> object:
     normalized = _normalize_optional_text(value)
     if normalized is None or not isinstance(normalized, str):
@@ -99,16 +106,22 @@ class QuarryBase(BaseModel):
     def normalize_subscription_end_date(cls, value: object) -> object:
         return _normalize_subscription_end_date_value(value)
 
-    @field_validator("lat")
+    @field_validator("lat", mode="before")
     @classmethod
-    def validate_lat(cls, value: float | None) -> float | None:
+    def validate_lat(cls, value: object) -> float | None:
+        value = _normalize_optional_coordinate_value(value)
+        if value is None:
+            return None
         if value is not None and (value < -90 or value > 90):
             raise ValueError("Latitude must be between -90 and 90")
         return value
 
-    @field_validator("lon")
+    @field_validator("lon", mode="before")
     @classmethod
-    def validate_lon(cls, value: float | None) -> float | None:
+    def validate_lon(cls, value: object) -> float | None:
+        value = _normalize_optional_coordinate_value(value)
+        if value is None:
+            return None
         if value is not None and (value < -180 or value > 180):
             raise ValueError("Longitude must be between -180 and 180")
         return value
@@ -169,16 +182,22 @@ class QuarryUpdate(BaseModel):
     def normalize_subscription_end_date(cls, value: object) -> object:
         return _normalize_subscription_end_date_value(value)
 
-    @field_validator("lat")
+    @field_validator("lat", mode="before")
     @classmethod
-    def validate_lat(cls, value: float | None) -> float | None:
+    def validate_lat(cls, value: object) -> float | None:
+        value = _normalize_optional_coordinate_value(value)
+        if value is None:
+            return None
         if value is not None and not -90 <= value <= 90:
             raise ValueError("Latitude must be between -90 and 90")
         return value
 
-    @field_validator("lon")
+    @field_validator("lon", mode="before")
     @classmethod
-    def validate_lon(cls, value: float | None) -> float | None:
+    def validate_lon(cls, value: object) -> float | None:
+        value = _normalize_optional_coordinate_value(value)
+        if value is None:
+            return None
         if value is not None and not -180 <= value <= 180:
             raise ValueError("Longitude must be between -180 and 180")
         return value

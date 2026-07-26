@@ -213,6 +213,8 @@ export default function AdminDashboardScreen({
   const [equipmentApplications, setEquipmentApplications] = useState<
     AdminEquipmentApplicationAlert[]
   >([]);
+  const [pendingDriverModerationCount, setPendingDriverModerationCount] =
+    useState(0);
   const [pendingEquipmentModerationCount, setPendingEquipmentModerationCount] =
     useState(0);
   const [driverActiveOverrides, setDriverActiveOverrides] = useState<
@@ -342,9 +344,9 @@ export default function AdminDashboardScreen({
   const [previewLeft, setPreviewLeft] = useState<string | null>(null);
   const [previewPlate, setPreviewPlate] = useState<string | null>(null);
 
-  const pendingDriversCount = drivers.filter(
-    (driver) => driver.moderation_status === "pending_moderation",
-  ).length;
+  const pendingDriversCount =
+    pendingDriverModerationCount ||
+    drivers.filter((driver) => driver.moderation_status === "pending_moderation").length;
   const newEquipmentApplicationsCount = equipmentApplications.filter(
     (item) => item.status === "new",
   ).length;
@@ -418,6 +420,7 @@ export default function AdminDashboardScreen({
         setPendingRequests((prev) =>
           prev.filter((request) => request.driver_id !== id),
         );
+        setPendingDriverModerationCount((current) => Math.max(current - 1, 0));
         setDrivers((prev) =>
           prev.map((driver) =>
             driver.id === id
@@ -445,6 +448,7 @@ export default function AdminDashboardScreen({
         setPendingRequests((prev) =>
           prev.filter((request) => request.driver_id !== id),
         );
+        setPendingDriverModerationCount((current) => Math.max(current - 1, 0));
         setDrivers((prev) =>
           prev.map((driver) =>
             driver.id === id
@@ -666,6 +670,9 @@ export default function AdminDashboardScreen({
       if (!res.ok) throw new Error("Ошибка загрузки водителей");
       const data = await res.json();
       const items = Array.isArray(data) ? data : data.results || [];
+      setPendingDriverModerationCount(
+        items.filter((driver: AdminDriver) => driver.moderation_status === "pending_moderation").length,
+      );
       setDrivers(applyDriverActiveOverrides(items));
     } catch (err) {
       if (!silent) toast.error("Не удалось загрузить водителей");
@@ -732,6 +739,24 @@ export default function AdminDashboardScreen({
     }
   };
 
+  const fetchPendingDriverModerationCount = async (silent = true) => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${baseURL}/admin/drivers/pending-moderation/count`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        throw new Error("Не удалось загрузить количество водителей на модерации");
+      }
+      const data = await res.json().catch(() => ({}));
+      setPendingDriverModerationCount(Number(data.count) || 0);
+    } catch (error) {
+      if (!silent) {
+        toast.error("Не удалось загрузить количество водителей на модерации");
+      }
+    }
+  };
+
   const fetchLiveCars = async () => {
     if (!token) return;
     setIsLoadingCars(true);
@@ -784,9 +809,11 @@ export default function AdminDashboardScreen({
   useEffect(() => {
     if (!token) return;
 
+    void fetchPendingDriverModerationCount(true);
     void fetchEquipmentApplications(true);
     void fetchEquipmentModerationCount(true);
     const intervalId = window.setInterval(() => {
+      void fetchPendingDriverModerationCount(true);
       void fetchEquipmentApplications(true);
       void fetchEquipmentModerationCount(true);
     }, 30000);
@@ -1647,6 +1674,32 @@ export default function AdminDashboardScreen({
           <span>Выйти</span>
         </button>
         </div>
+        {pendingDriversCount > 0 ? (
+          <div className="w-full rounded-2xl border border-emerald-200 bg-[linear-gradient(135deg,rgba(236,253,245,1)_0%,rgba(239,246,255,1)_100%)] px-4 py-3 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 rounded-2xl bg-emerald-500/10 p-2 text-emerald-600">
+                  <Users className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-black text-slate-900">
+                    Новые водители ожидают проверки
+                  </p>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Сейчас на модерации: {pendingDriversCount}.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab("drivers")}
+                className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-700"
+              >
+                Перейти
+              </button>
+            </div>
+          </div>
+        ) : null}
         {activeEquipmentApplicationsCount > 0 ? (
           <div className="w-full rounded-2xl border border-sky-200 bg-[linear-gradient(135deg,rgba(239,246,255,1)_0%,rgba(255,251,235,1)_100%)] px-4 py-3 shadow-sm">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

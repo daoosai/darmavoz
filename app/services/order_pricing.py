@@ -22,7 +22,6 @@ from app.services.pickup_points import public_pickup_point_filters
 
 logger = logging.getLogger(__name__)
 MARKETPLACE_POINT_TYPES = ("quarry", "accumulator", "warehouse", "supplier")
-AUTO_CALCULATION_POINT_TYPES = ("quarry",)
 ROUTE_BUILD_ERROR_MESSAGE = "Не удалось построить маршрут до вашего адреса."
 CALCULATION_DATA_ERROR_MESSAGE = "Не удалось рассчитать маршрут. Проверьте адрес доставки."
 
@@ -289,7 +288,7 @@ async def calculate_client_order_options(
             .join(quarry_materials, quarry_materials.c.quarry_id == Quarry.id)
             .where(
                 *public_pickup_point_filters(),
-                Quarry.point_type.in_(AUTO_CALCULATION_POINT_TYPES),
+                Quarry.point_type == "quarry",
                 quarry_materials.c.material_id == material_id,
                 quarry_materials.c.is_active.is_(True),
             )

@@ -728,7 +728,7 @@ function MainContent({
                     strokeWidth={isActive ? 2.5 : 2}
                   />
                   {tab.badge !== undefined && (
-                    <span className="absolute -top-1 -right-2 bg-red-500 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full">
+                    <span className="absolute right-0 top-0 z-10 flex h-4 min-w-4 translate-x-1 -translate-y-1 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white shadow-sm">
                       {tab.badge}
                     </span>
                   )}

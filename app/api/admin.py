@@ -117,6 +117,10 @@ class AdminStatisticsOut(BaseModel):
     active_drivers: int
 
 
+class PendingCountOut(BaseModel):
+    count: int
+
+
 
 @router.get("/statistics", response_model=AdminStatisticsOut)
 async def get_admin_statistics(
@@ -1033,6 +1037,20 @@ async def list_admin_drivers(
 ):
     del current_admin
     return await _list_admin_drivers(db)
+
+
+@router.get("/drivers/pending-moderation/count", response_model=PendingCountOut)
+async def get_pending_driver_moderation_count(
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+) -> PendingCountOut:
+    del current_admin
+    count = await db.scalar(
+        select(func.count(Driver.id)).where(
+            Driver.moderation_status == ModerationStatus.pending_moderation.value
+        )
+    )
+    return PendingCountOut(count=int(count or 0))
 
 
 @router.get("/drivers/{driver_id}", response_model=DriverResponse)

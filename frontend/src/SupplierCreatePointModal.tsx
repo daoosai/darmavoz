@@ -72,6 +72,7 @@ export default function SupplierCreatePointModal({ token, point, onClose, onSave
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [pendingFilePreviews, setPendingFilePreviews] = useState<string[]>([]);
   const addressContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -96,6 +97,14 @@ export default function SupplierCreatePointModal({ token, point, onClose, onSave
     document.addEventListener("mousedown", handleDocumentMouseDown);
     return () => document.removeEventListener("mousedown", handleDocumentMouseDown);
   }, []);
+
+  useEffect(() => {
+    const nextPreviews = pendingFiles.map((file) => URL.createObjectURL(file));
+    setPendingFilePreviews(nextPreviews);
+    return () => {
+      nextPreviews.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [pendingFiles]);
 
   const uploadMediaFiles = async (
     pointId: string,
@@ -244,7 +253,7 @@ export default function SupplierCreatePointModal({ token, point, onClose, onSave
       toast.success(
         isEditing
           ? "Изменения сохранены и отправлены на повторную модерацию"
-          : "Анкета точки сохранена",
+          : "Анкета точки отправлена на модерацию",
       );
     } catch (error) {
       toast.error(
@@ -314,7 +323,7 @@ export default function SupplierCreatePointModal({ token, point, onClose, onSave
             </div>
 
             <div ref={addressContainerRef} className="relative">
-              <label className="text-sm font-bold text-slate-900">Текстовый адрес</label>
+              <label className="text-sm font-bold text-slate-900">Адрес</label>
               <div className="relative mt-2">
                 <Search className="absolute left-3 top-3.5 h-5 w-5 text-slate-400" />
                 <input
@@ -401,17 +410,24 @@ export default function SupplierCreatePointModal({ token, point, onClose, onSave
             ) : null}
 
             {pendingFiles.length > 0 ? (
-              <div className="mt-4 space-y-2">
+              <div className="mt-4 grid grid-cols-3 gap-3">
                 {pendingFiles.map((file, index) => (
                   <div
                     key={`${file.name}-${index}`}
-                    className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm"
+                    className="relative aspect-square overflow-hidden rounded-2xl border border-slate-200 bg-slate-100"
                   >
-                    <span className="truncate font-medium text-slate-700">{file.name}</span>
+                    <img
+                      src={pendingFilePreviews[index]}
+                      alt={file.name}
+                      className="h-full w-full object-cover"
+                    />
+                    <div className="absolute inset-x-0 bottom-0 bg-slate-900/70 px-2 py-1 text-[10px] font-semibold text-white">
+                      <span className="block truncate">{file.name}</span>
+                    </div>
                     <button
                       type="button"
                       onClick={() => removePendingFile(index)}
-                      className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-500 hover:text-rose-600"
+                      className="absolute right-2 top-2 rounded-full bg-white/95 px-2 py-1 text-[10px] font-bold text-slate-600 shadow-sm hover:text-rose-600"
                     >
                       Убрать
                     </button>
@@ -432,7 +448,7 @@ export default function SupplierCreatePointModal({ token, point, onClose, onSave
             className="flex w-full items-center justify-center gap-2 rounded-2xl bg-sky-500 py-4 text-lg font-black text-white hover:bg-sky-600 disabled:opacity-50"
           >
             {isBusy ? <Loader2 className="h-5 w-5 animate-spin" /> : null}
-            {isEditing ? "Сохранить анкету" : "Создать анкету"}
+            {isEditing ? "Сохранить и отправить на модерацию" : "Отправить на модерацию"}
           </button>
         </form>
       </div>

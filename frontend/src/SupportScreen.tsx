@@ -923,8 +923,8 @@ export default function SupportScreen({
   if (selected) {
     const messageGroups = groupMessagesByDay(selected.messages);
     return (
-      <div className="flex h-full min-h-[calc(100dvh-7rem)] flex-col overflow-hidden bg-slate-50 sm:min-h-full">
-        <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-slate-100 bg-white p-4">
+      <div className="flex h-[100dvh] flex-col overflow-hidden bg-white">
+        <div className="sticky top-0 z-10 flex-none flex items-center gap-3 border-b border-gray-100 bg-white p-4">
           <button
             onClick={() => setSelected(null)}
             className="rounded-full bg-slate-100 p-2"
@@ -956,7 +956,7 @@ export default function SupportScreen({
           </span>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-4">
           {selected.messages.length === 0 ? (
             <div className="flex h-full items-center justify-center text-center text-sm text-slate-400">
               Сообщений пока нет
@@ -1149,7 +1149,7 @@ export default function SupportScreen({
         {selected.status !== "closed" ? (
           <form
             onSubmit={sendReply}
-            className="mt-auto shrink-0 border-t border-slate-100 bg-white p-4"
+            className="flex-none border-t border-gray-100 bg-white p-4 pb-safe"
           >
             {editingMessage ? (
               <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3">
@@ -1246,7 +1246,7 @@ export default function SupportScreen({
             </div>
           </form>
         ) : (
-          <p className="mt-auto shrink-0 border-t bg-white p-4 text-center text-sm text-slate-500">
+          <p className="flex-none border-t border-gray-100 bg-white p-4 pb-safe text-center text-sm text-slate-500">
             Обращение закрыто. История доступна только для чтения.
           </p>
         )}

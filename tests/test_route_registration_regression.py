@@ -23,3 +23,4 @@ def test_supplier_and_admin_routes_registered():
     assert "GET" in route_map.get("/api/v1/supplier/equipment", set())
     assert "POST" in route_map.get("/api/v1/supplier/equipment", set())
     assert "PATCH" in route_map.get("/api/v1/admin/suppliers/{supplier_id}", set())
+    assert "DELETE" in route_map.get("/api/v1/support/tickets/{ticket_id}", set())

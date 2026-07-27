@@ -392,6 +392,7 @@ async def get_own_support_ticket(
 
 
 @router.delete("/support/tickets/{ticket_id}", response_model=dict[str, bool])
+@message_router.delete("/tickets/{ticket_id}", response_model=dict[str, bool])
 async def delete_own_support_ticket(
     ticket_id: UUID,
     db: AsyncSession = Depends(get_db),

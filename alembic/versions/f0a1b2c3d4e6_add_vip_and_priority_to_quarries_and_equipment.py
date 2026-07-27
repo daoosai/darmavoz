@@ -7,6 +7,7 @@ Create Date: 2026-07-27 00:00:00.000000
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.engine.reflection import Inspector
 
 
 # revision identifiers, used by Alembic.
@@ -17,26 +18,39 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "quarries",
-        sa.Column("is_vip", sa.Boolean(), nullable=False, server_default=sa.text("false")),
-    )
-    op.add_column(
-        "quarries",
-        sa.Column("manual_priority", sa.Integer(), nullable=False, server_default=sa.text("0")),
-    )
-    op.add_column(
-        "special_equipment_listings",
-        sa.Column("is_vip", sa.Boolean(), nullable=False, server_default=sa.text("false")),
-    )
-    op.add_column(
-        "special_equipment_listings",
-        sa.Column("manual_priority", sa.Integer(), nullable=False, server_default=sa.text("0")),
-    )
-    op.add_column(
-        "special_equipment_listings",
-        sa.Column("price_from", sa.Numeric(12, 2), nullable=True),
-    )
+    conn = op.get_bind()
+    inspector = Inspector.from_engine(conn)
+
+    quarries_columns = {column["name"] for column in inspector.get_columns("quarries")}
+    if "is_vip" not in quarries_columns:
+        op.add_column(
+            "quarries",
+            sa.Column("is_vip", sa.Boolean(), nullable=False, server_default=sa.text("false")),
+        )
+    if "manual_priority" not in quarries_columns:
+        op.add_column(
+            "quarries",
+            sa.Column("manual_priority", sa.Integer(), nullable=False, server_default=sa.text("0")),
+        )
+
+    equipment_columns = {
+        column["name"] for column in inspector.get_columns("special_equipment_listings")
+    }
+    if "is_vip" not in equipment_columns:
+        op.add_column(
+            "special_equipment_listings",
+            sa.Column("is_vip", sa.Boolean(), nullable=False, server_default=sa.text("false")),
+        )
+    if "manual_priority" not in equipment_columns:
+        op.add_column(
+            "special_equipment_listings",
+            sa.Column("manual_priority", sa.Integer(), nullable=False, server_default=sa.text("0")),
+        )
+    if "price_from" not in equipment_columns:
+        op.add_column(
+            "special_equipment_listings",
+            sa.Column("price_from", sa.Numeric(12, 2), nullable=True),
+        )
 
     op.execute(
         """

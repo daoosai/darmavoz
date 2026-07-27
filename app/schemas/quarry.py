@@ -129,6 +129,8 @@ class QuarryBase(BaseModel):
 
 class QuarryCreate(QuarryBase):
     is_active: bool = True
+    is_vip: bool = False
+    manual_priority: int = 0
     min_delivery_price: Optional[float] = Field(default=None, ge=0)
     material_ids: Optional[list[UUID]] = None
     material_offers: Optional[list[QuarryMaterialOfferIn]] = None
@@ -155,6 +157,8 @@ class QuarryUpdate(BaseModel):
     subscription_end_date: Optional[datetime] = None
     lat: Optional[float] = None
     lon: Optional[float] = None
+    is_vip: Optional[bool] = None
+    manual_priority: Optional[int] = None
     min_delivery_price: Optional[float] = Field(default=None, ge=0)
     is_active: Optional[bool] = None
     material_ids: Optional[list[UUID]] = None
@@ -208,6 +212,8 @@ class QuarryOut(QuarryBase):
     id: UUID
     min_delivery_price: Optional[float] = None
     rating: float = 5.0
+    is_vip: bool = False
+    manual_priority: int = 0
     is_active: bool
     moderation_status: ModerationStatusValue
     moderation_comment: Optional[str] = None

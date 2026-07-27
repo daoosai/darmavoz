@@ -100,6 +100,19 @@ def _normalize_listing_tariffs(raw_tariffs: object) -> list[dict]:
     return normalized
 
 
+def _extract_price_from_tariffs(raw_tariffs: object) -> float | None:
+    normalized = _normalize_listing_tariffs(raw_tariffs)
+    prices = [
+        Decimal(str(price)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        for item in normalized
+        for price in [item.get("price")]
+        if price is not None
+    ]
+    if not prices:
+        return None
+    return float(min(prices))
+
+
 def _slugify(value: str) -> str:
     slug = re.sub(r"[^a-z0-9а-яё]+", "-", value.strip().lower(), flags=re.IGNORECASE)
     return slug.strip("-") or "equipment"
@@ -150,6 +163,9 @@ async def _listing_payload(db: AsyncSession, listing: SpecialEquipmentListing) -
         "city": listing.city,
         "district": listing.district,
         "is_active": listing.is_active,
+        "is_vip": listing.is_vip,
+        "manual_priority": listing.manual_priority,
+        "price_from": float(listing.price_from) if listing.price_from is not None else None,
         "sort_order": listing.sort_order,
         "media_files": media,
         "primary_image_url": media[0].public_url if media else None,
@@ -369,7 +385,9 @@ async def list_public_equipment(
         )
     result = await db.execute(
         stmt.order_by(
-            SpecialEquipmentListing.sort_order.asc(),
+            SpecialEquipmentListing.is_vip.desc(),
+            SpecialEquipmentListing.manual_priority.desc(),
+            SpecialEquipmentListing.price_from.asc().nullslast(),
             SpecialEquipmentListing.created_at.desc(),
         )
     )
@@ -520,7 +538,12 @@ async def list_admin_equipment(
     if search:
         stmt = stmt.where(SpecialEquipmentListing.title.ilike(f"%{search.strip()}%"))
     result = await db.execute(
-        stmt.order_by(SpecialEquipmentListing.sort_order.asc(), SpecialEquipmentListing.created_at.desc())
+        stmt.order_by(
+            SpecialEquipmentListing.is_vip.desc(),
+            SpecialEquipmentListing.manual_priority.desc(),
+            SpecialEquipmentListing.price_from.asc().nullslast(),
+            SpecialEquipmentListing.created_at.desc(),
+        )
     )
     return [await _listing_payload(db, item) for item in result.scalars().all()]
 
@@ -545,6 +568,7 @@ async def create_equipment_listing(
         **values,
         equipment_type=equipment_type,
         equipment_type_id=equipment_type_id,
+        price_from=_extract_price_from_tariffs(values.get("tariffs")),
         created_by_user_id=current_user.id,
         moderation_status=ModerationStatus.approved.value,
         moderated_by_user_id=current_user.id,
@@ -590,6 +614,8 @@ async def update_equipment_listing(
         "city",
         "district",
         "is_active",
+        "is_vip",
+        "manual_priority",
         "sort_order",
     ):
         if field in changed:
@@ -597,6 +623,8 @@ async def update_equipment_listing(
             if field == "tariffs" and value is not None:
                 value = [tariff.model_dump() for tariff in value]
             setattr(listing, field, value)
+    if "tariffs" in changed:
+        listing.price_from = _extract_price_from_tariffs(listing.tariffs)
     listing.moderation_status = ModerationStatus.approved.value
     listing.moderation_comment = None
     listing.moderated_by_user_id = current_user.id
@@ -674,13 +702,23 @@ async def create_supplier_equipment(
         equipment_type_id=payload.equipment_type_id,
     )
     values = payload.model_dump(
-        exclude={"equipment_type", "equipment_type_id", "is_active", "sort_order"}
+        exclude={
+            "equipment_type",
+            "equipment_type_id",
+            "is_active",
+            "is_vip",
+            "manual_priority",
+            "sort_order",
+        }
     )
     listing = SpecialEquipmentListing(
         **values,
         equipment_type=equipment_type,
         equipment_type_id=equipment_type_id,
+        price_from=_extract_price_from_tariffs(values.get("tariffs")),
         is_active=True,
+        is_vip=False,
+        manual_priority=0,
         is_deleted=False,
         sort_order=0,
         created_by_user_id=current_supplier.id,
@@ -729,6 +767,8 @@ async def update_supplier_equipment(
         if field == "tariffs" and value is not None:
             value = [tariff.model_dump() for tariff in value]
         setattr(listing, field, value)
+    if "tariffs" in changed:
+        listing.price_from = _extract_price_from_tariffs(listing.tariffs)
     _reset_supplier_listing_moderation(listing)
     await db.commit()
     _schedule_supplier_listing_moderation_email(

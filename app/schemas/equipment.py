@@ -114,6 +114,8 @@ class EquipmentListingBase(BaseModel):
     city: str | None = Field(default=None, max_length=255)
     district: str | None = Field(default=None, max_length=255)
     is_active: bool = True
+    is_vip: bool = False
+    manual_priority: int = 0
     sort_order: int = 0
 
     model_config = ConfigDict(str_strip_whitespace=True)
@@ -139,6 +141,8 @@ class EquipmentListingUpdate(BaseModel):
     city: str | None = Field(default=None, max_length=255)
     district: str | None = Field(default=None, max_length=255)
     is_active: bool | None = None
+    is_vip: bool | None = None
+    manual_priority: int | None = None
     sort_order: int | None = None
 
     model_config = ConfigDict(str_strip_whitespace=True)
@@ -161,6 +165,9 @@ class EquipmentListingOut(BaseModel):
     city: str | None
     district: str | None
     is_active: bool
+    is_vip: bool = False
+    manual_priority: int = 0
+    price_from: float | None = None
     sort_order: int
     media_files: list[MediaFileOut] = Field(default_factory=list)
     primary_image_url: str | None = None

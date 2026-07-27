@@ -127,6 +127,8 @@ async def create_pickup_point(
         lat=payload.lat,
         lon=payload.lon,
         min_delivery_price=min_price,
+        is_vip=payload.is_vip,
+        manual_priority=payload.manual_priority,
         is_active=payload.is_active,
         moderation_status=ModerationStatus.incomplete.value,
         moderated_by_user_id=current_admin.id,
@@ -188,6 +190,8 @@ async def update_pickup_point(
         "lat",
         "lon",
         "min_delivery_price",
+        "is_vip",
+        "manual_priority",
         "is_active",
     ):
         if field in changed:

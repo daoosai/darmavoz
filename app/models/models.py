@@ -307,6 +307,12 @@ class Quarry(Base):
     lon: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     min_delivery_price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
     rating: Mapped[float] = mapped_column(Float, default=5.0, server_default="5.0", nullable=False)
+    is_vip: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, server_default=text("false")
+    )
+    manual_priority: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False, server_default=text("0")
+    )
     subscription_end_date: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
@@ -495,6 +501,13 @@ class SpecialEquipmentListing(Base):
         index=True,
         server_default=text("false"),
     )
+    is_vip: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, server_default=text("false")
+    )
+    manual_priority: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False, server_default=text("0")
+    )
+    price_from: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
     owner_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(

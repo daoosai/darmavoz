@@ -659,6 +659,22 @@ function EditQuarryModal({
     if (lat === null || lon === null) return null;
     return { lat, lon };
   };
+  const createDraggableMarker = (mapInstance: any, coordinates: [number, number]) => {
+    const mapgl = (window as any).mapgl;
+    const marker = new mapgl.Marker(mapInstance, {
+      coordinates,
+      draggable: true,
+    });
+    marker.on("dragend", (event: any) => {
+      const [nextLon, nextLat] = event.target.getCoordinates();
+      setFormData((current) => ({
+        ...current,
+        lat: stringifyCoordinate(nextLat),
+        lon: stringifyCoordinate(nextLon),
+      }));
+    });
+    return marker;
+  };
   const totalPhotoCount = (formData.media_files?.length || 0) + pendingFiles.length;
 
   React.useEffect(() => {
@@ -678,9 +694,10 @@ function EditQuarryModal({
     mapRef.current = mapInstance;
 
     if (initialCoordinates) {
-      markerRef.current = new mapgl.Marker(mapInstance, {
-        coordinates: [initialCoordinates.lon, initialCoordinates.lat],
-      });
+      markerRef.current = createDraggableMarker(mapInstance, [
+        initialCoordinates.lon,
+        initialCoordinates.lat,
+      ]);
     }
 
     return () => {
@@ -723,9 +740,7 @@ function EditQuarryModal({
       return;
     }
 
-    markerRef.current = new mapgl.Marker(mapRef.current, {
-      coordinates: point,
-    });
+    markerRef.current = createDraggableMarker(mapRef.current, point);
   }, [formData.lat, formData.lon]);
 
   const handleLatChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1529,6 +1544,22 @@ function EnhancedEditQuarryModal({
     if (lat === null || lon === null) return null;
     return { lat, lon };
   };
+  const createDraggableMarker = (mapInstance: any, coordinates: [number, number]) => {
+    const mapgl = (window as any).mapgl;
+    const marker = new mapgl.Marker(mapInstance, {
+      coordinates,
+      draggable: true,
+    });
+    marker.on("dragend", (event: any) => {
+      const [nextLon, nextLat] = event.target.getCoordinates();
+      setFormData((current) => ({
+        ...current,
+        lat: stringifyCoordinate(nextLat),
+        lon: stringifyCoordinate(nextLon),
+      }));
+    });
+    return marker;
+  };
 
   React.useEffect(() => {
     const mapgl = (window as any).mapgl;
@@ -1546,9 +1577,10 @@ function EnhancedEditQuarryModal({
 
     mapRef.current = mapInstance;
     if (initialCoordinates) {
-      markerRef.current = new mapgl.Marker(mapInstance, {
-        coordinates: [initialCoordinates.lon, initialCoordinates.lat],
-      });
+      markerRef.current = createDraggableMarker(mapInstance, [
+        initialCoordinates.lon,
+        initialCoordinates.lat,
+      ]);
     }
 
     return () => {
@@ -1588,9 +1620,7 @@ function EnhancedEditQuarryModal({
       markerRef.current.setCoordinates(point);
       return;
     }
-    markerRef.current = new mapgl.Marker(mapRef.current, {
-      coordinates: point,
-    });
+    markerRef.current = createDraggableMarker(mapRef.current, point);
   }, [formData.lat, formData.lon]);
 
   const geocodeAddress = async (address: string) => {

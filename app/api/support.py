@@ -6,7 +6,7 @@ from uuid import UUID
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from jose import JWTError, jwt
-from sqlalchemy import inspect as sa_inspect, select
+from sqlalchemy import delete, inspect as sa_inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -165,6 +165,12 @@ def _message_is_operator_authored(message: SupportMessage) -> bool:
 def _validate_ticket_open_for_message(ticket: SupportTicket) -> None:
     if ticket.status == "closed":
         raise HTTPException(status_code=409, detail="Обращение уже закрыто")
+
+
+async def _delete_ticket_with_messages(db: AsyncSession, ticket: SupportTicket) -> None:
+    await db.execute(delete(SupportMessage).where(SupportMessage.ticket_id == ticket.id))
+    await db.delete(ticket)
+    await db.commit()
 
 
 async def _resolve_support_reply_target(
@@ -385,6 +391,19 @@ async def get_own_support_ticket(
     return _ticket_payload(ticket, actor)
 
 
+@router.delete("/support/tickets/{ticket_id}", response_model=dict[str, bool])
+async def delete_own_support_ticket(
+    ticket_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    actor: SupportActor = Depends(get_support_actor),
+):
+    ticket = await _get_ticket(db, ticket_id)
+    if not _actor_owns_ticket(actor, ticket):
+        raise HTTPException(status_code=403, detail="Нет доступа к удалению этого чата")
+    await _delete_ticket_with_messages(db, ticket)
+    return {"ok": True}
+
+
 @router.post("/support/tickets/{ticket_id}/messages", response_model=SupportTicketOut)
 async def add_own_support_message(
     ticket_id: UUID,
@@ -519,6 +538,17 @@ async def get_operator_support_ticket(
         user=current_user,
     )
     return _ticket_payload(await _get_ticket(db, ticket_id), actor)
+
+
+@router.delete("/admin/support/tickets/{ticket_id}", response_model=dict[str, bool])
+async def delete_operator_support_ticket(
+    ticket_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_logist_user),
+):
+    ticket = await _get_ticket(db, ticket_id)
+    await _delete_ticket_with_messages(db, ticket)
+    return {"ok": True}
 
 
 @router.post("/admin/support/tickets/{ticket_id}/messages", response_model=SupportTicketOut)

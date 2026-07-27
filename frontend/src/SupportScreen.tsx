@@ -768,7 +768,7 @@ export default function SupportScreen({
   };
 
   const deleteTicket = async (ticketId: string) => {
-    if (!window.confirm("Удалить этот чат навсегда?")) return;
+    if (!window.confirm("Удалить этот чат?")) return;
 
     const previousTickets = tickets;
     const previousSelected = selected;
@@ -777,7 +777,10 @@ export default function SupportScreen({
     removeTicketFromState(ticketId);
 
     try {
-      const response = await fetch(`${baseURL}/admin/support/tickets/${ticketId}`, {
+      const deleteEndpoint = operatorMode
+        ? `${baseURL}/admin/support/tickets/${ticketId}`
+        : `${baseURL}/support/tickets/${ticketId}`;
+      const response = await fetch(deleteEndpoint, {
         method: "DELETE",
         headers,
       });
@@ -1385,7 +1388,7 @@ export default function SupportScreen({
                 >
                   {statusLabels[ticket.status]}
                 </span>
-                {operatorMode ? (
+                {true ? (
                   <span
                     role="button"
                     tabIndex={0}

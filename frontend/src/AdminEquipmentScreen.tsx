@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Edit2, ImageIcon, Plus, Star, Trash2, UploadCloud, X } from "lucide-react";
+import { Crown, Edit2, ImageIcon, Plus, Star, Trash2, UploadCloud, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuthStore } from "./store";
 import { baseURL, extractApiErrorMessage, resolveMediaUrl } from "./utils";
@@ -41,6 +41,8 @@ interface ListingForm {
   city: string;
   district: string;
   is_active: boolean;
+  is_vip: boolean;
+  manual_priority: number;
   sort_order: number;
 }
 
@@ -53,7 +55,15 @@ const emptyListing: ListingForm = {
   city: "",
   district: "",
   is_active: true,
+  is_vip: false,
+  manual_priority: 0,
   sort_order: 0,
+};
+
+const normalizeManualPriority = (value?: number | null) => {
+  const parsed = Number(value ?? 0);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.min(100, Math.max(0, Math.trunc(parsed)));
 };
 
 const getApplicationStatusLabel = (status: Application["status"]) => {
@@ -224,11 +234,13 @@ export default function AdminEquipmentScreen({
               price: tariff.price?.toString() || "",
               hours: tariff.hours?.toString() || "",
             })),
-            city: item.city || "",
-            district: item.district || "",
-            is_active: item.is_active !== false,
-            sort_order: item.sort_order || 0,
-          }
+             city: item.city || "",
+             district: item.district || "",
+             is_active: item.is_active !== false,
+             is_vip: Boolean(item.is_vip),
+             manual_priority: normalizeManualPriority(item.manual_priority),
+             sort_order: item.sort_order || 0,
+           }
         : {
             ...emptyListing,
             equipment_type: activeTypes[0]?.name || "",
@@ -321,6 +333,7 @@ export default function AdminEquipmentScreen({
     const hourlyPrice = Number(
       listingForm.tariffs.find((tariff) => tariff.type === "hour")?.price,
     );
+    const manualPriority = normalizeManualPriority(listingForm.manual_priority);
 
     const response = await fetch(
       `${baseURL}/admin/equipment${listingForm.id ? `/${listingForm.id}` : ""}`,
@@ -330,6 +343,7 @@ export default function AdminEquipmentScreen({
         body: JSON.stringify({
           ...listingForm,
           id: undefined,
+          manual_priority: manualPriority,
           tariffs: listingForm.tariffs.map((tariff) => ({
             type: tariff.type,
             price:
@@ -580,7 +594,12 @@ export default function AdminEquipmentScreen({
           ) : (
             <div className="grid gap-4 lg:grid-cols-2">
               {pendingListings.map((item) => (
-                <article key={item.id} className="overflow-hidden rounded-3xl bg-white shadow-sm">
+                <article
+                  key={item.id}
+                  className={`overflow-hidden rounded-3xl bg-white shadow-sm ${
+                    item.is_vip ? "border border-amber-300 shadow-amber-100/70" : ""
+                  }`}
+                >
                   {item.primary_image_url ? (
                     <img
                       src={resolveMediaUrl(item.primary_image_url) || "/placeholder.jpg"}
@@ -599,6 +618,19 @@ export default function AdminEquipmentScreen({
                       </p>
                       <h3 className="text-xl font-black text-slate-900">{item.title}</h3>
                       <p className="font-bold text-sky-600">{item.equipment_type_name}</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {item.is_vip ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 text-xs font-black uppercase tracking-wide text-amber-800">
+                            <Crown className="h-3.5 w-3.5" />
+                            VIP
+                          </span>
+                        ) : null}
+                        {item.manual_priority ? (
+                          <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
+                            Приоритет: {item.manual_priority}
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
                     <p className="text-sm text-slate-600">{item.description}</p>
                     <div className="rounded-xl bg-slate-50 p-3 text-sm">
@@ -680,6 +712,19 @@ export default function AdminEquipmentScreen({
 
                 <div className="p-4">
                   <p className="text-xs font-bold text-sky-600">{item.equipment_type_name}</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {item.is_vip ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 text-xs font-black uppercase tracking-wide text-amber-800">
+                        <Crown className="h-3.5 w-3.5" />
+                        VIP
+                      </span>
+                    ) : null}
+                    {item.manual_priority ? (
+                      <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
+                        Приоритет: {item.manual_priority}
+                      </span>
+                    ) : null}
+                  </div>
                   <span
                     className={`mt-1 inline-flex rounded-full px-2 py-1 text-[10px] font-black uppercase ${
                       item.moderation_status === "approved"
@@ -1013,6 +1058,37 @@ export default function AdminEquipmentScreen({
                       setListingForm({ ...listingForm, district: event.target.value })
                     }
                     className="mt-1 w-full rounded-xl bg-slate-100 p-3 font-normal"
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 rounded-2xl border border-amber-100 bg-amber-50/60 p-4 sm:grid-cols-2">
+                <label className="flex items-center gap-3 rounded-xl bg-white px-4 py-3 text-sm font-bold text-slate-800">
+                  <input
+                    type="checkbox"
+                    checked={listingForm.is_vip}
+                    onChange={(event) =>
+                      setListingForm({ ...listingForm, is_vip: event.target.checked })
+                    }
+                    className="h-4 w-4 rounded border-amber-300 text-amber-500 focus:ring-amber-400"
+                  />
+                  VIP-статус
+                </label>
+                <label className="text-sm font-bold text-slate-800">
+                  Ручной приоритет (0-100)
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={listingForm.manual_priority}
+                    onChange={(event) =>
+                      setListingForm({
+                        ...listingForm,
+                        manual_priority: normalizeManualPriority(Number(event.target.value)),
+                      })
+                    }
+                    className="mt-1 w-full rounded-xl bg-white p-3 font-normal"
                   />
                 </label>
               </div>

@@ -8,7 +8,6 @@ import {
   ChevronLeft,
   PackageCheck,
   History,
-  PhoneCall,
   Headphones,
 } from "lucide-react";
 import { NotificationToggle } from "./components/shared/NotificationToggle";
@@ -225,18 +224,6 @@ export default function ClientProfileScreen({
           </div>
           <span className="font-semibold text-slate-800 text-left flex-1">
             Мои адреса
-          </span>
-        </button>
-
-        <button
-          onClick={() => (window.location.href = "tel:+79000000000")}
-          className="w-full bg-white p-4 rounded-2xl shadow-sm flex items-center gap-4 active:scale-[0.98] transition-transform"
-        >
-          <div className="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center shrink-0">
-            <PhoneCall className="w-5 h-5 text-green-500" />
-          </div>
-          <span className="font-semibold text-slate-800 text-left flex-1">
-            Позвонить диспетчеру
           </span>
         </button>
 

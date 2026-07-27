@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ChevronDown, Headphones, ImageIcon, MapPin, Wrench, X } from "lucide-react";
+import { ArrowLeft, ChevronDown, Crown, Headphones, ImageIcon, MapPin, Wrench, X } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { fetch2gisAddressSuggestions, withTyumenBias } from "./addressSearch";
@@ -40,6 +40,9 @@ export interface EquipmentListing {
   owner_user_id?: string | null;
   owner_name?: string | null;
   owner_phone?: string | null;
+  is_vip?: boolean;
+  manual_priority?: number;
+  price_from?: number | null;
   moderation_status?: "incomplete" | "pending_moderation" | "approved" | "rejected" | "suspended";
   moderation_comment?: string | null;
 }
@@ -547,8 +550,8 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
           <ArrowLeft className="h-4 w-4" /> К каталогу
         </button>
 
-        <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
-          <div className="flex snap-x gap-2 overflow-x-auto">
+        <div className={`overflow-hidden rounded-3xl bg-white shadow-sm ${selected.is_vip ? "border border-amber-300 shadow-amber-100/70" : ""}`}>
+          <div className="relative flex snap-x gap-2 overflow-x-auto">
             {photos.length ? (
               photos.map((photo) => (
                 <img
@@ -563,13 +566,27 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
                 <ImageIcon className="h-12 w-12 text-slate-300" />
               </div>
             )}
+            {selected.is_vip ? (
+              <div className="pointer-events-none absolute left-4 top-4 z-10 inline-flex items-center gap-1 rounded-full bg-amber-400 px-3 py-1 text-xs font-black uppercase tracking-wide text-white shadow-lg">
+                <Crown className="h-3.5 w-3.5" />
+                VIP
+              </div>
+            ) : null}
           </div>
 
           <div className="p-5">
             <p className="text-xs font-bold uppercase tracking-wider text-sky-600">
               {selected.equipment_type_name}
             </p>
-            <h2 className="mt-1 text-2xl font-black text-slate-900">{selected.title}</h2>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <h2 className="text-2xl font-black text-slate-900">{selected.title}</h2>
+              {selected.is_vip ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 text-xs font-black uppercase tracking-wide text-amber-800">
+                  <Crown className="h-3.5 w-3.5" />
+                  VIP-предложение
+                </span>
+              ) : null}
+            </div>
             {(selected.city || selected.district) && (
               <p className="mt-2 flex items-center gap-1 text-sm text-slate-500">
                 <MapPin className="h-4 w-4" />
@@ -892,22 +909,37 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
             <button
               key={item.id}
               onClick={() => setSelected(item)}
-              className="overflow-hidden rounded-2xl bg-white text-left shadow-sm"
+              className={`overflow-hidden rounded-2xl bg-white text-left shadow-sm transition ${item.is_vip ? "border border-amber-300 shadow-amber-100/70" : ""}`}
             >
-              {item.primary_image_url ? (
-                <img
-                  src={resolveMediaUrl(item.primary_image_url) || "/placeholder.jpg"}
-                  alt={item.title}
-                  className="h-40 w-full object-cover"
-                />
-              ) : (
-                <div className="flex h-40 items-center justify-center bg-slate-100">
-                  <ImageIcon className="h-9 w-9 text-slate-300" />
-                </div>
-              )}
+              <div className="relative">
+                {item.primary_image_url ? (
+                  <img
+                    src={resolveMediaUrl(item.primary_image_url) || "/placeholder.jpg"}
+                    alt={item.title}
+                    className="h-40 w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-40 items-center justify-center bg-slate-100">
+                    <ImageIcon className="h-9 w-9 text-slate-300" />
+                  </div>
+                )}
+                {item.is_vip ? (
+                  <span className="pointer-events-none absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-amber-400 px-3 py-1 text-[11px] font-black uppercase tracking-wide text-white shadow-lg">
+                    <Crown className="h-3.5 w-3.5" />
+                    VIP
+                  </span>
+                ) : null}
+              </div>
               <div className="p-4">
                 <p className="text-xs font-bold text-sky-600">{item.equipment_type_name}</p>
-                <h3 className="mt-1 text-lg font-black">{item.title}</h3>
+                <div className="mt-1 flex items-start justify-between gap-2">
+                  <h3 className="text-lg font-black">{item.title}</h3>
+                  {item.manual_priority ? (
+                    <span className="shrink-0 rounded-full bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-700">
+                      #{item.manual_priority}
+                    </span>
+                  ) : null}
+                </div>
                 <p className="mt-2 font-bold text-slate-900">{formatEquipmentPrice(item)}</p>
                 {(item.city || item.district) && (
                   <p className="mt-2 flex items-center gap-1 text-xs text-slate-500">

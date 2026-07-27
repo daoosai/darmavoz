@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Plus, Edit2, ImagePlus, Star, Trash2 } from "lucide-react";
+import { Plus, Edit2, ImagePlus, Star, Trash2, Crown } from "lucide-react";
 import toast from "react-hot-toast";
 import {
   fetch2gisAddressSuggestions,
@@ -23,6 +23,8 @@ export interface Quarry {
   lat: number | null;
   lon: number | null;
   min_delivery_price?: number;
+  is_vip?: boolean;
+  manual_priority?: number;
   moderation_status?: string;
   is_active: boolean;
   owner_user_id?: string | null;
@@ -57,6 +59,12 @@ const MODERATION_BADGES: Record<string, { label: string; className: string }> = 
 
 const moderationBadge = (status?: string) =>
   MODERATION_BADGES[status || "incomplete"] || MODERATION_BADGES.incomplete;
+
+const normalizeManualPriority = (value?: number | null) => {
+  const parsed = Number(value ?? 0);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.min(100, Math.max(0, Math.trunc(parsed)));
+};
 
 const POINT_TYPE_LABELS: Record<Quarry["point_type"], string> = {
   quarry: "Карьер",
@@ -295,6 +303,8 @@ export default function AdminQuarriesScreen({
         subscription_end_date: "",
         lat: 57.152223,
         lon: 65.527202,
+        is_vip: false,
+        manual_priority: 0,
         is_active: false,
         material_ids: [],
         material_offers: [],
@@ -398,7 +408,8 @@ export default function AdminQuarriesScreen({
                       {getQuarryAddress(quarry)}
                     </td>
                     <td className="p-4">
-                      {quarry.is_active ? (
+                      <div className="flex flex-wrap gap-2">
+                        {quarry.is_active ? (
                         <span className="inline-flex items-center px-2 py-1 rounded-lg bg-emerald-100 text-emerald-700 text-xs font-bold">
                           Активен
                         </span>
@@ -406,7 +417,19 @@ export default function AdminQuarriesScreen({
                         <span className="inline-flex items-center px-2 py-1 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold">
                           Скрыт
                         </span>
-                      )}
+                        )}
+                        {quarry.is_vip ? (
+                          <span className="inline-flex items-center gap-1 rounded-lg bg-amber-100 px-2 py-1 text-xs font-black uppercase tracking-wide text-amber-800">
+                            <Crown className="h-3.5 w-3.5" />
+                            VIP
+                          </span>
+                        ) : null}
+                        {(quarry.manual_priority || 0) > 0 ? (
+                          <span className="inline-flex items-center rounded-lg bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">
+                            #{quarry.manual_priority}
+                          </span>
+                        ) : null}
+                      </div>
                     </td>
                     <td className="p-4">
                       <span className={`inline-flex items-center rounded-lg px-2 py-1 text-xs font-bold ${moderationBadge(quarry.moderation_status).className}`}>
@@ -489,6 +512,17 @@ export default function AdminQuarriesScreen({
                   <span className={`inline-flex items-center rounded-lg px-2 py-1 text-xs font-bold ${moderationBadge(quarry.moderation_status).className}`}>
                     {moderationBadge(quarry.moderation_status).label}
                   </span>
+                  {quarry.is_vip ? (
+                    <span className="inline-flex items-center gap-1 rounded-lg bg-amber-100 px-2 py-1 text-xs font-black uppercase tracking-wide text-amber-800">
+                      <Crown className="h-3.5 w-3.5" />
+                      VIP
+                    </span>
+                  ) : null}
+                  {(quarry.manual_priority || 0) > 0 ? (
+                    <span className="inline-flex items-center rounded-lg bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">
+                      #{quarry.manual_priority}
+                    </span>
+                  ) : null}
                 </div>
                 <div className="flex items-center justify-end gap-2">
                   <button
@@ -904,6 +938,8 @@ function EditQuarryModal({
         lat,
         lon,
         is_active: shouldDelayActivation ? false : requestedActive,
+        is_vip: Boolean(formData.is_vip),
+        manual_priority: normalizeManualPriority(formData.manual_priority),
         material_ids: Array.from(new Set((formData.material_ids || []).filter(Boolean))),
         material_offers: normalizedMaterialOffers,
         ...(usesOwnerPhone ? {} : { contact_phone: normalizeOptionalText(formData.contact_phone) }),
@@ -1888,6 +1924,8 @@ function EnhancedEditQuarryModal({
         lat,
         lon,
         is_active: shouldDelayActivation ? false : requestedActive,
+        is_vip: Boolean(formData.is_vip),
+        manual_priority: normalizeManualPriority(formData.manual_priority),
         material_ids: Array.from(new Set((formData.material_ids || []).filter(Boolean))),
         material_offers: normalizedMaterialOffers,
         ...(usesOwnerPhone ? {} : { contact_phone: normalizeOptionalText(formData.contact_phone) }),
@@ -2233,6 +2271,37 @@ function EnhancedEditQuarryModal({
                 Фотографии пока не добавлены
               </div>
             ) : null}
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 rounded-2xl border border-amber-100 bg-amber-50/60 p-4 sm:grid-cols-2">
+            <label className="flex items-center gap-3 rounded-xl bg-white px-4 py-3 text-sm font-bold text-slate-800">
+              <input
+                type="checkbox"
+                checked={Boolean(formData.is_vip)}
+                onChange={(event) =>
+                  setFormData({ ...formData, is_vip: event.target.checked })
+                }
+                className="h-4 w-4 rounded border-amber-300 text-amber-500 focus:ring-amber-400"
+              />
+              VIP-статус
+            </label>
+            <label className="text-sm font-bold text-slate-800">
+              Ручной приоритет (0-100)
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="1"
+                value={formData.manual_priority ?? 0}
+                onChange={(event) =>
+                  setFormData({
+                    ...formData,
+                    manual_priority: normalizeManualPriority(Number(event.target.value)),
+                  })
+                }
+                className="mt-1 w-full rounded-xl bg-white px-4 py-3 font-normal"
+              />
+            </label>
           </div>
 
           <div className="flex items-center gap-3 pt-2">

@@ -264,6 +264,12 @@ def schedule_logist_no_driver_found_notification(order: Order) -> None:
 
 
 def schedule_pickup_point_moderation_notification(point: Quarry) -> None:
+    point_type_ru = "Точка забора"
+    if point.point_type == "quarry":
+        point_type_ru = "Карьер"
+    elif point.point_type in {"accumulator", "warehouse", "supplier"}:
+        point_type_ru = "Накопитель"
+
     logger.info(
         "pickup_point_moderation_push_scheduled",
         extra={
@@ -275,7 +281,7 @@ def schedule_pickup_point_moderation_notification(point: Quarry) -> None:
     _safe_schedule(
         schedule_push_to_logists,
         "Новая заявка на модерацию",
-        "Поставщик добавил новую точку забора и ожидает проверки",
+        f'Поставщик добавил новый {point_type_ru} "{point.name}" и ожидает проверки.',
         {
             "event": "pickup_point_pending_moderation",
             "pickup_point_id": str(point.id),

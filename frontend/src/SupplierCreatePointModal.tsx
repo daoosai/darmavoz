@@ -195,6 +195,22 @@ export default function SupplierCreatePointModal({ token, point, onClose, onSave
     setPendingFiles((current) => current.filter((_, fileIndex) => fileIndex !== index));
   };
 
+  const submitPointForModeration = async (pointId: string) => {
+    const response = await fetch(`${baseURL}/supplier/points/${pointId}/submit`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const errorSource =
+        data && typeof data === "object" && !Array.isArray(data)
+          ? { ...data, status: response.status }
+          : { detail: data, status: response.status };
+      throw new Error(extractApiErrorMessage(errorSource, "Не удалось отправить точку на модерацию"));
+    }
+    return data as SupplierPoint;
+  };
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const name = form.name.trim();
@@ -252,6 +268,20 @@ export default function SupplierCreatePointModal({ token, point, onClose, onSave
             uploadedMedia[0]?.public_url ||
             null,
         };
+      }
+
+      if (!isEditing && savedPoint.id) {
+        try {
+          savedPoint = await submitPointForModeration(savedPoint.id);
+        } catch (submitError) {
+          onSaved(savedPoint);
+          toast.error(
+            submitError instanceof Error
+              ? `Точка сохранена как черновик.\n${submitError.message}`
+              : "Точка сохранена как черновик",
+          );
+          return;
+        }
       }
 
       onSaved(savedPoint);

@@ -15,6 +15,7 @@ from app.models.models import (
     User,
     quarry_materials,
 )
+from app.services.notifications import schedule_pickup_point_moderation_notification
 
 
 class FakeRedis:
@@ -365,6 +366,34 @@ async def test_supplier_can_submit_pending_point_without_coords_but_admin_cannot
     )
     assert approve.status_code == 400
     assert "координаты" in approve.json()["detail"]
+
+
+def test_pickup_point_moderation_notification_uses_point_specific_body(monkeypatch):
+    scheduled: dict[str, object] = {}
+
+    def fake_safe_schedule(func, title, body, data):
+        scheduled["func"] = func
+        scheduled["title"] = title
+        scheduled["body"] = body
+        scheduled["data"] = data
+
+    monkeypatch.setattr("app.services.notifications._safe_schedule", fake_safe_schedule)
+
+    point = Quarry(
+        name="Северный",
+        address="Тюмень",
+        point_type="quarry",
+        owner_user_id=uuid4(),
+    )
+
+    schedule_pickup_point_moderation_notification(point)
+
+    assert scheduled["title"] == "Новая заявка на модерацию"
+    assert scheduled["body"] == 'Поставщик добавил новый Карьер "Северный" и ожидает проверки.'
+    assert scheduled["data"] == {
+        "event": "pickup_point_pending_moderation",
+        "pickup_point_id": str(point.id),
+    }
 
 
 @pytest.mark.asyncio

@@ -302,17 +302,15 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
                       Изменить
                     </button>
 
-                    {point.moderation_status === "approved" ? null : (
+                    {point.moderation_status === "incomplete" ? (
                       <button
-                        disabled={isBusy || point.moderation_status === "pending_moderation"}
+                        disabled={isBusy}
                         onClick={() => void submitPoint(point.id)}
                         className="flex-1 rounded-2xl bg-sky-500 px-3 py-3 text-sm font-bold text-white hover:bg-sky-600 disabled:opacity-40"
                       >
-                        {point.moderation_status === "pending_moderation"
-                          ? "На модерации"
-                          : "На модерацию"}
+                        На модерацию
                       </button>
-                    )}
+                    ) : null}
                   </div>
                 </div>
               </article>

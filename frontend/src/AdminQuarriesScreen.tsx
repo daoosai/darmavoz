@@ -158,10 +158,12 @@ const buildQuarryFormData = (quarry: Quarry): QuarryFormData => ({
 
 interface AdminQuarriesScreenProps {
   materials: any[];
+  onPointsChanged?: () => void | Promise<void>;
 }
 
 export default function AdminQuarriesScreen({
   materials,
+  onPointsChanged,
 }: AdminQuarriesScreenProps) {
   const { token } = useAuthStore();
   const [quarries, setQuarries] = useState<Quarry[]>([]);
@@ -223,6 +225,7 @@ export default function AdminQuarriesScreen({
       }
       toast.success(action === "approve" ? "Точка одобрена" : "Заявка отклонена");
       await fetchQuarries();
+      await onPointsChanged?.();
       return true;
     } catch {
       toast.error("Не удалось связаться с сервером");
@@ -271,6 +274,7 @@ export default function AdminQuarriesScreen({
           : "Точка скрыта, так как уже связана с заказами",
       );
       await fetchQuarries();
+      await onPointsChanged?.();
     } catch {
       toast.error("Не удалось связаться с сервером");
     } finally {
@@ -522,7 +526,8 @@ export default function AdminQuarriesScreen({
           onClose={() => setIsModalOpen(false)}
           onSave={() => {
             setIsModalOpen(false);
-            fetchQuarries();
+            void fetchQuarries();
+            void onPointsChanged?.();
           }}
         />
       )}

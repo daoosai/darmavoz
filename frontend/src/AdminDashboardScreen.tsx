@@ -761,6 +761,7 @@ export default function AdminDashboardScreen({
           : Number(data?.count) || 0;
       setPendingPointModerationCount(count);
     } catch (error) {
+      setPendingPointModerationCount(0);
       if (!silent) {
         toast.error("РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ С‚РѕС‡РєРё РЅР° РјРѕРґРµСЂР°С†РёРё");
       }
@@ -1784,6 +1785,32 @@ export default function AdminDashboardScreen({
                 className="inline-flex items-center justify-center rounded-xl bg-amber-500 px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-amber-600"
               >
                 Проверить
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {pendingPointModerationCount > 0 ? (
+          <div className="w-full rounded-2xl border border-cyan-200 bg-[linear-gradient(135deg,rgba(236,254,255,1)_0%,rgba(240,249,255,1)_100%)] px-4 py-3 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 rounded-2xl bg-cyan-500/10 p-2 text-cyan-700">
+                  <Map className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-black text-slate-900">
+                    Есть новые точки забора, ожидающие модерации
+                  </p>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Сейчас на проверке: {pendingPointModerationCount}.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab("quarries")}
+                className="inline-flex items-center justify-center rounded-xl bg-cyan-500 px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-cyan-600"
+              >
+                Перейти
               </button>
             </div>
           </div>
@@ -3167,7 +3194,10 @@ export default function AdminDashboardScreen({
               )}
             </>
           ) : activeTab === "quarries" ? (
-            <AdminQuarriesScreen materials={materials} />
+            <AdminQuarriesScreen
+              materials={materials}
+              onPointsChanged={() => fetchPendingPointModerationCount(true)}
+            />
           ) : activeTab === "suppliers" ? (
             <AdminSuppliersScreen />
           ) : activeTab === "equipment" ? (

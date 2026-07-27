@@ -57,12 +57,6 @@ def upgrade() -> None:
         """
     )
 
-    op.alter_column("quarries", "is_vip", server_default=None)
-    op.alter_column("quarries", "manual_priority", server_default=None)
-    op.alter_column("special_equipment_listings", "is_vip", server_default=None)
-    op.alter_column("special_equipment_listings", "manual_priority", server_default=None)
-
-
 def downgrade() -> None:
     op.drop_column("special_equipment_listings", "price_from")
     op.drop_column("special_equipment_listings", "manual_priority")

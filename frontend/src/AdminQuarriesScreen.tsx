@@ -119,6 +119,17 @@ const serializeSubscriptionEndDate = (value?: string | null) => {
   return parsed ? parsed.toISOString() : null;
 };
 
+const subscriptionDateInputMin = new Date().toISOString().split("T")[0];
+
+const normalizeSubscriptionDateInput = (value: string) => {
+  if (!value) return "";
+  const truncated = value.slice(0, 10);
+  const [year = "", month = "", day = ""] = truncated.split("-");
+  return [year.slice(0, 4), month.slice(0, 2), day.slice(0, 2)]
+    .filter((part, index, parts) => part || parts.slice(index + 1).some(Boolean))
+    .join("-");
+};
+
 const normalizeOptionalText = (value?: string | null) => {
   if (typeof value !== "string") return null;
   const normalized = value.trim();
@@ -1254,12 +1265,13 @@ function EditQuarryModal({
               <input
                 type="date"
                 value={formData.subscription_end_date || ""}
-                min="2000-01-01"
+                min={subscriptionDateInputMin}
                 max="2099-12-31"
                 onChange={(event) =>
                   setFormData({
                     ...formData,
-                    subscription_end_date: event.target.value || null,
+                    subscription_end_date:
+                      normalizeSubscriptionDateInput(event.target.value) || null,
                   })
                 }
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3"
@@ -2053,10 +2065,12 @@ function EnhancedEditQuarryModal({
               <input
                 type="date"
                 value={formData.subscription_end_date || ""}
+                min={subscriptionDateInputMin}
                 onChange={(event) =>
                   setFormData({
                     ...formData,
-                    subscription_end_date: event.target.value || null,
+                    subscription_end_date:
+                      normalizeSubscriptionDateInput(event.target.value) || null,
                   })
                 }
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3"

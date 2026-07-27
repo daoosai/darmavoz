@@ -25,6 +25,10 @@ from app.services.pickup_points import (
 router = APIRouter()
 logger = logging.getLogger(__name__)
 SUPPLIER_POINT_TYPES = {"quarry", "accumulator"}
+SUPPLIER_EDIT_REMODERATION_STATUSES = {
+    ModerationStatus.rejected.value,
+    ModerationStatus.approved.value,
+}
 
 
 def _validate_supplier_display_name(user: User) -> None:
@@ -35,6 +39,12 @@ def _validate_supplier_display_name(user: User) -> None:
 
 def _supplier_phone_value(user: User) -> str | None:
     return user.username if "@" not in (user.username or "") else None
+
+
+def _reset_point_moderation_after_supplier_edit(point: Quarry) -> None:
+    if point.moderation_status in SUPPLIER_EDIT_REMODERATION_STATUSES:
+        point.moderation_status = ModerationStatus.pending_moderation.value
+        point.moderation_comment = None
 
 
 async def _owned_point(db: AsyncSession, user: User, point_id: UUID) -> Quarry:
@@ -209,8 +219,7 @@ async def update_supplier_point(
             offers=payload_data.get("material_offers"),
             legacy_material_ids=payload_data.get("material_ids"),
         )
-    if point.moderation_status == ModerationStatus.approved.value:
-        point.moderation_status = ModerationStatus.pending_moderation.value
+    _reset_point_moderation_after_supplier_edit(point)
     await db.commit()
     return await pickup_point_payload(db, point)
 
@@ -224,8 +233,7 @@ async def replace_supplier_offers(
 ) -> dict:
     point = await _owned_point(db, current_user, point_id)
     await sync_material_offers(db, quarry_id=point.id, offers=offers)
-    if point.moderation_status == ModerationStatus.approved.value:
-        point.moderation_status = ModerationStatus.pending_moderation.value
+    _reset_point_moderation_after_supplier_edit(point)
     await db.commit()
     return await pickup_point_payload(db, point)
 

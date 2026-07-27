@@ -7,7 +7,7 @@ import {
   MapPin,
   Minus,
   Plus,
-  Crown,
+  Star,
   Truck,
 } from "lucide-react";
 import {
@@ -735,9 +735,9 @@ export default function CartScreen({
                                   <div className="flex flex-wrap items-center gap-2">
                                     <h5 className="line-clamp-2 text-sm font-bold text-slate-900">{option.quarry_name}</h5>
                                     {option.is_vip ? (
-                                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-amber-800">
-                                        <Crown className="h-3 w-3" />
-                                        VIP
+                                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black tracking-wide text-amber-700">
+                                        <Star className="h-3 w-3 fill-current" />
+                                        Рекомендуем
                                       </span>
                                     ) : null}
                                   </div>

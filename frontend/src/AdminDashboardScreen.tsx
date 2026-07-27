@@ -215,6 +215,8 @@ export default function AdminDashboardScreen({
   >([]);
   const [pendingDriverModerationCount, setPendingDriverModerationCount] =
     useState(0);
+  const [pendingPointModerationCount, setPendingPointModerationCount] =
+    useState(0);
   const [pendingEquipmentModerationCount, setPendingEquipmentModerationCount] =
     useState(0);
   const [driverActiveOverrides, setDriverActiveOverrides] = useState<
@@ -739,6 +741,32 @@ export default function AdminDashboardScreen({
     }
   };
 
+  const fetchPendingPointModerationCount = async (silent = true) => {
+    if (!token) return;
+    try {
+      const res = await fetch(
+        `${baseURL}/admin/pickup-points?moderation_status=pending_moderation`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      if (!res.ok) {
+        throw new Error("РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ С‚РѕС‡РєРё РЅР° РјРѕРґРµСЂР°С†РёРё");
+      }
+      const data = await res.json().catch(() => []);
+      const count = Array.isArray(data)
+        ? data.length
+        : Array.isArray(data?.results)
+          ? data.results.length
+          : Number(data?.count) || 0;
+      setPendingPointModerationCount(count);
+    } catch (error) {
+      if (!silent) {
+        toast.error("РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ С‚РѕС‡РєРё РЅР° РјРѕРґРµСЂР°С†РёРё");
+      }
+    }
+  };
+
   const fetchPendingDriverModerationCount = async (silent = true) => {
     if (!token) return;
     try {
@@ -809,10 +837,12 @@ export default function AdminDashboardScreen({
   useEffect(() => {
     if (!token) return;
 
+    void fetchPendingPointModerationCount(true);
     void fetchPendingDriverModerationCount(true);
     void fetchEquipmentApplications(true);
     void fetchEquipmentModerationCount(true);
     const intervalId = window.setInterval(() => {
+      void fetchPendingPointModerationCount(true);
       void fetchPendingDriverModerationCount(true);
       void fetchEquipmentApplications(true);
       void fetchEquipmentModerationCount(true);
@@ -1593,6 +1623,11 @@ export default function AdminDashboardScreen({
             >
               <Map className="w-4 h-4" />
               Точки
+              {pendingPointModerationCount > 0 && (
+                <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs font-bold text-white">
+                  {pendingPointModerationCount}
+                </span>
+              )}
             </button>
             <button
               onClick={() => setActiveTab("delivery")}
@@ -3173,7 +3208,14 @@ export default function AdminDashboardScreen({
           >
             <Layers className="w-6 h-6" />
           </div>
-          <span className="text-[10px] font-bold">Каталог</span>
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] font-bold">Точки</span>
+            {pendingPointModerationCount > 0 && (
+              <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                {pendingPointModerationCount}
+              </span>
+            )}
+          </div>
         </button>
         <button
           onClick={() => setActiveTab("quarries")}
@@ -3188,7 +3230,14 @@ export default function AdminDashboardScreen({
           >
             <Map className="w-6 h-6" />
           </div>
-          <span className="text-[10px] font-bold">Точки</span>
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] font-bold">Точки</span>
+            {pendingPointModerationCount > 0 && (
+              <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                {pendingPointModerationCount}
+              </span>
+            )}
+          </div>
         </button>
         <button
           onClick={() => setActiveTab("delivery")}

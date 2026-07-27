@@ -12,7 +12,7 @@
     "lint": "tsc --noEmit",
     "test:e2e": "playwright test",
     "assets:generate": "capacitor-assets generate",
-    "generate-icons": "npx pwa-asset-generator public/logo.png public/icons -i public/index.html -m public/manifest.json -v",
+    "generate-icons": "npx pwa-asset-generator public/logo.png public/icons -i public/index.html -m public/manifest.webmanifest -v",
     "version:sync": "node scripts/sync_version.js"
   },
   "dependencies": {

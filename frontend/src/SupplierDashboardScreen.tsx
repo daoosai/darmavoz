@@ -20,6 +20,25 @@ const TYPE_LABELS: Record<string, string> = {
   supplier: "Поставщик",
 };
 
+const getPointStatusMeta = (point: SupplierPoint) => {
+  if (point.is_active === false || point.moderation_status === "suspended") {
+    return { label: "Скрыт", className: "bg-gray-100 text-gray-800" };
+  }
+  if (point.moderation_status === "pending_moderation") {
+    return { label: "На модерации", className: "bg-yellow-100 text-yellow-800" };
+  }
+  if (point.moderation_status === "approved") {
+    return { label: "Одобрено", className: "bg-green-100 text-green-800" };
+  }
+  if (point.moderation_status === "rejected") {
+    return { label: "Отклонено", className: "bg-red-100 text-red-800" };
+  }
+  return {
+    label: STATUS_LABELS[point.moderation_status] || point.moderation_status,
+    className: "bg-gray-100 text-gray-800",
+  };
+};
+
 interface Props {
   token: string;
   onRequireProfile?: () => void;
@@ -240,8 +259,10 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
                       </p>
                       <h2 className="mt-1 text-xl font-black">{point.name}</h2>
                     </div>
-                    <span className="rounded-full bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
-                      {STATUS_LABELS[point.moderation_status] || point.moderation_status}
+                    <span
+                      className={`rounded-full px-3 py-2 text-xs font-bold ${getPointStatusMeta(point).className}`}
+                    >
+                      {getPointStatusMeta(point).label}
                     </span>
                   </div>
 

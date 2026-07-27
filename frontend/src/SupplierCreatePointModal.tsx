@@ -16,6 +16,7 @@ export interface SupplierPoint {
   description?: string | null;
   lat: number | null;
   lon: number | null;
+  is_active?: boolean;
   moderation_status: string;
   moderation_comment?: string | null;
   primary_image_url?: string | null;

@@ -172,6 +172,8 @@ export default function AdminQuarriesScreen({
   const [typeFilter, setTypeFilter] = useState("");
   const [isModerating, setIsModerating] = useState(false);
   const [deletingPointId, setDeletingPointId] = useState<string | null>(null);
+  const [rejectPointId, setRejectPointId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
 
   const fetchQuarries = async () => {
     try {
@@ -231,9 +233,22 @@ export default function AdminQuarriesScreen({
   };
 
   const rejectPoint = (pointId: string) => {
-    const reason = window.prompt("Укажите причину отклонения:");
-    if (!reason?.trim()) return;
-    void moderatePoint(pointId, "reject", reason.trim());
+    setRejectPointId(pointId);
+    setRejectReason("");
+  };
+
+  const closeRejectModal = () => {
+    if (isModerating) return;
+    setRejectPointId(null);
+    setRejectReason("");
+  };
+
+  const submitRejectPoint = async () => {
+    if (!rejectPointId || !rejectReason.trim()) return;
+    const success = await moderatePoint(rejectPointId, "reject", rejectReason.trim());
+    if (success) {
+      closeRejectModal();
+    }
   };
 
   const deletePoint = async (point: Quarry) => {
@@ -511,6 +526,45 @@ export default function AdminQuarriesScreen({
           }}
         />
       )}
+
+      {rejectPointId ? (
+        <div className="fixed inset-0 z-50 bg-black/50">
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl">
+              <h3 className="text-xl font-black text-slate-900">Укажите причину отклонения</h3>
+              <p className="mt-2 text-sm text-slate-500">
+                Комментарий увидит поставщик в причине отказа по точке.
+              </p>
+              <textarea
+                value={rejectReason}
+                onChange={(event) => setRejectReason(event.target.value)}
+                placeholder="Например: добавьте фото, уточните описание или скорректируйте адрес."
+                autoFocus
+                rows={5}
+                className="mt-4 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-100"
+              />
+              <div className="mt-5 flex gap-3">
+                <button
+                  type="button"
+                  onClick={closeRejectModal}
+                  disabled={isModerating}
+                  className="flex-1 rounded-2xl bg-slate-100 px-4 py-3 font-bold text-slate-700 transition hover:bg-slate-200 disabled:opacity-50"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void submitRejectPoint()}
+                  disabled={isModerating || !rejectReason.trim()}
+                  className="flex-1 rounded-2xl bg-red-500 px-4 py-3 font-bold text-white transition hover:bg-red-600 disabled:opacity-50"
+                >
+                  Отклонить
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
     </div>
   );

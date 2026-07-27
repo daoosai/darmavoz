@@ -40,7 +40,11 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
       });
       const data = await response.json().catch(() => []);
       if (!response.ok) {
-        throw new Error(extractApiErrorMessage(data, "Не удалось загрузить точки"));
+        const errorSource =
+          data && typeof data === "object" && !Array.isArray(data)
+            ? { ...data, status: response.status }
+            : { detail: data, status: response.status };
+        throw new Error(extractApiErrorMessage(errorSource, "Не удалось загрузить точки"));
       }
       setPoints(Array.isArray(data) ? data : []);
     } catch (error) {
@@ -177,7 +181,11 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(extractApiErrorMessage(data, "Анкета заполнена не полностью"));
+        const errorSource =
+          data && typeof data === "object" && !Array.isArray(data)
+            ? { ...data, status: response.status }
+            : { detail: data, status: response.status };
+        throw new Error(extractApiErrorMessage(errorSource, "Анкета заполнена не полностью"));
       }
       await fetchPoints();
       toast.success("Точка отправлена на модерацию");

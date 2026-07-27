@@ -225,9 +225,13 @@ export default function SupplierCreatePointModal({ token, point, onClose, onSave
       );
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
+        const errorSource =
+          data && typeof data === "object" && !Array.isArray(data)
+            ? { ...data, status: response.status }
+            : { detail: data, status: response.status };
         throw new Error(
           extractApiErrorMessage(
-            data,
+            errorSource,
             isEditing ? "Не удалось сохранить изменения" : "Не удалось создать точку",
           ),
         );

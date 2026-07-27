@@ -122,13 +122,31 @@ async def test_supplier_auth_creates_only_user_and_allows_multiple_points(
         },
         headers=headers,
     )
+    minimal_point = await client.post(
+        "/api/v1/supplier/points",
+        json={
+            "name": "Minimal point",
+            "short_name": "Minimal point",
+            "point_type": "quarry",
+            "address": "Minimal address",
+            "description": None,
+            "material_ids": None,
+            "material_offers": None,
+            "delivery_option_ids": None,
+        },
+        headers=headers,
+    )
     assert first_point.status_code == 201
     assert second_point.status_code == 201
+    assert minimal_point.status_code == 201
     assert first_point.json()["lat"] is None
     assert first_point.json()["lon"] is None
+    assert minimal_point.json()["lat"] is None
+    assert minimal_point.json()["lon"] is None
     assert {
         first_point.json()["owner_user_id"],
         second_point.json()["owner_user_id"],
+        minimal_point.json()["owner_user_id"],
     } == {first_point.json()["owner_user_id"]}
 
     warehouse_point = await client.post(
@@ -175,6 +193,7 @@ async def test_supplier_auth_creates_only_user_and_allows_multiple_points(
     assert {point["name"] for point in points.json()} == {
         "Updated test point",
         "Test accumulator",
+        "Minimal point",
     }
 
     async with session_factory() as session:

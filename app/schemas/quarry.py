@@ -130,14 +130,15 @@ class QuarryBase(BaseModel):
 class QuarryCreate(QuarryBase):
     is_active: bool = True
     min_delivery_price: Optional[float] = Field(default=None, ge=0)
-    material_ids: list[UUID] = Field(default_factory=list)
-    material_offers: list[QuarryMaterialOfferIn] = Field(default_factory=list)
-    delivery_option_ids: list[UUID] = Field(default_factory=list)
+    material_ids: Optional[list[UUID]] = None
+    material_offers: Optional[list[QuarryMaterialOfferIn]] = None
+    delivery_option_ids: Optional[list[UUID]] = None
 
     @model_validator(mode="after")
     def normalize_references(self):
-        self.material_ids = list(dict.fromkeys(self.material_ids))
-        self.delivery_option_ids = list(dict.fromkeys(self.delivery_option_ids))
+        self.material_ids = list(dict.fromkeys(self.material_ids or []))
+        self.delivery_option_ids = list(dict.fromkeys(self.delivery_option_ids or []))
+        self.material_offers = list(self.material_offers or [])
         offer_ids = [offer.material_id for offer in self.material_offers]
         if len(offer_ids) != len(set(offer_ids)):
             raise ValueError("Material offers must be unique")

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ChevronDown, Crown, Headphones, ImageIcon, MapPin, Wrench, X } from "lucide-react";
+import { ArrowLeft, ChevronDown, Headphones, ImageIcon, MapPin, Wrench, X } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { fetch2gisAddressSuggestions, withTyumenBias } from "./addressSearch";
@@ -567,9 +567,8 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
               </div>
             )}
             {selected.is_vip ? (
-              <div className="pointer-events-none absolute left-4 top-4 z-10 inline-flex items-center gap-1 rounded-full bg-amber-400 px-3 py-1 text-xs font-black uppercase tracking-wide text-white shadow-lg">
-                <Crown className="h-3.5 w-3.5" />
-                VIP
+              <div className="pointer-events-none absolute left-4 top-4 z-10 inline-flex items-center rounded-full bg-amber-400 px-3 py-1 text-xs font-bold text-white shadow-lg">
+                {"\u2B50 \u0420\u0435\u043a\u043e\u043c\u0435\u043d\u0434\u0443\u0435\u043c"}
               </div>
             ) : null}
           </div>
@@ -581,9 +580,8 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <h2 className="text-2xl font-black text-slate-900">{selected.title}</h2>
               {selected.is_vip ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 text-xs font-black uppercase tracking-wide text-amber-800">
-                  <Crown className="h-3.5 w-3.5" />
-                  VIP-предложение
+                <span className="inline-flex items-center rounded-full bg-amber-400 px-3 py-1 text-xs font-bold text-white">
+                  {"\u2B50 \u0420\u0435\u043a\u043e\u043c\u0435\u043d\u0434\u0443\u0435\u043c"}
                 </span>
               ) : null}
             </div>
@@ -924,9 +922,8 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
                   </div>
                 )}
                 {item.is_vip ? (
-                  <span className="pointer-events-none absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-amber-400 px-3 py-1 text-[11px] font-black uppercase tracking-wide text-white shadow-lg">
-                    <Crown className="h-3.5 w-3.5" />
-                    VIP
+                  <span className="pointer-events-none absolute left-3 top-3 inline-flex items-center rounded-full bg-amber-400 px-3 py-1 text-xs font-bold text-white shadow-lg">
+                    {"\u2B50 \u0420\u0435\u043a\u043e\u043c\u0435\u043d\u0434\u0443\u0435\u043c"}
                   </span>
                 ) : null}
               </div>

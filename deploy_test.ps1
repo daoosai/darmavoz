@@ -1,11 +1,28 @@
-$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = "Stop"
+
+# Auto-detect Java bundled with Android Studio.
+if (Test-Path "C:\Program Files\Android\Android Studio\jbr") {
+  $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
+} elseif (Test-Path "C:\Program Files\Android\Android Studio\jre") {
+  $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jre"
+}
+
+function Assert-LastExitCode {
+  param(
+    [string]$CommandName
+  )
+
+  if ($LASTEXITCODE -ne 0) {
+    throw "$CommandName failed with exit code $LASTEXITCODE"
+  }
+}
 
 $root = $PSScriptRoot
 if (-not $root) {
   $root = (Get-Location).Path
 }
 
-$SERVER_IP = "test.darmavoz.ru"
+$SERVER_IP = "159.194.236.11"
 $frontendDir = Join-Path $root "frontend"
 $androidDir = Join-Path $frontendDir "android"
 $apkPath = Join-Path $frontendDir "android/app/build/outputs/apk/debug/app-debug.apk"
@@ -35,13 +52,16 @@ Push-Location $frontendDir
 try {
   Write-Host "1/4 Build web bundle..." -ForegroundColor Yellow
   npm run build
+  Assert-LastExitCode "npm run build"
 
   Write-Host "2/4 Build Android APK..." -ForegroundColor Yellow
   npx cap sync android
+  Assert-LastExitCode "npx cap sync android"
 
   Push-Location $androidDir
   try {
     .\gradlew assembleDebug
+    Assert-LastExitCode ".\\gradlew assembleDebug"
   }
   finally {
     Pop-Location
@@ -53,16 +73,20 @@ finally {
 
 Write-Host "3/4 Upload APK and frontend bundle..." -ForegroundColor Yellow
 scp $apkPath "root@${SERVER_IP}:/opt/darmavoz_test_deploy/static/darmavoz-test.apk"
+Assert-LastExitCode "scp apk upload"
 
 if (Test-Path $frontendArchivePath) {
   Remove-Item -LiteralPath $frontendArchivePath -Force
 }
 
 tar -C $webDistPath -cf $frontendArchivePath .
+Assert-LastExitCode "tar frontend dist"
 scp $frontendArchivePath "root@${SERVER_IP}:/tmp/frontend-dist.tar"
+Assert-LastExitCode "scp frontend archive upload"
 Remove-Item -LiteralPath $frontendArchivePath -Force
 
 Write-Host "4/4 Update backend on server..." -ForegroundColor Yellow
 $remoteScript | ssh "root@${SERVER_IP}" "bash -s"
+Assert-LastExitCode "ssh remote deploy"
 
 Write-Host "Deploy completed successfully!" -ForegroundColor Green

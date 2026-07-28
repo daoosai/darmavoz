@@ -10,12 +10,11 @@ import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
 interface LoginScreenProps {
   onLogin: (role: UserRole) => void;
   onBack: () => void;
-  onSelectSupplier?: () => void;
 }
 
 const normalizePhoneValue = (value: string) => value.replace(/[\s()-]/g, "");
 
-export default function LoginScreen({ onLogin, onBack, onSelectSupplier }: LoginScreenProps) {
+export default function LoginScreen({ onLogin, onBack }: LoginScreenProps) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -202,15 +201,6 @@ export default function LoginScreen({ onLogin, onBack, onSelectSupplier }: Login
               {isLoading ? "Вход..." : "Войти"}
             </button>
 
-            {onSelectSupplier ? (
-              <button
-                type="button"
-                onClick={onSelectSupplier}
-                className="mt-2 text-sm font-semibold text-[#187fac] underline decoration-[#2DB0E6]/40 underline-offset-4"
-              >
-                Для поставщиков
-              </button>
-            ) : null}
           </form>
         )}
       </div>

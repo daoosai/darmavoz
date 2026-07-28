@@ -6,10 +6,12 @@ export default function WelcomeScreen({
   onSelectClient,
   onSelectEmployee,
   onSelectDriverRegister,
+  onSelectSupplier,
 }: {
   onSelectClient: () => void;
   onSelectEmployee: () => void;
   onSelectDriverRegister: () => void;
+  onSelectSupplier: () => void;
 }) {
   const [showToast, setShowToast] = useState(false);
   const [isRequisitesOpen, setIsRequisitesOpen] = useState(false);
@@ -18,13 +20,13 @@ export default function WelcomeScreen({
   const handleDriverClick = () => {
     setShowToast(true);
     setTimeout(() => setShowToast(false), 2000);
+    onSelectDriverRegister();
   };
 
   return (
     <div className="relative flex min-h-screen flex-col items-center overflow-y-auto bg-slate-50 px-6 text-center">
-      {/* Toast Notification */}
       {showToast && (
-        <div className="absolute top-10 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-6 py-3 rounded-full text-sm font-medium shadow-xl z-50 animate-in fade-in slide-in-from-top-4">
+        <div className="absolute left-1/2 top-10 z-50 -translate-x-1/2 rounded-full bg-slate-900 px-6 py-3 text-sm font-medium text-white shadow-xl animate-in fade-in slide-in-from-top-4">
           Приложение водителя в разработке
         </div>
       )}
@@ -50,10 +52,18 @@ export default function WelcomeScreen({
           </button>
 
           <button
-            onClick={onSelectDriverRegister}
+            onClick={handleDriverClick}
             className="mt-2 w-full rounded-2xl bg-[#2DB0E6] py-4 text-lg font-bold text-white shadow-sm transition-colors active:bg-blue-700"
           >
             Регистрация водителя
+          </button>
+
+          <button
+            type="button"
+            onClick={onSelectSupplier}
+            className="mt-4 cursor-pointer text-center text-sm font-medium text-[#2DB0E6]"
+          >
+            Регистрация/вход для партнеров
           </button>
         </div>
       </div>
@@ -75,10 +85,7 @@ export default function WelcomeScreen({
         </button>
       </footer>
 
-      <RequisitesModal
-        isOpen={isRequisitesOpen}
-        onClose={() => setIsRequisitesOpen(false)}
-      />
+      <RequisitesModal isOpen={isRequisitesOpen} onClose={() => setIsRequisitesOpen(false)} />
       <PrivacyPolicyModal
         isOpen={isPrivacyPolicyOpen}
         onClose={() => setIsPrivacyPolicyOpen(false)}

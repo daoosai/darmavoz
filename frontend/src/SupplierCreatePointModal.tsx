@@ -1,8 +1,14 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { ImagePlus, Loader2, MapPin, Search, X } from "lucide-react";
 import toast from "react-hot-toast";
 
-import { fetch2gisAddressSuggestions } from "./addressSearch";
+import {
+  fetch2gisAddressSuggestions,
+  get2gisSuggestionAddress,
+  get2gisSuggestionCoordinates,
+  get2gisSuggestionLabel,
+  withTyumenBias,
+} from "./addressSearch";
 import { type MaterialProps } from "./MaterialDetailScreen";
 import { baseURL, extractApiErrorMessage } from "./utils";
 
@@ -12,6 +18,23 @@ type MaterialOfferDraft = {
   material_id: string;
   price: number;
   is_active: boolean;
+};
+
+type AddressSuggestion = {
+  label: string;
+  address: string;
+  lat?: number;
+  lon?: number;
+};
+
+type SupplierPointFormState = {
+  point_type: EditablePointType;
+  name: string;
+  address: string;
+  description: string;
+  lat: string;
+  lon: string;
+  material_offers: MaterialOfferDraft[];
 };
 
 export interface SupplierPoint {
@@ -47,13 +70,7 @@ interface Props {
   onSaved: (point: SupplierPoint) => void;
 }
 
-type SupplierPointFormState = {
-  point_type: EditablePointType;
-  name: string;
-  address: string;
-  description: string;
-  material_offers: MaterialOfferDraft[];
-};
+const DEFAULT_MAP_CENTER: [number, number] = [65.527202, 57.152223];
 
 const normalizeEditablePointType = (value?: SupplierPoint["point_type"]): EditablePointType =>
   value === "accumulator" ? "accumulator" : "quarry";
@@ -61,6 +78,20 @@ const normalizeEditablePointType = (value?: SupplierPoint["point_type"]): Editab
 const normalizeOptionalText = (value: string) => {
   const normalized = value.trim();
   return normalized || null;
+};
+
+const stringifyCoordinate = (value?: number | null) =>
+  typeof value === "number" && Number.isFinite(value) ? String(value) : "";
+
+const parseCoordinate = (value?: string | number | null) => {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().replace(",", ".");
+  if (!normalized) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
 };
 
 const normalizeMaterialOffers = (offers: MaterialOfferDraft[]) => {
@@ -82,25 +113,28 @@ const initialForm: SupplierPointFormState = {
   name: "",
   address: "",
   description: "",
+  lat: "",
+  lon: "",
   material_offers: [],
 };
 
 const buildSupplierPointPayload = (form: SupplierPointFormState) => {
   const materialOffers = normalizeMaterialOffers(form.material_offers);
+  const lat = parseCoordinate(form.lat);
+  const lon = parseCoordinate(form.lon);
   return {
     point_type: form.point_type,
     name: form.name.trim(),
     short_name: form.name.trim(),
     address: form.address.trim(),
     description: normalizeOptionalText(form.description),
+    lat,
+    lon,
     material_ids: materialOffers.map((offer) => offer.material_id),
     material_offers: materialOffers,
     materials: materialOffers,
   };
 };
-
-const suggestionLabel = (item: any): string =>
-  item.full_name || item.address_name || item.name || item.search_attributes?.suggested_text || "";
 
 const formatMaterialPrice = (price?: number | null) => {
   if (price == null || !Number.isFinite(Number(price)) || Number(price) <= 0) {
@@ -118,6 +152,8 @@ const buildInitialForm = (point?: SupplierPoint | null): SupplierPointFormState 
     name: point.name,
     address: point.address || "",
     description: point.description || "",
+    lat: stringifyCoordinate(point.lat),
+    lon: stringifyCoordinate(point.lon),
     material_offers: (point.material_offers || [])
       .filter((offer) => offer.is_active !== false)
       .map((offer) => ({
@@ -137,28 +173,31 @@ export default function SupplierCreatePointModal({
 }: Props) {
   const isEditing = Boolean(point);
   const [form, setForm] = useState<SupplierPointFormState>(() => buildInitialForm(point));
-  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
+  const [isGeocoding, setIsGeocoding] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [pendingFilePreviews, setPendingFilePreviews] = useState<string[]>([]);
   const addressContainerRef = useRef<HTMLDivElement | null>(null);
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<any>(null);
+  const markerRef = useRef<any>(null);
+  const lastGeocodedAddressRef = useRef(normalizeOptionalText(point?.address || "")?.toLowerCase() || "");
 
   useEffect(() => {
-    setForm(buildInitialForm(point));
+    const nextForm = buildInitialForm(point);
+    setForm(nextForm);
+    lastGeocodedAddressRef.current = normalizeOptionalText(nextForm.address)?.toLowerCase() || "";
   }, [point]);
 
   useEffect(() => {
-    const query = form.address.trim();
-    if (query.length < 3) {
-      setSuggestions([]);
-      return;
-    }
-    const timeoutId = window.setTimeout(async () => {
-      setSuggestions(await fetch2gisAddressSuggestions(query));
-    }, 300);
-    return () => window.clearTimeout(timeoutId);
-  }, [form.address]);
+    const nextPreviews = pendingFiles.map((file) => URL.createObjectURL(file));
+    setPendingFilePreviews(nextPreviews);
+    return () => {
+      nextPreviews.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [pendingFiles]);
 
   useEffect(() => {
     const handleDocumentMouseDown = (event: MouseEvent) => {
@@ -171,13 +210,79 @@ export default function SupplierCreatePointModal({
     return () => document.removeEventListener("mousedown", handleDocumentMouseDown);
   }, []);
 
+  const parsedCoordinates = useMemo(() => {
+    const lat = parseCoordinate(form.lat);
+    const lon = parseCoordinate(form.lon);
+    if (lat === null || lon === null) return null;
+    return { lat, lon };
+  }, [form.lat, form.lon]);
+
+  const createDraggableMarker = (mapInstance: any, coordinates: [number, number]) => {
+    const mapgl = (window as any).mapgl;
+    const marker = new mapgl.Marker(mapInstance, {
+      coordinates,
+      draggable: true,
+    });
+    marker.on("dragend", (event: any) => {
+      const [nextLon, nextLat] = event.target.getCoordinates();
+      setForm((current) => ({
+        ...current,
+        lat: stringifyCoordinate(nextLat),
+        lon: stringifyCoordinate(nextLon),
+      }));
+    });
+    return marker;
+  };
+
   useEffect(() => {
-    const nextPreviews = pendingFiles.map((file) => URL.createObjectURL(file));
-    setPendingFilePreviews(nextPreviews);
+    const mapgl = (window as any).mapgl;
+    const key = import.meta.env.VITE_2GIS_KEY;
+    if (!mapgl || !key || !mapContainerRef.current || mapRef.current) return;
+
+    const initialCoordinates = parsedCoordinates;
+    const mapInstance = new mapgl.Map(mapContainerRef.current, {
+      center: initialCoordinates
+        ? [initialCoordinates.lon, initialCoordinates.lat]
+        : DEFAULT_MAP_CENTER,
+      zoom: 12,
+      key,
+    });
+
+    mapRef.current = mapInstance;
+
+    if (initialCoordinates) {
+      markerRef.current = createDraggableMarker(mapInstance, [
+        initialCoordinates.lon,
+        initialCoordinates.lat,
+      ]);
+    }
+
     return () => {
-      nextPreviews.forEach((url) => URL.revokeObjectURL(url));
+      if (markerRef.current) {
+        markerRef.current.destroy();
+        markerRef.current = null;
+      }
+      if (mapRef.current) {
+        mapRef.current.destroy();
+        mapRef.current = null;
+      }
     };
-  }, [pendingFiles]);
+  }, [parsedCoordinates]);
+
+  useEffect(() => {
+    const mapgl = (window as any).mapgl;
+    if (!mapRef.current || !mapgl || !parsedCoordinates) return;
+
+    const pointCoordinates: [number, number] = [parsedCoordinates.lon, parsedCoordinates.lat];
+    mapRef.current.setCenter(pointCoordinates);
+
+    if (markerRef.current) {
+      markerRef.current.setCoordinates(pointCoordinates);
+      return;
+    }
+
+    markerRef.current = createDraggableMarker(mapRef.current, pointCoordinates);
+  }, [parsedCoordinates]);
 
   const uploadMediaFiles = async (
     pointId: string,
@@ -242,14 +347,6 @@ export default function SupplierCreatePointModal({
     return nextMedia;
   };
 
-  const selectSuggestion = (item: any) => {
-    setForm((current) => ({
-      ...current,
-      address: suggestionLabel(item),
-    }));
-    setShowSuggestions(false);
-  };
-
   const handleSelectFiles = (files: FileList | null) => {
     if (!files?.length) return;
     setPendingFiles((current) => [...current, ...Array.from(files)]);
@@ -257,6 +354,20 @@ export default function SupplierCreatePointModal({
 
   const removePendingFile = (index: number) => {
     setPendingFiles((current) => current.filter((_, fileIndex) => fileIndex !== index));
+  };
+
+  const updateMaterialPrice = (materialId: string, nextValue: string) => {
+    setForm((current) => ({
+      ...current,
+      material_offers: current.material_offers.map((offer) =>
+        offer.material_id === materialId
+          ? {
+              ...offer,
+              price: Number(nextValue),
+            }
+          : offer,
+      ),
+    }));
   };
 
   const toggleMaterial = (material: MaterialProps) => {
@@ -282,18 +393,110 @@ export default function SupplierCreatePointModal({
     });
   };
 
-  const updateMaterialPrice = (materialId: string, nextValue: string) => {
+  const getCoordsFromBackend = async (address: string) => {
+    setIsGeocoding(true);
+    try {
+      const response = await fetch(
+        `${baseURL}/geo/geocode?address=${encodeURIComponent(withTyumenBias(address))}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(extractApiErrorMessage(data, "Не удалось определить координаты по адресу"));
+      }
+      const lat = Number(data.lat);
+      const lon = Number(data.lon);
+      if (Number.isFinite(lat) && Number.isFinite(lon)) {
+        return { lat, lon };
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось определить координаты по адресу");
+    } finally {
+      setIsGeocoding(false);
+    }
+    return null;
+  };
+
+  const handleAddressChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value;
+    lastGeocodedAddressRef.current = "";
+    setForm((current) => ({ ...current, address: value }));
+    setShowSuggestions(true);
+
+    if (!value.trim()) {
+      setSuggestions([]);
+      return;
+    }
+
+    const nextSuggestions = await fetch2gisAddressSuggestions(value);
+    setSuggestions(
+      nextSuggestions
+        .map((item: any) => {
+          const address = get2gisSuggestionAddress(item);
+          const label = get2gisSuggestionLabel(item);
+          const { lat, lon } = get2gisSuggestionCoordinates(item);
+          return {
+            label: label || address,
+            address,
+            lat,
+            lon,
+          };
+        })
+        .filter((item) => Boolean(item.address)),
+    );
+  };
+
+  const selectSuggestion = async (suggestion: AddressSuggestion) => {
+    const address = suggestion.address.trim() || suggestion.label.trim();
+    setShowSuggestions(false);
+    setSuggestions([]);
+
+    if (typeof suggestion.lat === "number" && typeof suggestion.lon === "number") {
+      lastGeocodedAddressRef.current = address.toLowerCase();
+      setForm((current) => ({
+        ...current,
+        address,
+        lat: stringifyCoordinate(suggestion.lat),
+        lon: stringifyCoordinate(suggestion.lon),
+      }));
+      return;
+    }
+
+    setForm((current) => ({ ...current, address }));
+    const coords = await getCoordsFromBackend(address);
+    if (!coords) return;
+
+    lastGeocodedAddressRef.current = address.toLowerCase();
     setForm((current) => ({
       ...current,
-      material_offers: current.material_offers.map((offer) =>
-        offer.material_id === materialId
-          ? {
-              ...offer,
-              price: Number(nextValue),
-            }
-          : offer,
-      ),
+      address,
+      lat: stringifyCoordinate(coords.lat),
+      lon: stringifyCoordinate(coords.lon),
     }));
+  };
+
+  const handleLatChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value;
+    const parts = value.split(/[,\s]+/);
+    if (parts.length >= 2) {
+      const lat = parseCoordinate(parts[0]);
+      const lon = parseCoordinate(parts[1]);
+      if (lat !== null && lon !== null) {
+        setForm((current) => ({
+          ...current,
+          lat: stringifyCoordinate(lat),
+          lon: stringifyCoordinate(lon),
+        }));
+        return;
+      }
+    }
+    setForm((current) => ({ ...current, lat: value }));
+  };
+
+  const handleLonChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setForm((current) => ({ ...current, lon: event.target.value }));
   };
 
   const submitPointForModeration = async (pointId: string) => {
@@ -317,6 +520,8 @@ export default function SupplierCreatePointModal({
     const name = form.name.trim();
     const address = form.address.trim();
     const normalizedOffers = normalizeMaterialOffers(form.material_offers);
+    let lat = parseCoordinate(form.lat);
+    let lon = parseCoordinate(form.lon);
 
     if (!name) {
       toast.error("Укажите название точки");
@@ -335,12 +540,32 @@ export default function SupplierCreatePointModal({
       return;
     }
 
+    if (lat === null || lon === null) {
+      const addressKey = address.toLowerCase();
+      if (lastGeocodedAddressRef.current !== addressKey) {
+        const coords = await getCoordsFromBackend(address);
+        if (coords) {
+          lat = coords.lat;
+          lon = coords.lon;
+          lastGeocodedAddressRef.current = addressKey;
+          setForm((current) => ({
+            ...current,
+            lat: stringifyCoordinate(coords.lat),
+            lon: stringifyCoordinate(coords.lon),
+          }));
+        }
+      }
+    }
+
     setIsBusy(true);
     try {
       const payload = buildSupplierPointPayload({
         ...form,
+        lat: stringifyCoordinate(lat),
+        lon: stringifyCoordinate(lon),
         material_offers: normalizedOffers,
       });
+
       const response = await fetch(
         isEditing ? `${baseURL}/supplier/points/${point!.id}` : `${baseURL}/supplier/points`,
         {
@@ -473,10 +698,7 @@ export default function SupplierCreatePointModal({
                 <input
                   value={form.address}
                   onFocus={() => setShowSuggestions(true)}
-                  onChange={(event) => {
-                    setForm((current) => ({ ...current, address: event.target.value }));
-                    setShowSuggestions(true);
-                  }}
+                  onChange={handleAddressChange}
                   placeholder="Укажите адрес точки"
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-3 text-slate-900 outline-none focus:border-sky-500"
                 />
@@ -484,23 +706,23 @@ export default function SupplierCreatePointModal({
                   <div className="absolute z-30 mt-2 max-h-56 w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1 shadow-xl">
                     {suggestions.map((item, index) => (
                       <button
-                        key={item.id || index}
+                        key={`${item.address}-${index}`}
                         type="button"
                         onMouseDown={(event) => {
                           event.preventDefault();
-                          selectSuggestion(item);
+                          void selectSuggestion(item);
                         }}
                         className="flex w-full items-start gap-2 rounded-xl px-3 py-3 text-left text-sm text-slate-700 hover:bg-sky-50"
                       >
                         <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-sky-500" />
-                        {suggestionLabel(item)}
+                        {item.label}
                       </button>
                     ))}
                   </div>
                 ) : null}
               </div>
               <p className="mt-2 text-xs text-slate-500">
-                Координаты поставит администратор на этапе модерации.
+                Выберите адрес из подсказок или уточните точку маркером на карте.
               </p>
             </div>
 
@@ -515,6 +737,44 @@ export default function SupplierCreatePointModal({
                 className="mt-2 min-h-28 w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-slate-900 outline-none focus:border-sky-500"
               />
             </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Карта 2ГИС
+              </label>
+              <div
+                ref={mapContainerRef}
+                className="h-48 min-h-[192px] w-full overflow-hidden rounded-xl bg-slate-200"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Широта (Lat)
+                </label>
+                <input
+                  type="text"
+                  value={form.lat}
+                  onChange={handleLatChange}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 font-medium text-slate-900 outline-none transition-all focus:border-[#2DB0E6] focus:ring-2 focus:ring-[#2DB0E6]/20"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Долгота (Lon)
+                </label>
+                <input
+                  type="text"
+                  value={form.lon}
+                  onChange={handleLonChange}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 font-medium text-slate-900 outline-none transition-all focus:border-[#2DB0E6] focus:ring-2 focus:ring-[#2DB0E6]/20"
+                />
+              </div>
+            </div>
+            {isGeocoding ? (
+              <p className="text-xs text-slate-500">Определяем координаты по адресу...</p>
+            ) : null}
           </section>
 
           <section className="rounded-2xl bg-white p-5 shadow-sm">

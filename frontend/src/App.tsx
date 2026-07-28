@@ -253,6 +253,7 @@ export default function App() {
           }}
           onSelectEmployee={() => setCurrentRoute("login")}
           onSelectDriverRegister={() => setCurrentRoute("driver_register")}
+          onSelectSupplier={() => setCurrentRoute("supplier_register")}
         />
       );
     }
@@ -289,7 +290,6 @@ export default function App() {
             )
           }
           onBack={() => setCurrentRoute("welcome")}
-          onSelectSupplier={() => setCurrentRoute("supplier_register")}
         />
       );
     }

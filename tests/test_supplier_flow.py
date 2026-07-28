@@ -317,6 +317,28 @@ async def test_supplier_can_submit_pending_point_without_coords_but_admin_cannot
     )
     assert profile.status_code == 200
 
+    async with session_factory() as session:
+        category = Category(
+            name="Инертные",
+            slug=f"inert-{uuid4().hex[:8]}",
+            sort_order=0,
+            is_active=True,
+        )
+        material = Material(
+            category=category,
+            name="Песок карьерный",
+            description=None,
+            price=1800,
+            unit="м3",
+            min_volume=1,
+            is_active=True,
+            sort_order=0,
+        )
+        session.add_all([category, material])
+        await session.commit()
+        await session.refresh(material)
+        material_id = material.id
+
     created = await client.post(
         "/api/v1/supplier/points",
         json={
@@ -327,12 +349,19 @@ async def test_supplier_can_submit_pending_point_without_coords_but_admin_cannot
             "description": "Point without coordinates",
             "lat": None,
             "lon": None,
-            "material_offers": [],
+            "materials": [
+                {
+                    "material_id": str(material_id),
+                    "price": 1950,
+                }
+            ],
         },
         headers=headers,
     )
     assert created.status_code == 201
     point_id = created.json()["id"]
+    assert created.json()["material_offers"]
+    assert created.json()["material_offers"][0]["material_id"] == str(material_id)
 
     async with session_factory() as session:
         session.add(

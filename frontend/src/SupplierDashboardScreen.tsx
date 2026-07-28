@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Building2, Loader2, MapPin, Pencil, Plus, Star, Upload } from "lucide-react";
 import toast from "react-hot-toast";
 
+import { type MaterialProps } from "./MaterialDetailScreen";
 import SupplierCreatePointModal, { type SupplierPoint } from "./SupplierCreatePointModal";
 import { baseURL, extractApiErrorMessage } from "./utils";
 
@@ -46,6 +47,7 @@ interface Props {
 
 export default function SupplierDashboardScreen({ token, onRequireProfile }: Props) {
   const [points, setPoints] = useState<SupplierPoint[]>([]);
+  const [materials, setMaterials] = useState<MaterialProps[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isBusy, setIsBusy] = useState(false);
   const [showCreatePoint, setShowCreatePoint] = useState(false);
@@ -94,9 +96,24 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
     }
   };
 
+  const fetchMaterials = async () => {
+    try {
+      const response = await fetch(`${baseURL}/catalog/materials/`);
+      const data = await response.json().catch(() => []);
+      if (!response.ok) {
+        throw new Error(extractApiErrorMessage(data, "Не удалось загрузить материалы"));
+      }
+      const items = Array.isArray(data) ? data : data.results || [];
+      setMaterials(items.filter((item: MaterialProps & { is_active?: boolean }) => item.is_active !== false));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось загрузить материалы");
+    }
+  };
+
   useEffect(() => {
     void fetchPoints();
     void fetchProfile();
+    void fetchMaterials();
   }, [token]);
 
   const openCreatePoint = () => {
@@ -343,6 +360,7 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
       {showCreatePoint ? (
         <SupplierCreatePointModal
           token={token}
+          materials={materials}
           onClose={() => setShowCreatePoint(false)}
           onSaved={(point) => {
             setPoints((current) => [point, ...current]);
@@ -355,6 +373,7 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
         <SupplierCreatePointModal
           token={token}
           point={editingPoint}
+          materials={materials}
           onClose={() => setEditingPoint(null)}
           onSaved={(savedPoint) => {
             setPoints((current) =>

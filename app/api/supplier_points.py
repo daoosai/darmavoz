@@ -31,6 +31,16 @@ SUPPLIER_EDIT_REMODERATION_STATUSES = {
 }
 
 
+def _extract_material_offers(payload: QuarryCreate | QuarryUpdate | dict):
+    if isinstance(payload, dict):
+        if "material_offers" in payload:
+            return payload.get("material_offers")
+        return payload.get("materials")
+    if payload.material_offers is not None:
+        return payload.material_offers
+    return payload.materials
+
+
 def _validate_supplier_display_name(user: User) -> None:
     if (user.display_name or "").strip():
         return
@@ -165,7 +175,10 @@ async def create_supplier_point(
     db.add(point)
     await db.flush()
     await sync_material_offers(
-        db, quarry_id=point.id, offers=payload.material_offers, legacy_material_ids=payload.material_ids
+        db,
+        quarry_id=point.id,
+        offers=_extract_material_offers(payload),
+        legacy_material_ids=payload.material_ids,
     )
     await sync_delivery_options(
         db,
@@ -212,11 +225,11 @@ async def update_supplier_point(
             quarry_id=point.id,
             delivery_option_ids=await default_delivery_option_ids(db, point.point_type),
         )
-    if "material_offers" in changed or "material_ids" in changed:
+    if "material_offers" in changed or "materials" in changed or "material_ids" in changed:
         await sync_material_offers(
             db,
             quarry_id=point.id,
-            offers=payload_data.get("material_offers"),
+            offers=_extract_material_offers(payload_data),
             legacy_material_ids=payload_data.get("material_ids"),
         )
     _reset_point_moderation_after_supplier_edit(point)
@@ -248,7 +261,7 @@ async def submit_supplier_point(
     await validate_point_can_be_approved(
         db,
         point,
-        require_materials=False,
+        require_materials=True,
         require_coordinates=False,
     )
     point.moderation_status = ModerationStatus.pending_moderation.value

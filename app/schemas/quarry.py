@@ -133,6 +133,7 @@ class QuarryCreate(QuarryBase):
     manual_priority: int = 0
     min_delivery_price: Optional[float] = Field(default=None, ge=0)
     material_ids: Optional[list[UUID]] = None
+    materials: Optional[list[QuarryMaterialOfferIn]] = None
     material_offers: Optional[list[QuarryMaterialOfferIn]] = None
     delivery_option_ids: Optional[list[UUID]] = None
 
@@ -140,7 +141,10 @@ class QuarryCreate(QuarryBase):
     def normalize_references(self):
         self.material_ids = list(dict.fromkeys(self.material_ids or []))
         self.delivery_option_ids = list(dict.fromkeys(self.delivery_option_ids or []))
-        self.material_offers = list(self.material_offers or [])
+        self.materials = list(self.materials or [])
+        self.material_offers = list(self.material_offers or self.materials)
+        if not self.materials:
+            self.materials = list(self.material_offers)
         offer_ids = [offer.material_id for offer in self.material_offers]
         if len(offer_ids) != len(set(offer_ids)):
             raise ValueError("Material offers must be unique")
@@ -162,6 +166,7 @@ class QuarryUpdate(BaseModel):
     min_delivery_price: Optional[float] = Field(default=None, ge=0)
     is_active: Optional[bool] = None
     material_ids: Optional[list[UUID]] = None
+    materials: Optional[list[QuarryMaterialOfferIn]] = None
     material_offers: Optional[list[QuarryMaterialOfferIn]] = None
     delivery_option_ids: Optional[list[UUID]] = None
 
@@ -206,6 +211,27 @@ class QuarryUpdate(BaseModel):
         if value is not None and not -180 <= value <= 180:
             raise ValueError("Longitude must be between -180 and 180")
         return value
+
+    @model_validator(mode="after")
+    def normalize_references(self):
+        if self.material_ids is not None:
+            self.material_ids = list(dict.fromkeys(self.material_ids))
+        if self.delivery_option_ids is not None:
+            self.delivery_option_ids = list(dict.fromkeys(self.delivery_option_ids))
+        if self.materials is not None:
+            self.materials = list(self.materials)
+        if self.material_offers is not None:
+            self.material_offers = list(self.material_offers)
+        if self.material_offers is None and self.materials is not None:
+            self.material_offers = list(self.materials)
+        if self.materials is None and self.material_offers is not None:
+            self.materials = list(self.material_offers)
+        offers = self.material_offers if self.material_offers is not None else self.materials
+        if offers is not None:
+            offer_ids = [offer.material_id for offer in offers]
+            if len(offer_ids) != len(set(offer_ids)):
+                raise ValueError("Material offers must be unique")
+        return self
 
 
 class QuarryOut(QuarryBase):

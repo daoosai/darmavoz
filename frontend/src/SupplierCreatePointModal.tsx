@@ -3,9 +3,16 @@ import { ImagePlus, Loader2, MapPin, Search, X } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { fetch2gisAddressSuggestions } from "./addressSearch";
+import { type MaterialProps } from "./MaterialDetailScreen";
 import { baseURL, extractApiErrorMessage } from "./utils";
 
 type EditablePointType = "quarry" | "accumulator";
+
+type MaterialOfferDraft = {
+  material_id: string;
+  price: number;
+  is_active: boolean;
+};
 
 export interface SupplierPoint {
   id: string;
@@ -34,10 +41,19 @@ export interface SupplierPoint {
 
 interface Props {
   token: string;
+  materials: MaterialProps[];
   point?: SupplierPoint | null;
   onClose: () => void;
   onSaved: (point: SupplierPoint) => void;
 }
+
+type SupplierPointFormState = {
+  point_type: EditablePointType;
+  name: string;
+  address: string;
+  description: string;
+  material_offers: MaterialOfferDraft[];
+};
 
 const normalizeEditablePointType = (value?: SupplierPoint["point_type"]): EditablePointType =>
   value === "accumulator" ? "accumulator" : "quarry";
@@ -47,43 +63,90 @@ const normalizeOptionalText = (value: string) => {
   return normalized || null;
 };
 
-const initialForm = {
-  point_type: "quarry" as EditablePointType,
+const normalizeMaterialOffers = (offers: MaterialOfferDraft[]) => {
+  const seen = new Set<string>();
+  return offers
+    .filter((offer) => offer.material_id && !seen.has(offer.material_id))
+    .map((offer) => {
+      seen.add(offer.material_id);
+      return {
+        material_id: offer.material_id,
+        price: Number(offer.price),
+        is_active: offer.is_active !== false,
+      };
+    });
+};
+
+const initialForm: SupplierPointFormState = {
+  point_type: "quarry",
   name: "",
   address: "",
   description: "",
+  material_offers: [],
 };
 
-const buildSupplierPointPayload = (form: typeof initialForm) => ({
-  point_type: form.point_type,
-  name: form.name.trim(),
-  short_name: form.name.trim(),
-  address: form.address.trim(),
-  description: normalizeOptionalText(form.description),
-  material_offers: [],
-});
+const buildSupplierPointPayload = (form: SupplierPointFormState) => {
+  const materialOffers = normalizeMaterialOffers(form.material_offers);
+  return {
+    point_type: form.point_type,
+    name: form.name.trim(),
+    short_name: form.name.trim(),
+    address: form.address.trim(),
+    description: normalizeOptionalText(form.description),
+    material_ids: materialOffers.map((offer) => offer.material_id),
+    material_offers: materialOffers,
+    materials: materialOffers,
+  };
+};
 
 const suggestionLabel = (item: any): string =>
   item.full_name || item.address_name || item.name || item.search_attributes?.suggested_text || "";
 
-export default function SupplierCreatePointModal({ token, point, onClose, onSaved }: Props) {
+const formatMaterialPrice = (price?: number | null) => {
+  if (price == null || !Number.isFinite(Number(price)) || Number(price) <= 0) {
+    return "цена не указана";
+  }
+  return `${Number(price).toLocaleString("ru-RU")} ₽`;
+};
+
+const buildInitialForm = (point?: SupplierPoint | null): SupplierPointFormState => {
+  if (!point) {
+    return initialForm;
+  }
+  return {
+    point_type: normalizeEditablePointType(point.point_type),
+    name: point.name,
+    address: point.address || "",
+    description: point.description || "",
+    material_offers: (point.material_offers || [])
+      .filter((offer) => offer.is_active !== false)
+      .map((offer) => ({
+        material_id: offer.material_id,
+        price: Number(offer.price ?? 0),
+        is_active: true,
+      })),
+  };
+};
+
+export default function SupplierCreatePointModal({
+  token,
+  materials,
+  point,
+  onClose,
+  onSaved,
+}: Props) {
   const isEditing = Boolean(point);
-  const [form, setForm] = useState(() =>
-    point
-      ? {
-          point_type: normalizeEditablePointType(point.point_type),
-          name: point.name,
-          address: point.address || "",
-          description: point.description || "",
-        }
-      : initialForm,
-  );
+  const [form, setForm] = useState<SupplierPointFormState>(() => buildInitialForm(point));
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [pendingFilePreviews, setPendingFilePreviews] = useState<string[]>([]);
   const addressContainerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setForm(buildInitialForm(point));
+  }, [point]);
 
   useEffect(() => {
     const query = form.address.trim();
@@ -196,6 +259,43 @@ export default function SupplierCreatePointModal({ token, point, onClose, onSave
     setPendingFiles((current) => current.filter((_, fileIndex) => fileIndex !== index));
   };
 
+  const toggleMaterial = (material: MaterialProps) => {
+    setForm((current) => {
+      const exists = current.material_offers.some((offer) => offer.material_id === material.id);
+      if (exists) {
+        return {
+          ...current,
+          material_offers: current.material_offers.filter((offer) => offer.material_id !== material.id),
+        };
+      }
+      return {
+        ...current,
+        material_offers: [
+          ...current.material_offers,
+          {
+            material_id: material.id,
+            price: Number(material.price || 0),
+            is_active: true,
+          },
+        ],
+      };
+    });
+  };
+
+  const updateMaterialPrice = (materialId: string, nextValue: string) => {
+    setForm((current) => ({
+      ...current,
+      material_offers: current.material_offers.map((offer) =>
+        offer.material_id === materialId
+          ? {
+              ...offer,
+              price: Number(nextValue),
+            }
+          : offer,
+      ),
+    }));
+  };
+
   const submitPointForModeration = async (pointId: string) => {
     const response = await fetch(`${baseURL}/supplier/points/${pointId}/submit`, {
       method: "POST",
@@ -216,6 +316,7 @@ export default function SupplierCreatePointModal({ token, point, onClose, onSave
     event.preventDefault();
     const name = form.name.trim();
     const address = form.address.trim();
+    const normalizedOffers = normalizeMaterialOffers(form.material_offers);
 
     if (!name) {
       toast.error("Укажите название точки");
@@ -225,10 +326,21 @@ export default function SupplierCreatePointModal({ token, point, onClose, onSave
       toast.error("Укажите адрес точки");
       return;
     }
+    if (normalizedOffers.length === 0) {
+      toast.error("Добавьте хотя бы один материал с ценой");
+      return;
+    }
+    if (normalizedOffers.some((offer) => !Number.isFinite(offer.price) || offer.price <= 0)) {
+      toast.error("Укажите корректную цену для каждого выбранного материала");
+      return;
+    }
 
     setIsBusy(true);
     try {
-      const payload = buildSupplierPointPayload(form);
+      const payload = buildSupplierPointPayload({
+        ...form,
+        material_offers: normalizedOffers,
+      });
       const response = await fetch(
         isEditing ? `${baseURL}/supplier/points/${point!.id}` : `${baseURL}/supplier/points`,
         {
@@ -256,11 +368,7 @@ export default function SupplierCreatePointModal({ token, point, onClose, onSave
 
       let savedPoint = data as SupplierPoint;
       if (pendingFiles.length > 0 && savedPoint.id) {
-        const uploadedMedia = await uploadMediaFiles(
-          savedPoint.id,
-          pendingFiles,
-          savedPoint.media_files || [],
-        );
+        const uploadedMedia = await uploadMediaFiles(savedPoint.id, pendingFiles, savedPoint.media_files || []);
         savedPoint = {
           ...savedPoint,
           media_files: uploadedMedia,
@@ -407,6 +515,71 @@ export default function SupplierCreatePointModal({ token, point, onClose, onSave
                 className="mt-2 min-h-28 w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-slate-900 outline-none focus:border-sky-500"
               />
             </div>
+          </section>
+
+          <section className="rounded-2xl bg-white p-5 shadow-sm">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">Материалы и цены</h3>
+              <p className="mt-1 text-xs text-slate-500">
+                Выберите материалы, которые доступны на точке. Базовая цена подставляется автоматически, её можно изменить.
+              </p>
+            </div>
+
+            {materials.length > 0 ? (
+              <div className="mt-4 max-h-72 space-y-2 overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                {materials.map((material) => {
+                  const offer = form.material_offers.find((item) => item.material_id === material.id);
+                  const isChecked = Boolean(offer);
+                  return (
+                    <div
+                      key={material.id}
+                      className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm"
+                    >
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleMaterial(material)}
+                          className="mt-1 h-5 w-5 rounded border-slate-300 text-sky-500 focus:ring-sky-500"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-bold text-slate-900">{material.name}</p>
+                            <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-500">
+                              {material.unit}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs text-slate-500">
+                            Базовая цена: {formatMaterialPrice(material.price)}
+                          </p>
+                          {isChecked ? (
+                            <div className="mt-3 flex items-center gap-3">
+                              <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                Цена
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={offer?.price ?? ""}
+                                onChange={(event) => updateMaterialPrice(material.id, event.target.value)}
+                                className="w-36 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-500"
+                                placeholder="Цена"
+                              />
+                              <span className="text-sm text-slate-500">₽ / {material.unit}</span>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="mt-4 rounded-2xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">
+                Материалы пока не загрузились
+              </div>
+            )}
           </section>
 
           <section className="rounded-2xl bg-white p-5 shadow-sm">

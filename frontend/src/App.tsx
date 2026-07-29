@@ -734,23 +734,25 @@ function MainContent({
                           : "text-slate-500 opacity-45 hover:opacity-70"
                   }`}
                 >
-                  <Icon
-                    className={`h-5 w-5 ${
-                      isActive && isPriority
-                        ? "text-white"
-                        : isPriority
-                          ? "text-slate-500"
-                          : isActive
-                            ? "text-[#2DB0E6]"
-                            : "text-slate-500"
-                    }`}
-                    strokeWidth={isActive ? 2.5 : 2}
-                  />
-                  {tab.badge !== undefined && (
-                    <span className="absolute right-0 top-0 z-10 flex h-4 min-w-4 translate-x-1 -translate-y-1 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white shadow-sm">
-                      {tab.badge}
-                    </span>
-                  )}
+                  <span className="relative inline-block">
+                    <Icon
+                      className={`h-5 w-5 ${
+                        isActive && isPriority
+                          ? "text-white"
+                          : isPriority
+                            ? "text-slate-500"
+                            : isActive
+                              ? "text-[#2DB0E6]"
+                              : "text-slate-500"
+                      }`}
+                      strokeWidth={isActive ? 2.5 : 2}
+                    />
+                    {tab.badge !== undefined && (
+                      <span className="absolute -right-2 -top-1 z-10 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white shadow-sm">
+                        {tab.badge}
+                      </span>
+                    )}
+                  </span>
                   <span
                     className={`whitespace-nowrap text-[10px] leading-none ${
                       isActive && isPriority

@@ -1,10 +1,21 @@
 $ErrorActionPreference = "Stop"
 
-# Auto-detect Java bundled with Android Studio.
+Write-Host " Настройка окружения Windows..." -ForegroundColor Cyan
 if (Test-Path "C:\Program Files\Android\Android Studio\jbr") {
   $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
+  Write-Host "✅ JAVA_HOME установлен: $env:JAVA_HOME" -ForegroundColor Green
 } elseif (Test-Path "C:\Program Files\Android\Android Studio\jre") {
   $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jre"
+  Write-Host "✅ JAVA_HOME установлен: $env:JAVA_HOME" -ForegroundColor Green
+}
+
+# Помощь Capacitor'у в поиске Node.js на Windows
+$nodePath = (Get-Command node -ErrorAction SilentlyContinue).Path
+if ($nodePath) {
+  $nodeDir = Split-Path $nodePath
+  if ($env:PATH -notlike "*$nodeDir*") {
+    $env:PATH = "$nodeDir;$env:PATH"
+  }
 }
 
 function Assert-LastExitCode {
@@ -39,7 +50,7 @@ rm -rf $frontendTargetDir/*
 tar -xf /tmp/frontend-dist.tar -C $frontendTargetDir
 rm -f /tmp/frontend-dist.tar
 cd $sourceDir
-git pull origin develop
+git fetch origin && git reset --hard origin/develop
 DEPLOY_REF=`$(git rev-parse HEAD)
 git -C $deployDir checkout --detach `$DEPLOY_REF
 docker compose -f $deployDir/docker-compose.test.yml build backend_test
@@ -55,13 +66,13 @@ try {
   Assert-LastExitCode "npm run build"
 
   Write-Host "2/4 Build Android APK..." -ForegroundColor Yellow
-  npx cap sync android
-  Assert-LastExitCode "npx cap sync android"
+  npx.cmd cap sync android
+  Assert-LastExitCode "npx.cmd cap sync android"
 
   Push-Location $androidDir
   try {
-    .\gradlew assembleDebug
-    Assert-LastExitCode ".\\gradlew assembleDebug"
+    .\gradlew.bat assembleDebug
+    Assert-LastExitCode ".\\gradlew.bat assembleDebug"
   }
   finally {
     Pop-Location

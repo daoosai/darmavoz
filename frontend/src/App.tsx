@@ -535,7 +535,7 @@ function MainContent({
           {activeTab === "home" && (
             <>
               {/* Top Address Button */}
-              <div className="px-4 mb-4">
+              <div className="mb-4 px-4 pt-[calc(env(safe-area-inset-top,0px)+0.25rem)]">
                 <button
                   onClick={() => {
                     if (role !== "client") {

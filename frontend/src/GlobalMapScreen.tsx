@@ -268,7 +268,7 @@ export default function GlobalMapScreen() {
                 type="button"
                 aria-label="Закрыть шторку"
                 onClick={clearSelectedPoint}
-                className="absolute right-4 top-4 z-10 rounded-full bg-slate-100 p-2 text-slate-500 transition hover:bg-slate-200 hover:text-slate-700"
+                className="absolute right-4 top-[max(env(safe-area-inset-top,16px),1rem)] z-10 rounded-full bg-slate-100 p-2 text-slate-500 transition hover:bg-slate-200 hover:text-slate-700"
               >
                 <X className="h-5 w-5" />
               </button>

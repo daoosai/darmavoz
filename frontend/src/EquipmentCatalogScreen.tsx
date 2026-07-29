@@ -162,7 +162,7 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
           <ArrowLeft className="h-4 w-4" /> К каталогу
         </button>
 
-        <div className={`overflow-hidden rounded-3xl bg-white shadow-sm ${selected.is_vip ? "border border-amber-300 shadow-amber-100/70" : ""}`}>
+        <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
           <div className="relative flex snap-x gap-2 overflow-x-auto">
             {photos.length ? (
               photos.map((photo) => (
@@ -180,7 +180,7 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
             )}
             {selected.is_vip ? (
               <div className="pointer-events-none absolute left-4 top-4 z-10 inline-flex items-center rounded-full bg-amber-400 px-3 py-1 text-xs font-bold text-white shadow-lg">
-                ⭐ Рекомендуем
+                Рекомендуем
               </div>
             ) : null}
           </div>
@@ -193,7 +193,7 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
               <h2 className="text-2xl font-black text-slate-900">{selected.title}</h2>
               {selected.is_vip ? (
                 <span className="inline-flex items-center rounded-full bg-amber-400 px-3 py-1 text-xs font-bold text-white">
-                  ⭐ Рекомендуем
+                  Рекомендуем
                 </span>
               ) : null}
             </div>
@@ -314,7 +314,7 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
             <button
               key={item.id}
               onClick={() => setSelected(item)}
-              className={`overflow-hidden rounded-2xl bg-white text-left shadow-sm transition ${item.is_vip ? "border border-amber-300 shadow-amber-100/70" : ""}`}
+              className="overflow-hidden rounded-2xl bg-white text-left shadow-sm transition"
             >
               <div className="relative">
                 {item.primary_image_url ? (
@@ -330,7 +330,7 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
                 )}
                 {item.is_vip ? (
                   <span className="pointer-events-none absolute left-3 top-3 inline-flex items-center rounded-full bg-amber-400 px-3 py-1 text-xs font-bold text-white shadow-lg">
-                    ⭐ Рекомендуем
+                    Рекомендуем
                   </span>
                 ) : null}
               </div>
@@ -338,11 +338,6 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
                 <p className="text-xs font-bold text-sky-600">{item.equipment_type_name}</p>
                 <div className="mt-1 flex items-start justify-between gap-2">
                   <h3 className="text-lg font-black">{item.title}</h3>
-                  {item.manual_priority ? (
-                    <span className="shrink-0 rounded-full bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-700">
-                      #{item.manual_priority}
-                    </span>
-                  ) : null}
                 </div>
                 <p className="mt-2 font-bold text-slate-900">{formatEquipmentPrice(item)}</p>
                 {(item.city || item.district) && (

@@ -118,6 +118,15 @@ def _slugify(value: str) -> str:
     return slug.strip("-") or "equipment"
 
 
+def _normalize_listing_contact_phone(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    return normalize_phone(normalized)
+
+
 async def _unique_type_slug(
     db: AsyncSession, name: str, *, exclude_id: UUID | None = None
 ) -> str:
@@ -159,6 +168,7 @@ async def _listing_payload(db: AsyncSession, listing: SpecialEquipmentListing) -
         "equipment_type_name": listing.equipment_type,
         "title": listing.title,
         "description": listing.description,
+        "contact_phone": listing.contact_phone or (listing.owner.username if listing.owner else None),
         "tariffs": _normalize_listing_tariffs(listing.tariffs),
         "city": listing.city,
         "district": listing.district,
@@ -171,7 +181,7 @@ async def _listing_payload(db: AsyncSession, listing: SpecialEquipmentListing) -
         "primary_image_url": media[0].public_url if media else None,
         "owner_user_id": listing.owner_user_id,
         "owner_name": listing.owner.display_name if listing.owner else None,
-        "owner_phone": listing.owner.username if listing.owner else None,
+        "owner_phone": listing.owner.username if listing.owner else listing.contact_phone,
         "moderation_status": listing.moderation_status,
         "moderation_comment": listing.moderation_comment,
         "created_at": listing.created_at,
@@ -564,6 +574,7 @@ async def create_equipment_listing(
         equipment_type_id=payload.equipment_type_id,
     )
     values = payload.model_dump(exclude={"equipment_type", "equipment_type_id"})
+    values["contact_phone"] = _normalize_listing_contact_phone(payload.contact_phone)
     listing = SpecialEquipmentListing(
         **values,
         equipment_type=equipment_type,
@@ -610,6 +621,7 @@ async def update_equipment_listing(
     for field in (
         "title",
         "description",
+        "contact_phone",
         "tariffs",
         "city",
         "district",
@@ -620,6 +632,8 @@ async def update_equipment_listing(
     ):
         if field in changed:
             value = getattr(payload, field)
+            if field == "contact_phone":
+                value = _normalize_listing_contact_phone(value)
             if field == "tariffs" and value is not None:
                 value = [tariff.model_dump() for tariff in value]
             setattr(listing, field, value)
@@ -711,6 +725,9 @@ async def create_supplier_equipment(
             "sort_order",
         }
     )
+    values["contact_phone"] = _normalize_listing_contact_phone(
+        payload.contact_phone or current_supplier.username
+    )
     listing = SpecialEquipmentListing(
         **values,
         equipment_type=equipment_type,
@@ -760,10 +777,12 @@ async def update_supplier_equipment(
         )
         listing.equipment_type = equipment_type
         listing.equipment_type_id = equipment_type_id
-    for field in ("title", "description", "tariffs", "city", "district"):
+    for field in ("title", "description", "contact_phone", "tariffs", "city", "district"):
         if field not in changed:
             continue
         value = getattr(payload, field)
+        if field == "contact_phone":
+            value = _normalize_listing_contact_phone(value)
         if field == "tariffs" and value is not None:
             value = [tariff.model_dump() for tariff in value]
         setattr(listing, field, value)

@@ -110,6 +110,7 @@ class EquipmentListingBase(BaseModel):
     equipment_type_id: UUID | None = None
     title: str = Field(min_length=1, max_length=255)
     description: str = Field(min_length=1, max_length=10000)
+    contact_phone: str | None = Field(default=None, max_length=20)
     tariffs: list[EquipmentTariff] = Field(min_length=1, max_length=2)
     city: str | None = Field(default=None, max_length=255)
     district: str | None = Field(default=None, max_length=255)
@@ -137,6 +138,7 @@ class EquipmentListingUpdate(BaseModel):
     equipment_type_id: UUID | None = None
     title: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = Field(default=None, min_length=1, max_length=10000)
+    contact_phone: str | None = Field(default=None, max_length=20)
     tariffs: list[EquipmentTariff] | None = Field(default=None, min_length=1, max_length=2)
     city: str | None = Field(default=None, max_length=255)
     district: str | None = Field(default=None, max_length=255)
@@ -161,6 +163,7 @@ class EquipmentListingOut(BaseModel):
     equipment_type_name: str
     title: str
     description: str
+    contact_phone: str | None = None
     tariffs: list[EquipmentTariff]
     city: str | None
     district: str | None

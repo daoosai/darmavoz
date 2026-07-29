@@ -11,7 +11,6 @@ interface AdminProfileScreenProps {
   onOpenSuppliers?: () => void;
   onOpenEquipment?: () => void;
   onOpenSupport?: () => void;
-  equipmentNewCount?: number;
 }
 
 export default function AdminProfileScreen({
@@ -20,7 +19,6 @@ export default function AdminProfileScreen({
   onOpenSuppliers,
   onOpenEquipment,
   onOpenSupport,
-  equipmentNewCount = 0,
 }: AdminProfileScreenProps) {
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -165,11 +163,6 @@ export default function AdminProfileScreen({
                 Спецтехника
               </span>
               <span className="flex items-center gap-3">
-                {equipmentNewCount > 0 ? (
-                  <span className="inline-flex min-w-6 items-center justify-center rounded-full bg-rose-500 px-2 py-1 text-xs font-black leading-none text-white">
-                    {equipmentNewCount}
-                  </span>
-                ) : null}
                 <span className="text-sky-600 text-sm">Открыть</span>
               </span>
             </button>

@@ -3,7 +3,7 @@ import {
   Home,
   List,
   ShoppingCart,
-  Tag,
+  Map,
   User,
   MapPin,
   Search,
@@ -20,7 +20,6 @@ import { getImageUrl, baseURL, APP_VERSION } from "./utils";
 
 import CartScreen from "./CartScreen";
 import ProfileScreen from "./ProfileScreen";
-import PromosScreen from "./PromosScreen";
 import MaterialBottomSheet from "./MaterialBottomSheet";
 
 import { Toaster } from "react-hot-toast";
@@ -48,6 +47,7 @@ import { usePushNotifications } from "./usePushNotifications";
 import SupplierPortalScreen from "./SupplierPortalScreen";
 import FloatingOrderTracker from "./FloatingOrderTracker";
 import EquipmentCatalogScreen from "./EquipmentCatalogScreen";
+import GlobalMapScreen from "./GlobalMapScreen";
 import SupportScreen from "./SupportScreen";
 import PickupPointMapScreen, { PickupPointSelection } from "./PickupPointMapScreen";
 
@@ -379,6 +379,8 @@ export default function App() {
         focusedOrderId={focusedClientOrderId}
         onOpenOrder={openClientOrder}
         onClearFocusedOrder={clearFocusedClientOrder}
+        currentPath={currentPath}
+        setCurrentPath={setCurrentPath}
       />
     );
   };
@@ -423,6 +425,8 @@ function MainContent({
   focusedOrderId,
   onOpenOrder,
   onClearFocusedOrder,
+  currentPath,
+  setCurrentPath,
 }: any) {
   const { selectedAddress } = useAddressStore();
   const { token } = useAuthStore();
@@ -435,7 +439,7 @@ function MainContent({
       icon: ShoppingCart,
       badge: cartItemsCount > 0 ? cartItemsCount : undefined,
     },
-    { id: "promotions", label: "Акции", icon: Tag },
+    { id: "map", label: "Карта", icon: Map },
     { id: "profile", label: "Профиль", icon: User },
   ];
 
@@ -511,6 +515,16 @@ function MainContent({
     setShowAddressSheet(false);
     setShowAuthSheet(false);
   }, [quickBuyMaterial, role, selectedAddress, setSelectedMaterial, token]);
+
+  useEffect(() => {
+    if (currentPath === "/map" && activeTab !== "map") {
+      setActiveTab("map");
+      return;
+    }
+    if (currentPath !== "/map" && activeTab === "map") {
+      setActiveTab("home");
+    }
+  }, [activeTab, currentPath, setActiveTab]);
 
   return (
     <div className="min-h-screen w-full bg-slate-100 flex sm:items-center justify-center text-slate-900">
@@ -670,7 +684,7 @@ function MainContent({
             />
           )}
 
-          {activeTab === "promotions" && <PromosScreen />}
+          {activeTab === "map" && <GlobalMapScreen />}
 
           {activeTab === "profile" &&
             (role === "client" ? (
@@ -697,12 +711,17 @@ function MainContent({
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
-              const isPriority = ["orders", "cart", "promotions"].includes(tab.id);
+              const isPriority = ["orders", "cart", "map"].includes(tab.id);
               return (
                 <button
                   key={tab.id}
                   onClick={() => {
                     onClearFocusedOrder();
+                    const nextPath = tab.id === "map" ? "/map" : "/";
+                    if (typeof window !== "undefined" && window.location.pathname !== nextPath) {
+                      window.history.pushState({}, "", nextPath);
+                    }
+                    setCurrentPath(nextPath);
                     setActiveTab(tab.id);
                   }}
                   className={`relative flex min-w-0 flex-1 cursor-pointer flex-col items-center gap-1 rounded-xl px-1 py-1.5 transition-all ${

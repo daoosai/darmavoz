@@ -1,30 +1,18 @@
 import React, { useEffect, useState } from "react";
 import { Crown, Edit2, ImageIcon, Plus, Star, Trash2, UploadCloud, X } from "lucide-react";
 import toast from "react-hot-toast";
+
+import ReasonModal from "./components/admin/ReasonModal";
+import {
+  EquipmentListing,
+  EquipmentTypeItem,
+  formatEquipmentPrice,
+  getEquipmentTariffs,
+} from "./EquipmentCatalogScreen";
 import { useAuthStore } from "./store";
 import { baseURL, extractApiErrorMessage, resolveMediaUrl } from "./utils";
-import { EquipmentListing, EquipmentTypeItem, formatEquipmentPrice, getEquipmentTariffs } from "./EquipmentCatalogScreen";
-import ReasonModal from "./components/admin/ReasonModal";
 
-interface Application {
-  id: string;
-  listing_title_snapshot: string;
-  client_name?: string;
-  contact_phone: string;
-  object_address: string;
-  requested_date: string;
-  requested_time: string;
-  duration_value: number;
-  duration_unit: "hours" | "shifts";
-  comment?: string;
-  reject_reason?: string | null;
-  cancel_reason?: string | null;
-  status: "new" | "in_progress" | "closed" | "completed" | "rejected" | "cancelled";
-  primary_image_url?: string;
-}
-
-type Tab = "listings" | "moderation" | "types" | "applications";
-type ApplicationsTab = "active" | "history";
+type Tab = "listings" | "moderation" | "types";
 
 interface ListingTariffForm {
   type: "hour" | "shift";
@@ -37,6 +25,7 @@ interface ListingForm {
   equipment_type: string;
   title: string;
   description: string;
+  contact_phone: string;
   tariffs: ListingTariffForm[];
   city: string;
   district: string;
@@ -51,6 +40,7 @@ const emptyListing: ListingForm = {
   equipment_type: "",
   title: "",
   description: "",
+  contact_phone: "",
   tariffs: [{ type: "hour", price: "", hours: "" }],
   city: "",
   district: "",
@@ -66,43 +56,15 @@ const normalizeManualPriority = (value?: number | null) => {
   return Math.min(100, Math.max(0, Math.trunc(parsed)));
 };
 
-const getApplicationStatusLabel = (status: Application["status"]) => {
-  switch (status) {
-    case "new":
-      return "НОВАЯ";
-    case "in_progress":
-      return "В РАБОТЕ";
-    case "rejected":
-      return "ОТКЛОНЕНА";
-    case "cancelled":
-      return "ОТМЕНЕНА КЛИЕНТОМ";
-    case "completed":
-      return "ЗАВЕРШЕНА";
-    default:
-      return "ЗАКРЫТА";
-  }
-};
-
-const getApplicationStatusClass = (status: Application["status"]) =>
-  status === "rejected" || status === "cancelled"
-    ? "text-rose-600"
-    : "text-sky-600";
-
 export default function AdminEquipmentScreen({
-  applicationsOnly = false,
-  onApplicationsChanged,
   onPendingModerationChanged,
 }: {
-  applicationsOnly?: boolean;
-  onApplicationsChanged?: (applications: Application[]) => void;
   onPendingModerationChanged?: (count: number) => void;
 }) {
   const { token, role } = useAuthStore();
-  const [tab, setTab] = useState<Tab>(applicationsOnly ? "applications" : "listings");
-  const [applicationsTab, setApplicationsTab] = useState<ApplicationsTab>("active");
+  const [tab, setTab] = useState<Tab>("listings");
   const [types, setTypes] = useState<EquipmentTypeItem[]>([]);
   const [listings, setListings] = useState<EquipmentListing[]>([]);
-  const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [showListingForm, setShowListingForm] = useState(false);
   const [listingForm, setListingForm] = useState<ListingForm>({ ...emptyListing });
@@ -110,9 +72,6 @@ export default function AdminEquipmentScreen({
   const [rejectingListing, setRejectingListing] = useState<EquipmentListing | null>(null);
   const [listingRejectReason, setListingRejectReason] = useState("");
   const [isRejectingListing, setIsRejectingListing] = useState(false);
-  const [rejectingApplication, setRejectingApplication] = useState<Application | null>(null);
-  const [rejectReason, setRejectReason] = useState("");
-  const [rejecting, setRejecting] = useState(false);
 
   const headers = { Authorization: `Bearer ${token}` };
   const activeTypes = types.filter((item) => item.is_active);
@@ -120,43 +79,30 @@ export default function AdminEquipmentScreen({
   const pendingListings = listings.filter(
     (item) => item.moderation_status === "pending_moderation",
   );
-  const activeApplications = applications.filter((item) => item.status === "new" || item.status === "in_progress");
-  const historyApplications = applications.filter((item) => item.status === "completed" || item.status === "rejected" || item.status === "cancelled");
-  const visibleApplications = applicationsTab === "active" ? activeApplications : historyApplications;
 
   const load = async () => {
     setLoading(true);
     try {
-      const requests: Promise<Response>[] = [
+      const [typesResponse, listingsResponse] = await Promise.all([
         fetch(
           canManageTypes ? `${baseURL}/admin/equipment-types` : `${baseURL}/equipment/types`,
           { headers },
         ),
-        fetch(`${baseURL}/admin/equipment-applications`, { headers }),
-      ];
-
-      if (!applicationsOnly) {
-        requests.push(fetch(`${baseURL}/admin/equipment`, { headers }));
-      }
-
-      const responses = await Promise.all(requests);
-      if (responses.some((response) => !response.ok)) {
+        fetch(`${baseURL}/admin/equipment`, { headers }),
+      ]);
+      if (!typesResponse.ok || !listingsResponse.ok) {
         throw new Error("load");
       }
 
-      setTypes(await responses[0].json());
-      const loadedApplications: Application[] = await responses[1].json();
-      setApplications(loadedApplications);
-      onApplicationsChanged?.(loadedApplications);
-      if (responses[2]) {
-        const loadedListings: EquipmentListing[] = await responses[2].json();
-        setListings(loadedListings);
-        onPendingModerationChanged?.(
-          loadedListings.filter(
-            (item) => item.moderation_status === "pending_moderation",
-          ).length,
-        );
-      }
+      const loadedTypes: EquipmentTypeItem[] = await typesResponse.json();
+      const loadedListings: EquipmentListing[] = await listingsResponse.json();
+      setTypes(Array.isArray(loadedTypes) ? loadedTypes : []);
+      setListings(Array.isArray(loadedListings) ? loadedListings : []);
+      onPendingModerationChanged?.(
+        loadedListings.filter(
+          (item) => item.moderation_status === "pending_moderation",
+        ).length,
+      );
     } catch {
       toast.error("Не удалось загрузить раздел спецтехники");
     } finally {
@@ -166,11 +112,10 @@ export default function AdminEquipmentScreen({
 
   useEffect(() => {
     void load();
-  }, [applicationsOnly, token]);
+  }, [token]);
 
   const saveType = async () => {
     if (!newTypeName.trim()) return;
-
     const response = await fetch(`${baseURL}/admin/equipment-types`, {
       method: "POST",
       headers: { ...headers, "Content-Type": "application/json" },
@@ -180,12 +125,10 @@ export default function AdminEquipmentScreen({
         sort_order: types.length * 10 + 10,
       }),
     });
-
     if (!response.ok) {
       toast.error("Не удалось создать тип");
       return;
     }
-
     setNewTypeName("");
     await load();
   };
@@ -196,28 +139,23 @@ export default function AdminEquipmentScreen({
       headers: { ...headers, "Content-Type": "application/json" },
       body: JSON.stringify(patch),
     });
-
     if (!response.ok) {
       toast.error("Не удалось обновить тип");
       return;
     }
-
     await load();
   };
 
   const deleteType = async (id: string) => {
     if (!window.confirm("Удалить тип спецтехники?")) return;
-
     const response = await fetch(`${baseURL}/admin/equipment-types/${id}`, {
       method: "DELETE",
       headers,
     });
-
     if (!response.ok) {
       toast.error("Не удалось удалить тип");
       return;
     }
-
     await load();
   };
 
@@ -229,18 +167,19 @@ export default function AdminEquipmentScreen({
             equipment_type: item.equipment_type || item.equipment_type_name,
             title: item.title,
             description: item.description,
+            contact_phone: item.contact_phone || "",
             tariffs: getEquipmentTariffs(item).map((tariff) => ({
               type: tariff.type,
               price: tariff.price?.toString() || "",
               hours: tariff.hours?.toString() || "",
             })),
-             city: item.city || "",
-             district: item.district || "",
-             is_active: item.is_active !== false,
-             is_vip: Boolean(item.is_vip),
-             manual_priority: normalizeManualPriority(item.manual_priority),
-             sort_order: item.sort_order || 0,
-           }
+            city: item.city || "",
+            district: item.district || "",
+            is_active: item.is_active !== false,
+            is_vip: Boolean(item.is_vip),
+            manual_priority: normalizeManualPriority(item.manual_priority),
+            sort_order: item.sort_order || 0,
+          }
         : {
             ...emptyListing,
             equipment_type: activeTypes[0]?.name || "",
@@ -255,16 +194,11 @@ export default function AdminEquipmentScreen({
     decision: "approve" | "reject",
     reason?: string,
   ) => {
-    const response = await fetch(
-      `${baseURL}/admin/equipment/${item.id}/${decision}`,
-      {
-        method: "POST",
-        headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify(
-          decision === "reject" ? { reason: reason?.trim() || "" } : {},
-        ),
-      },
-    );
+    const response = await fetch(`${baseURL}/admin/equipment/${item.id}/${decision}`, {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify(decision === "reject" ? { reason: reason?.trim() || "" } : {}),
+    });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       toast.error(
@@ -275,29 +209,6 @@ export default function AdminEquipmentScreen({
     toast.success(decision === "approve" ? "Объявление одобрено" : "Объявление отклонено");
     await load();
     return true;
-  };
-
-  const openRejectListingModal = (item: EquipmentListing) => {
-    setRejectingListing(item);
-    setListingRejectReason("");
-  };
-
-  const submitListingRejection = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!rejectingListing || !listingRejectReason.trim()) return;
-    setIsRejectingListing(true);
-    try {
-      const success = await moderateListing(
-        rejectingListing,
-        "reject",
-        listingRejectReason,
-      );
-      if (!success) return;
-      setRejectingListing(null);
-      setListingRejectReason("");
-    } finally {
-      setIsRejectingListing(false);
-    }
   };
 
   const updateTariff = (index: number, patch: Partial<ListingTariffForm>) => {
@@ -311,7 +222,6 @@ export default function AdminEquipmentScreen({
 
   const addShiftTariff = () => {
     if (listingForm.tariffs.some((tariff) => tariff.type === "shift")) return;
-
     setListingForm((previous) => ({
       ...previous,
       tariffs: [...previous.tariffs, { type: "shift", price: "", hours: "8" }],
@@ -320,7 +230,6 @@ export default function AdminEquipmentScreen({
 
   const removeTariff = (index: number) => {
     if (listingForm.tariffs.length <= 1) return;
-
     setListingForm((previous) => ({
       ...previous,
       tariffs: previous.tariffs.filter((_, tariffIndex) => tariffIndex !== index),
@@ -329,7 +238,6 @@ export default function AdminEquipmentScreen({
 
   const saveListing = async (event: React.FormEvent) => {
     event.preventDefault();
-
     const hourlyPrice = Number(
       listingForm.tariffs.find((tariff) => tariff.type === "hour")?.price,
     );
@@ -341,9 +249,16 @@ export default function AdminEquipmentScreen({
         method: listingForm.id ? "PATCH" : "POST",
         headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...listingForm,
-          id: undefined,
+          equipment_type: listingForm.equipment_type,
+          title: listingForm.title,
+          description: listingForm.description,
+          contact_phone: listingForm.contact_phone || null,
+          city: listingForm.city || null,
+          district: listingForm.district || null,
+          is_active: listingForm.is_active,
+          is_vip: listingForm.is_vip,
           manual_priority: manualPriority,
+          sort_order: listingForm.sort_order,
           tariffs: listingForm.tariffs.map((tariff) => ({
             type: tariff.type,
             price:
@@ -369,18 +284,15 @@ export default function AdminEquipmentScreen({
 
   const deleteListing = async (id: string) => {
     if (!window.confirm("Удалить объявление спецтехники?")) return;
-
     const response = await fetch(`${baseURL}/admin/equipment/${id}`, {
       method: "DELETE",
       headers,
     });
-
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
       toast.error(extractApiErrorMessage(data, "Не удалось удалить объявление"));
       return;
     }
-
     await load();
   };
 
@@ -446,58 +358,33 @@ export default function AdminEquipmentScreen({
         headers,
       },
     );
-
     if (!response.ok) {
       toast.error("Не удалось изменить фотографию");
       return;
     }
-
     await load();
   };
 
-  const changeApplicationStatus = async (item: Application) => {
-    const nextStatus = item.status === "new" ? "in_progress" : "completed";
-    const response = await fetch(`${baseURL}/admin/equipment-applications/${item.id}/status`, {
-      method: "PATCH",
-      headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify({ status: nextStatus }),
-    });
-
-    if (!response.ok) {
-      toast.error("Не удалось обновить заявку");
-      return;
-    }
-
-    await load();
+  const openRejectListingModal = (item: EquipmentListing) => {
+    setRejectingListing(item);
+    setListingRejectReason("");
   };
 
-  const rejectApplication = async (event: React.FormEvent) => {
+  const submitListingRejection = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!rejectingApplication || !rejectReason.trim()) return;
-
-    setRejecting(true);
+    if (!rejectingListing || !listingRejectReason.trim()) return;
+    setIsRejectingListing(true);
     try {
-      const response = await fetch(
-        `${baseURL}/admin/equipment-applications/${rejectingApplication.id}/reject`,
-        {
-          method: "PATCH",
-          headers: { ...headers, "Content-Type": "application/json" },
-          body: JSON.stringify({ reject_reason: rejectReason }),
-        },
+      const success = await moderateListing(
+        rejectingListing,
+        "reject",
+        listingRejectReason,
       );
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(extractApiErrorMessage(data, "Не удалось отклонить заявку"));
-      }
-
-      setRejectingApplication(null);
-      setRejectReason("");
-      await load();
-      toast.success("Заявка отклонена");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось отклонить заявку");
+      if (!success) return;
+      setRejectingListing(null);
+      setListingRejectReason("");
     } finally {
-      setRejecting(false);
+      setIsRejectingListing(false);
     }
   };
 
@@ -507,26 +394,23 @@ export default function AdminEquipmentScreen({
 
   return (
     <div className="space-y-5">
-      {!applicationsOnly && (
-        <div className="flex gap-2 overflow-x-auto rounded-2xl bg-white p-2 shadow-sm">
-          {[
-            ["listings", "Объявления"],
-            ["moderation", `На модерации${pendingListings.length ? ` · ${pendingListings.length}` : ""}`],
-            ...(canManageTypes ? [["types", "Типы техники"]] : []),
-            ["applications", "Заявки"],
-          ].map(([value, label]) => (
-            <button
-              key={value}
-              onClick={() => setTab(value as Tab)}
-              className={`shrink-0 rounded-xl px-5 py-3 text-sm font-bold ${
-                tab === value ? "bg-sky-500 text-white" : "text-slate-500"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="flex gap-2 overflow-x-auto rounded-2xl bg-white p-2 shadow-sm">
+        {[
+          ["listings", "Объявления"],
+          ["moderation", `На модерации${pendingListings.length ? ` · ${pendingListings.length}` : ""}`],
+          ...(canManageTypes ? [["types", "Типы техники"]] : []),
+        ].map(([value, label]) => (
+          <button
+            key={value}
+            onClick={() => setTab(value as Tab)}
+            className={`shrink-0 rounded-xl px-5 py-3 text-sm font-bold ${
+              tab === value ? "bg-sky-500 text-white" : "text-slate-500"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
 
       {tab === "types" && canManageTypes && (
         <div className="rounded-3xl bg-white p-5 shadow-sm">
@@ -635,7 +519,7 @@ export default function AdminEquipmentScreen({
                     <p className="text-sm text-slate-600">{item.description}</p>
                     <div className="rounded-xl bg-slate-50 p-3 text-sm">
                       <p className="font-bold">{item.owner_name || "Поставщик"}</p>
-                      {item.owner_phone ? <p className="text-slate-500">{item.owner_phone}</p> : null}
+                      {item.contact_phone ? <p className="text-slate-500">{item.contact_phone}</p> : null}
                       <p className="mt-1">{formatEquipmentPrice(item)}</p>
                     </div>
                     <div className="flex gap-2">
@@ -740,10 +624,13 @@ export default function AdminEquipmentScreen({
                         ? "Отклонено"
                         : "На модерации"}
                   </span>
-                  <div className="flex justify-between gap-2">
+                  <div className="mt-2 flex justify-between gap-2">
                     <div>
                       <h3 className="text-lg font-black">{item.title}</h3>
                       <p className="font-bold">{formatEquipmentPrice(item)}</p>
+                      {item.contact_phone ? (
+                        <p className="mt-1 text-sm text-slate-500">{item.contact_phone}</p>
+                      ) : null}
                     </div>
                     <div className="flex">
                       <button onClick={() => openListing(item)} className="p-2 text-slate-500">
@@ -790,108 +677,6 @@ export default function AdminEquipmentScreen({
             ))}
           </div>
         </>
-      )}
-
-      {tab === "applications" && (
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-2xl font-black">Заявки на спецтехнику</h2>
-            <p className="text-sm text-slate-500">Обработка клиентских заявок</p>
-          </div>
-
-          <div className="flex gap-2 overflow-x-auto rounded-2xl bg-white p-2 shadow-sm">
-            {[
-              ["active", "Активные"],
-              ["history", "История"],
-            ].map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setApplicationsTab(value as ApplicationsTab)}
-                className={`shrink-0 rounded-xl px-5 py-3 text-sm font-bold ${
-                  applicationsTab === value ? "bg-sky-500 text-white" : "text-slate-500"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {visibleApplications.length === 0 ? (
-            <p className="rounded-2xl bg-white p-10 text-center text-slate-500">
-              {applicationsTab === "active" ? "Активных заявок пока нет" : "История заявок пуста"}
-            </p>
-          ) : (
-            visibleApplications.map((item) => (
-              <div key={item.id} className="rounded-3xl bg-white p-5 shadow-sm">
-                <div className="flex gap-4">
-                  {item.primary_image_url && (
-                    <img
-                      src={resolveMediaUrl(item.primary_image_url) || "/placeholder.jpg"}
-                      className="h-24 w-28 rounded-xl bg-slate-100 object-contain"
-                      alt={item.listing_title_snapshot}
-                    />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className={`text-xs font-bold ${getApplicationStatusClass(item.status)}`}>
-                          {getApplicationStatusLabel(item.status)}
-                        </p>
-                        <h3 className="text-lg font-black">{item.listing_title_snapshot}</h3>
-                      </div>
-                    </div>
-                    <p className="mt-1 text-sm font-bold">{item.client_name} · {item.contact_phone}</p>
-                    <p className="mt-2 text-sm text-slate-600">{item.object_address}</p>
-                    <p className="mt-1 text-sm text-slate-500">
-                      {new Date(item.requested_date).toLocaleDateString("ru-RU")} в{" "}
-                      {item.requested_time.slice(0, 5)} · {item.duration_value}{" "}
-                      {item.duration_unit === "hours" ? "ч." : "смен"}
-                    </p>
-                  </div>
-                </div>
-
-                {item.comment && (
-                  <p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm">{item.comment}</p>
-                )}
-                {item.reject_reason && (
-                  <p className="mt-3 rounded-xl bg-rose-50 p-3 text-sm text-rose-700">
-                    <span className="font-bold">Причина отказа:</span> {item.reject_reason}
-                  </p>
-                )}
-                {item.cancel_reason && (
-                  <p className="mt-3 rounded-xl bg-rose-50 p-3 text-sm text-rose-700">
-                    <span className="font-bold">Причина отмены:</span> {item.cancel_reason}
-                  </p>
-                )}
-
-                {(item.status === "new" || item.status === "in_progress") && (
-                  <div className="mt-4 flex gap-2">
-                    <button
-                      onClick={() => void changeApplicationStatus(item)}
-                      className={`flex-1 rounded-xl p-3 font-bold ${
-                        item.status === "new"
-                          ? "bg-sky-500 text-white"
-                          : "bg-emerald-100 text-emerald-700"
-                      }`}
-                    >
-                      {item.status === "new" ? "Взять в работу" : "Завершить заявку"}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setRejectingApplication(item);
-                        setRejectReason("");
-                      }}
-                      className="flex-1 rounded-xl bg-rose-600 p-3 font-bold text-white"
-                    >
-                      Отказаться
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))
-          )}
-        </div>
       )}
 
       {showListingForm && (
@@ -951,6 +736,18 @@ export default function AdminEquipmentScreen({
                     setListingForm({ ...listingForm, description: event.target.value })
                   }
                   className="mt-1 w-full rounded-xl bg-slate-100 p-3 font-normal"
+                />
+              </label>
+
+              <label className="block text-sm font-bold">
+                Контактный телефон
+                <input
+                  value={listingForm.contact_phone}
+                  onChange={(event) =>
+                    setListingForm({ ...listingForm, contact_phone: event.target.value })
+                  }
+                  className="mt-1 w-full rounded-xl bg-slate-100 p-3 font-normal"
+                  placeholder="+7 (999) 000-00-00"
                 />
               </label>
 
@@ -1119,7 +916,7 @@ export default function AdminEquipmentScreen({
         subject={rejectingListing?.title}
         label="Укажите, что нужно исправить"
         value={listingRejectReason}
-        placeholder="Например: добавьте фото техники, уточните описание или тарифы."
+        placeholder="Например: добавьте фото техники, уточните описание, телефон или тарифы."
         submitLabel="Отклонить"
         submittingLabel="Отклоняем..."
         isSubmitting={isRejectingListing}
@@ -1130,22 +927,6 @@ export default function AdminEquipmentScreen({
           setListingRejectReason("");
         }}
         onSubmit={submitListingRejection}
-      />
-
-      <ReasonModal
-        isOpen={Boolean(rejectingApplication)}
-        eyebrow="Отказ от заявки"
-        title="Причина отказа"
-        subject={rejectingApplication?.listing_title_snapshot}
-        label="Причина отказа"
-        value={rejectReason}
-        submitLabel="Отклонить"
-        submittingLabel="Сохраняем..."
-        isSubmitting={rejecting}
-        submitDisabled={!rejectReason.trim()}
-        onChange={setRejectReason}
-        onClose={() => setRejectingApplication(null)}
-        onSubmit={rejectApplication}
       />
     </div>
   );

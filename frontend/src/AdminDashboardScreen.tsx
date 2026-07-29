@@ -148,11 +148,6 @@ interface PendingModerationRequest {
   vehicle_plate_url?: string | null;
 }
 
-interface AdminEquipmentApplicationAlert {
-  id: string;
-  status: "new" | "in_progress" | "closed" | "completed" | "rejected" | "cancelled";
-}
-
 interface AdminDashboardScreenProps {
   onLogout: () => void;
 }
@@ -209,9 +204,6 @@ export default function AdminDashboardScreen({
   const [drivers, setDrivers] = useState<AdminDriver[]>([]);
   const [pendingRequests, setPendingRequests] = useState<
     PendingModerationRequest[]
-  >([]);
-  const [equipmentApplications, setEquipmentApplications] = useState<
-    AdminEquipmentApplicationAlert[]
   >([]);
   const [pendingDriverModerationCount, setPendingDriverModerationCount] =
     useState(0);
@@ -349,13 +341,6 @@ export default function AdminDashboardScreen({
   const pendingDriversCount =
     pendingDriverModerationCount ||
     drivers.filter((driver) => driver.moderation_status === "pending_moderation").length;
-  const newEquipmentApplicationsCount = equipmentApplications.filter(
-    (item) => item.status === "new",
-  ).length;
-  const activeEquipmentApplicationsCount = equipmentApplications.filter(
-    (item) => item.status === "new" || item.status === "in_progress",
-  ).length;
-
   const sortedDeliveryOptions = useMemo(() => {
     return [...deliveryOptions].sort(
       (a, b) => (a.capacity_m3 || 0) - (b.capacity_m3 || 0),
@@ -701,24 +686,6 @@ export default function AdminDashboardScreen({
     }
   };
 
-  const fetchEquipmentApplications = async (silent = true) => {
-    if (!token) return;
-    try {
-      const res = await fetch(`${baseURL}/admin/equipment-applications`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) {
-        throw new Error("Не удалось загрузить заявки на спецтехнику");
-      }
-      const data = await res.json();
-      setEquipmentApplications(Array.isArray(data) ? data : data.results || []);
-    } catch (err) {
-      if (!silent) {
-        toast.error("Не удалось загрузить заявки на спецтехнику");
-      }
-    }
-  };
-
   const fetchEquipmentModerationCount = async (silent = true) => {
     if (!token) return;
     try {
@@ -840,12 +807,10 @@ export default function AdminDashboardScreen({
 
     void fetchPendingPointModerationCount(true);
     void fetchPendingDriverModerationCount(true);
-    void fetchEquipmentApplications(true);
     void fetchEquipmentModerationCount(true);
     const intervalId = window.setInterval(() => {
       void fetchPendingPointModerationCount(true);
       void fetchPendingDriverModerationCount(true);
-      void fetchEquipmentApplications(true);
       void fetchEquipmentModerationCount(true);
     }, 30000);
 
@@ -863,8 +828,6 @@ export default function AdminDashboardScreen({
       if (deliveryOptions.length === 0) fetchDeliveryOptions(true);
     } else if (activeTab === "moderation" && pendingRequests.length === 0) {
       fetchPendingRequests();
-    } else if (activeTab === "equipment") {
-      void fetchEquipmentApplications(false);
     }
   }, [activeTab]);
 
@@ -1730,33 +1693,6 @@ export default function AdminDashboardScreen({
                 type="button"
                 onClick={() => setActiveTab("drivers")}
                 className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-700"
-              >
-                Перейти
-              </button>
-            </div>
-          </div>
-        ) : null}
-        {activeEquipmentApplicationsCount > 0 ? (
-          <div className="w-full rounded-2xl border border-sky-200 bg-[linear-gradient(135deg,rgba(239,246,255,1)_0%,rgba(255,251,235,1)_100%)] px-4 py-3 shadow-sm">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 rounded-2xl bg-sky-500/10 p-2 text-sky-600">
-                  <Clock className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-black text-slate-900">
-                    У вас есть активные заявки на спецтехнику
-                  </p>
-                  <p className="mt-1 text-sm text-slate-600">
-                    Новых: {newEquipmentApplicationsCount}. В работе:{" "}
-                    {Math.max(activeEquipmentApplicationsCount - newEquipmentApplicationsCount, 0)}.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveTab("equipment")}
-                className="inline-flex items-center justify-center rounded-xl bg-sky-500 px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-sky-600"
               >
                 Перейти
               </button>
@@ -3202,11 +3138,6 @@ export default function AdminDashboardScreen({
             <AdminSuppliersScreen />
           ) : activeTab === "equipment" ? (
             <AdminEquipmentScreen
-              onApplicationsChanged={(applications) =>
-                setEquipmentApplications(
-                  applications.map(({ id, status }) => ({ id, status })),
-                )
-              }
               onPendingModerationChanged={setPendingEquipmentModerationCount}
             />
           ) : activeTab === "support" ? (
@@ -3217,7 +3148,6 @@ export default function AdminDashboardScreen({
               onOpenSuppliers={() => setActiveTab("suppliers")}
               onOpenEquipment={() => setActiveTab("equipment")}
               onOpenSupport={() => setActiveTab("support")}
-              equipmentNewCount={newEquipmentApplicationsCount}
             />
           ) : null}
         </div>

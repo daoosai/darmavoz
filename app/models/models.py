@@ -488,6 +488,7 @@ class SpecialEquipmentListing(Base):
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
+    contact_phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     tariffs: Mapped[list[dict]] = mapped_column(
         JSONB, default=list, nullable=False, server_default="[]"
     )

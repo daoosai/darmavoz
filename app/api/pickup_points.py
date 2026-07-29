@@ -11,7 +11,7 @@ from app.models.models import (
     Quarry,
     quarry_materials,
 )
-from app.schemas.quarry import PickupPointMarkerOut, QuarryOut
+from app.schemas.quarry import GlobalPickupPointOut, PickupPointMarkerOut, QuarryOut
 from app.services.pickup_points import (
     is_pickup_point_publicly_available,
     pickup_point_payload,
@@ -99,6 +99,56 @@ async def list_pickup_points(
         }
         for row in rows
     ]
+
+
+@router.get("/global", response_model=list[GlobalPickupPointOut])
+async def list_global_pickup_points(
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    result = await db.execute(
+        select(Quarry)
+        .where(
+            *public_pickup_point_filters(),
+            Quarry.lat.is_not(None),
+            Quarry.lon.is_not(None),
+        )
+        .order_by(
+            Quarry.is_vip.desc(),
+            Quarry.manual_priority.desc(),
+            Quarry.name.asc(),
+        )
+    )
+    items: list[dict] = []
+    for point in result.scalars().all():
+        payload = await pickup_point_payload(db, point)
+        active_offers = [
+            {
+                "material_id": offer["material_id"],
+                "material_name": offer["material_name"],
+                "unit": offer["unit"],
+                "price": offer["price"],
+            }
+            for offer in payload["material_offers"]
+            if offer["is_active"]
+        ]
+        if not active_offers:
+            continue
+        items.append(
+            {
+                "id": payload["id"],
+                "name": payload["name"],
+                "short_name": payload["short_name"],
+                "point_type": payload["point_type"],
+                "address": payload["address"],
+                "description": payload["description"],
+                "contact_phone": payload["contact_phone"],
+                "lat": payload["lat"],
+                "lon": payload["lon"],
+                "primary_image_url": payload["primary_image_url"],
+                "material_offers": active_offers,
+            }
+        )
+    return items
 
 
 @router.get("/{point_id}", response_model=QuarryOut)

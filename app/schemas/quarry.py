@@ -276,6 +276,27 @@ class PickupPointMarkerOut(BaseModel):
     primary_image_url: Optional[str] = None
 
 
+class GlobalPickupPointMaterialOut(BaseModel):
+    material_id: UUID
+    material_name: str
+    unit: str
+    price: Optional[float] = None
+
+
+class GlobalPickupPointOut(BaseModel):
+    id: UUID
+    name: str
+    short_name: str
+    point_type: PickupPointTypeValue
+    address: str
+    description: Optional[str] = None
+    contact_phone: Optional[str] = None
+    lat: float
+    lon: float
+    primary_image_url: Optional[str] = None
+    material_offers: list[GlobalPickupPointMaterialOut] = Field(default_factory=list)
+
+
 class ModerationDecision(BaseModel):
     comment: Optional[str] = Field(default=None, max_length=2000)
 

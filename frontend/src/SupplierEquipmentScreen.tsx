@@ -19,6 +19,7 @@ interface EquipmentForm {
   equipment_type: string;
   title: string;
   description: string;
+  contact_phone: string;
   hourly_price: string;
   shift_hours: string;
   city: string;
@@ -36,6 +37,7 @@ const EMPTY_FORM: EquipmentForm = {
   equipment_type: "",
   title: "",
   description: "",
+  contact_phone: "",
   hourly_price: "",
   shift_hours: "",
   city: "",
@@ -181,6 +183,7 @@ export default function SupplierEquipmentScreen({ token }: Props) {
             equipment_type: listing.equipment_type || listing.equipment_type_name,
             title: listing.title,
             description: listing.description,
+            contact_phone: listing.contact_phone || "",
             hourly_price: hourTariff?.price?.toString() || "",
             shift_hours: shiftTariff?.hours?.toString() || "",
             city: listing.city || "",
@@ -316,6 +319,7 @@ export default function SupplierEquipmentScreen({ token }: Props) {
           equipment_type: form.equipment_type,
           title: form.title,
           description: form.description,
+          contact_phone: form.contact_phone || null,
           tariffs,
           city: form.city || null,
           district: form.district || null,
@@ -690,6 +694,15 @@ export default function SupplierEquipmentScreen({ token }: Props) {
                 value={form.description}
                 onChange={(event) => setForm({ ...form, description: event.target.value })}
                 className="mt-1 w-full rounded-xl bg-slate-100 p-3 font-normal"
+              />
+            </label>
+            <label className="block text-sm font-bold">
+              Контактный телефон
+              <input
+                value={form.contact_phone}
+                onChange={(event) => setForm({ ...form, contact_phone: event.target.value })}
+                className="mt-1 w-full rounded-xl bg-slate-100 p-3 font-normal"
+                placeholder="+7 (999) 000-00-00"
               />
             </label>
             <div className="grid grid-cols-2 gap-3">

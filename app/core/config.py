@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     ANDROID_VERSION: str = "2.6.0"
     IOS_VERSION: str = "2.6.0"
     WEB_VERSION: str = "2.6.0"
-    APK_DOWNLOAD_URL: str = "/static/darmavoz.apk"
+    APK_DOWNLOAD_URL: str = "/static/darmavoz-test.apk"
     APK_FORCE_UPDATE: bool = False
     SMTP_HOST: str | None = None
     SMTP_PORT: int = 465

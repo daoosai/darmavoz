@@ -9,6 +9,13 @@ if (Test-Path "C:\Program Files\Android\Android Studio\jbr") {
   Write-Host "✅ JAVA_HOME установлен: $env:JAVA_HOME" -ForegroundColor Green
 }
 
+if ($env:JAVA_HOME) {
+  $javaBinDir = Join-Path $env:JAVA_HOME "bin"
+  if ($env:PATH -notlike "*$javaBinDir*") {
+    $env:PATH = "$javaBinDir;$env:PATH"
+  }
+}
+
 # Помощь Capacitor'у в поиске Node.js на Windows
 $nodePath = (Get-Command node -ErrorAction SilentlyContinue).Path
 if ($nodePath) {
@@ -62,16 +69,16 @@ Write-Host "Start local build and deploy (Darmavoz Test 2.6.0)..." -ForegroundCo
 Push-Location $frontendDir
 try {
   Write-Host "1/4 Build web bundle..." -ForegroundColor Yellow
-  npm run build
+  & npm.cmd run build
   Assert-LastExitCode "npm run build"
 
   Write-Host "2/4 Build Android APK..." -ForegroundColor Yellow
-  npx.cmd cap sync android
+  & npx.cmd cap sync android
   Assert-LastExitCode "npx.cmd cap sync android"
 
   Push-Location $androidDir
   try {
-    .\gradlew.bat assembleDebug
+    & .\gradlew.bat assembleDebug
     Assert-LastExitCode ".\\gradlew.bat assembleDebug"
   }
   finally {

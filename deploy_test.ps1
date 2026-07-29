@@ -36,24 +36,24 @@ if (-not $root) {
 $SERVER_IP = "159.194.236.11"
 $frontendDir = Join-Path $root "frontend"
 $androidDir = Join-Path $frontendDir "android"
-$apkPath = Join-Path $frontendDir "android/app/build/outputs/apk/debug/app-debug.apk"
 $webDistPath = Join-Path $frontendDir "dist"
 $frontendArchivePath = Join-Path $root "frontend-dist.tar"
 $sourceDir = "/opt/darmavoz_test"
 $deployDir = "/opt/darmavoz_test_deploy"
 $frontendTargetDir = "/opt/daoos-kit/sites/darmavoz_test/frontend"
 
-$remoteScript = @"
-set -e
-mkdir -p $frontendTargetDir
-rm -rf $frontendTargetDir/*
-tar -xf /tmp/frontend-dist.tar -C $frontendTargetDir
-rm -f /tmp/frontend-dist.tar
-cd $sourceDir
-git fetch origin && git reset --hard origin/develop
-DEPLOY_REF=`$(git rev-parse HEAD)
-git -C $deployDir checkout --detach `$DEPLOY_REF
-docker compose -f $deployDir/docker-compose.test.yml build backend_test
+$remoteCommand = @"
+set -e;
+mkdir -p $frontendTargetDir;
+rm -rf $frontendTargetDir/*;
+tar -xf /tmp/frontend-dist.tar -C $frontendTargetDir;
+rm -f /tmp/frontend-dist.tar;
+cd $sourceDir;
+git fetch origin;
+git reset --hard origin/develop;
+DEPLOY_REF=`$(git rev-parse HEAD);
+git -C $deployDir checkout --detach `$DEPLOY_REF;
+docker compose -f $deployDir/docker-compose.test.yml build backend_test;
 docker compose -f $deployDir/docker-compose.test.yml up -d --no-deps --force-recreate backend_test
 "@
 
@@ -83,7 +83,7 @@ finally {
 }
 
 Write-Host "3/4 Upload APK and frontend bundle..." -ForegroundColor Yellow
-scp $apkPath "root@${SERVER_IP}:/opt/darmavoz_test_deploy/static/darmavoz-test.apk"
+scp frontend\android\app\build\outputs\apk\debug\app-debug.apk root@${SERVER_IP}:/opt/darmavoz_test_deploy/static/darmavoz-test.apk
 Assert-LastExitCode "scp apk upload"
 
 if (Test-Path $frontendArchivePath) {
@@ -97,7 +97,7 @@ Assert-LastExitCode "scp frontend archive upload"
 Remove-Item -LiteralPath $frontendArchivePath -Force
 
 Write-Host "4/4 Update backend on server..." -ForegroundColor Yellow
-$remoteScript | ssh "root@${SERVER_IP}" "bash -s"
+ssh "root@${SERVER_IP}" $remoteCommand
 Assert-LastExitCode "ssh remote deploy"
 
 Write-Host "Deploy completed successfully!" -ForegroundColor Green

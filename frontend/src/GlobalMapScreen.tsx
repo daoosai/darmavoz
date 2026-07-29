@@ -35,7 +35,7 @@ const TYPE_LABELS: Record<GlobalPickupPoint["point_type"], string> = {
 export default function GlobalMapScreen() {
   const [points, setPoints] = useState<GlobalPickupPoint[]>([]);
   const [selectedMaterialId, setSelectedMaterialId] = useState<string>("all");
-  const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
+  const [selectedPoint, setSelectedPoint] = useState<GlobalPickupPoint | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -91,7 +91,9 @@ export default function GlobalMapScreen() {
       });
       return materialMap;
     }, new Map<string, { id: string; name: string }>()),
-  ).map(([, value]) => value).sort((first, second) => first.name.localeCompare(second.name));
+  )
+    .map(([, value]) => value)
+    .sort((first, second) => first.name.localeCompare(second.name));
 
   const visiblePoints = points.filter(
     (point) =>
@@ -99,19 +101,11 @@ export default function GlobalMapScreen() {
       point.material_offers.some((offer) => offer.material_id === selectedMaterialId),
   );
 
-  const selectedPoint =
-    visiblePoints.find((point) => point.id === selectedPointId) || visiblePoints[0] || null;
-
   useEffect(() => {
-    if (!selectedPoint && visiblePoints.length > 0) {
-      setSelectedPointId(visiblePoints[0].id);
-      return;
-    }
-
     if (selectedPoint && !visiblePoints.some((point) => point.id === selectedPoint.id)) {
-      setSelectedPointId(visiblePoints[0]?.id || null);
+      setSelectedPoint(null);
     }
-  }, [visiblePoints, selectedPoint]);
+  }, [selectedPoint, visiblePoints]);
 
   useEffect(() => {
     const mapgl = (window as any).mapgl;
@@ -152,14 +146,14 @@ export default function GlobalMapScreen() {
         point.point_type === "quarry"
           ? '<span class="global-pickup-marker__icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 19 6.4-11 3.2 5.2L15.4 9 21 19H3Z"/><path d="m7.5 19 3.1-5.3 3.2 5.3H7.5Z" opacity=".45"/></svg></span>'
           : '<span class="global-pickup-marker__icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5 12 5l8 4.5V19h-3v-6H7v6H4V9.5Z"/><path d="M9 15h6v4H9v-4Z" opacity=".45"/></svg></span>';
-      element.addEventListener("click", () => setSelectedPointId(point.id));
+      element.addEventListener("click", () => setSelectedPoint(point));
 
       return new mapgl.HtmlMarker(mapRef.current, {
         coordinates: [point.lon, point.lat],
         html: element,
       });
     });
-  }, [visiblePoints, selectedPoint?.id]);
+  }, [selectedPoint?.id, visiblePoints]);
 
   useEffect(() => {
     if (!selectedPoint || !mapRef.current) {
@@ -211,10 +205,7 @@ export default function GlobalMapScreen() {
 
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 p-4">
         <div className="pointer-events-auto rounded-[28px] bg-white/95 p-4 shadow-xl backdrop-blur">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-500">
-            Глобальная карта
-          </p>
-          <h2 className="mt-2 text-2xl font-black text-slate-900">Точки забора</h2>
+          <h2 className="text-2xl font-black text-slate-900">Точки забора</h2>
           <p className="mt-1 text-sm text-slate-500">
             Все активные карьеры и накопители на одной карте
           </p>

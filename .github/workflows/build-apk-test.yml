@@ -9,7 +9,7 @@ jobs:
   build-test-apk:
     runs-on: ubuntu-latest
     env:
-      APK_REMOTE_DIR: /opt/darmavoz_test_deploy/static
+      APK_REMOTE_DIR: /opt/daoos-kit/sites/darmavoz_test/static
       APK_REMOTE_NAME: darmavoz-test.apk
       APK_BUILD_PATH: frontend/android/app/build/outputs/apk/debug/app-debug.apk
       VITE_2GIS_KEY: ${{ secrets.VITE_2GIS_KEY }}
@@ -118,7 +118,7 @@ jobs:
           username: ${{ secrets.USERNAME || secrets.SSH_USER }}
           key: ${{ secrets.PRIVATE_KEY || secrets.SSH_PRIVATE_KEY }}
           source: "${{ env.APK_BUILD_PATH }}"
-          target: "/opt/darmavoz_test_deploy/static/"
+          target: "/opt/daoos-kit/sites/darmavoz_test/static/"
           strip_components: 7
           overwrite: true
 
@@ -130,6 +130,4 @@ jobs:
           key: ${{ secrets.PRIVATE_KEY || secrets.SSH_PRIVATE_KEY }}
           script: |
             set -euo pipefail
-            mv /opt/darmavoz_test_deploy/static/app-debug.apk /opt/darmavoz_test_deploy/static/darmavoz-test.apk
-            cd /opt/darmavoz_test_deploy
-            docker compose -f docker-compose.test.yml up -d --build backend_test
+            mv /opt/daoos-kit/sites/darmavoz_test/static/app-debug.apk /opt/daoos-kit/sites/darmavoz_test/static/darmavoz-test.apk

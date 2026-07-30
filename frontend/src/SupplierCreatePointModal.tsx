@@ -49,6 +49,7 @@ export interface SupplierPoint {
   is_active?: boolean;
   moderation_status: string;
   moderation_comment?: string | null;
+  pending_changes?: Record<string, unknown> | null;
   primary_image_url?: string | null;
   media_files?: Array<{
     id: string;

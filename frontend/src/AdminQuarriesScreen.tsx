@@ -26,6 +26,7 @@ export interface Quarry {
   is_vip?: boolean;
   manual_priority?: number;
   moderation_status?: string;
+  pending_changes?: Record<string, unknown> | null;
   is_active: boolean;
   owner_user_id?: string | null;
   material_ids?: string[];
@@ -57,8 +58,21 @@ const MODERATION_BADGES: Record<string, { label: string; className: string }> = 
   suspended: { label: "Приостановлен", className: "bg-orange-100 text-orange-700" },
 };
 
+MODERATION_BADGES.has_pending_changes = {
+  label: "Есть правки",
+  className: "bg-sky-100 text-sky-800",
+};
+
 const moderationBadge = (status?: string) =>
   MODERATION_BADGES[status || "incomplete"] || MODERATION_BADGES.incomplete;
+
+const getPendingChangesSummary = (pendingChanges?: Record<string, unknown> | null) => {
+  if (!pendingChanges || typeof pendingChanges !== "object") {
+    return null;
+  }
+  const keys = Object.keys(pendingChanges);
+  return keys.length ? keys.join(", ") : null;
+};
 
 const normalizeManualPriority = (value?: number | null) => {
   const parsed = Number(value ?? 0);
@@ -360,6 +374,7 @@ export default function AdminQuarriesScreen({
           <option value="approved">Одобрено</option>
           <option value="rejected">Отклонено</option>
           <option value="suspended">Приостановлено</option>
+          <option value="has_pending_changes">Есть правки</option>
         </select>
         <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
           <option value="">Все типы</option>
@@ -417,6 +432,11 @@ export default function AdminQuarriesScreen({
                     </td>
                     <td className="p-4 text-sm text-slate-600 max-w-[250px] truncate">
                       {getQuarryAddress(quarry)}
+                      {getPendingChangesSummary(quarry.pending_changes) ? (
+                        <div className="mt-1 text-xs text-sky-700">
+                          Правки: {getPendingChangesSummary(quarry.pending_changes)}
+                        </div>
+                      ) : null}
                     </td>
                     <td className="p-4">
                       <div className="flex flex-wrap gap-2">
@@ -464,7 +484,7 @@ export default function AdminQuarriesScreen({
                         >
                           <Trash2 className="w-5 h-5" />
                         </button>
-                        {quarry.moderation_status === "pending_moderation" && quarry.id && (
+                        {["pending_moderation", "has_pending_changes"].includes(quarry.moderation_status || "") && quarry.id && (
                           <div className="flex flex-col items-stretch gap-2">
                             <button disabled={isModerating} onClick={() => void moderatePoint(quarry.id!, "approve")} className="w-28 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50">Одобрить</button>
                             <button disabled={isModerating} onClick={() => rejectPoint(quarry.id!)} className="w-28 rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-50">Отклонить</button>
@@ -502,6 +522,11 @@ export default function AdminQuarriesScreen({
               </div>
               <div className="text-sm text-gray-600">
                 {getQuarryAddress(quarry)}
+                {getPendingChangesSummary(quarry.pending_changes) ? (
+                  <div className="mt-1 text-xs text-sky-700">
+                    Правки: {getPendingChangesSummary(quarry.pending_changes)}
+                  </div>
+                ) : null}
               </div>
               {(quarry.owner_name || quarry.owner_phone) && (
                 <div className="text-xs font-medium text-slate-500">
@@ -551,7 +576,7 @@ export default function AdminQuarriesScreen({
                   >
                     <Trash2 className="w-5 h-5" />
                   </button>
-                  {quarry.moderation_status === "pending_moderation" && quarry.id ? (
+                  {["pending_moderation", "has_pending_changes"].includes(quarry.moderation_status || "") && quarry.id ? (
                     <div className="flex flex-col items-stretch gap-2">
                       <button disabled={isModerating} onClick={() => void moderatePoint(quarry.id!, "approve")} className="w-28 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 disabled:opacity-50">Одобрить</button>
                       <button disabled={isModerating} onClick={() => rejectPoint(quarry.id!)} className="w-28 rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 disabled:opacity-50">Отклонить</button>

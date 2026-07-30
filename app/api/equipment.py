@@ -49,11 +49,24 @@ from app.services.notifications import (
     schedule_equipment_application_rejected_notification,
 )
 from app.services.email_service import send_email
+from app.services.moderation import (
+    EQUIPMENT_ENTITY_TYPE,
+    clear_entity_pending_changes,
+    create_moderation_audit_log,
+    has_publicly_visible_moderation_status,
+    mark_entity_pending_changes,
+    serialize_moderation_value,
+    summarize_pending_changes,
+)
 from app.utils.phones import normalize_phone
 
 router = APIRouter()
 supplier_router = APIRouter()
 equipment_owner_router = APIRouter()
+OWNER_PENDING_EDIT_STATUSES = {
+    ModerationStatus.approved.value,
+    ModerationStatus.has_pending_changes.value,
+}
 
 
 def _format_duration_value(value: float) -> str:
@@ -161,7 +174,12 @@ async def _listing_media(db: AsyncSession, listing_id: UUID) -> list[MediaFile]:
     return list(result.scalars().all())
 
 
-async def _listing_payload(db: AsyncSession, listing: SpecialEquipmentListing) -> dict:
+async def _listing_payload(
+    db: AsyncSession,
+    listing: SpecialEquipmentListing,
+    *,
+    include_pending_changes: bool = False,
+) -> dict:
     media = await _listing_media(db, listing.id)
     return {
         "id": listing.id,
@@ -186,6 +204,7 @@ async def _listing_payload(db: AsyncSession, listing: SpecialEquipmentListing) -
         "owner_phone": listing.owner.username if listing.owner else listing.contact_phone,
         "moderation_status": listing.moderation_status,
         "moderation_comment": listing.moderation_comment,
+        "pending_changes": serialize_moderation_value(listing.pending_changes) if include_pending_changes else None,
         "created_at": listing.created_at,
         "updated_at": listing.updated_at,
     }
@@ -287,12 +306,145 @@ def _reset_supplier_listing_moderation(listing: SpecialEquipmentListing) -> None
         listing.moderated_by_user_id = None
 
 
+async def _normalize_listing_update_data(
+    db: AsyncSession,
+    payload: EquipmentListingUpdate,
+) -> dict:
+    changed = payload.model_fields_set
+    payload_data: dict = {}
+    if changed.intersection({"equipment_type", "equipment_type_id"}):
+        equipment_type, equipment_type_id = await _resolve_equipment_type(
+            db,
+            equipment_type=payload.equipment_type,
+            equipment_type_id=payload.equipment_type_id,
+        )
+        payload_data["equipment_type"] = equipment_type
+        payload_data["equipment_type_id"] = equipment_type_id
+    for field in (
+        "title",
+        "description",
+        "contact_phone",
+        "tariffs",
+        "city",
+        "district",
+        "is_active",
+    ):
+        if field not in changed:
+            continue
+        value = getattr(payload, field)
+        if field == "contact_phone":
+            value = _normalize_listing_contact_phone(value)
+        if field == "tariffs" and value is not None:
+            value = [tariff.model_dump() for tariff in value]
+        payload_data[field] = value
+    return payload_data
+
+    payload_data = await _normalize_listing_update_data(db, payload)
+    use_pending_changes = listing.moderation_status in OWNER_PENDING_EDIT_STATUSES
+    pending_changes = {}
+    if use_pending_changes:
+        if "is_active" in payload_data:
+            listing.is_active = payload_data["is_active"]
+        pending_changes = {
+            field: value
+            for field, value in payload_data.items()
+            if field != "is_active"
+        }
+        if pending_changes:
+            mark_entity_pending_changes(listing, pending_changes)
+    else:
+        _apply_listing_update_data(listing, payload_data)
+        _reset_supplier_listing_moderation(listing)
+    await create_moderation_audit_log(
+        db,
+        entity_type=EQUIPMENT_ENTITY_TYPE,
+        entity_id=listing.id,
+        user_id=current_owner.id,
+        action="edited",
+        comment=summarize_pending_changes(pending_changes) or listing.title,
+    )
+    await db.commit()
+    _schedule_supplier_listing_moderation_email(
+        background_tasks,
+        listing,
+        action="Р С‘Р В·Р СР ВµР Р…Р С‘Р В»",
+        fields_summary=summarize_pending_changes(pending_changes),
+    )
+    return await _listing_payload(
+        db,
+        await _get_listing(db, listing.id),
+        include_pending_changes=True,
+    )
+    changed = payload.model_fields_set
+    payload_data: dict = {}
+    if changed.intersection({"equipment_type", "equipment_type_id"}):
+        equipment_type, equipment_type_id = await _resolve_equipment_type(
+            db,
+            equipment_type=payload.equipment_type,
+            equipment_type_id=payload.equipment_type_id,
+        )
+        payload_data["equipment_type"] = equipment_type
+        payload_data["equipment_type_id"] = equipment_type_id
+    for field in ("title", "description", "contact_phone", "tariffs", "city", "district", "is_active"):
+        if field not in changed:
+            continue
+        value = getattr(payload, field)
+        if field == "contact_phone":
+            value = _normalize_listing_contact_phone(value)
+        if field == "tariffs" and value is not None:
+            value = [tariff.model_dump() for tariff in value]
+        payload_data[field] = value
+    return payload_data
+
+
+def _apply_listing_update_data(
+    listing: SpecialEquipmentListing,
+    payload_data: dict,
+) -> None:
+    for field, value in payload_data.items():
+        setattr(listing, field, value)
+    if "tariffs" in payload_data:
+        listing.price_from = _extract_price_from_tariffs(listing.tariffs)
+
+
 def _schedule_supplier_listing_moderation_email(
     background_tasks: BackgroundTasks,
     listing: SpecialEquipmentListing,
     *,
     action: str,
+    fields_summary: str | None = None,
 ) -> None:
+    if not settings.ADMIN_EMAIL:
+        return
+
+    if listing.moderation_status == ModerationStatus.has_pending_changes.value:
+        equipment_type = (listing.equipment_type or "Спецтехника").strip() or "Спецтехника"
+        listing_title = (listing.title or "Без названия").strip() or "Без названия"
+        background_tasks.add_task(
+            send_email,
+            to_email=settings.ADMIN_EMAIL,
+            subject="Правки объявления спецтехники ожидают модерации",
+            body=(
+                f'Поставщик {action} правки объявления: {equipment_type} "{listing_title}". '
+                f"Изменены поля: {fields_summary or 'без деталей'}."
+            ),
+        )
+        return
+
+    equipment_type = (listing.equipment_type or "РЎРїРµС†С‚РµС…РЅРёРєР°").strip() or "РЎРїРµС†С‚РµС…РЅРёРєР°"
+    listing_title = (listing.title or "Р‘РµР· РЅР°Р·РІР°РЅРёСЏ").strip() or "Р‘РµР· РЅР°Р·РІР°РЅРёСЏ"
+    if listing.moderation_status == ModerationStatus.has_pending_changes.value:
+        background_tasks.add_task(
+            send_email,
+            to_email=settings.ADMIN_EMAIL,
+            subject="РџСЂР°РІРєРё РѕР±СЉСЏРІР»РµРЅРёСЏ СЃРїРµС†С‚РµС…РЅРёРєРё РѕР¶РёРґР°СЋС‚ РјРѕРґРµСЂР°С†РёРё",
+            body=(
+                f'РџРѕСЃС‚Р°РІС‰РёРє {action} РїСЂР°РІРєРё РѕР±СЉСЏРІР»РµРЅРёСЏ: {equipment_type} "{listing_title}". '
+                f"РР·РјРµРЅРµРЅС‹ РїРѕР»СЏ: {fields_summary or 'Р±РµР· РґРµС‚Р°Р»РµР№'}."
+            ),
+        )
+        return
+
     if (
         not settings.ADMIN_EMAIL
         or listing.moderation_status != ModerationStatus.pending_moderation.value
@@ -371,7 +523,12 @@ async def list_public_equipment(
         .where(
             SpecialEquipmentListing.is_active.is_(True),
             SpecialEquipmentListing.is_deleted.is_(False),
-            SpecialEquipmentListing.moderation_status == ModerationStatus.approved.value,
+            SpecialEquipmentListing.moderation_status.in_(
+                (
+                    ModerationStatus.approved.value,
+                    ModerationStatus.has_pending_changes.value,
+                )
+            ),
             or_(
                 SpecialEquipmentListing.equipment_type_id.is_(None),
                 SpecialEquipmentType.is_active.is_(True),
@@ -416,7 +573,7 @@ async def get_public_equipment(listing_id: UUID, db: AsyncSession = Depends(get_
     listing = await _get_listing(db, listing_id)
     if (
         not listing.is_active
-        or listing.moderation_status != ModerationStatus.approved.value
+        or not has_publicly_visible_moderation_status(listing.moderation_status)
         or (
             listing.equipment_type_ref is not None
             and not listing.equipment_type_ref.is_active
@@ -542,9 +699,19 @@ async def list_admin_equipment(
     if is_active is not None:
         stmt = stmt.where(SpecialEquipmentListing.is_active.is_(is_active))
     if moderation_status is not None:
-        stmt = stmt.where(
-            SpecialEquipmentListing.moderation_status == moderation_status.value
-        )
+        if moderation_status == ModerationStatus.pending_moderation:
+            stmt = stmt.where(
+                SpecialEquipmentListing.moderation_status.in_(
+                    [
+                        ModerationStatus.pending_moderation.value,
+                        ModerationStatus.has_pending_changes.value,
+                    ]
+                )
+            )
+        else:
+            stmt = stmt.where(
+                SpecialEquipmentListing.moderation_status == moderation_status.value
+            )
     if owner_user_id is not None:
         stmt = stmt.where(SpecialEquipmentListing.owner_user_id == owner_user_id)
     if search:
@@ -557,7 +724,10 @@ async def list_admin_equipment(
             SpecialEquipmentListing.created_at.desc(),
         )
     )
-    return [await _listing_payload(db, item) for item in result.scalars().all()]
+    return [
+        await _listing_payload(db, item, include_pending_changes=True)
+        for item in result.scalars().all()
+    ]
 
 
 @router.post(
@@ -590,7 +760,11 @@ async def create_equipment_listing(
     )
     db.add(listing)
     await db.commit()
-    return await _listing_payload(db, await _get_listing(db, listing.id))
+    return await _listing_payload(
+        db,
+        await _get_listing(db, listing.id),
+        include_pending_changes=True,
+    )
 
 
 @router.get("/admin/equipment/{listing_id}", response_model=OperatorEquipmentListingOut)
@@ -600,7 +774,11 @@ async def get_admin_equipment(
     current_user: User = Depends(get_current_logist_user),
 ):
     del current_user
-    return await _listing_payload(db, await _get_listing(db, listing_id))
+    return await _listing_payload(
+        db,
+        await _get_listing(db, listing_id),
+        include_pending_changes=True,
+    )
 
 
 @router.patch("/admin/equipment/{listing_id}", response_model=OperatorEquipmentListingOut)
@@ -646,7 +824,11 @@ async def update_equipment_listing(
     listing.moderated_by_user_id = current_user.id
     listing.moderated_at = datetime.now(timezone.utc)
     await db.commit()
-    return await _listing_payload(db, await _get_listing(db, listing.id))
+    return await _listing_payload(
+        db,
+        await _get_listing(db, listing.id),
+        include_pending_changes=True,
+    )
 
 
 @router.delete("/admin/equipment/{listing_id}")
@@ -687,7 +869,10 @@ async def _list_owner_equipment(
         )
         .order_by(SpecialEquipmentListing.created_at.desc())
     )
-    return [await _listing_payload(db, item) for item in result.scalars().all()]
+    return [
+        await _listing_payload(db, item, include_pending_changes=True)
+        for item in result.scalars().all()
+    ]
 
 
 async def _create_owner_equipment(
@@ -731,12 +916,25 @@ async def _create_owner_equipment(
     )
     db.add(listing)
     await db.commit()
+    await create_moderation_audit_log(
+        db,
+        entity_type=EQUIPMENT_ENTITY_TYPE,
+        entity_id=listing.id,
+        user_id=current_owner.id,
+        action="created",
+        comment=listing.title,
+    )
+    await db.commit()
     _schedule_supplier_listing_moderation_email(
         background_tasks,
         listing,
         action="РґРѕР±Р°РІРёР»",
     )
-    return await _listing_payload(db, await _get_listing(db, listing.id))
+    return await _listing_payload(
+        db,
+        await _get_listing(db, listing.id),
+        include_pending_changes=True,
+    )
 
 
 async def _update_owner_equipment(
@@ -748,6 +946,43 @@ async def _update_owner_equipment(
     current_owner: User,
 ) -> dict:
     listing = await _get_listing(db, listing_id)
+    if listing.owner_user_id == current_owner.id:
+        payload_data = await _normalize_listing_update_data(db, payload)
+        use_pending_changes = listing.moderation_status in OWNER_PENDING_EDIT_STATUSES
+        pending_changes: dict = {}
+        if use_pending_changes:
+            if "is_active" in payload_data:
+                listing.is_active = payload_data["is_active"]
+            pending_changes = {
+                field: value
+                for field, value in payload_data.items()
+                if field != "is_active"
+            }
+            if pending_changes:
+                mark_entity_pending_changes(listing, pending_changes)
+        else:
+            _apply_listing_update_data(listing, payload_data)
+            _reset_supplier_listing_moderation(listing)
+        await create_moderation_audit_log(
+            db,
+            entity_type=EQUIPMENT_ENTITY_TYPE,
+            entity_id=listing.id,
+            user_id=current_owner.id,
+            action="edited",
+            comment=summarize_pending_changes(pending_changes) or listing.title,
+        )
+        await db.commit()
+        _schedule_supplier_listing_moderation_email(
+            background_tasks,
+            listing,
+            action="изменил",
+            fields_summary=summarize_pending_changes(pending_changes),
+        )
+        return await _listing_payload(
+            db,
+            await _get_listing(db, listing.id),
+            include_pending_changes=True,
+        )
     if listing.owner_user_id != current_owner.id:
         raise HTTPException(status_code=404, detail="РћР±СЉСЏРІР»РµРЅРёРµ СЃРїРµС†С‚РµС…РЅРёРєРё РЅРµ РЅР°Р№РґРµРЅРѕ")
     changed = payload.model_fields_set
@@ -982,13 +1217,36 @@ async def approve_supplier_equipment(
     current_user: User = Depends(get_current_logist_user),
 ):
     listing = await _get_listing(db, listing_id)
+    staged_changes = (
+        listing.pending_changes
+        if listing.moderation_status == ModerationStatus.has_pending_changes.value
+        else None
+    )
+    if staged_changes:
+        pending_payload = EquipmentListingUpdate.model_validate(staged_changes)
+        pending_data = await _normalize_listing_update_data(db, pending_payload)
+        _apply_listing_update_data(listing, pending_data)
+        clear_entity_pending_changes(listing)
+    await create_moderation_audit_log(
+        db,
+        entity_type=EQUIPMENT_ENTITY_TYPE,
+        entity_id=listing.id,
+        user_id=current_user.id,
+        action="approved",
+        comment=summarize_pending_changes(staged_changes) or (payload.comment if payload else None),
+    )
     listing.moderation_status = ModerationStatus.approved.value
     listing.moderation_comment = payload.comment if payload else None
     listing.moderated_at = datetime.now(timezone.utc)
     listing.moderated_by_user_id = current_user.id
-    listing.is_active = True
+    if not staged_changes:
+        listing.is_active = True
     await db.commit()
-    return await _listing_payload(db, await _get_listing(db, listing.id))
+    return await _listing_payload(
+        db,
+        await _get_listing(db, listing.id),
+        include_pending_changes=True,
+    )
 
 
 @router.post(
@@ -1002,12 +1260,33 @@ async def reject_supplier_equipment(
     current_user: User = Depends(get_current_logist_user),
 ):
     listing = await _get_listing(db, listing_id)
-    listing.moderation_status = ModerationStatus.rejected.value
+    staged_changes = (
+        listing.pending_changes
+        if listing.moderation_status == ModerationStatus.has_pending_changes.value
+        else None
+    )
+    if staged_changes:
+        listing.moderation_status = ModerationStatus.approved.value
+        clear_entity_pending_changes(listing)
+    else:
+        listing.moderation_status = ModerationStatus.rejected.value
     listing.moderation_comment = payload.reason
     listing.moderated_at = datetime.now(timezone.utc)
     listing.moderated_by_user_id = current_user.id
+    await create_moderation_audit_log(
+        db,
+        entity_type=EQUIPMENT_ENTITY_TYPE,
+        entity_id=listing.id,
+        user_id=current_user.id,
+        action="rejected",
+        comment=payload.reason,
+    )
     await db.commit()
-    return await _listing_payload(db, await _get_listing(db, listing.id))
+    return await _listing_payload(
+        db,
+        await _get_listing(db, listing.id),
+        include_pending_changes=True,
+    )
 
 
 @router.post(

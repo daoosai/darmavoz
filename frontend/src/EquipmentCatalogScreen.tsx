@@ -47,8 +47,15 @@ export interface EquipmentListing {
   is_vip?: boolean;
   manual_priority?: number;
   price_from?: number | null;
-  moderation_status?: "incomplete" | "pending_moderation" | "approved" | "rejected" | "suspended";
+  moderation_status?:
+    | "incomplete"
+    | "pending_moderation"
+    | "has_pending_changes"
+    | "approved"
+    | "rejected"
+    | "suspended";
   moderation_comment?: string | null;
+  pending_changes?: Record<string, unknown> | null;
 }
 
 interface Props {

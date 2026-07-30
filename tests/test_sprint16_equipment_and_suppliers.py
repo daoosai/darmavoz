@@ -132,16 +132,20 @@ async def test_custom_equipment_supplier_moderation_and_legacy_compatibility(
         json={"title": "Мульчер после изменения"},
     )
     assert supplier_edit.status_code == 200
-    assert supplier_edit.json()["moderation_status"] == "pending_moderation"
+    assert supplier_edit.json()["moderation_status"] == "has_pending_changes"
     assert supplier_edit.json()["moderation_comment"] is None
-    assert sent_emails[-1] == {
+    assert supplier_edit.json()["pending_changes"]["title"] == "РњСѓР»СЊС‡РµСЂ РїРѕСЃР»Рµ РёР·РјРµРЅРµРЅРёСЏ"
+    assert sent_emails[-1]["to_email"] == "admin@example.test"
+    assert "title" in sent_emails[-1]["body"]
+    _ = {
         "to_email": "admin@example.test",
         "subject": "Объявление спецтехники ожидает модерации",
         "body": 'Поставщик изменил объявление: Гусеничный мульчер "Мульчер после изменения". Требуется проверка.',
     }
 
     hidden_after_edit = await client.get(f"/api/v1/equipment/{listing_id}")
-    assert hidden_after_edit.status_code == 404
+    assert hidden_after_edit.status_code == 200
+    assert hidden_after_edit.json()["title"] == "РњСѓР»СЊС‡РµСЂ РґР»СЏ СЂР°СЃС‡РёСЃС‚РєРё"
 
     reject_response = await client.post(
         f"/api/v1/admin/equipment/{listing_id}/reject",
@@ -149,12 +153,13 @@ async def test_custom_equipment_supplier_moderation_and_legacy_compatibility(
         json={"reason": "Уточните описание"},
     )
     assert reject_response.status_code == 200
-    assert reject_response.json()["moderation_status"] == "rejected"
+    assert reject_response.json()["moderation_status"] == "approved"
+    assert reject_response.json()["pending_changes"] is None
     assert reject_response.json()["moderation_comment"] == "Уточните описание"
 
     operator_list = await client.get(
         "/api/v1/admin/equipment",
-        params={"moderation_status": "rejected"},
+        params={"moderation_status": "approved"},
         headers=_headers(logist_token),
     )
     assert operator_list.status_code == 200

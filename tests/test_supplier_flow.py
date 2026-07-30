@@ -186,13 +186,14 @@ async def test_supplier_auth_creates_only_user_and_allows_multiple_points(
         headers=headers,
     )
     assert edited_point.status_code == 200
-    assert edited_point.json()["name"] == "Updated test point"
-    assert edited_point.json()["moderation_status"] == ModerationStatus.pending_moderation.value
+    assert edited_point.json()["name"] == "Test point"
+    assert edited_point.json()["moderation_status"] == ModerationStatus.has_pending_changes.value
+    assert edited_point.json()["pending_changes"]["name"] == "Updated test point"
 
     points = await client.get("/api/v1/supplier/points", headers=headers)
     assert points.status_code == 200
     assert {point["name"] for point in points.json()} == {
-        "Updated test point",
+        "Test point",
         "Test accumulator",
         "Minimal point",
     }

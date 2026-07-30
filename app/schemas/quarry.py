@@ -9,7 +9,12 @@ from app.schemas.catalog import DeliveryOptionOut, MediaFileOut
 
 PickupPointTypeValue = Literal["quarry", "accumulator", "warehouse", "supplier"]
 ModerationStatusValue = Literal[
-    "incomplete", "pending_moderation", "approved", "rejected", "suspended"
+    "incomplete",
+    "pending_moderation",
+    "has_pending_changes",
+    "approved",
+    "rejected",
+    "suspended",
 ]
 
 
@@ -243,6 +248,7 @@ class QuarryOut(QuarryBase):
     is_active: bool
     moderation_status: ModerationStatusValue
     moderation_comment: Optional[str] = None
+    pending_changes: dict | None = None
     owner_user_id: Optional[UUID] = None
     material_ids: list[UUID] = Field(default_factory=list)
     materials: list[QuarryMaterialRef] = Field(default_factory=list)

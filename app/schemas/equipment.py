@@ -11,7 +11,12 @@ TariffType = Literal["hour", "shift"]
 ApplicationStatus = Literal["new", "in_progress", "closed", "completed", "rejected", "cancelled"]
 DurationUnit = Literal["hours", "shifts"]
 ModerationStatusValue = Literal[
-    "incomplete", "pending_moderation", "approved", "rejected", "suspended"
+    "incomplete",
+    "pending_moderation",
+    "has_pending_changes",
+    "approved",
+    "rejected",
+    "suspended",
 ]
 
 
@@ -177,6 +182,7 @@ class EquipmentListingOut(BaseModel):
     owner_user_id: UUID | None = None
     moderation_status: ModerationStatusValue
     moderation_comment: str | None = None
+    pending_changes: dict | None = None
     created_at: datetime
     updated_at: datetime
 

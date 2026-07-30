@@ -14,6 +14,8 @@ const STATUS_LABELS: Record<string, string> = {
   suspended: "Приостановлено",
 };
 
+STATUS_LABELS.has_pending_changes = "Есть правки";
+
 const TYPE_LABELS: Record<string, string> = {
   quarry: "Карьер",
   accumulator: "Накопитель",
@@ -27,6 +29,9 @@ const getPointStatusMeta = (point: SupplierPoint) => {
   }
   if (point.moderation_status === "pending_moderation") {
     return { label: "На модерации", className: "bg-yellow-100 text-yellow-800" };
+  }
+  if (point.moderation_status === "has_pending_changes") {
+    return { label: "Есть правки", className: "bg-sky-100 text-sky-800" };
   }
   if (point.moderation_status === "approved") {
     return { label: "Одобрено", className: "bg-green-100 text-green-800" };
@@ -53,6 +58,15 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
   const [showCreatePoint, setShowCreatePoint] = useState(false);
   const [editingPoint, setEditingPoint] = useState<SupplierPoint | null>(null);
   const [displayName, setDisplayName] = useState("");
+
+  const getPendingChangesSummary = (point: SupplierPoint) => {
+    const pendingChanges = point.pending_changes;
+    if (!pendingChanges || typeof pendingChanges !== "object") {
+      return null;
+    }
+    const keys = Object.keys(pendingChanges);
+    return keys.length ? keys.join(", ") : null;
+  };
 
   const fetchPoints = async () => {
     try {
@@ -232,6 +246,32 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
     }
   };
 
+  const togglePointVisibility = async (point: SupplierPoint) => {
+    setIsBusy(true);
+    try {
+      const response = await fetch(`${baseURL}/supplier/points/${point.id}`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ is_active: point.is_active === false }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(
+          extractApiErrorMessage(data, "Не удалось изменить статус точки"),
+        );
+      }
+      await fetchPoints();
+      toast.success(point.is_active === false ? "Точка опубликована" : "Точка скрыта");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось обновить точку");
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
   return (
     <div className="text-slate-900">
       <header className="px-5 pb-4 pt-[max(env(safe-area-inset-top),1rem)]">
@@ -294,6 +334,12 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
                     </p>
                   ) : null}
 
+                  {point.moderation_status === "has_pending_changes" ? (
+                    <p className="mt-4 rounded-2xl bg-sky-50 p-3 text-sm text-sky-700">
+                      На модерации правки: {getPendingChangesSummary(point) || "есть обновления"}
+                    </p>
+                  ) : null}
+
                   {(point.media_files || []).length > 0 ? (
                     <div className="mt-4 grid grid-cols-3 gap-2">
                       {(point.media_files || []).map((media) => (
@@ -350,6 +396,19 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
                       </button>
                     ) : null}
                   </div>
+
+                  <button
+                    type="button"
+                    disabled={isBusy}
+                    onClick={() => void togglePointVisibility(point)}
+                    className={`mt-3 w-full rounded-2xl px-3 py-3 text-sm font-bold ${
+                      point.is_active === false
+                        ? "bg-emerald-50 text-emerald-700"
+                        : "bg-slate-100 text-slate-700"
+                    } disabled:opacity-50`}
+                  >
+                    {point.is_active === false ? "Опубликовать" : "Скрыть"}
+                  </button>
                 </div>
               </article>
             ))}

@@ -77,8 +77,18 @@ export default function AdminEquipmentScreen({
   const activeTypes = types.filter((item) => item.is_active);
   const canManageTypes = role === "admin";
   const pendingListings = listings.filter(
-    (item) => item.moderation_status === "pending_moderation",
+    (item) =>
+      item.moderation_status === "pending_moderation" ||
+      item.moderation_status === "has_pending_changes",
   );
+  const getPendingChangesSummary = (listing: EquipmentListing) => {
+    const pendingChanges = listing.pending_changes;
+    if (!pendingChanges || typeof pendingChanges !== "object") {
+      return null;
+    }
+    const keys = Object.keys(pendingChanges);
+    return keys.length ? keys.join(", ") : null;
+  };
 
   const load = async () => {
     setLoading(true);
@@ -100,7 +110,9 @@ export default function AdminEquipmentScreen({
       setListings(Array.isArray(loadedListings) ? loadedListings : []);
       onPendingModerationChanged?.(
         loadedListings.filter(
-          (item) => item.moderation_status === "pending_moderation",
+          (item) =>
+            item.moderation_status === "pending_moderation" ||
+            item.moderation_status === "has_pending_changes",
         ).length,
       );
     } catch {
@@ -515,6 +527,11 @@ export default function AdminEquipmentScreen({
                       </div>
                     </div>
                     <p className="text-sm text-slate-600">{item.description}</p>
+                    {getPendingChangesSummary(item) ? (
+                      <div className="rounded-xl bg-sky-50 p-3 text-sm text-sky-700">
+                        Правки: {getPendingChangesSummary(item)}
+                      </div>
+                    ) : null}
                     <div className="rounded-xl bg-slate-50 p-3 text-sm">
                       <p className="font-bold">{item.owner_name || "Поставщик"}</p>
                       {item.contact_phone ? <p className="text-slate-500">{item.contact_phone}</p> : null}

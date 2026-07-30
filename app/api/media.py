@@ -3,7 +3,7 @@ from uuid import UUID
 from pathlib import Path
 
 from botocore.exceptions import ClientError
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy import and_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,6 +24,13 @@ from app.services.storage import (
 from app.services.vehicle_moderation import (
     REQUIRED_VEHICLE_MEDIA_SLOTS,
     set_incomplete_moderation,
+)
+from app.services.moderation import (
+    EQUIPMENT_ENTITY_TYPE,
+    QUARRY_ENTITY_TYPE,
+    create_moderation_audit_log,
+    mark_entity_pending_changes,
+    schedule_admin_moderation_email,
 )
 
 router = APIRouter()
@@ -155,27 +162,59 @@ async def _load_vehicle_media(db: AsyncSession, vehicle_id: UUID) -> list[MediaF
     return list(result.scalars().all())
 
 
-async def _reset_supplier_equipment_moderation(
+async def _apply_supplier_media_moderation(
     db: AsyncSession,
     current_user: User,
     *,
     entity_type: str,
     entity_id: UUID,
+    background_tasks: BackgroundTasks,
+    action_label: str,
 ) -> None:
     role_name = current_user.role.name if current_user.role else None
-    if role_name not in {"supplier", "equipment_owner"} or entity_type != "equipment_listing":
+    if role_name not in {"supplier", "equipment_owner"}:
         return
-    listing = await db.get(SpecialEquipmentListing, entity_id)
-    if listing is None:
+    entity = None
+    entity_label = None
+    entity_audit_type = None
+    if entity_type == "equipment_listing":
+        entity = await db.get(SpecialEquipmentListing, entity_id)
+        entity_label = entity.title if entity is not None else None
+        entity_audit_type = EQUIPMENT_ENTITY_TYPE
+    elif entity_type == "quarry":
+        entity = await db.get(Quarry, entity_id)
+        entity_label = entity.name if entity is not None else None
+        entity_audit_type = QUARRY_ENTITY_TYPE
+    if entity is None or entity_audit_type is None:
         return
-    if listing.moderation_status in {
+
+    if entity.moderation_status in {
         ModerationStatus.approved.value,
-        ModerationStatus.rejected.value,
+        ModerationStatus.has_pending_changes.value,
     }:
-        listing.moderation_status = ModerationStatus.pending_moderation.value
-        listing.moderation_comment = None
-        listing.moderated_at = None
-        listing.moderated_by_user_id = None
+        mark_entity_pending_changes(entity, {"media_updated": True})
+        schedule_admin_moderation_email(
+            background_tasks,
+            subject="Изменения фотографий ожидают модерации",
+            body=(
+                f'Пользователь изменил фотографии сущности "{entity_label or entity_id}". '
+                f"Действие: {action_label}."
+            ),
+        )
+    elif entity.moderation_status == ModerationStatus.rejected.value:
+        entity.moderation_status = ModerationStatus.pending_moderation.value
+        entity.moderation_comment = None
+        entity.moderated_at = None
+        entity.moderated_by_user_id = None
+
+    await create_moderation_audit_log(
+        db,
+        entity_type=entity_audit_type,
+        entity_id=entity_id,
+        user_id=current_user.id,
+        action="edited",
+        comment=f"media:{action_label}",
+    )
 
 
 @router.post("/presign-upload", response_model=PresignUploadResponse)
@@ -219,6 +258,7 @@ async def presign_upload(
 @router.post("/confirm", response_model=ConfirmUploadResponse, status_code=status.HTTP_201_CREATED)
 async def confirm_upload(
     payload: ConfirmUploadRequest,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ConfirmUploadResponse:
@@ -312,11 +352,13 @@ async def confirm_upload(
         if linked_driver is not None and linked_driver.moderation_status != ModerationStatus.suspended.value:
             set_incomplete_moderation(linked_driver)
 
-    await _reset_supplier_equipment_moderation(
+    await _apply_supplier_media_moderation(
         db,
         current_user,
         entity_type=entity_type,
         entity_id=entity_id,
+        background_tasks=background_tasks,
+        action_label="upload",
     )
     await db.commit()
     await db.refresh(media_file)
@@ -327,6 +369,7 @@ async def confirm_upload(
 @router.delete("/{media_id}", status_code=status.HTTP_200_OK)
 async def delete_media(
     media_id: UUID,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, bool]:
@@ -362,11 +405,13 @@ async def delete_media(
     await db.delete(media_file)
     await db.flush()
     await _sync_entity_image_url(entity_type, entity_id, db)
-    await _reset_supplier_equipment_moderation(
+    await _apply_supplier_media_moderation(
         db,
         current_user,
         entity_type=entity_type,
         entity_id=entity_id,
+        background_tasks=background_tasks,
+        action_label="delete",
     )
     await db.commit()
     return {"ok": True}
@@ -375,6 +420,7 @@ async def delete_media(
 @router.post("/{media_id}/make-primary", status_code=status.HTTP_200_OK)
 async def make_media_primary(
     media_id: UUID,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, bool]:
@@ -403,11 +449,13 @@ async def make_media_primary(
     )
     media_file.is_primary = True
     await _sync_entity_image_url(media_file.entity_type, media_file.entity_id, db)
-    await _reset_supplier_equipment_moderation(
+    await _apply_supplier_media_moderation(
         db,
         current_user,
         entity_type=media_file.entity_type,
         entity_id=media_file.entity_id,
+        background_tasks=background_tasks,
+        action_label="make_primary",
     )
     await db.commit()
     return {"ok": True}

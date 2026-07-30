@@ -70,6 +70,11 @@ const STATUS_META: Record<string, { label: string; className: string }> = {
   },
 };
 
+STATUS_META.has_pending_changes = {
+  label: "Есть правки",
+  className: "bg-sky-100 text-sky-800",
+};
+
 type ListingsTab = "active" | "moderation" | "archived";
 
 const LISTING_TAB_LABELS: Record<ListingsTab, string> = {
@@ -83,7 +88,10 @@ const matchesListingTab = (listing: EquipmentListing, tab: ListingsTab) => {
     return listing.moderation_status === "approved" && listing.is_active;
   }
   if (tab === "moderation") {
-    return listing.moderation_status === "pending_moderation";
+    return (
+      listing.moderation_status === "pending_moderation" ||
+      listing.moderation_status === "has_pending_changes"
+    );
   }
   return listing.moderation_status === "rejected" || !listing.is_active;
 };
@@ -108,6 +116,15 @@ export default function SupplierEquipmentScreen({
     requiresEquipmentOwnerName && equipmentOwnerName.trim().length === 0;
 
   const headers = { Authorization: `Bearer ${token}` };
+
+  const getPendingChangesSummary = (listing: EquipmentListing) => {
+    const pendingChanges = listing.pending_changes;
+    if (!pendingChanges || typeof pendingChanges !== "object") {
+      return null;
+    }
+    const keys = Object.keys(pendingChanges);
+    return keys.length ? keys.join(", ") : null;
+  };
 
   const clearPendingPhotos = () => {
     setPendingPhotos((current) => {
@@ -492,6 +509,26 @@ export default function SupplierEquipmentScreen({
     await load();
   };
 
+  const toggleListingVisibility = async (listing: EquipmentListing) => {
+    try {
+      const response = await fetch(`${baseURL}${apiPrefix}/equipment/${listing.id}`, {
+        method: "PATCH",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ is_active: listing.is_active === false }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(
+          extractApiErrorMessage(data, "Не удалось изменить статус объявления"),
+        );
+      }
+      toast.success(listing.is_active === false ? "Объявление опубликовано" : "Объявление скрыто");
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось обновить объявление");
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -636,6 +673,11 @@ export default function SupplierEquipmentScreen({
                     {listing.moderation_comment}
                   </p>
                 ) : null}
+                {listing.moderation_status === "has_pending_changes" ? (
+                  <p className="rounded-xl bg-sky-50 p-3 text-sm text-sky-700">
+                    На модерации правки: {getPendingChangesSummary(listing) || "есть обновления"}
+                  </p>
+                ) : null}
                 {listing.media_files?.length ? (
                   <div className="flex gap-2 overflow-x-auto">
                     {listing.media_files.map((media) => (
@@ -656,6 +698,17 @@ export default function SupplierEquipmentScreen({
                     ))}
                   </div>
                 ) : null}
+                <button
+                  type="button"
+                  onClick={() => void toggleListingVisibility(listing)}
+                  className={`w-full rounded-xl px-4 py-3 text-sm font-bold ${
+                    listing.is_active === false
+                      ? "bg-emerald-50 text-emerald-700"
+                      : "bg-slate-100 text-slate-700"
+                  }`}
+                >
+                  {listing.is_active === false ? "Опубликовать" : "Скрыть"}
+                </button>
               </div>
             </article>
           );

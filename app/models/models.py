@@ -334,6 +334,7 @@ class Quarry(Base):
         nullable=False,
     )
     moderation_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    pending_changes: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     moderated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     moderated_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         ForeignKey("users.id"), nullable=True
@@ -528,6 +529,7 @@ class SpecialEquipmentListing(Base):
         index=True,
     )
     moderation_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    pending_changes: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     moderated_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -660,6 +662,24 @@ class SupportTicket(Base):
     )
 
 
+class ModerationAuditLog(Base):
+    __tablename__ = "moderation_audit_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    entity_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("users.id"), nullable=True, index=True
+    )
+    action: Mapped[str] = mapped_column(String(64), nullable=False)
+    comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped[Optional["User"]] = relationship("User", foreign_keys=[user_id])
+
+
 class SupportMessage(Base):
     __tablename__ = "support_messages"
 
@@ -724,6 +744,7 @@ class DriverStatus(str, Enum):
 class ModerationStatus(str, Enum):
     incomplete = "incomplete"
     pending_moderation = "pending_moderation"
+    has_pending_changes = "has_pending_changes"
     approved = "approved"
     rejected = "rejected"
     suspended = "suspended"

@@ -25,6 +25,8 @@ interface GlobalPickupPoint {
   material_offers: GlobalPickupPointMaterial[];
 }
 
+const DEFAULT_MAP_CENTER: [number, number] = [65.534328, 57.152286];
+
 const TYPE_LABELS: Record<GlobalPickupPoint["point_type"], string> = {
   quarry: "Карьер",
   accumulator: "Накопитель",
@@ -34,13 +36,16 @@ const TYPE_LABELS: Record<GlobalPickupPoint["point_type"], string> = {
 
 export default function GlobalMapScreen() {
   const [points, setPoints] = useState<GlobalPickupPoint[]>([]);
-  const [selectedMaterialId, setSelectedMaterialId] = useState<string>("all");
+  const [selectedMaterials, setSelectedMaterials] = useState<string[]>([]);
   const [selectedPoint, setSelectedPoint] = useState<GlobalPickupPoint | null>(null);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
-  const markerRefs = useRef<any[]>([]);
+  const pointMarkerRefs = useRef<any[]>([]);
+  const userMarkerRef = useRef<any | null>(null);
+  const userLocationCenteredRef = useRef(false);
 
   const clearSelectedPoint = () => setSelectedPoint(null);
 
@@ -54,7 +59,7 @@ export default function GlobalMapScreen() {
       try {
         const response = await fetch(`${baseURL}/catalog/pickup-points/global`);
         if (!response.ok) {
-          throw new Error("Не удалось загрузить точки забора");
+          throw new Error("Не удалось загрузить точки на карте");
         }
 
         const data = await response.json();
@@ -81,6 +86,33 @@ export default function GlobalMapScreen() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!("geolocation" in navigator)) {
+      return;
+    }
+
+    let cancelled = false;
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        if (cancelled) {
+          return;
+        }
+
+        const lat = Number(coords.latitude);
+        const lon = Number(coords.longitude);
+        if (Number.isFinite(lat) && Number.isFinite(lon)) {
+          setUserLocation({ lat, lon });
+        }
+      },
+      () => undefined,
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 },
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const materials = Array.from(
     points.reduce((materialMap, point) => {
       point.material_offers.forEach((offer) => {
@@ -95,13 +127,15 @@ export default function GlobalMapScreen() {
     }, new Map<string, { id: string; name: string }>()),
   )
     .map(([, value]) => value)
-    .sort((first, second) => first.name.localeCompare(second.name));
+    .sort((first, second) => first.name.localeCompare(second.name, "ru"));
 
-  const visiblePoints = points.filter(
-    (point) =>
-      selectedMaterialId === "all" ||
-      point.material_offers.some((offer) => offer.material_id === selectedMaterialId),
-  );
+  const visiblePoints = points.filter((point) => {
+    if (selectedMaterials.length === 0) {
+      return true;
+    }
+
+    return point.material_offers.some((offer) => selectedMaterials.includes(offer.material_id));
+  });
 
   useEffect(() => {
     if (selectedPoint && !visiblePoints.some((point) => point.id === selectedPoint.id)) {
@@ -118,14 +152,16 @@ export default function GlobalMapScreen() {
     }
 
     mapRef.current = new mapgl.Map(mapContainerRef.current, {
-      center: [65.534328, 57.152286],
+      center: DEFAULT_MAP_CENTER,
       zoom: 10,
       key,
     });
 
     return () => {
-      markerRefs.current.forEach((marker) => marker.destroy());
-      markerRefs.current = [];
+      pointMarkerRefs.current.forEach((marker) => marker.destroy());
+      pointMarkerRefs.current = [];
+      userMarkerRef.current?.destroy?.();
+      userMarkerRef.current = null;
       mapRef.current?.destroy();
       mapRef.current = null;
     };
@@ -137,10 +173,10 @@ export default function GlobalMapScreen() {
       return;
     }
 
-    markerRefs.current.forEach((marker) => marker.destroy());
-    markerRefs.current = [];
+    pointMarkerRefs.current.forEach((marker) => marker.destroy());
+    pointMarkerRefs.current = [];
 
-    markerRefs.current = visiblePoints.map((point) => {
+    pointMarkerRefs.current = visiblePoints.map((point) => {
       const element = document.createElement("button");
       element.type = "button";
       element.className = `global-pickup-marker${point.id === selectedPoint?.id ? " global-pickup-marker--active" : ""}`;
@@ -158,6 +194,45 @@ export default function GlobalMapScreen() {
   }, [selectedPoint?.id, visiblePoints]);
 
   useEffect(() => {
+    const mapgl = (window as any).mapgl;
+    if (!mapRef.current || !mapgl?.HtmlMarker) {
+      return;
+    }
+
+    userMarkerRef.current?.destroy?.();
+    userMarkerRef.current = null;
+
+    if (!userLocation) {
+      return;
+    }
+
+    const element = document.createElement("div");
+    element.className = "global-user-marker";
+    element.setAttribute("aria-label", "Вы здесь");
+
+    userMarkerRef.current = new mapgl.HtmlMarker(mapRef.current, {
+      coordinates: [userLocation.lon, userLocation.lat],
+      html: element,
+    });
+  }, [userLocation]);
+
+  useEffect(() => {
+    if (!userLocation || !mapRef.current || userLocationCenteredRef.current || selectedPoint) {
+      return;
+    }
+
+    mapRef.current.setCenter([userLocation.lon, userLocation.lat], {
+      easing: "easeOutCubic",
+      duration: 700,
+    });
+    mapRef.current.setZoom(12, {
+      easing: "easeOutCubic",
+      duration: 700,
+    });
+    userLocationCenteredRef.current = true;
+  }, [selectedPoint, userLocation]);
+
+  useEffect(() => {
     if (!selectedPoint || !mapRef.current) {
       return;
     }
@@ -171,6 +246,14 @@ export default function GlobalMapScreen() {
       duration: 600,
     });
   }, [selectedPoint]);
+
+  const toggleMaterial = (materialId: string) => {
+    setSelectedMaterials((current) =>
+      current.includes(materialId)
+        ? current.filter((value) => value !== materialId)
+        : [...current, materialId],
+    );
+  };
 
   return (
     <div className="relative min-h-[calc(100vh-140px)] overflow-hidden rounded-[28px] bg-slate-100">
@@ -201,6 +284,14 @@ export default function GlobalMapScreen() {
           height: 100%;
           fill: currentColor;
         }
+        .global-user-marker {
+          width: 18px;
+          height: 18px;
+          border-radius: 999px;
+          background: #0ea5e9;
+          border: 3px solid #ffffff;
+          box-shadow: 0 0 0 6px rgba(14, 165, 233, 0.24);
+        }
       `}</style>
 
       <div ref={mapContainerRef} className="absolute inset-0" />
@@ -214,27 +305,30 @@ export default function GlobalMapScreen() {
           <div className="mt-4 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
             <button
               type="button"
-              onClick={() => setSelectedMaterialId("all")}
+              onClick={() => setSelectedMaterials([])}
               className={`shrink-0 rounded-full px-4 py-2 text-sm font-bold ${
-                selectedMaterialId === "all" ? "bg-sky-500 text-white" : "bg-slate-100 text-slate-600"
+                selectedMaterials.length === 0
+                  ? "bg-sky-500 text-white"
+                  : "bg-slate-100 text-slate-600"
               }`}
             >
               Все материалы
             </button>
-            {materials.map((material) => (
-              <button
-                key={material.id}
-                type="button"
-                onClick={() => setSelectedMaterialId(material.id)}
-                className={`shrink-0 rounded-full px-4 py-2 text-sm font-bold ${
-                  selectedMaterialId === material.id
-                    ? "bg-sky-500 text-white"
-                    : "bg-slate-100 text-slate-600"
-                }`}
-              >
-                {material.name}
-              </button>
-            ))}
+            {materials.map((material) => {
+              const isActive = selectedMaterials.includes(material.id);
+              return (
+                <button
+                  key={material.id}
+                  type="button"
+                  onClick={() => toggleMaterial(material.id)}
+                  className={`shrink-0 rounded-full px-4 py-2 text-sm font-bold ${
+                    isActive ? "bg-sky-500 text-white" : "bg-slate-100 text-slate-600"
+                  }`}
+                >
+                  {material.name}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -250,7 +344,7 @@ export default function GlobalMapScreen() {
 
       {!loading && !error && visiblePoints.length === 0 && (
         <div className="absolute inset-x-4 top-40 z-10 rounded-2xl bg-white p-4 text-sm font-medium text-slate-600 shadow-xl">
-          Для выбранного материала активных точек пока нет.
+          Для выбранных материалов активных точек пока нет.
         </div>
       )}
 

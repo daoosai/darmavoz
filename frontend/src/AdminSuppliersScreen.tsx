@@ -56,8 +56,8 @@ export default function AdminSuppliersScreen() {
       try {
         setIsLoading(true);
         const urls = [
-          `${baseURL}/admin/users?role=supplier`,
           `${baseURL}/admin/suppliers?role=supplier`,
+          `${baseURL}/admin/users?role=supplier`,
         ];
         let data: unknown = [];
         let resolved = false;
@@ -73,7 +73,7 @@ export default function AdminSuppliersScreen() {
             resolved = true;
             break;
           }
-          if (response.status !== 404) {
+          if (response.status !== 404 && response.status !== 405) {
             throw new Error(
               extractApiErrorMessage(data, "Не удалось загрузить список поставщиков"),
             );
@@ -142,7 +142,7 @@ export default function AdminSuppliersScreen() {
         }
         return normalized;
       }
-      if (response.status !== 404) {
+      if (response.status !== 404 && response.status !== 405) {
         throw new Error(
           extractApiErrorMessage(data, "Не удалось обновить поставщика"),
         );
@@ -186,10 +186,10 @@ export default function AdminSuppliersScreen() {
     try {
       setDeletingId(supplier.id);
       const urls = [
-        `${baseURL}/admin/users/${supplier.id}`,
-        `${baseURL}/admin/users/${supplier.id}/`,
         `${baseURL}/admin/suppliers/${supplier.id}`,
         `${baseURL}/admin/suppliers/${supplier.id}/`,
+        `${baseURL}/admin/users/${supplier.id}`,
+        `${baseURL}/admin/users/${supplier.id}/`,
       ];
       let deleted = false;
       let lastPayload: unknown = {};
@@ -207,7 +207,7 @@ export default function AdminSuppliersScreen() {
           deleted = true;
           break;
         }
-        if (response.status !== 404) {
+        if (response.status !== 404 && response.status !== 405) {
           throw new Error(
             extractApiErrorMessage(data, "Не удалось удалить поставщика"),
           );

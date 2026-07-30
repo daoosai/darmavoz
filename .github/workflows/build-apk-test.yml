@@ -131,3 +131,5 @@ jobs:
           script: |
             set -euo pipefail
             mv /opt/darmavoz_test_deploy/static/app-debug.apk /opt/darmavoz_test_deploy/static/darmavoz-test.apk
+            cd /opt/darmavoz_test_deploy
+            docker compose -f docker-compose.test.yml up -d --build backend_test

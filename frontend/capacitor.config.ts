@@ -5,13 +5,6 @@ const config: CapacitorConfig = {
   appName: 'Дармавоз',
   webDir: 'dist',
   backgroundColor: '#ffffff',
-  plugins: {
-    Keyboard: {
-      resize: 'body',
-      style: 'light',
-      resizeOnFullScreen: true,
-    },
-  },
 };
 
 export default config;

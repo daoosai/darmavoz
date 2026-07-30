@@ -21,10 +21,17 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
+      - name: Derive frontend version
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./package.json').version")"
+          echo "VITE_APP_VERSION=${VERSION}" >> "${GITHUB_ENV}"
+
       - name: Build frontend on runner
         working-directory: frontend
         env:
-          VITE_APP_VERSION: 2.5.0
+          VITE_APP_VERSION: ${{ env.VITE_APP_VERSION }}
           VITE_2GIS_KEY: ${{ secrets.VITE_2GIS_KEY }}
         run: |
           set -euo pipefail

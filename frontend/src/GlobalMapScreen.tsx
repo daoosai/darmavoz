@@ -26,10 +26,10 @@ interface GlobalPickupPoint {
 }
 
 const TYPE_LABELS: Record<GlobalPickupPoint["point_type"], string> = {
-  quarry: "РљР°СЂСЊРµСЂ",
-  accumulator: "РќР°РєРѕРїРёС‚РµР»СЊ",
-  warehouse: "РЎРєР»Р°Рґ",
-  supplier: "РџРѕСЃС‚Р°РІС‰РёРє",
+  quarry: "Карьер",
+  accumulator: "Накопитель",
+  warehouse: "Склад",
+  supplier: "Поставщик",
 };
 
 export default function GlobalMapScreen() {
@@ -54,7 +54,7 @@ export default function GlobalMapScreen() {
       try {
         const response = await fetch(`${baseURL}/catalog/pickup-points/global`);
         if (!response.ok) {
-          throw new Error("РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ С‚РѕС‡РєРё Р·Р°Р±РѕСЂР°");
+          throw new Error("Не удалось загрузить точки забора");
         }
 
         const data = await response.json();
@@ -64,7 +64,7 @@ export default function GlobalMapScreen() {
       } catch (loadError) {
         if (!cancelled) {
           setError(
-            loadError instanceof Error ? loadError.message : "РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё РєР°СЂС‚С‹",
+            loadError instanceof Error ? loadError.message : "Ошибка загрузки карты",
           );
         }
       } finally {
@@ -207,9 +207,9 @@ export default function GlobalMapScreen() {
 
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 p-4">
         <div className="pointer-events-auto rounded-[28px] bg-white/95 p-4 shadow-xl backdrop-blur">
-          <h2 className="text-2xl font-black text-slate-900">РђРєС‚РёРІРЅС‹Рµ С‚РѕС‡РєРё</h2>
+          <h2 className="text-2xl font-black text-slate-900">Активные точки</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Р’СЃРµ Р°РєС‚РёРІРЅС‹Рµ РєР°СЂСЊРµСЂС‹ Рё РЅР°РєРѕРїРёС‚РµР»Рё РЅР° РѕРґРЅРѕР№ РєР°СЂС‚Рµ
+            Все активные карьеры и накопители на одной карте
           </p>
           <div className="mt-4 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
             <button
@@ -219,7 +219,7 @@ export default function GlobalMapScreen() {
                 selectedMaterialId === "all" ? "bg-sky-500 text-white" : "bg-slate-100 text-slate-600"
               }`}
             >
-              Р’СЃРµ РјР°С‚РµСЂРёР°Р»С‹
+              Все материалы
             </button>
             {materials.map((material) => (
               <button
@@ -243,14 +243,14 @@ export default function GlobalMapScreen() {
         <div className="absolute inset-x-4 top-40 z-10 rounded-2xl bg-white p-4 shadow-xl">
           <div className="flex items-center gap-3 text-sm font-medium text-slate-600">
             {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <MapPin className="h-5 w-5" />}
-            {loading ? "Р—Р°РіСЂСѓР¶Р°РµРј С‚РѕС‡РєРё..." : error}
+            {loading ? "Загружаем точки..." : error}
           </div>
         </div>
       )}
 
       {!loading && !error && visiblePoints.length === 0 && (
         <div className="absolute inset-x-4 top-40 z-10 rounded-2xl bg-white p-4 text-sm font-medium text-slate-600 shadow-xl">
-          Р”Р»СЏ РІС‹Р±СЂР°РЅРЅРѕРіРѕ РјР°С‚РµСЂРёР°Р»Р° Р°РєС‚РёРІРЅС‹С… С‚РѕС‡РµРє РїРѕРєР° РЅРµС‚.
+          Для выбранного материала активных точек пока нет.
         </div>
       )}
 
@@ -258,7 +258,7 @@ export default function GlobalMapScreen() {
         <>
           <button
             type="button"
-            aria-label="Р—Р°РєСЂС‹С‚СЊ РґРµС‚Р°Р»Рё С‚РѕС‡РєРё"
+            aria-label="Закрыть детали точки"
             className="absolute inset-0 z-10 bg-transparent"
             onClick={clearSelectedPoint}
           />
@@ -267,7 +267,7 @@ export default function GlobalMapScreen() {
               <div className="flex shrink-0 items-start gap-3 border-b border-slate-100 px-4 py-4">
                 <button
                   type="button"
-                  aria-label="Р—Р°РєСЂС‹С‚СЊ РґРµС‚Р°Р»Рё С‚РѕС‡РєРё"
+                  aria-label="Закрыть детали точки"
                   onClick={clearSelectedPoint}
                   className="rounded-full bg-slate-100 p-2 text-slate-500 transition hover:bg-slate-200 hover:text-slate-700"
                 >
@@ -312,7 +312,7 @@ export default function GlobalMapScreen() {
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
                       <div className="rounded-2xl bg-slate-50 p-3">
                         <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
-                          РњР°С‚РµСЂРёР°Р»С‹
+                          Материалы
                         </p>
                         <div className="mt-2 flex flex-wrap gap-2">
                           {selectedPoint.material_offers.map((offer) => (
@@ -327,12 +327,12 @@ export default function GlobalMapScreen() {
                       </div>
                       <div className="rounded-2xl bg-slate-50 p-3">
                         <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
-                          РљРѕРЅС‚Р°РєС‚
+                          Контакт
                         </p>
                         <p className="mt-2 text-sm font-bold text-slate-800">
                           {selectedPoint.contact_phone
                             ? formatPhoneNumber(selectedPoint.contact_phone)
-                            : "РўРµР»РµС„РѕРЅ РЅРµ СѓРєР°Р·Р°РЅ"}
+                            : "Телефон не указан"}
                         </p>
                         {selectedPoint.contact_phone ? (
                           <a
@@ -340,7 +340,7 @@ export default function GlobalMapScreen() {
                             className="mt-3 inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-bold text-sky-700"
                           >
                             <Phone className="h-3.5 w-3.5" />
-                            РџРѕР·РІРѕРЅРёС‚СЊ
+                            Позвонить
                           </a>
                         ) : null}
                       </div>
@@ -363,7 +363,7 @@ export default function GlobalMapScreen() {
                   className="flex w-full items-center justify-center gap-2 rounded-2xl bg-sky-500 px-5 py-4 font-bold text-white shadow-sm"
                 >
                   <Route className="h-5 w-5" />
-                  РџРѕСЃС‚СЂРѕРёС‚СЊ РјР°СЂС€СЂСѓС‚
+                  Построить маршрут
                 </button>
               </div>
             </div>

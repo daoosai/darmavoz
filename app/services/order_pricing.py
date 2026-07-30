@@ -374,7 +374,8 @@ async def calculate_client_order_options(
     options.sort(
         key=lambda option: (
             -int(bool(option.quarry.is_vip)),
-            -(option.quarry.manual_priority or 0),
+            0 if (option.quarry.manual_priority or 0) > 0 else 1,
+            option.quarry.manual_priority or 0,
             option.total_amount,
             option.mileage_km,
             option.quarry.name.casefold(),

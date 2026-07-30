@@ -4,7 +4,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -555,7 +555,11 @@ async def list_public_equipment(
     result = await db.execute(
         stmt.order_by(
             SpecialEquipmentListing.is_vip.desc(),
-            SpecialEquipmentListing.manual_priority.desc(),
+            case(
+                (SpecialEquipmentListing.manual_priority > 0, 0),
+                else_=1,
+            ).asc(),
+            SpecialEquipmentListing.manual_priority.asc(),
             SpecialEquipmentListing.created_at.desc(),
         )
     )

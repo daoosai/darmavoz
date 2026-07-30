@@ -79,12 +79,6 @@ from app.services.vehicle_moderation import (
 
 router = APIRouter()
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-PARTNER_DELETE_BLOCK_MESSAGE = (
-    "Нельзя удалить партнера: у него есть активные точки или объявления. "
-    "Сначала удалите или скройте их."
-)
-
-
 def _error_detail(code: str, message: str) -> dict[str, str]:
     return {"code": code, "message": message}
 
@@ -457,6 +451,7 @@ async def delete_admin_partner_user(
             detail="Партнер не найден",
         )
 
+    role_name = user.role.name if user.role is not None else None
     active_points_count = await db.scalar(
         select(func.count(Quarry.id)).where(
             Quarry.owner_user_id == user.id,
@@ -470,10 +465,15 @@ async def delete_admin_partner_user(
             SpecialEquipmentListing.is_deleted.is_(False),
         )
     )
-    if (active_points_count or 0) > 0 or (active_equipment_count or 0) > 0:
+    if role_name == "supplier" and (active_points_count or 0) > 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=PARTNER_DELETE_BLOCK_MESSAGE,
+            detail="Нельзя удалить поставщика: у него есть активные точки. Сначала удалите или скройте их.",
+        )
+    if role_name == "equipment_owner" and (active_equipment_count or 0) > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Нельзя удалить партнера: у него есть активные объявления. Сначала удалите или скройте их.",
         )
 
     await db.execute(

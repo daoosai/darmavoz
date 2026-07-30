@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useState } from "react";
-import { Edit2, ImageIcon, Loader2, Plus, Trash2, UploadCloud, X } from "lucide-react";
+import { AlertCircle, Edit2, ImageIcon, Loader2, Plus, Trash2, UploadCloud, X } from "lucide-react";
 import toast from "react-hot-toast";
 
 import {
@@ -8,7 +8,8 @@ import {
   formatEquipmentPrice,
   getEquipmentTariffs,
 } from "./EquipmentCatalogScreen";
-import { baseURL, extractApiErrorMessage, resolveMediaUrl } from "./utils";
+import { useAuthStore } from "./store";
+import { baseURL, extractApiErrorMessage, formatPhoneNumber, resolveMediaUrl } from "./utils";
 
 interface Props {
   token: string;
@@ -43,6 +44,11 @@ const EMPTY_FORM: EquipmentForm = {
   shift_hours: "",
   city: "",
   district: "",
+};
+
+const normalizeContactPhoneForApi = (value: string) => {
+  const normalized = value.replace(/[^\d+]/g, "").trim();
+  return normalized || null;
 };
 
 const STATUS_META: Record<string, { label: string; className: string }> = {
@@ -86,6 +92,7 @@ export default function SupplierEquipmentScreen({
   token,
   apiPrefix = "/supplier",
 }: Props) {
+  const { currentUser } = useAuthStore();
   const [types, setTypes] = useState<EquipmentTypeItem[]>([]);
   const [listings, setListings] = useState<EquipmentListing[]>([]);
   const [tab, setTab] = useState<ListingsTab>("active");
@@ -94,7 +101,11 @@ export default function SupplierEquipmentScreen({
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<EquipmentForm>(EMPTY_FORM);
   const [pendingPhotos, setPendingPhotos] = useState<PendingPhotoItem[]>([]);
+  const [equipmentOwnerName, setEquipmentOwnerName] = useState(currentUser?.name?.trim() || "");
   const pendingPhotoPreviews = pendingPhotos.map((item) => item.previewUrl);
+  const requiresEquipmentOwnerName = apiPrefix === "/equipment-owner";
+  const isEquipmentOwnerCreationBlocked =
+    requiresEquipmentOwnerName && equipmentOwnerName.trim().length === 0;
 
   const headers = { Authorization: `Bearer ${token}` };
 
@@ -169,9 +180,38 @@ export default function SupplierEquipmentScreen({
 
   useEffect(() => {
     void load();
-  }, [token]);
+  }, [token, apiPrefix]);
+
+  useEffect(() => {
+    setEquipmentOwnerName(currentUser?.name?.trim() || "");
+  }, [currentUser?.name]);
+
+  useEffect(() => {
+    if (!requiresEquipmentOwnerName) {
+      return;
+    }
+
+    const loadEquipmentOwnerProfile = async () => {
+      try {
+        const response = await fetch(`${baseURL}/equipment-owner/me`, { headers });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(extractApiErrorMessage(data, "Не удалось загрузить профиль"));
+        }
+        setEquipmentOwnerName((data.display_name || "").trim());
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Не удалось загрузить профиль");
+      }
+    };
+
+    void loadEquipmentOwnerProfile();
+  }, [requiresEquipmentOwnerName, token]);
 
   const openForm = (listing?: EquipmentListing) => {
+    if (!listing && isEquipmentOwnerCreationBlocked) {
+      toast.error("Сначала заполните ФИО в профиле");
+      return;
+    }
     const hourTariff = listing
       ? getEquipmentTariffs(listing).find((tariff) => tariff.type === "hour")
       : null;
@@ -186,7 +226,7 @@ export default function SupplierEquipmentScreen({
             equipment_type: listing.equipment_type || listing.equipment_type_name,
             title: listing.title,
             description: listing.description,
-            contact_phone: listing.contact_phone || "",
+            contact_phone: formatPhoneNumber(listing.contact_phone || ""),
             hourly_price: hourTariff?.price?.toString() || "",
             shift_hours: shiftTariff?.hours?.toString() || "",
             city: listing.city || "",
@@ -322,7 +362,7 @@ export default function SupplierEquipmentScreen({
           equipment_type: form.equipment_type,
           title: form.title,
           description: form.description,
-          contact_phone: form.contact_phone || null,
+          contact_phone: normalizeContactPhoneForApi(form.contact_phone),
           tariffs,
           city: form.city || null,
           district: form.district || null,
@@ -493,13 +533,28 @@ export default function SupplierEquipmentScreen({
           <button
             type="button"
             onClick={() => openForm()}
-            className="rounded-2xl bg-white p-3 text-sky-600 shadow-sm"
+            disabled={isEquipmentOwnerCreationBlocked}
+            className="rounded-2xl bg-white p-3 text-sky-600 shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
             aria-label="Добавить объявление"
           >
             <Plus className="h-6 w-6" />
           </button>
         </div>
       </div>
+
+      {isEquipmentOwnerCreationBlocked ? (
+        <div className="flex items-start gap-3 rounded-3xl border border-amber-200 bg-amber-50 px-4 py-4 text-amber-800 shadow-sm">
+          <div className="rounded-2xl bg-amber-100 p-2 text-amber-700">
+            <AlertCircle className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="font-bold">Заполните профиль</p>
+            <p className="mt-1 text-sm">
+              Пожалуйста, заполните ФИО в Профиле, чтобы создавать объявления
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       <div className="flex gap-2 overflow-x-auto rounded-2xl bg-white p-2 shadow-sm">
         {(["active", "moderation", "archived"] as ListingsTab[]).map((value) => (
@@ -703,7 +758,9 @@ export default function SupplierEquipmentScreen({
               Контактный телефон
               <input
                 value={form.contact_phone}
-                onChange={(event) => setForm({ ...form, contact_phone: event.target.value })}
+                onChange={(event) =>
+                  setForm({ ...form, contact_phone: formatPhoneNumber(event.target.value) })
+                }
                 className="mt-1 w-full rounded-xl bg-slate-100 p-3 font-normal"
                 placeholder="+7 (999) 000-00-00"
               />

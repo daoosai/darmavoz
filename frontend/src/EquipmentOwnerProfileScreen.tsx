@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Loader2, LogOut, Mail, Phone, Tractor } from "lucide-react";
+import { Loader2, LogOut, Mail, Phone, UserRound } from "lucide-react";
 import toast from "react-hot-toast";
 
+import { useAuthStore } from "./store";
 import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
 
 interface Props {
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export default function EquipmentOwnerProfileScreen({ token, onLogout }: Props) {
+  const { setCurrentUser } = useAuthStore();
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -30,6 +32,11 @@ export default function EquipmentOwnerProfileScreen({ token, onLogout }: Props) 
         setPhone(data.phone || "");
         setEmail(data.email || "");
         setDisplayName(data.display_name || "");
+        setCurrentUser({
+          id: "equipment_owner",
+          name: data.display_name || "",
+          phone: data.phone || "",
+        });
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Не удалось загрузить профиль");
       } finally {
@@ -56,6 +63,11 @@ export default function EquipmentOwnerProfileScreen({ token, onLogout }: Props) 
       setPhone(data.phone || "");
       setEmail(data.email || "");
       setDisplayName(data.display_name || "");
+      setCurrentUser({
+        id: "equipment_owner",
+        name: data.display_name || "",
+        phone: data.phone || "",
+      });
       toast.success("Профиль сохранен");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Не удалось сохранить профиль");
@@ -103,14 +115,14 @@ export default function EquipmentOwnerProfileScreen({ token, onLogout }: Props) 
         ) : null}
 
         <label className="block text-sm font-bold text-gray-900">
-          ФИО / Название компании
+          ФИО
           <span className="mt-2 flex items-center gap-3 rounded-xl border border-gray-200 px-4 focus-within:border-sky-500">
-            <Tractor className="h-5 w-5 text-sky-500" />
+            <UserRound className="h-5 w-5 text-sky-500" />
             <input
               maxLength={255}
               value={displayName}
               onChange={(event) => setDisplayName(event.target.value)}
-              placeholder="ООО Спецтехника"
+              placeholder="Иванов Иван Иванович"
               className="w-full bg-transparent py-4 text-gray-900 outline-none"
             />
           </span>

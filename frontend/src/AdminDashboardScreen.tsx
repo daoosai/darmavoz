@@ -1545,7 +1545,7 @@ export default function AdminDashboardScreen({
   return (
     <div className="flex flex-col h-screen bg-slate-50 relative overflow-hidden text-slate-800">
       {/* Header */}
-      <div className="bg-white px-6 py-4 shadow-sm z-10 sticky top-0 border-b border-slate-100 flex flex-col gap-4">
+      <div className="bg-white px-6 pb-4 pt-[max(env(safe-area-inset-top,0px),1rem)] shadow-sm z-10 sticky top-0 border-b border-slate-100 flex flex-col gap-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center justify-between sm:justify-start gap-6">
           <div>
@@ -3248,26 +3248,6 @@ export default function AdminDashboardScreen({
             )}
           </div>
           <span className="text-[10px] font-bold">Модерация</span>
-        </button>
-        <button
-          onClick={() => setActiveTab("equipment")}
-          className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${
-            activeTab === "equipment"
-              ? "text-[#2DB0E6]"
-              : "text-slate-400 hover:text-slate-600"
-          }`}
-        >
-          <div
-            className={`relative p-1.5 rounded-xl transition-colors ${activeTab === "equipment" ? "bg-[#2DB0E6]/10" : ""}`}
-          >
-            <Wrench className="w-6 h-6" />
-            {pendingEquipmentModerationCount > 0 && (
-              <div className="absolute -top-1 -right-1 min-w-4 rounded-full bg-rose-500 px-1 text-center text-[9px] font-bold leading-4 text-white shadow-sm">
-                {pendingEquipmentModerationCount > 99 ? "99+" : pendingEquipmentModerationCount}
-              </div>
-            )}
-          </div>
-          <span className="text-[10px] font-bold">Техника</span>
         </button>
         <button
           onClick={() => setActiveTab("profile")}

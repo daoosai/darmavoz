@@ -467,9 +467,7 @@ export default function AdminEquipmentScreen({
         <div className="space-y-4">
           <div>
             <h2 className="text-2xl font-black">Объявления на модерации</h2>
-            <p className="text-sm text-slate-500">
-              Проверка объявлений, созданных поставщиками
-            </p>
+            <p className="text-sm text-slate-500">Проверка объявлений</p>
           </div>
           {pendingListings.length === 0 ? (
             <p className="rounded-2xl bg-white p-10 text-center text-slate-500 shadow-sm">

@@ -234,7 +234,7 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
 
   return (
     <div className="text-slate-900">
-      <header className="px-5 pb-4 pt-6">
+      <header className="px-5 pb-4 pt-[max(env(safe-area-inset-top),1rem)]">
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-sky-500">
           Кабинет поставщика
         </p>

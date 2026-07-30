@@ -31,7 +31,7 @@ export default function WelcomeScreen({
             onClick={onSelectEmployee}
             className="w-full rounded-2xl border border-slate-200 bg-white py-4 text-lg font-bold text-[#2DB0E6] shadow-sm transition-colors active:bg-blue-50"
           >
-            Регистрация / Вход для партнёров
+            Вход для партнеров
           </button>
         </div>
       </div>

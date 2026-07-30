@@ -927,7 +927,7 @@ export default function SupportScreen({
     const messageGroups = groupMessagesByDay(selected.messages);
     return (
       <div className="flex h-[100dvh] flex-col overflow-hidden bg-white">
-        <div className="sticky top-0 z-10 flex-none flex items-center gap-3 border-b border-gray-100 bg-white p-4">
+        <div className="sticky top-0 z-10 flex-none flex items-center gap-3 border-b border-gray-100 bg-white p-4 pt-[max(env(safe-area-inset-top),1rem)]">
           <button
             onClick={() => setSelected(null)}
             className="rounded-full bg-slate-100 p-2"
@@ -1259,7 +1259,7 @@ export default function SupportScreen({
   }
 
   return (
-    <div className="min-h-full bg-slate-50 p-4">
+    <div className="min-h-full bg-slate-50 p-4 pt-[max(env(safe-area-inset-top),1rem)]">
       <div className="mb-5 flex items-center justify-between">
         <div className="flex items-center gap-3">
           {onBack && (

@@ -136,15 +136,9 @@ export default function LoginScreen({
       </div>
 
       <div className="flex flex-1 flex-col items-center justify-center p-6">
-        <h1 className="mb-2 text-center text-3xl font-black tracking-tight text-[#2DB0E6]">
+        <h1 className="mb-8 text-center text-3xl font-black tracking-tight text-[#2DB0E6]">
           Дармавоз
         </h1>
-        <h2 className="mb-3 text-center text-lg font-medium text-slate-500">
-          Партнёры
-        </h2>
-        <p className="mb-8 text-center text-sm text-slate-400">
-          Админ и логист входят по логину и паролю
-        </p>
 
         {otpStep ? (
           <OtpVerificationStep

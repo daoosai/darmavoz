@@ -69,7 +69,7 @@ export default function EquipmentOwnerProfileScreen({ token, onLogout }: Props) 
   }
 
   return (
-    <div className="px-5 pb-8 pt-6 text-gray-900">
+    <div className="px-5 pb-8 pt-[max(env(safe-area-inset-top),1rem)] text-gray-900">
       <p className="text-xs font-bold uppercase tracking-[0.2em] text-sky-500">
         Кабинет владельца спецтехники
       </p>

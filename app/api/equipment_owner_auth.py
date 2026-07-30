@@ -22,6 +22,9 @@ from app.utils.phones import normalize_phone
 router = APIRouter()
 TTL_SECONDS = 300
 CODE_PREFIX = "otp:equipment_owner_register"
+ROLE_CONFLICT_MESSAGE = (
+    "Этот номер уже зарегистрирован для другой роли. Пожалуйста, используйте другой номер."
+)
 
 
 async def _get_equipment_owner_user(db: AsyncSession, phone: str) -> User | None:
@@ -39,7 +42,7 @@ async def register_equipment_owner(
     existing_user = await db.scalar(select(User).where(User.username == phone))
     existing_owner = await _get_equipment_owner_user(db, phone)
     if existing_user is not None and existing_owner is None:
-        raise HTTPException(status_code=409, detail="PHONE_ALREADY_USED_BY_ANOTHER_ROLE")
+        raise HTTPException(status_code=400, detail=ROLE_CONFLICT_MESSAGE)
     code = generate_otp_code()
     stored_code = await send_auth_sms_code(
         phone_number=normalize_sms_phone(phone),
@@ -66,7 +69,7 @@ async def verify_equipment_owner_registration(
     user = await _get_equipment_owner_user(db, phone)
     if user is None:
         if await db.scalar(select(User.id).where(User.username == phone)) is not None:
-            raise HTTPException(status_code=409, detail="PHONE_ALREADY_USED_BY_ANOTHER_ROLE")
+            raise HTTPException(status_code=400, detail=ROLE_CONFLICT_MESSAGE)
         role = await db.scalar(select(Role).where(Role.name == "equipment_owner"))
         if role is None:
             role = Role(name="equipment_owner", description="Special equipment owner")
@@ -83,7 +86,14 @@ async def verify_equipment_owner_registration(
             await db.commit()
         except IntegrityError as exc:
             await db.rollback()
-            raise HTTPException(status_code=409, detail="EQUIPMENT_OWNER_PHONE_ALREADY_EXISTS") from exc
+            conflicting_user = await db.scalar(select(User).where(User.username == phone))
+            conflicting_owner = await _get_equipment_owner_user(db, phone)
+            if conflicting_user is not None and conflicting_owner is None:
+                raise HTTPException(status_code=400, detail=ROLE_CONFLICT_MESSAGE) from exc
+            raise HTTPException(
+                status_code=400,
+                detail="Владелец спецтехники с таким номером уже существует.",
+            ) from exc
     elif not user.is_active:
         raise HTTPException(status_code=403, detail="EQUIPMENT_OWNER_ACCOUNT_DISABLED")
 

@@ -43,6 +43,7 @@ export default function GlobalMapScreen() {
   const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isMapReady, setIsMapReady] = useState(false);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const pointMarkerRefs = useRef<any[]>([]);
@@ -164,12 +165,15 @@ export default function GlobalMapScreen() {
       zoom: 10,
       key,
     });
+    setIsMapReady(true);
 
     return () => {
       pointMarkerRefs.current.forEach((marker) => marker.destroy());
       pointMarkerRefs.current = [];
       userMarkerRef.current?.destroy?.();
       userMarkerRef.current = null;
+      setIsMapReady(false);
+      userLocationCenteredRef.current = false;
       mapRef.current?.destroy();
       mapRef.current = null;
     };
@@ -177,7 +181,7 @@ export default function GlobalMapScreen() {
 
   useEffect(() => {
     const mapgl = (window as any).mapgl;
-    if (!mapRef.current || !mapgl?.HtmlMarker) {
+    if (!isMapReady || !mapRef.current || !mapgl?.HtmlMarker) {
       return;
     }
 
@@ -199,11 +203,11 @@ export default function GlobalMapScreen() {
         html: element,
       });
     });
-  }, [selectedPoint?.id, visiblePoints]);
+  }, [isMapReady, selectedPoint?.id, visiblePoints]);
 
   useEffect(() => {
     const mapgl = (window as any).mapgl;
-    if (!mapRef.current || !mapgl?.HtmlMarker) {
+    if (!isMapReady || !mapRef.current || !mapgl?.HtmlMarker) {
       return;
     }
 
@@ -222,10 +226,16 @@ export default function GlobalMapScreen() {
       coordinates: [userLocation.lon, userLocation.lat],
       html: element,
     });
-  }, [userLocation]);
+  }, [isMapReady, userLocation]);
 
   useEffect(() => {
-    if (!userLocation || !mapRef.current || userLocationCenteredRef.current || selectedPoint) {
+    if (
+      !isMapReady ||
+      !userLocation ||
+      !mapRef.current ||
+      userLocationCenteredRef.current ||
+      selectedPoint
+    ) {
       return;
     }
 
@@ -238,7 +248,7 @@ export default function GlobalMapScreen() {
       duration: 700,
     });
     userLocationCenteredRef.current = true;
-  }, [selectedPoint, userLocation]);
+  }, [isMapReady, selectedPoint, userLocation]);
 
   useEffect(() => {
     if (!selectedPoint || !mapRef.current) {

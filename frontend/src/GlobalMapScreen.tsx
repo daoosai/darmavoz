@@ -1,3 +1,5 @@
+import { Capacitor } from "@capacitor/core";
+import { Geolocation } from "@capacitor/geolocation";
 import { useEffect, useRef, useState } from "react";
 import { Loader2, MapPin, Mountain, Phone, Route, Warehouse, X } from "lucide-react";
 
@@ -33,6 +35,25 @@ const TYPE_LABELS: Record<GlobalPickupPoint["point_type"], string> = {
   warehouse: "Склад",
   supplier: "Поставщик",
 };
+
+const getWebCurrentPosition = () =>
+  new Promise<{ lat: number; lon: number }>((resolve, reject) => {
+    if (!("geolocation" in navigator)) {
+      reject(new Error("Geolocation is unavailable"));
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        resolve({
+          lat: Number(coords.latitude),
+          lon: Number(coords.longitude),
+        });
+      },
+      reject,
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 },
+    );
+  });
 
 export default function GlobalMapScreen() {
   const [points, setPoints] = useState<GlobalPickupPoint[]>([]);
@@ -87,26 +108,45 @@ export default function GlobalMapScreen() {
   }, []);
 
   useEffect(() => {
-    if (!("geolocation" in navigator)) {
-      return;
-    }
-
     let cancelled = false;
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
-        if (cancelled) {
+
+    const checkPermissionsAndGetLocation = async () => {
+      try {
+        if (Capacitor.isNativePlatform()) {
+          const permissions = await Geolocation.requestPermissions();
+          const permissionState =
+            permissions.location === "granted" || permissions.coarseLocation === "granted";
+
+          if (!permissionState || cancelled) {
+            console.warn("Location permission denied");
+            return;
+          }
+
+          const coordinates = await Geolocation.getCurrentPosition({
+            enableHighAccuracy: false,
+            timeout: 8000,
+            maximumAge: 300000,
+          });
+
+          if (!cancelled) {
+            setUserLocation({
+              lat: Number(coordinates.coords.latitude),
+              lon: Number(coordinates.coords.longitude),
+            });
+          }
           return;
         }
 
-        const lat = Number(coords.latitude);
-        const lon = Number(coords.longitude);
-        if (Number.isFinite(lat) && Number.isFinite(lon)) {
-          setUserLocation({ lat, lon });
+        const coordinates = await getWebCurrentPosition();
+        if (!cancelled) {
+          setUserLocation(coordinates);
         }
-      },
-      () => undefined,
-      { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 },
-    );
+      } catch (locationError) {
+        console.error("Geolocation error:", locationError);
+      }
+    };
+
+    void checkPermissionsAndGetLocation();
 
     return () => {
       cancelled = true;

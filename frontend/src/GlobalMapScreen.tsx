@@ -26,10 +26,10 @@ interface GlobalPickupPoint {
 }
 
 const TYPE_LABELS: Record<GlobalPickupPoint["point_type"], string> = {
-  quarry: "Карьер",
-  accumulator: "Накопитель",
-  warehouse: "Склад",
-  supplier: "Поставщик",
+  quarry: "РљР°СЂСЊРµСЂ",
+  accumulator: "РќР°РєРѕРїРёС‚РµР»СЊ",
+  warehouse: "РЎРєР»Р°Рґ",
+  supplier: "РџРѕСЃС‚Р°РІС‰РёРє",
 };
 
 export default function GlobalMapScreen() {
@@ -54,7 +54,7 @@ export default function GlobalMapScreen() {
       try {
         const response = await fetch(`${baseURL}/catalog/pickup-points/global`);
         if (!response.ok) {
-          throw new Error("Не удалось загрузить точки забора");
+          throw new Error("РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ С‚РѕС‡РєРё Р·Р°Р±РѕСЂР°");
         }
 
         const data = await response.json();
@@ -64,7 +64,7 @@ export default function GlobalMapScreen() {
       } catch (loadError) {
         if (!cancelled) {
           setError(
-            loadError instanceof Error ? loadError.message : "Ошибка загрузки карты",
+            loadError instanceof Error ? loadError.message : "РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё РєР°СЂС‚С‹",
           );
         }
       } finally {
@@ -207,9 +207,9 @@ export default function GlobalMapScreen() {
 
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 p-4">
         <div className="pointer-events-auto rounded-[28px] bg-white/95 p-4 shadow-xl backdrop-blur">
-          <h2 className="text-2xl font-black text-slate-900">Активные точки</h2>
+          <h2 className="text-2xl font-black text-slate-900">РђРєС‚РёРІРЅС‹Рµ С‚РѕС‡РєРё</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Все активные карьеры и накопители на одной карте
+            Р’СЃРµ Р°РєС‚РёРІРЅС‹Рµ РєР°СЂСЊРµСЂС‹ Рё РЅР°РєРѕРїРёС‚РµР»Рё РЅР° РѕРґРЅРѕР№ РєР°СЂС‚Рµ
           </p>
           <div className="mt-4 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
             <button
@@ -219,7 +219,7 @@ export default function GlobalMapScreen() {
                 selectedMaterialId === "all" ? "bg-sky-500 text-white" : "bg-slate-100 text-slate-600"
               }`}
             >
-              Все материалы
+              Р’СЃРµ РјР°С‚РµСЂРёР°Р»С‹
             </button>
             {materials.map((material) => (
               <button
@@ -243,14 +243,14 @@ export default function GlobalMapScreen() {
         <div className="absolute inset-x-4 top-40 z-10 rounded-2xl bg-white p-4 shadow-xl">
           <div className="flex items-center gap-3 text-sm font-medium text-slate-600">
             {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <MapPin className="h-5 w-5" />}
-            {loading ? "Загружаем точки..." : error}
+            {loading ? "Р—Р°РіСЂСѓР¶Р°РµРј С‚РѕС‡РєРё..." : error}
           </div>
         </div>
       )}
 
       {!loading && !error && visiblePoints.length === 0 && (
         <div className="absolute inset-x-4 top-40 z-10 rounded-2xl bg-white p-4 text-sm font-medium text-slate-600 shadow-xl">
-          Для выбранного материала активных точек пока нет.
+          Р”Р»СЏ РІС‹Р±СЂР°РЅРЅРѕРіРѕ РјР°С‚РµСЂРёР°Р»Р° Р°РєС‚РёРІРЅС‹С… С‚РѕС‡РµРє РїРѕРєР° РЅРµС‚.
         </div>
       )}
 
@@ -258,18 +258,22 @@ export default function GlobalMapScreen() {
         <>
           <button
             type="button"
-            aria-label="Закрыть детали точки"
+            aria-label="Р—Р°РєСЂС‹С‚СЊ РґРµС‚Р°Р»Рё С‚РѕС‡РєРё"
             className="absolute inset-0 z-10 bg-transparent"
             onClick={clearSelectedPoint}
           />
-          <div className="absolute inset-x-0 bottom-0 z-20 px-4 pb-[env(safe-area-inset-bottom,0px)]">
-            <div className="relative flex max-h-[85dvh] flex-col overflow-hidden rounded-t-[28px] bg-white shadow-2xl sm:rounded-[28px]">
-              <div className="flex shrink-0 justify-center pt-4">
-                <span className="h-1.5 w-14 rounded-full bg-slate-300" />
-              </div>
-
-              <div className="relative flex shrink-0 items-start justify-between gap-3 px-4 pb-3 pt-4">
-                <div className="min-w-0 pr-12">
+          <div className="absolute inset-x-0 bottom-0 z-20 px-4 pb-[env(safe-area-inset-bottom,16px)]">
+            <div className="relative flex max-h-[80dvh] flex-col overflow-hidden rounded-t-[28px] bg-white shadow-2xl sm:rounded-[28px]">
+              <div className="flex shrink-0 items-start gap-3 border-b border-slate-100 px-4 py-4">
+                <button
+                  type="button"
+                  aria-label="Р—Р°РєСЂС‹С‚СЊ РґРµС‚Р°Р»Рё С‚РѕС‡РєРё"
+                  onClick={clearSelectedPoint}
+                  className="rounded-full bg-slate-100 p-2 text-slate-500 transition hover:bg-slate-200 hover:text-slate-700"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+                <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-bold text-sky-700">
                       {TYPE_LABELS[selectedPoint.point_type]}
@@ -278,18 +282,10 @@ export default function GlobalMapScreen() {
                   <h3 className="mt-2 text-xl font-black text-slate-900">{selectedPoint.name}</h3>
                   <p className="mt-1 text-sm text-slate-500">{selectedPoint.address}</p>
                 </div>
-                <button
-                  type="button"
-                  aria-label="Закрыть шторку"
-                  onClick={clearSelectedPoint}
-                  className="absolute right-4 top-[max(env(safe-area-inset-top,16px),1rem)] z-10 rounded-full bg-slate-100 p-2 text-slate-500 transition hover:bg-slate-200 hover:text-slate-700"
-                >
-                  <X className="h-5 w-5" />
-                </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto px-4 pb-[max(env(safe-area-inset-bottom,0px),1rem)]">
-                <div className="grid gap-4 pb-4 sm:grid-cols-[160px,1fr]">
+              <div className="flex-1 overflow-y-auto px-4 py-4">
+                <div className="grid gap-4 sm:grid-cols-[160px,1fr]">
                   <div className="mt-2 overflow-hidden rounded-2xl bg-slate-100">
                     {selectedPoint.primary_image_url ? (
                       <img
@@ -316,7 +312,7 @@ export default function GlobalMapScreen() {
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
                       <div className="rounded-2xl bg-slate-50 p-3">
                         <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
-                          Материалы
+                          РњР°С‚РµСЂРёР°Р»С‹
                         </p>
                         <div className="mt-2 flex flex-wrap gap-2">
                           {selectedPoint.material_offers.map((offer) => (
@@ -331,12 +327,12 @@ export default function GlobalMapScreen() {
                       </div>
                       <div className="rounded-2xl bg-slate-50 p-3">
                         <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
-                          Контакт
+                          РљРѕРЅС‚Р°РєС‚
                         </p>
                         <p className="mt-2 text-sm font-bold text-slate-800">
                           {selectedPoint.contact_phone
                             ? formatPhoneNumber(selectedPoint.contact_phone)
-                            : "Телефон не указан"}
+                            : "РўРµР»РµС„РѕРЅ РЅРµ СѓРєР°Р·Р°РЅ"}
                         </p>
                         {selectedPoint.contact_phone ? (
                           <a
@@ -344,29 +340,31 @@ export default function GlobalMapScreen() {
                             className="mt-3 inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-bold text-sky-700"
                           >
                             <Phone className="h-3.5 w-3.5" />
-                            Позвонить
+                            РџРѕР·РІРѕРЅРёС‚СЊ
                           </a>
                         ) : null}
                       </div>
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        handleOpenNavigator({
-                          lat: selectedPoint.lat,
-                          lon: selectedPoint.lon,
-                          label: selectedPoint.short_name || selectedPoint.name,
-                          address: selectedPoint.address,
-                        })
-                      }
-                      className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-sky-500 px-5 py-4 font-bold text-white shadow-sm"
-                    >
-                      <Route className="h-5 w-5" />
-                      Построить маршрут
-                    </button>
                   </div>
                 </div>
+              </div>
+
+              <div className="shrink-0 border-t border-slate-100 bg-white px-4 pb-[env(safe-area-inset-bottom,16px)] pt-3">
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleOpenNavigator({
+                      lat: selectedPoint.lat,
+                      lon: selectedPoint.lon,
+                      label: selectedPoint.short_name || selectedPoint.name,
+                      address: selectedPoint.address,
+                    })
+                  }
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-sky-500 px-5 py-4 font-bold text-white shadow-sm"
+                >
+                  <Route className="h-5 w-5" />
+                  РџРѕСЃС‚СЂРѕРёС‚СЊ РјР°СЂС€СЂСѓС‚
+                </button>
               </div>
             </div>
           </div>

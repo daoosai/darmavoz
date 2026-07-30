@@ -176,7 +176,7 @@ export default function DriverRegistrationScreen({
 
   return (
     <div className="flex flex-col h-screen bg-white text-slate-900 pb-8 sm:max-w-md sm:mx-auto">
-      <div className="flex items-center p-4 border-b border-slate-100 shrink-0">
+      <div className="flex items-center border-b border-slate-100 px-4 pb-4 pt-[max(env(safe-area-inset-top,16px),1rem)] shrink-0">
         <button
           onClick={onBack}
           className="p-2 -ml-2 rounded-full hover:bg-slate-50 transition-colors"

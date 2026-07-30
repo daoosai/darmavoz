@@ -391,6 +391,7 @@ export default function SupplierEquipmentScreen({
   const save = async (event: FormEvent) => {
     event.preventDefault();
     setSaving(true);
+    const isNewListing = !form.id;
     const hourlyPrice = Number(form.hourly_price);
     const shiftHours = form.shift_hours ? Number(form.shift_hours) : null;
     const tariffs = [
@@ -416,6 +417,9 @@ export default function SupplierEquipmentScreen({
         );
       }
       closeForm();
+      if (isNewListing) {
+        setTab("moderation");
+      }
       toast.success(
         pendingPhotos.length > 0
           ? "Объявление и фото отправлены на модерацию"

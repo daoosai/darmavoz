@@ -126,7 +126,7 @@ export default function LoginScreen({
 
   return (
     <div className="flex h-screen flex-col bg-white pb-8 text-slate-900 sm:mx-auto sm:max-w-md">
-      <div className="flex items-center border-b border-slate-100 p-4">
+      <div className="flex items-center border-b border-slate-100 px-4 pb-4 pt-[max(env(safe-area-inset-top,16px),1rem)]">
         <button
           onClick={onBack}
           className="-ml-2 rounded-full p-2 transition-colors hover:bg-slate-50"

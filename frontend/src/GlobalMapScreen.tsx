@@ -1,7 +1,8 @@
 import { Capacitor } from "@capacitor/core";
 import { Geolocation } from "@capacitor/geolocation";
 import { useEffect, useRef, useState } from "react";
-import { Loader2, MapPin, Mountain, Phone, Route, Warehouse, X } from "lucide-react";
+import { Loader2, LocateFixed, MapPin, Mountain, Phone, Route, Warehouse, X } from "lucide-react";
+import toast from "react-hot-toast";
 
 import { handleOpenNavigator } from "./openNavigator";
 import { baseURL, formatPhoneNumber, resolveMediaUrl } from "./utils";
@@ -27,7 +28,13 @@ interface GlobalPickupPoint {
   material_offers: GlobalPickupPointMaterial[];
 }
 
+interface UserLocation {
+  lat: number;
+  lon: number;
+}
+
 const DEFAULT_MAP_CENTER: [number, number] = [65.534328, 57.152286];
+const SMART_CENTER_DISTANCE_KM = 100;
 
 const TYPE_LABELS: Record<GlobalPickupPoint["point_type"], string> = {
   quarry: "Карьер",
@@ -36,21 +43,204 @@ const TYPE_LABELS: Record<GlobalPickupPoint["point_type"], string> = {
   supplier: "Поставщик",
 };
 
+const calculateDistanceKm = (
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+) => {
+  const earthRadiusKm = 6371;
+  const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
+  const latitudeDelta = toRadians(lat2 - lat1);
+  const longitudeDelta = toRadians(lon2 - lon1);
+  const startLatitude = toRadians(lat1);
+  const endLatitude = toRadians(lat2);
+  const haversine =
+    Math.sin(latitudeDelta / 2) ** 2
+    + Math.cos(startLatitude)
+      * Math.cos(endLatitude)
+      * Math.sin(longitudeDelta / 2) ** 2;
+
+  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+};
+
+const getNearestPointDistance = (
+  location: UserLocation,
+  pickupPoints: GlobalPickupPoint[],
+) => {
+  if (pickupPoints.length === 0) {
+    return null;
+  }
+
+  return pickupPoints.reduce((nearestDistance, point) => {
+    const nextDistance = calculateDistanceKm(location.lat, location.lon, point.lat, point.lon);
+    return Math.min(nearestDistance, nextDistance);
+  }, Number.POSITIVE_INFINITY);
+};
+
+const getBoundsFromPoints = (pickupPoints: GlobalPickupPoint[]) => {
+  if (pickupPoints.length === 0) {
+    return null;
+  }
+
+  const bounds = pickupPoints.reduce(
+    (accumulator, point) => ({
+      minLat: Math.min(accumulator.minLat, point.lat),
+      maxLat: Math.max(accumulator.maxLat, point.lat),
+      minLon: Math.min(accumulator.minLon, point.lon),
+      maxLon: Math.max(accumulator.maxLon, point.lon),
+    }),
+    {
+      minLat: pickupPoints[0].lat,
+      maxLat: pickupPoints[0].lat,
+      minLon: pickupPoints[0].lon,
+      maxLon: pickupPoints[0].lon,
+    },
+  );
+
+  return bounds;
+};
+
 export default function GlobalMapScreen() {
   const [points, setPoints] = useState<GlobalPickupPoint[]>([]);
   const [selectedMaterials, setSelectedMaterials] = useState<string[]>([]);
   const [selectedPoint, setSelectedPoint] = useState<GlobalPickupPoint | null>(null);
-  const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null);
+  const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isMapReady, setIsMapReady] = useState(false);
+  const [isLocationResolved, setIsLocationResolved] = useState(false);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const pointMarkerRefs = useRef<any[]>([]);
   const userMarkerRef = useRef<any | null>(null);
   const userLocationCenteredRef = useRef(false);
+  const initialViewportAppliedRef = useRef(false);
+  const regionToastShownRef = useRef(false);
 
   const clearSelectedPoint = () => setSelectedPoint(null);
+
+  const upsertUserMarker = (nextLocation: UserLocation | null) => {
+    const mapgl = (window as any).mapgl;
+    if (!isMapReady || !mapRef.current || !mapgl?.HtmlMarker) {
+      return;
+    }
+
+    if (!nextLocation) {
+      userMarkerRef.current?.destroy?.();
+      userMarkerRef.current = null;
+      return;
+    }
+
+    const coordinates: [number, number] = [nextLocation.lon, nextLocation.lat];
+    if (typeof userMarkerRef.current?.setCoordinates === "function") {
+      userMarkerRef.current.setCoordinates(coordinates);
+      return;
+    }
+
+    userMarkerRef.current?.destroy?.();
+    const element = document.createElement("div");
+    element.className = "global-user-marker";
+    element.setAttribute("aria-label", "Вы здесь");
+
+    userMarkerRef.current = new mapgl.HtmlMarker(mapRef.current, {
+      coordinates,
+      html: element,
+    });
+  };
+
+  const centerMapOnCoordinates = (
+    location: UserLocation,
+    zoom = 14,
+  ) => {
+    if (!mapRef.current) {
+      return;
+    }
+
+    mapRef.current.setCenter([location.lon, location.lat], {
+      easing: "easeOutCubic",
+      duration: 700,
+    });
+    mapRef.current.setZoom(zoom, {
+      easing: "easeOutCubic",
+      duration: 700,
+    });
+  };
+
+  const fitMapToPoints = (pickupPoints: GlobalPickupPoint[]) => {
+    if (!mapRef.current || pickupPoints.length === 0) {
+      return;
+    }
+
+    if (pickupPoints.length === 1) {
+      centerMapOnCoordinates({ lat: pickupPoints[0].lat, lon: pickupPoints[0].lon }, 12);
+      return;
+    }
+
+    const bounds = getBoundsFromPoints(pickupPoints);
+    if (!bounds) {
+      return;
+    }
+
+    if (typeof mapRef.current.fitBounds === "function") {
+      mapRef.current.fitBounds(
+        [
+          [bounds.minLon, bounds.minLat],
+          [bounds.maxLon, bounds.maxLat],
+        ],
+        {
+          padding: 64,
+          duration: 700,
+        },
+      );
+      return;
+    }
+
+    centerMapOnCoordinates(
+      {
+        lat: (bounds.minLat + bounds.maxLat) / 2,
+        lon: (bounds.minLon + bounds.maxLon) / 2,
+      },
+      10,
+    );
+  };
+
+  const requestUserLocation = async (showErrorToast = false) => {
+    try {
+      if (Capacitor.isNativePlatform()) {
+        await Geolocation.requestPermissions();
+      }
+
+      const position = await Geolocation.getCurrentPosition({
+        enableHighAccuracy: false,
+        timeout: 10000,
+        maximumAge: 300000,
+      });
+
+      const nextLocation = {
+        lat: Number(position.coords.latitude),
+        lon: Number(position.coords.longitude),
+      };
+      setUserLocation(nextLocation);
+      return nextLocation;
+    } catch (locationError) {
+      console.warn("Геолокация недоступна или запрещена пользователем", locationError);
+      if (showErrorToast) {
+        toast.error("Не удалось получить доступ к геопозиции");
+      }
+      return null;
+    }
+  };
+
+  const handleLocateMe = async () => {
+    const nextLocation = await requestUserLocation(true);
+    if (!nextLocation) {
+      return;
+    }
+
+    upsertUserMarker(nextLocation);
+    centerMapOnCoordinates(nextLocation, 14);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -92,30 +282,17 @@ export default function GlobalMapScreen() {
   useEffect(() => {
     let cancelled = false;
 
-    const getUserLocation = async () => {
-      try {
-        if (Capacitor.isNativePlatform()) {
-          await Geolocation.requestPermissions();
-        }
-
-        const position = await Geolocation.getCurrentPosition({
-          enableHighAccuracy: false,
-          timeout: 10000,
-          maximumAge: 300000,
-        });
-
-        if (!cancelled) {
-          setUserLocation({
-            lat: Number(position.coords.latitude),
-            lon: Number(position.coords.longitude),
-          });
-        }
-      } catch (locationError) {
-        console.warn("Геолокация недоступна или запрещена пользователем", locationError);
+    const resolveInitialUserLocation = async () => {
+      const nextLocation = await requestUserLocation(false);
+      if (!cancelled && nextLocation) {
+        setUserLocation(nextLocation);
+      }
+      if (!cancelled) {
+        setIsLocationResolved(true);
       }
     };
 
-    void getUserLocation();
+    void resolveInitialUserLocation();
 
     return () => {
       cancelled = true;
@@ -173,7 +350,10 @@ export default function GlobalMapScreen() {
       userMarkerRef.current?.destroy?.();
       userMarkerRef.current = null;
       setIsMapReady(false);
+      setIsLocationResolved(false);
       userLocationCenteredRef.current = false;
+      initialViewportAppliedRef.current = false;
+      regionToastShownRef.current = false;
       mapRef.current?.destroy();
       mapRef.current = null;
     };
@@ -206,63 +386,56 @@ export default function GlobalMapScreen() {
   }, [isMapReady, selectedPoint?.id, visiblePoints]);
 
   useEffect(() => {
-    const mapgl = (window as any).mapgl;
-    if (!isMapReady || !mapRef.current || !mapgl?.HtmlMarker) {
-      return;
-    }
-
-    userMarkerRef.current?.destroy?.();
-    userMarkerRef.current = null;
-
-    if (!userLocation) {
-      return;
-    }
-
-    const element = document.createElement("div");
-    element.className = "global-user-marker";
-    element.setAttribute("aria-label", "Вы здесь");
-
-    userMarkerRef.current = new mapgl.HtmlMarker(mapRef.current, {
-      coordinates: [userLocation.lon, userLocation.lat],
-      html: element,
-    });
+    upsertUserMarker(userLocation);
   }, [isMapReady, userLocation]);
 
   useEffect(() => {
     if (
       !isMapReady ||
-      !userLocation ||
-      !mapRef.current ||
-      userLocationCenteredRef.current ||
+      loading ||
+      !isLocationResolved ||
+      initialViewportAppliedRef.current ||
       selectedPoint
     ) {
       return;
     }
 
-    mapRef.current.setCenter([userLocation.lon, userLocation.lat], {
-      easing: "easeOutCubic",
-      duration: 700,
-    });
-    mapRef.current.setZoom(12, {
-      easing: "easeOutCubic",
-      duration: 700,
-    });
-    userLocationCenteredRef.current = true;
-  }, [isMapReady, selectedPoint, userLocation]);
+    if (points.length === 0) {
+      if (userLocation) {
+        centerMapOnCoordinates(userLocation, 12);
+      }
+      initialViewportAppliedRef.current = true;
+      return;
+    }
+
+    const nearestPointDistance = userLocation
+      ? getNearestPointDistance(userLocation, points)
+      : null;
+
+    if (
+      userLocation &&
+      nearestPointDistance !== null &&
+      nearestPointDistance < SMART_CENTER_DISTANCE_KM
+    ) {
+      centerMapOnCoordinates(userLocation, 12);
+      userLocationCenteredRef.current = true;
+    } else {
+      fitMapToPoints(points);
+      if (!regionToastShownRef.current) {
+        toast("В вашем регионе пока нет активных точек. Показаны доступные.");
+        regionToastShownRef.current = true;
+      }
+    }
+
+    initialViewportAppliedRef.current = true;
+  }, [isLocationResolved, isMapReady, loading, points, selectedPoint, userLocation]);
 
   useEffect(() => {
     if (!selectedPoint || !mapRef.current) {
       return;
     }
 
-    mapRef.current.setCenter([selectedPoint.lon, selectedPoint.lat], {
-      easing: "easeOutCubic",
-      duration: 600,
-    });
-    mapRef.current.setZoom(12, {
-      easing: "easeOutCubic",
-      duration: 600,
-    });
+    centerMapOnCoordinates({ lat: selectedPoint.lat, lon: selectedPoint.lon }, 12);
   }, [selectedPoint]);
 
   const toggleMaterial = (materialId: string) => {
@@ -351,6 +524,15 @@ export default function GlobalMapScreen() {
             </div>
           </div>
         </div>
+
+        <button
+          type="button"
+          onClick={() => void handleLocateMe()}
+          aria-label="Моё местоположение"
+          className="absolute bottom-24 right-4 z-[50] flex h-12 w-12 items-center justify-center rounded-full bg-white shadow-lg transition hover:bg-slate-50"
+        >
+          <LocateFixed className="h-5 w-5 text-sky-600" />
+        </button>
 
         {(loading || error) && (
           <div className="absolute inset-x-4 top-40 z-10 rounded-2xl bg-white p-4 shadow-xl">

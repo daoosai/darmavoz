@@ -274,12 +274,12 @@ export default function GlobalMapScreen() {
                   <X className="h-5 w-5" />
                 </button>
                 <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-xl font-black text-slate-900">{selectedPoint.name}</h3>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
                     <span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-bold text-sky-700">
                       {TYPE_LABELS[selectedPoint.point_type]}
                     </span>
                   </div>
-                  <h3 className="mt-2 text-xl font-black text-slate-900">{selectedPoint.name}</h3>
                   <p className="mt-1 text-sm text-slate-500">{selectedPoint.address}</p>
                 </div>
               </div>
@@ -311,7 +311,7 @@ export default function GlobalMapScreen() {
 
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
                       <div className="rounded-2xl bg-slate-50 p-3">
-                        <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                        <p className="text-xs font-bold tracking-wide text-slate-400">
                           Материалы
                         </p>
                         <div className="mt-2 flex flex-wrap gap-2">
@@ -326,8 +326,8 @@ export default function GlobalMapScreen() {
                         </div>
                       </div>
                       <div className="rounded-2xl bg-slate-50 p-3">
-                        <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
-                          Контакт
+                        <p className="text-xs font-bold tracking-wide text-slate-400">
+                          Контакты
                         </p>
                         <p className="mt-2 text-sm font-bold text-slate-800">
                           {selectedPoint.contact_phone

@@ -604,8 +604,10 @@ export default function PickupPointMapScreen({
             )}
           </div>
           <div className="mt-4 min-w-0">
-            <span className="text-xs font-bold uppercase tracking-wide text-sky-500">{TYPE_LABELS[selected.point_type]}</span>
             <h2 className="text-xl font-bold text-gray-900">{selected.name}</h2>
+            <span className="mt-2 inline-block text-xs font-bold uppercase tracking-wide text-sky-500">
+              {TYPE_LABELS[selected.point_type]}
+            </span>
             {selectedPointAddress && <p className="mt-1 text-sm text-gray-500">{selectedPointAddress}</p>}
             {selectedDistance !== null && (
               <p className="mt-1 flex items-center gap-1 text-xs font-medium text-gray-400">

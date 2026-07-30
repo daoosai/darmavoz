@@ -3,7 +3,7 @@ from datetime import datetime, UTC
 import re
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from pydantic import BaseModel, field_validator
 from sqlalchemy import delete, exists, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
@@ -30,6 +30,8 @@ from app.models.models import (
     OrderOffer,
     OrderStatus,
     Role,
+    Quarry,
+    SpecialEquipmentListing,
     SupportMessage,
     SupportTicket,
     User,
@@ -77,10 +79,60 @@ from app.services.vehicle_moderation import (
 
 router = APIRouter()
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+PARTNER_DELETE_BLOCK_MESSAGE = (
+    "Нельзя удалить партнера: у него есть активные точки или объявления. "
+    "Сначала удалите или скройте их."
+)
 
 
 def _error_detail(code: str, message: str) -> dict[str, str]:
     return {"code": code, "message": message}
+
+
+async def _load_partner_equipment_titles(
+    db: AsyncSession,
+    owner_ids: list[UUID],
+) -> dict[UUID, list[str]]:
+    if not owner_ids:
+        return {}
+
+    result = await db.execute(
+        select(SpecialEquipmentListing)
+        .where(
+            SpecialEquipmentListing.owner_user_id.in_(owner_ids),
+            SpecialEquipmentListing.is_deleted.is_(False),
+        )
+        .order_by(SpecialEquipmentListing.title.asc())
+    )
+    titles_by_owner: dict[UUID, list[str]] = {owner_id: [] for owner_id in owner_ids}
+    for listing in result.scalars().all():
+        if listing.owner_user_id is None or not listing.is_active:
+            continue
+        titles_by_owner.setdefault(listing.owner_user_id, []).append(listing.title)
+    return titles_by_owner
+
+
+def _build_admin_partner_out(
+    user: User,
+    *,
+    role_name: str,
+    equipment_titles: list[str] | None = None,
+) -> AdminSupplierOut:
+    active_points = [
+        point.name
+        for point in (user.pickup_points or [])
+        if point.is_active
+    ]
+    return AdminSupplierOut(
+        id=user.id,
+        role=role_name,
+        full_name=user.display_name or None,
+        phone=user.username,
+        is_active=user.is_active,
+        pickup_points=list(user.pickup_points or []),
+        active_point_names=active_points,
+        active_equipment_names=list(equipment_titles or []),
+    )
 
 
 async def _unique_category_slug(
@@ -241,32 +293,36 @@ async def update_admin_me(
 
 @router.get("/suppliers", response_model=list[AdminSupplierOut])
 async def list_admin_suppliers(
+    role: str = Query(default="supplier"),
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin_user),
 ) -> list[AdminSupplierOut]:
     del current_admin
+    if role not in {"supplier", "equipment_owner"}:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Поддерживаются только роли supplier и equipment_owner",
+        )
+
     result = await db.execute(
         select(User)
         .join(Role)
         .options(selectinload(User.pickup_points))
-        .where(Role.name == "supplier")
+        .where(Role.name == role)
         .order_by(func.coalesce(User.display_name, User.username))
     )
-    suppliers = result.scalars().unique().all()
+    partners = result.scalars().unique().all()
+    equipment_titles_by_owner = await _load_partner_equipment_titles(
+        db,
+        [partner.id for partner in partners],
+    )
     return [
-        AdminSupplierOut(
-            id=supplier.id,
-            full_name=(supplier.display_name or None),
-            phone=supplier.username,
-            is_active=supplier.is_active,
-            pickup_points=list(supplier.pickup_points or []),
-            active_point_names=[
-                point.name
-                for point in supplier.pickup_points
-                if point.is_active
-            ],
+        _build_admin_partner_out(
+            partner,
+            role_name=role,
+            equipment_titles=equipment_titles_by_owner.get(partner.id, []),
         )
-        for supplier in suppliers
+        for partner in partners
     ]
 
 
@@ -287,7 +343,7 @@ async def update_admin_supplier(
         select(User)
         .join(Role)
         .options(selectinload(User.pickup_points))
-        .where(User.id == supplier_id, Role.name == "supplier")
+        .where(User.id == supplier_id, Role.name.in_(["supplier", "equipment_owner"]))
     )
     if supplier is None:
         raise HTTPException(
@@ -331,6 +387,7 @@ async def update_admin_supplier(
         ) from exc
     supplier = await db.scalar(
         select(User)
+        .join(Role)
         .options(selectinload(User.pickup_points))
         .where(User.id == supplier_id)
     )
@@ -339,16 +396,83 @@ async def update_admin_supplier(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=_error_detail("SUPPLIER_NOT_FOUND", "Поставщик не найден"),
         )
-    return AdminSupplierOut(
-        id=supplier.id,
-        full_name=supplier.display_name or None,
-        phone=supplier.username,
-        is_active=supplier.is_active,
-        pickup_points=list(supplier.pickup_points or []),
-        active_point_names=[
-            point.name for point in supplier.pickup_points if point.is_active
-        ],
+    supplier_role_name = supplier.role.name if supplier.role is not None else "supplier"
+    equipment_titles_by_owner = await _load_partner_equipment_titles(db, [supplier.id])
+    return _build_admin_partner_out(
+        supplier,
+        role_name=supplier_role_name if supplier_role_name in {"supplier", "equipment_owner"} else "supplier",
+        equipment_titles=equipment_titles_by_owner.get(supplier.id, []),
     )
+
+
+@router.delete("/users/{user_id}", response_model=dict[str, str])
+async def delete_admin_partner_user(
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+) -> dict[str, str]:
+    del current_admin
+    user = await db.scalar(
+        select(User)
+        .join(Role)
+        .where(
+            User.id == user_id,
+            Role.name.in_(["supplier", "equipment_owner"]),
+        )
+    )
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Партнер не найден",
+        )
+
+    active_points_count = await db.scalar(
+        select(func.count(Quarry.id)).where(
+            Quarry.owner_user_id == user.id,
+            Quarry.is_active.is_(True),
+        )
+    )
+    active_equipment_count = await db.scalar(
+        select(func.count(SpecialEquipmentListing.id)).where(
+            SpecialEquipmentListing.owner_user_id == user.id,
+            SpecialEquipmentListing.is_active.is_(True),
+            SpecialEquipmentListing.is_deleted.is_(False),
+        )
+    )
+    if (active_points_count or 0) > 0 or (active_equipment_count or 0) > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=PARTNER_DELETE_BLOCK_MESSAGE,
+        )
+
+    await db.execute(
+        update(Quarry)
+        .where(Quarry.owner_user_id == user.id)
+        .values(owner_user_id=None)
+    )
+    await db.execute(
+        update(SpecialEquipmentListing)
+        .where(SpecialEquipmentListing.owner_user_id == user.id)
+        .values(owner_user_id=None)
+    )
+
+    user.is_active = False
+    user.username = _build_deleted_unique_value(user.username, max_length=50)
+    user.display_name = None
+    user.email = None
+    user.fcm_token = None
+    await db.commit()
+
+    try:
+        await db.delete(user)
+        await db.commit()
+        return {"action": "deleted", "detail": "Партнер удалён окончательно"}
+    except IntegrityError:
+        await db.rollback()
+        return {
+            "action": "archived",
+            "detail": "Партнер архивирован, доступ отключён",
+        }
 
 
 @router.get("/logist-area")

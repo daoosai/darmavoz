@@ -147,7 +147,7 @@ export default function AdminProfileScreen({
             >
               <span className="flex items-center gap-3">
                 <Building2 className="w-5 h-5 text-sky-500" />
-                Поставщики
+                Поставщики / Партнеры
               </span>
               <span className="text-sky-600 text-sm">Открыть</span>
             </button>

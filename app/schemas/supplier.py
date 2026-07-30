@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -31,11 +31,13 @@ class AdminSupplierPointOut(BaseModel):
 
 class AdminSupplierOut(BaseModel):
     id: UUID
+    role: Literal["supplier", "equipment_owner"] = "supplier"
     full_name: Optional[str] = None
     phone: str
     is_active: bool
     pickup_points: list[AdminSupplierPointOut] = Field(default_factory=list)
     active_point_names: list[str] = Field(default_factory=list)
+    active_equipment_names: list[str] = Field(default_factory=list)
 
 
 class AdminSupplierUpdate(BaseModel):

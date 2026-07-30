@@ -26,6 +26,16 @@ interface AdminPartner {
   active_equipment_names: string[];
 }
 
+interface AdminPartnerResponse {
+  id?: string;
+  role?: string;
+  full_name?: string | null;
+  phone?: string | null;
+  is_active?: boolean;
+  active_point_names?: unknown;
+  active_equipment_names?: unknown;
+}
+
 const TAB_META: Record<
   PartnerTab,
   {
@@ -34,28 +44,44 @@ const TAB_META: Record<
     emptyTitle: string;
     emptyDescription: string;
     actionLabel: string;
-    listLabel: string;
     icon: typeof Building2;
   }
 > = {
   supplier: {
-    title: "Карьеры / Накопители",
+    title: "Поставщики",
     subtitle: "Телефоны и активные точки поставщиков карьеров и накопителей.",
-    emptyTitle: "Поставщиков пока нет",
+    emptyTitle: "Поставщики не найдены",
     emptyDescription: "Нет активных точек",
     actionLabel: "Активные точки",
-    listLabel: "Поставщик",
     icon: Building2,
   },
   equipment_owner: {
-    title: "Спецтехника",
+    title: "Партнеры",
     subtitle: "ФИО, телефоны и список активной спецтехники партнеров.",
-    emptyTitle: "Владельцев спецтехники пока нет",
+    emptyTitle: "Партнеры не найдены",
     emptyDescription: "Нет активной спецтехники",
     actionLabel: "Активная спецтехника",
-    listLabel: "Партнер",
     icon: Wrench,
   },
+};
+
+const toStringArray = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+
+const normalizePartner = (item: AdminPartnerResponse, activeTab: PartnerTab): AdminPartner | null => {
+  if (!item?.id || !item?.phone) {
+    return null;
+  }
+
+  return {
+    id: item.id,
+    role: activeTab,
+    full_name: item.full_name || null,
+    phone: item.phone,
+    is_active: Boolean(item.is_active),
+    active_point_names: toStringArray(item.active_point_names),
+    active_equipment_names: toStringArray(item.active_equipment_names),
+  };
 };
 
 const getPartnerItems = (partner: AdminPartner, tab: PartnerTab) =>
@@ -90,7 +116,12 @@ export default function AdminSuppliersScreen() {
             extractApiErrorMessage(data, "Не удалось загрузить список партнеров"),
           );
         }
-        setPartners(Array.isArray(data) ? data : []);
+        const normalized = Array.isArray(data)
+          ? data
+              .map((item) => normalizePartner(item as AdminPartnerResponse, activeTab))
+              .filter((item): item is AdminPartner => item !== null)
+          : [];
+        setPartners(normalized);
       } catch (error) {
         toast.error(
           error instanceof Error
@@ -137,7 +168,11 @@ export default function AdminSuppliersScreen() {
       });
       const data = await response.json().catch(() => ({}));
       if (response.ok) {
-        return data as AdminPartner;
+        const normalized = normalizePartner(data as AdminPartnerResponse, editingPartner.role);
+        if (!normalized) {
+          throw new Error("Сервер вернул неполные данные партнера");
+        }
+        return normalized;
       }
       if (response.status !== 404) {
         throw new Error(
@@ -204,6 +239,7 @@ export default function AdminSuppliersScreen() {
   };
 
   const meta = TAB_META[activeTab];
+  const TabIcon = meta.icon;
 
   return (
     <section className="flex flex-col gap-5">
@@ -244,7 +280,7 @@ export default function AdminSuppliersScreen() {
         </div>
       ) : partners.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-10 text-center shadow-sm">
-          <meta.icon className="mx-auto h-12 w-12 text-slate-300" />
+          <TabIcon className="mx-auto h-12 w-12 text-slate-300" />
           <p className="mt-4 text-lg font-bold text-slate-700">{meta.emptyTitle}</p>
         </div>
       ) : (
@@ -331,7 +367,7 @@ export default function AdminSuppliersScreen() {
                 >
                   <div className="flex items-start gap-3">
                     <div className="rounded-xl bg-sky-50 p-3 text-sky-600">
-                      <meta.icon className="h-5 w-5" />
+                      <TabIcon className="h-5 w-5" />
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="font-bold text-slate-900">
@@ -341,7 +377,7 @@ export default function AdminSuppliersScreen() {
                         <Phone className="h-4 w-4" />
                         {formatPhoneNumber(partner.phone)}
                       </p>
-                      <div className="mt-3 flex items-center justify-between gap-3">
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
                         <span
                           className={`rounded-full px-3 py-1 text-xs font-bold ${
                             partner.is_active
@@ -351,7 +387,7 @@ export default function AdminSuppliersScreen() {
                         >
                           {partner.is_active ? "Активен" : "Отключен"}
                         </span>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <button
                             type="button"
                             onClick={() => openEdit(partner)}
@@ -412,9 +448,7 @@ export default function AdminSuppliersScreen() {
             </div>
 
             <label className="block text-sm font-bold text-slate-700">
-              {editingPartner.role === "equipment_owner"
-                ? "ФИО"
-                : "ФИО / Название"}
+              {editingPartner.role === "equipment_owner" ? "ФИО" : "ФИО / Название"}
               <input
                 value={editForm.full_name}
                 onChange={(event) =>

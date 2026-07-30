@@ -1,19 +1,19 @@
-import { Headphones, MapPinned, UserRound } from "lucide-react";
+import { Headphones, Tractor, UserRound } from "lucide-react";
 
-export type SupplierTab = "points" | "support" | "profile";
+export type EquipmentOwnerTab = "equipment" | "support" | "profile";
 
 interface Props {
-  activeTab: SupplierTab;
-  onChange: (tab: SupplierTab) => void;
+  activeTab: EquipmentOwnerTab;
+  onChange: (tab: EquipmentOwnerTab) => void;
 }
 
 const ITEMS = [
-  { id: "points" as const, label: "Точки", icon: MapPinned },
+  { id: "equipment" as const, label: "Мои объявления", icon: Tractor },
   { id: "support" as const, label: "Поддержка", icon: Headphones },
   { id: "profile" as const, label: "Профиль", icon: UserRound },
 ];
 
-export default function SupplierBottomNav({ activeTab, onChange }: Props) {
+export default function EquipmentOwnerBottomNav({ activeTab, onChange }: Props) {
   return (
     <nav className="fixed bottom-0 left-1/2 z-40 flex w-full max-w-md -translate-x-1/2 border-t border-gray-200 bg-white/95 px-5 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur">
       {ITEMS.map(({ id, label, icon: Icon }) => {

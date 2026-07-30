@@ -12,6 +12,7 @@ import { baseURL, extractApiErrorMessage, resolveMediaUrl } from "./utils";
 
 interface Props {
   token: string;
+  apiPrefix?: "/supplier" | "/equipment-owner";
 }
 
 interface EquipmentForm {
@@ -81,7 +82,10 @@ const matchesListingTab = (listing: EquipmentListing, tab: ListingsTab) => {
   return listing.moderation_status === "rejected" || !listing.is_active;
 };
 
-export default function SupplierEquipmentScreen({ token }: Props) {
+export default function SupplierEquipmentScreen({
+  token,
+  apiPrefix = "/supplier",
+}: Props) {
   const [types, setTypes] = useState<EquipmentTypeItem[]>([]);
   const [listings, setListings] = useState<EquipmentListing[]>([]);
   const [tab, setTab] = useState<ListingsTab>("active");
@@ -131,8 +135,7 @@ export default function SupplierEquipmentScreen({ token }: Props) {
   };
 
   const loadSupplierListings = async () => {
-    const urls = [`${baseURL}/supplier/equipment`, `${baseURL}/supplier/equipment/`];
-    const notFoundPayloads: unknown[] = [];
+    const urls = [`${baseURL}${apiPrefix}/equipment`, `${baseURL}${apiPrefix}/equipment/`];
 
     for (const url of urls) {
       const response = await fetch(url, { headers });
@@ -305,10 +308,10 @@ export default function SupplierEquipmentScreen({ token }: Props) {
   ) => {
     const urls = form.id
       ? [
-          `${baseURL}/supplier/equipment/${form.id}`,
-          `${baseURL}/supplier/equipment/${form.id}/`,
+          `${baseURL}${apiPrefix}/equipment/${form.id}`,
+          `${baseURL}${apiPrefix}/equipment/${form.id}/`,
         ]
-      : [`${baseURL}/supplier/equipment`, `${baseURL}/supplier/equipment/`];
+      : [`${baseURL}${apiPrefix}/equipment`, `${baseURL}${apiPrefix}/equipment/`];
     let lastPayload: unknown = {};
 
     for (const url of urls) {

@@ -124,6 +124,7 @@ get_current_logist_user = require_roles("admin", "logist")
 get_current_manager_user = require_roles("admin", "manager")
 get_current_driver_user = require_roles("driver")
 get_current_supplier_user = require_roles("supplier")
+get_current_equipment_owner_user = require_roles("equipment_owner")
 
 
 async def get_current_driver(current_user: User = Depends(get_current_driver_user)) -> Driver:

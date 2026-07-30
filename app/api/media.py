@@ -98,6 +98,17 @@ async def _resolve_media_entity_context(
         entity = await _ensure_entity_exists(entity_type, entity_id, db)
         return entity_type, entity_id, entity if entity_type == "vehicle" else None
 
+    if role_name == "equipment_owner":
+        if entity_id is None or entity_type != "equipment_listing":
+            raise HTTPException(
+                status_code=403,
+                detail="Equipment owners can upload media only for their own equipment listings",
+            )
+        listing = await db.get(SpecialEquipmentListing, entity_id)
+        if listing is None or listing.owner_user_id != current_user.id:
+            raise HTTPException(status_code=404, detail="Equipment listing not found")
+        return "equipment_listing", entity_id, None
+
     if role_name == "supplier":
         if entity_id is None or entity_type not in {"quarry", "equipment_listing"}:
             raise HTTPException(
@@ -152,7 +163,7 @@ async def _reset_supplier_equipment_moderation(
     entity_id: UUID,
 ) -> None:
     role_name = current_user.role.name if current_user.role else None
-    if role_name != "supplier" or entity_type != "equipment_listing":
+    if role_name not in {"supplier", "equipment_owner"} or entity_type != "equipment_listing":
         return
     listing = await db.get(SpecialEquipmentListing, entity_id)
     if listing is None:
@@ -320,7 +331,7 @@ async def delete_media(
     current_user: User = Depends(get_current_user),
 ) -> dict[str, bool]:
     role_name = current_user.role.name if current_user.role else None
-    if role_name not in {"admin", "logist", "supplier"}:
+    if role_name not in {"admin", "logist", "supplier", "equipment_owner"}:
         raise HTTPException(status_code=403, detail="Media deletion is not allowed")
 
     result = await db.execute(select(MediaFile).where(MediaFile.id == media_id))

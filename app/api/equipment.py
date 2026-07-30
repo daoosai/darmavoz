@@ -39,6 +39,7 @@ from app.schemas.equipment import (
 from app.security.auth import (
     get_current_admin_user,
     get_current_client,
+    get_current_equipment_owner_user,
     get_current_logist_user,
     get_current_supplier_user,
 )
@@ -52,6 +53,7 @@ from app.utils.phones import normalize_phone
 
 router = APIRouter()
 supplier_router = APIRouter()
+equipment_owner_router = APIRouter()
 
 
 def _format_duration_value(value: float) -> str:
@@ -668,6 +670,116 @@ async def delete_equipment_listing(
     return {"ok": True, "result": "hidden"}
 
 
+async def _list_owner_equipment(
+    db: AsyncSession,
+    *,
+    current_owner: User,
+) -> list[dict]:
+    result = await db.execute(
+        select(SpecialEquipmentListing)
+        .options(
+            selectinload(SpecialEquipmentListing.equipment_type_ref),
+            selectinload(SpecialEquipmentListing.owner),
+        )
+        .where(
+            SpecialEquipmentListing.owner_user_id == current_owner.id,
+            SpecialEquipmentListing.is_deleted.is_(False),
+        )
+        .order_by(SpecialEquipmentListing.created_at.desc())
+    )
+    return [await _listing_payload(db, item) for item in result.scalars().all()]
+
+
+async def _create_owner_equipment(
+    payload: EquipmentListingCreate,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession,
+    *,
+    current_owner: User,
+) -> dict:
+    equipment_type, equipment_type_id = await _resolve_equipment_type(
+        db,
+        equipment_type=payload.equipment_type,
+        equipment_type_id=payload.equipment_type_id,
+    )
+    values = payload.model_dump(
+        exclude={
+            "equipment_type",
+            "equipment_type_id",
+            "is_active",
+            "is_vip",
+            "manual_priority",
+            "sort_order",
+        }
+    )
+    values["contact_phone"] = _normalize_listing_contact_phone(
+        payload.contact_phone or current_owner.username
+    )
+    listing = SpecialEquipmentListing(
+        **values,
+        equipment_type=equipment_type,
+        equipment_type_id=equipment_type_id,
+        price_from=_extract_price_from_tariffs(values.get("tariffs")),
+        is_active=True,
+        is_vip=False,
+        manual_priority=0,
+        is_deleted=False,
+        sort_order=0,
+        created_by_user_id=current_owner.id,
+        owner_user_id=current_owner.id,
+        moderation_status=ModerationStatus.pending_moderation.value,
+    )
+    db.add(listing)
+    await db.commit()
+    _schedule_supplier_listing_moderation_email(
+        background_tasks,
+        listing,
+        action="РґРѕР±Р°РІРёР»",
+    )
+    return await _listing_payload(db, await _get_listing(db, listing.id))
+
+
+async def _update_owner_equipment(
+    listing_id: UUID,
+    payload: EquipmentListingUpdate,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession,
+    *,
+    current_owner: User,
+) -> dict:
+    listing = await _get_listing(db, listing_id)
+    if listing.owner_user_id != current_owner.id:
+        raise HTTPException(status_code=404, detail="РћР±СЉСЏРІР»РµРЅРёРµ СЃРїРµС†С‚РµС…РЅРёРєРё РЅРµ РЅР°Р№РґРµРЅРѕ")
+    changed = payload.model_fields_set
+    if changed.intersection({"equipment_type", "equipment_type_id"}):
+        equipment_type, equipment_type_id = await _resolve_equipment_type(
+            db,
+            equipment_type=payload.equipment_type,
+            equipment_type_id=payload.equipment_type_id,
+        )
+        listing.equipment_type = equipment_type
+        listing.equipment_type_id = equipment_type_id
+    for field in ("title", "description", "contact_phone", "tariffs", "city", "district"):
+        if field not in changed:
+            continue
+        value = getattr(payload, field)
+        if field == "contact_phone":
+            value = _normalize_listing_contact_phone(value)
+        if field == "tariffs" and value is not None:
+            value = [tariff.model_dump() for tariff in value]
+        setattr(listing, field, value)
+    if "tariffs" in changed:
+        listing.price_from = _extract_price_from_tariffs(listing.tariffs)
+    _reset_supplier_listing_moderation(listing)
+    await db.commit()
+    _schedule_supplier_listing_moderation_email(
+        background_tasks,
+        listing,
+        action="РёР·РјРµРЅРёР»",
+    )
+    return await _listing_payload(db, await _get_listing(db, listing.id))
+
+
 @supplier_router.get("/equipment", response_model=list[EquipmentListingOut])
 @supplier_router.get(
     "/equipment/",
@@ -678,19 +790,7 @@ async def list_supplier_equipment(
     db: AsyncSession = Depends(get_db),
     current_supplier: User = Depends(get_current_supplier_user),
 ):
-    result = await db.execute(
-        select(SpecialEquipmentListing)
-        .options(
-            selectinload(SpecialEquipmentListing.equipment_type_ref),
-            selectinload(SpecialEquipmentListing.owner),
-        )
-        .where(
-            SpecialEquipmentListing.owner_user_id == current_supplier.id,
-            SpecialEquipmentListing.is_deleted.is_(False),
-        )
-        .order_by(SpecialEquipmentListing.created_at.desc())
-    )
-    return [await _listing_payload(db, item) for item in result.scalars().all()]
+    return await _list_owner_equipment(db, current_owner=current_supplier)
 
 
 @supplier_router.post(
@@ -710,6 +810,12 @@ async def create_supplier_equipment(
     db: AsyncSession = Depends(get_db),
     current_supplier: User = Depends(get_current_supplier_user),
 ):
+    return await _create_owner_equipment(
+        payload,
+        background_tasks,
+        db,
+        current_owner=current_supplier,
+    )
     equipment_type, equipment_type_id = await _resolve_equipment_type(
         db,
         equipment_type=payload.equipment_type,
@@ -765,6 +871,13 @@ async def update_supplier_equipment(
     db: AsyncSession = Depends(get_db),
     current_supplier: User = Depends(get_current_supplier_user),
 ):
+    return await _update_owner_equipment(
+        listing_id,
+        payload,
+        background_tasks,
+        db,
+        current_owner=current_supplier,
+    )
     listing = await _get_listing(db, listing_id)
     if listing.owner_user_id != current_supplier.id:
         raise HTTPException(status_code=404, detail="Объявление спецтехники не найдено")
@@ -796,6 +909,66 @@ async def update_supplier_equipment(
         action="изменил",
     )
     return await _listing_payload(db, await _get_listing(db, listing.id))
+
+
+@equipment_owner_router.get("/equipment", response_model=list[EquipmentListingOut])
+@equipment_owner_router.get(
+    "/equipment/",
+    response_model=list[EquipmentListingOut],
+    include_in_schema=False,
+)
+async def list_equipment_owner_equipment(
+    db: AsyncSession = Depends(get_db),
+    current_owner: User = Depends(get_current_equipment_owner_user),
+):
+    return await _list_owner_equipment(db, current_owner=current_owner)
+
+
+@equipment_owner_router.post(
+    "/equipment",
+    response_model=EquipmentListingOut,
+    status_code=status.HTTP_201_CREATED,
+)
+@equipment_owner_router.post(
+    "/equipment/",
+    response_model=EquipmentListingOut,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
+)
+async def create_equipment_owner_equipment(
+    payload: EquipmentListingCreate,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    current_owner: User = Depends(get_current_equipment_owner_user),
+):
+    return await _create_owner_equipment(
+        payload,
+        background_tasks,
+        db,
+        current_owner=current_owner,
+    )
+
+
+@equipment_owner_router.patch("/equipment/{listing_id}", response_model=EquipmentListingOut)
+@equipment_owner_router.patch(
+    "/equipment/{listing_id}/",
+    response_model=EquipmentListingOut,
+    include_in_schema=False,
+)
+async def update_equipment_owner_equipment(
+    listing_id: UUID,
+    payload: EquipmentListingUpdate,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    current_owner: User = Depends(get_current_equipment_owner_user),
+):
+    return await _update_owner_equipment(
+        listing_id,
+        payload,
+        background_tasks,
+        db,
+        current_owner=current_owner,
+    )
 
 
 @router.post(

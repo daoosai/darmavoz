@@ -84,7 +84,7 @@ async def get_support_actor(
         return SupportActor(role="client", client=await get_current_client(token=token, db=db))
     user = await get_current_user(token=token, db=db)
     role_name = user.role.name if user.role else ""
-    if role_name not in {"driver", "supplier"}:
+    if role_name not in {"driver", "supplier", "equipment_owner"}:
         raise HTTPException(
             status_code=403,
             detail="Обращения доступны клиентам, водителям и поставщикам",
@@ -105,7 +105,7 @@ async def get_support_session_actor(
         return SupportActor(role="client", client=await get_current_client(token=token, db=db))
     user = await get_current_user(token=token, db=db)
     role_name = user.role.name if user.role else ""
-    if role_name not in {"driver", "supplier", "admin", "logist"}:
+    if role_name not in {"driver", "supplier", "equipment_owner", "admin", "logist"}:
         raise HTTPException(
             status_code=403,
             detail="Обращения доступны клиентам, водителям, поставщикам, администраторам и логистам",

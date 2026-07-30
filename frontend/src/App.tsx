@@ -50,6 +50,7 @@ import EquipmentCatalogScreen from "./EquipmentCatalogScreen";
 import GlobalMapScreen from "./GlobalMapScreen";
 import SupportScreen from "./SupportScreen";
 import PickupPointMapScreen, { PickupPointSelection } from "./PickupPointMapScreen";
+import EquipmentOwnerPortalScreen from "./EquipmentOwnerPortalScreen";
 
 // Reuse Material type as MaterialProps by exporting it from MaterialDetailScreen or type matching
 export default function App() {
@@ -58,6 +59,14 @@ export default function App() {
     typeof window !== "undefined" ? window.location.pathname : "/",
   );
   const { role, token } = useAuthStore();
+  const resolveRouteForRole = (nextRole: string | null | undefined) => {
+    if (nextRole === "driver") return "driver" as const;
+    if (nextRole === "logist") return "logist" as const;
+    if (nextRole === "admin") return "admin" as const;
+    if (nextRole === "supplier") return "supplier" as const;
+    if (nextRole === "equipment_owner") return "equipment_owner" as const;
+    return "main" as const;
+  };
   const [currentRoute, setCurrentRoute] = useState<
     | "welcome"
     | "main"
@@ -66,7 +75,9 @@ export default function App() {
     | "logist"
     | "admin"
     | "supplier"
+    | "equipment_owner"
     | "supplier_register"
+    | "equipment_owner_register"
     | "driver_register"
   >(
     role === "client" && currentPath.startsWith("/client/orders/")
@@ -79,6 +90,8 @@ export default function App() {
           ? "admin"
           : role === "supplier"
             ? "supplier"
+            : role === "equipment_owner"
+              ? "equipment_owner"
           : "welcome",
   );
 
@@ -162,88 +175,34 @@ export default function App() {
   };
 
   const renderContent = () => {
+    const renderPartnerLogin = () => (
+      <LoginScreen
+        onLogin={(nextRole) => setCurrentRoute(resolveRouteForRole(nextRole))}
+        onBack={() => setCurrentRoute("welcome")}
+        onSelectSupplierRegister={() => setCurrentRoute("supplier_register")}
+        onSelectEquipmentOwnerRegister={() => setCurrentRoute("equipment_owner_register")}
+        onSelectDriverRegister={() => setCurrentRoute("driver_register")}
+      />
+    );
+
     if (currentPath === "/admin/orders") {
-      return role === "admin" ? (
-        <AdminOrdersListScreen role="admin" />
-      ) : (
-        <LoginScreen
-          onLogin={(r) =>
-            setCurrentRoute(
-              r === "driver"
-                ? "driver"
-                : r === "logist"
-                  ? "logist"
-                  : r === "admin"
-                    ? "admin"
-                    : "main",
-            )
-          }
-          onBack={() => setCurrentRoute("welcome")}
-        />
-      );
+      return role === "admin" ? <AdminOrdersListScreen role="admin" /> : renderPartnerLogin();
     }
 
     if (currentPath === "/logist/orders") {
       return role === "logist" ? (
         <LogistDashboardScreen onLogout={() => setCurrentRoute("login")} />
-      ) : (
-        <LoginScreen
-          onLogin={(r) =>
-            setCurrentRoute(
-              r === "driver"
-                ? "driver"
-                : r === "logist"
-                  ? "logist"
-                  : r === "admin"
-                    ? "admin"
-                    : "main",
-            )
-          }
-          onBack={() => setCurrentRoute("welcome")}
-        />
-      );
+      ) : renderPartnerLogin();
     }
 
     if (currentPath === "/admin/statistics") {
-      return role === "admin" ? (
-        <AdminStatisticsScreen role="admin" />
-      ) : (
-        <LoginScreen
-          onLogin={(r) =>
-            setCurrentRoute(
-              r === "driver"
-                ? "driver"
-                : r === "logist"
-                  ? "logist"
-                  : r === "admin"
-                    ? "admin"
-                    : "main",
-            )
-          }
-          onBack={() => setCurrentRoute("welcome")}
-        />
-      );
+      return role === "admin" ? <AdminStatisticsScreen role="admin" /> : renderPartnerLogin();
     }
 
     if (currentPath === "/logist/statistics") {
       return role === "logist" ? (
         <AdminStatisticsScreen role="logist" />
-      ) : (
-        <LoginScreen
-          onLogin={(r) =>
-            setCurrentRoute(
-              r === "driver"
-                ? "driver"
-                : r === "logist"
-                  ? "logist"
-                  : r === "admin"
-                    ? "admin"
-                    : "main",
-            )
-          }
-          onBack={() => setCurrentRoute("welcome")}
-        />
-      );
+      ) : renderPartnerLogin();
     }
     if (currentRoute === "welcome") {
       return (
@@ -252,8 +211,6 @@ export default function App() {
             setCurrentRoute("main");
           }}
           onSelectEmployee={() => setCurrentRoute("login")}
-          onSelectDriverRegister={() => setCurrentRoute("driver_register")}
-          onSelectSupplier={() => setCurrentRoute("supplier_register")}
         />
       );
     }
@@ -264,97 +221,42 @@ export default function App() {
           onRegister={(r) =>
             setCurrentRoute(r === "driver" ? "driver" : "main")
           }
-          onBack={() => setCurrentRoute("welcome")}
+          onBack={() => setCurrentRoute("login")}
         />
       );
     }
 
     if (currentRoute === "supplier_register" || currentRoute === "supplier") {
-      return <SupplierPortalScreen onBack={() => setCurrentRoute("welcome")} />;
+      return <SupplierPortalScreen onBack={() => setCurrentRoute("login")} />;
+    }
+
+    if (
+      currentRoute === "equipment_owner_register" ||
+      currentRoute === "equipment_owner"
+    ) {
+      return <EquipmentOwnerPortalScreen onBack={() => setCurrentRoute("login")} />;
     }
 
     if (currentRoute === "login") {
-      return (
-        <LoginScreen
-          onLogin={(r) =>
-            setCurrentRoute(
-              r === "driver"
-                ? "driver"
-                : r === "logist"
-                  ? "logist"
-                  : r === "admin"
-                    ? "admin"
-                    : r === "supplier"
-                      ? "supplier"
-                    : "main",
-            )
-          }
-          onBack={() => setCurrentRoute("welcome")}
-        />
-      );
+      return renderPartnerLogin();
     }
 
     if (currentRoute === "driver") {
       return role === "driver" ? (
         <DriverOrdersScreen onLogout={() => setCurrentRoute("login")} />
-      ) : (
-        <LoginScreen
-          onLogin={(r) =>
-            setCurrentRoute(
-              r === "driver"
-                ? "driver"
-                : r === "logist"
-                  ? "logist"
-                  : r === "admin"
-                    ? "admin"
-                    : "main",
-            )
-          }
-          onBack={() => setCurrentRoute("welcome")}
-        />
-      );
+      ) : renderPartnerLogin();
     }
 
     if (currentRoute === "logist") {
       return role === "logist" ? (
         <LogistDashboardScreen onLogout={() => setCurrentRoute("login")} />
-      ) : (
-        <LoginScreen
-          onLogin={(r) =>
-            setCurrentRoute(
-              r === "driver"
-                ? "driver"
-                : r === "logist"
-                  ? "logist"
-                  : r === "admin"
-                    ? "admin"
-                    : "main",
-            )
-          }
-          onBack={() => setCurrentRoute("welcome")}
-        />
-      );
+      ) : renderPartnerLogin();
     }
 
     if (currentRoute === "admin") {
       return role === "admin" ? (
         <AdminDashboardScreen onLogout={() => setCurrentRoute("login")} />
-      ) : (
-        <LoginScreen
-          onLogin={(r) =>
-            setCurrentRoute(
-              r === "driver"
-                ? "driver"
-                : r === "logist"
-                  ? "logist"
-                  : r === "admin"
-                    ? "admin"
-                    : "main",
-            )
-          }
-          onBack={() => setCurrentRoute("welcome")}
-        />
-      );
+      ) : renderPartnerLogin();
     }
 
     return (

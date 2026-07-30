@@ -10,11 +10,20 @@ import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
 interface LoginScreenProps {
   onLogin: (role: UserRole) => void;
   onBack: () => void;
+  onSelectSupplierRegister: () => void;
+  onSelectEquipmentOwnerRegister: () => void;
+  onSelectDriverRegister: () => void;
 }
 
 const normalizePhoneValue = (value: string) => value.replace(/[\s()-]/g, "");
 
-export default function LoginScreen({ onLogin, onBack }: LoginScreenProps) {
+export default function LoginScreen({
+  onLogin,
+  onBack,
+  onSelectSupplierRegister,
+  onSelectEquipmentOwnerRegister,
+  onSelectDriverRegister,
+}: LoginScreenProps) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -130,9 +139,12 @@ export default function LoginScreen({ onLogin, onBack }: LoginScreenProps) {
         <h1 className="mb-2 text-center text-3xl font-black tracking-tight text-[#2DB0E6]">
           Дармавоз
         </h1>
-        <h2 className="mb-8 text-center text-lg font-medium text-slate-500">
-          Сотрудники
+        <h2 className="mb-3 text-center text-lg font-medium text-slate-500">
+          Партнёры
         </h2>
+        <p className="mb-8 text-center text-sm text-slate-400">
+          Админ и логист входят по логину и паролю
+        </p>
 
         {otpStep ? (
           <OtpVerificationStep
@@ -148,60 +160,85 @@ export default function LoginScreen({ onLogin, onBack }: LoginScreenProps) {
             onVerify={handleVerifyLogin}
           />
         ) : (
-          <form onSubmit={handleLogin} className="flex w-full max-w-sm flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="employee-login" className="text-sm font-medium text-slate-700">
-                Логин или телефон
-              </label>
-              <input
-                id="employee-login"
-                type="text"
-                name="username"
-                value={username}
-                onChange={handleLoginChange}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 transition-all focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/50"
-                placeholder="Введите логин"
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="employee-password" className="text-sm font-medium text-slate-700">
-                Пароль
-              </label>
-              <div className="relative w-full">
+          <>
+            <form onSubmit={handleLogin} className="flex w-full max-w-sm flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="employee-login" className="text-sm font-medium text-slate-700">
+                  Логин или телефон
+                </label>
                 <input
-                  id="employee-password"
-                  type={showPassword ? "text" : "password"}
-                  name="password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 pr-12 text-slate-900 transition-all focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/50"
-                  placeholder="Введите пароль"
+                  id="employee-login"
+                  type="text"
+                  name="username"
+                  value={username}
+                  onChange={handleLoginChange}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 transition-all focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/50"
+                  placeholder="Введите логин"
                 />
-                <button
-                  type="button"
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
-                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                </button>
               </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="employee-password" className="text-sm font-medium text-slate-700">
+                  Пароль
+                </label>
+                <div className="relative w-full">
+                  <input
+                    id="employee-password"
+                    type={showPassword ? "text" : "password"}
+                    name="password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 pr-12 text-slate-900 transition-all focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/50"
+                    placeholder="Введите пароль"
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className={`mt-4 flex w-full items-center justify-center gap-2 rounded-xl py-4 text-lg font-bold text-white shadow-sm transition-all ${
+                  isLoading
+                    ? "cursor-not-allowed bg-[#2DB0E6]/70"
+                    : "bg-[#2DB0E6] hover:bg-[#209BD6] active:bg-[#209BD6]"
+                }`}
+              >
+                {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : null}
+                {isLoading ? "Вход..." : "Войти"}
+              </button>
+            </form>
+
+            <div className="mt-8 flex flex-col items-center gap-3 text-center">
+              <button
+                type="button"
+                onClick={onSelectSupplierRegister}
+                className="text-sm font-semibold text-[#2DB0E6]"
+              >
+                Регистрация карьеров/накопителей
+              </button>
+              <button
+                type="button"
+                onClick={onSelectEquipmentOwnerRegister}
+                className="text-sm font-semibold text-[#2DB0E6]"
+              >
+                Регистрация спецтехники
+              </button>
+              <button
+                type="button"
+                onClick={onSelectDriverRegister}
+                className="text-sm font-semibold text-[#2DB0E6]"
+              >
+                Регистрация водителей
+              </button>
             </div>
-
-            <button
-              type="submit"
-              disabled={isLoading}
-              className={`mt-4 flex w-full items-center justify-center gap-2 rounded-xl py-4 text-lg font-bold text-white shadow-sm transition-all ${
-                isLoading
-                  ? "cursor-not-allowed bg-[#2DB0E6]/70"
-                  : "bg-[#2DB0E6] hover:bg-[#209BD6] active:bg-[#209BD6]"
-              }`}
-            >
-              {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : null}
-              {isLoading ? "Вход..." : "Войти"}
-            </button>
-
-          </form>
+          </>
         )}
       </div>
     </div>

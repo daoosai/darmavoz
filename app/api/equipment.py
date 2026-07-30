@@ -556,7 +556,6 @@ async def list_public_equipment(
         stmt.order_by(
             SpecialEquipmentListing.is_vip.desc(),
             SpecialEquipmentListing.manual_priority.desc(),
-            SpecialEquipmentListing.price_from.asc().nullslast(),
             SpecialEquipmentListing.created_at.desc(),
         )
     )

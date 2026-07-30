@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Headphones, ImageIcon, MapPin, Phone, Wrench } from "lucide-react";
+import { ArrowLeft, Crown, Headphones, ImageIcon, MapPin, Phone, Wrench } from "lucide-react";
 import toast from "react-hot-toast";
 
 import SupportScreen from "./SupportScreen";
@@ -80,10 +80,10 @@ export const formatEquipmentPrice = (item: EquipmentListing) => {
   const tariffs = getEquipmentTariffs(item);
   const hourTariff = tariffs.find((tariff) => tariff.type === "hour");
   const shiftTariff = tariffs.find((tariff) => tariff.type === "shift");
-  if (hourTariff?.price == null) return "Цена договорная";
-  const hourLabel = `${Number(hourTariff.price).toLocaleString("ru-RU")} ₽/час`;
+  if (hourTariff?.price == null) return "Р¦РµРЅР° РґРѕРіРѕРІРѕСЂРЅР°СЏ";
+  const hourLabel = `${Number(hourTariff.price).toLocaleString("ru-RU")} в‚Ѕ/С‡Р°СЃ`;
   return shiftTariff?.price != null
-    ? `${hourLabel} · ${Number(shiftTariff.price).toLocaleString("ru-RU")} ₽/смена`
+    ? `${hourLabel} В· ${Number(shiftTariff.price).toLocaleString("ru-RU")} в‚Ѕ/СЃРјРµРЅР°`
     : hourLabel;
 };
 
@@ -116,7 +116,7 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
         setTypes(loadedTypes.filter((item) => item.is_active));
         setListings(Array.isArray(loadedListings) ? loadedListings : []);
       } catch {
-        toast.error("Не удалось загрузить каталог спецтехники");
+        toast.error("РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РєР°С‚Р°Р»РѕРі СЃРїРµС†С‚РµС…РЅРёРєРё");
       } finally {
         setLoading(false);
       }
@@ -147,7 +147,7 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
           initialContext={{
             type: "equipment_listing",
             id: selected.id,
-            subject: `Вопрос по объявлению «${selected.title}»`,
+            subject: `Р’РѕРїСЂРѕСЃ РїРѕ РѕР±СЉСЏРІР»РµРЅРёСЋ В«${selected.title}В»`,
           }}
         />
       );
@@ -166,7 +166,7 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
           onClick={() => setSelected(null)}
           className="mb-4 flex items-center gap-2 text-sm font-bold text-slate-600"
         >
-          <ArrowLeft className="h-4 w-4" /> К каталогу
+          <ArrowLeft className="h-4 w-4" /> Рљ РєР°С‚Р°Р»РѕРіСѓ
         </button>
 
         <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
@@ -186,8 +186,9 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
               </div>
             )}
             {selected.is_vip ? (
-              <div className="pointer-events-none absolute left-4 top-4 z-10 inline-flex items-center rounded-full bg-amber-400 px-3 py-1 text-xs font-bold text-white shadow-lg">
-                Рекомендуем
+              <div className="pointer-events-none absolute left-4 top-4 z-10 inline-flex items-center gap-1 rounded-full bg-amber-400 px-3 py-1 text-xs font-bold text-white shadow-lg">
+                <Crown className="h-3.5 w-3.5" />
+                VIP
               </div>
             ) : null}
           </div>
@@ -199,8 +200,9 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <h2 className="text-2xl font-black text-slate-900">{selected.title}</h2>
               {selected.is_vip ? (
-                <span className="inline-flex items-center rounded-full bg-amber-400 px-3 py-1 text-xs font-bold text-white">
-                  Рекомендуем
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-400 px-3 py-1 text-xs font-bold text-white">
+                  <Crown className="h-3.5 w-3.5" />
+                  VIP
                 </span>
               ) : null}
             </div>
@@ -217,10 +219,10 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
 
             <div className="mt-6 rounded-2xl bg-slate-50 p-4">
               <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
-                Контактный телефон
+                РљРѕРЅС‚Р°РєС‚РЅС‹Р№ С‚РµР»РµС„РѕРЅ
               </p>
               <p className="mt-2 text-lg font-black text-slate-900">
-                {contactPhone ? formatPhoneNumber(contactPhone) : "Не указан"}
+                {contactPhone ? formatPhoneNumber(contactPhone) : "РќРµ СѓРєР°Р·Р°РЅ"}
               </p>
             </div>
 
@@ -229,7 +231,7 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
                 href={`tel:${contactPhone}`}
                 className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-sky-500 px-5 py-4 font-bold text-white shadow-sm active:bg-sky-600"
               >
-                <Phone className="h-5 w-5" /> Позвонить
+                <Phone className="h-5 w-5" /> РџРѕР·РІРѕРЅРёС‚СЊ
               </a>
             ) : (
               <button
@@ -237,7 +239,7 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
                 disabled
                 className="mt-4 w-full rounded-2xl bg-slate-300 px-5 py-4 font-bold text-slate-600"
               >
-                Телефон не указан
+                РўРµР»РµС„РѕРЅ РЅРµ СѓРєР°Р·Р°РЅ
               </button>
             )}
 
@@ -251,7 +253,7 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
               }}
               className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-100 px-5 py-3 font-bold text-slate-600"
             >
-              <Headphones className="h-4 w-4" /> Задать вопрос оператору
+              <Headphones className="h-4 w-4" /> Р—Р°РґР°С‚СЊ РІРѕРїСЂРѕСЃ РѕРїРµСЂР°С‚РѕСЂСѓ
             </button>
           </div>
         </div>
@@ -264,17 +266,17 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
       <div className="mb-5">
         <div className="flex items-center gap-2">
           <Wrench className="h-6 w-6 text-sky-500" />
-          <h2 className="text-2xl font-black">Спецтехника</h2>
+          <h2 className="text-2xl font-black">РЎРїРµС†С‚РµС…РЅРёРєР°</h2>
         </div>
         <p className="mt-1 text-sm text-slate-500">
-          Доска объявлений спецтехники с прямым звонком поставщику
+          Р”РѕСЃРєР° РѕР±СЉСЏРІР»РµРЅРёР№ СЃРїРµС†С‚РµС…РЅРёРєРё СЃ РїСЂСЏРјС‹Рј Р·РІРѕРЅРєРѕРј РїРѕСЃС‚Р°РІС‰РёРєСѓ
         </p>
       </div>
 
       <input
         value={search}
         onChange={(event) => setSearch(event.target.value)}
-        placeholder="Поиск техники..."
+        placeholder="РџРѕРёСЃРє С‚РµС…РЅРёРєРё..."
         className="mb-3 w-full rounded-2xl bg-white p-3 shadow-sm outline-none"
       />
 
@@ -283,7 +285,7 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
           onClick={() => setSelectedType("")}
           className={`shrink-0 rounded-full px-4 py-2 text-sm font-bold ${!selectedType ? "bg-sky-500 text-white" : "bg-white text-slate-600"}`}
         >
-          Все
+          Р’СЃРµ
         </button>
         {types.map((type) => (
           <button
@@ -302,7 +304,7 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
           onChange={(event) => setCity(event.target.value)}
           className="mb-4 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 shadow-sm outline-none"
         >
-          <option value="">Все города и районы</option>
+          <option value="">Р’СЃРµ РіРѕСЂРѕРґР° Рё СЂР°Р№РѕРЅС‹</option>
           {cities.map((item) => (
             <option key={item}>{item}</option>
           ))}
@@ -310,10 +312,10 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
       )}
 
       {loading ? (
-        <p className="py-12 text-center text-slate-400">Загрузка...</p>
+        <p className="py-12 text-center text-slate-400">Р—Р°РіСЂСѓР·РєР°...</p>
       ) : filtered.length === 0 ? (
         <p className="rounded-2xl bg-white p-8 text-center text-slate-500">
-          Подходящая техника пока не добавлена
+          РџРѕРґС…РѕРґСЏС‰Р°СЏ С‚РµС…РЅРёРєР° РїРѕРєР° РЅРµ РґРѕР±Р°РІР»РµРЅР°
         </p>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -336,8 +338,9 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
                   </div>
                 )}
                 {item.is_vip ? (
-                  <span className="pointer-events-none absolute left-3 top-3 inline-flex items-center rounded-full bg-amber-400 px-3 py-1 text-xs font-bold text-white shadow-lg">
-                    Рекомендуем
+                  <span className="pointer-events-none absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-amber-400 px-3 py-1 text-xs font-bold text-white shadow-lg">
+                    <Crown className="h-3.5 w-3.5" />
+                    VIP
                   </span>
                 ) : null}
               </div>
@@ -355,7 +358,7 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
                 )}
                 <div className="mt-3 flex items-center gap-2 text-xs font-semibold text-slate-500">
                   <Phone className="h-3.5 w-3.5" />
-                  {getListingPhone(item) ? formatPhoneNumber(getListingPhone(item)) : "Телефон в карточке"}
+                  {getListingPhone(item) ? formatPhoneNumber(getListingPhone(item)) : "РўРµР»РµС„РѕРЅ РІ РєР°СЂС‚РѕС‡РєРµ"}
                 </div>
               </div>
             </button>

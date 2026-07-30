@@ -764,7 +764,7 @@ function QuickBuyChoiceModal({
           >
             <span className="block text-lg font-black">Купить с доставкой</span>
             <span className="mt-1 block text-sm text-sky-50">
-              Сначала адрес, потом кубатура и быстрый расчёт в корзине.
+              Мы автоматически подберем ближайший карьер с самой выгодной ценой.
             </span>
           </button>
 
@@ -775,7 +775,7 @@ function QuickBuyChoiceModal({
           >
             <span className="block text-lg font-black">Выбрать карьер на карте</span>
             <span className="mt-1 block text-sm text-slate-500">
-              Откроется карта точек и старый сценарий выбора.
+              Посмотреть все доступные точки на карте и выбрать подходящую самостоятельно.
             </span>
           </button>
         </div>

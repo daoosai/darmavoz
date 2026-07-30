@@ -43,6 +43,14 @@ const TYPE_LABELS: Record<GlobalPickupPoint["point_type"], string> = {
   supplier: "Поставщик",
 };
 
+const isValidCoordinate = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value);
+
+const getRenderablePoints = (pickupPoints: GlobalPickupPoint[]) =>
+  pickupPoints.filter(
+    (point) => isValidCoordinate(point.lat) && isValidCoordinate(point.lon),
+  );
+
 const calculateDistanceKm = (
   lat1: number,
   lon1: number,
@@ -68,22 +76,24 @@ const getNearestPointDistance = (
   location: UserLocation,
   pickupPoints: GlobalPickupPoint[],
 ) => {
-  if (pickupPoints.length === 0) {
+  const renderablePoints = getRenderablePoints(pickupPoints);
+  if (renderablePoints.length === 0) {
     return null;
   }
 
-  return pickupPoints.reduce((nearestDistance, point) => {
+  return renderablePoints.reduce((nearestDistance, point) => {
     const nextDistance = calculateDistanceKm(location.lat, location.lon, point.lat, point.lon);
     return Math.min(nearestDistance, nextDistance);
   }, Number.POSITIVE_INFINITY);
 };
 
 const getBoundsFromPoints = (pickupPoints: GlobalPickupPoint[]) => {
-  if (pickupPoints.length === 0) {
+  const renderablePoints = getRenderablePoints(pickupPoints);
+  if (renderablePoints.length === 0) {
     return null;
   }
 
-  const bounds = pickupPoints.reduce(
+  const bounds = renderablePoints.reduce(
     (accumulator, point) => ({
       minLat: Math.min(accumulator.minLat, point.lat),
       maxLat: Math.max(accumulator.maxLat, point.lat),
@@ -91,10 +101,10 @@ const getBoundsFromPoints = (pickupPoints: GlobalPickupPoint[]) => {
       maxLon: Math.max(accumulator.maxLon, point.lon),
     }),
     {
-      minLat: pickupPoints[0].lat,
-      maxLat: pickupPoints[0].lat,
-      minLon: pickupPoints[0].lon,
-      maxLon: pickupPoints[0].lon,
+      minLat: renderablePoints[0].lat,
+      maxLat: renderablePoints[0].lat,
+      minLon: renderablePoints[0].lon,
+      maxLon: renderablePoints[0].lon,
     },
   );
 
@@ -168,32 +178,37 @@ export default function GlobalMapScreen() {
   };
 
   const fitMapToPoints = (pickupPoints: GlobalPickupPoint[]) => {
-    if (!mapRef.current || pickupPoints.length === 0) {
+    const renderablePoints = getRenderablePoints(pickupPoints);
+    if (!mapRef.current || renderablePoints.length === 0) {
       return;
     }
 
-    if (pickupPoints.length === 1) {
-      centerMapOnCoordinates({ lat: pickupPoints[0].lat, lon: pickupPoints[0].lon }, 12);
+    if (renderablePoints.length === 1) {
+      centerMapOnCoordinates({ lat: renderablePoints[0].lat, lon: renderablePoints[0].lon }, 12);
       return;
     }
 
-    const bounds = getBoundsFromPoints(pickupPoints);
+    const bounds = getBoundsFromPoints(renderablePoints);
     if (!bounds) {
       return;
     }
 
-    if (typeof mapRef.current.fitBounds === "function") {
-      mapRef.current.fitBounds(
-        [
-          [bounds.minLon, bounds.minLat],
-          [bounds.maxLon, bounds.maxLat],
-        ],
-        {
-          padding: 64,
-          duration: 700,
-        },
-      );
-      return;
+    try {
+      if (typeof mapRef.current.fitBounds === "function") {
+        mapRef.current.fitBounds(
+          [
+            [bounds.minLon, bounds.minLat],
+            [bounds.maxLon, bounds.maxLat],
+          ],
+          {
+            padding: [64, 64, 64, 64],
+            duration: 700,
+          },
+        );
+        return;
+      }
+    } catch (fitBoundsError) {
+      console.warn("Не удалось выполнить fitBounds для карты", fitBoundsError);
     }
 
     centerMapOnCoordinates(

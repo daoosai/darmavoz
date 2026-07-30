@@ -241,7 +241,11 @@ export default function ClientAuthBottomSheet({ isOpen, onClose, onAuthenticated
   const contactLabel = authMode === "phone" ? phone : normalizeEmailValue(email);
 
   return (
-    <SwipeableBottomSheet isOpen={isOpen} onClose={onClose}>
+    <SwipeableBottomSheet
+      isOpen={isOpen}
+      onClose={onClose}
+      sheetClassName="relative flex max-h-[90dvh] w-full max-w-md flex-col overflow-y-auto rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl"
+    >
       {step === 2 ? (
               <button
                 onClick={() => {
@@ -254,7 +258,7 @@ export default function ClientAuthBottomSheet({ isOpen, onClose, onAuthenticated
               </button>
       ) : null}
 
-      <div className="mx-auto flex-1 w-full max-w-md overflow-y-auto px-6 pt-4 pb-6">
+      <div className="mx-auto flex-1 w-full max-w-md px-6 pt-4 pb-6">
               {step === 1 ? (
                 <div className="flex w-full flex-col items-center animate-in fade-in slide-in-from-right-4 duration-300">
                   <h2 className="mt-4 mb-2 text-center text-2xl font-bold leading-tight text-slate-800">

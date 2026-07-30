@@ -105,16 +105,33 @@ export default function AdminSuppliersScreen() {
     const fetchPartners = async () => {
       try {
         setIsLoading(true);
-        const response = await fetch(`${baseURL}/admin/suppliers?role=${activeTab}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        const data = await response.json().catch(() => []);
-        if (!response.ok) {
-          throw new Error(
-            extractApiErrorMessage(data, "Не удалось загрузить список партнеров"),
-          );
+        const urls = [
+          `${baseURL}/admin/users?role=${activeTab}`,
+          `${baseURL}/admin/suppliers?role=${activeTab}`,
+        ];
+        let data: unknown = [];
+        let resolved = false;
+
+        for (const url of urls) {
+          const response = await fetch(url, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          });
+          data = await response.json().catch(() => []);
+          if (response.ok) {
+            resolved = true;
+            break;
+          }
+          if (response.status !== 404) {
+            throw new Error(
+              extractApiErrorMessage(data, "Не удалось загрузить список партнеров"),
+            );
+          }
+        }
+
+        if (!resolved) {
+          throw new Error("На сервере не подключен маршрут списка партнеров");
         }
         const normalized = Array.isArray(data)
           ? data
@@ -217,16 +234,41 @@ export default function AdminSuppliersScreen() {
 
     try {
       setDeletingId(partner.id);
-      const response = await fetch(`${baseURL}/admin/users/${partner.id}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
+      const urls = [
+        `${baseURL}/admin/users/${partner.id}`,
+        `${baseURL}/admin/users/${partner.id}/`,
+        `${baseURL}/admin/suppliers/${partner.id}`,
+        `${baseURL}/admin/suppliers/${partner.id}/`,
+      ];
+      let deleted = false;
+      let lastPayload: unknown = {};
+
+      for (const url of urls) {
+        const response = await fetch(url, {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        const data = await response.json().catch(() => ({}));
+        lastPayload = data;
+        if (response.ok) {
+          deleted = true;
+          break;
+        }
+        if (response.status !== 404) {
+          throw new Error(
+            extractApiErrorMessage(data, "Не удалось удалить партнера"),
+          );
+        }
+      }
+
+      if (!deleted) {
         throw new Error(
-          extractApiErrorMessage(data, "Не удалось удалить партнера"),
+          extractApiErrorMessage(
+            lastPayload,
+            "На сервере не подключен маршрут удаления партнеров",
+          ),
         );
       }
       setPartners((current) => current.filter((item) => item.id !== partner.id));

@@ -291,8 +291,7 @@ async def update_admin_me(
     )
 
 
-@router.get("/suppliers", response_model=list[AdminSupplierOut])
-async def list_admin_suppliers(
+async def _list_admin_partner_users(
     role: str = Query(default="supplier"),
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin_user),
@@ -324,6 +323,24 @@ async def list_admin_suppliers(
         )
         for partner in partners
     ]
+
+
+@router.get("/users", response_model=list[AdminSupplierOut])
+async def list_admin_partner_users(
+    role: str = Query(default="supplier"),
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+) -> list[AdminSupplierOut]:
+    return await _list_admin_partner_users(role, db, current_admin)
+
+
+@router.get("/suppliers", response_model=list[AdminSupplierOut])
+async def list_admin_suppliers(
+    role: str = Query(default="supplier"),
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+) -> list[AdminSupplierOut]:
+    return await _list_admin_partner_users(role, db, current_admin)
 
 
 @router.patch("/suppliers/{supplier_id}", response_model=AdminSupplierOut)
@@ -406,6 +423,20 @@ async def update_admin_supplier(
 
 
 @router.delete("/users/{user_id}", response_model=dict[str, str])
+@router.delete(
+    "/users/{user_id}/",
+    response_model=dict[str, str],
+    include_in_schema=False,
+)
+@router.delete(
+    "/suppliers/{user_id}",
+    response_model=dict[str, str],
+)
+@router.delete(
+    "/suppliers/{user_id}/",
+    response_model=dict[str, str],
+    include_in_schema=False,
+)
 async def delete_admin_partner_user(
     user_id: UUID,
     db: AsyncSession = Depends(get_db),

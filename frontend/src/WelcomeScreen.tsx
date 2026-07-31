@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import PrivacyPolicyModal from "./PrivacyPolicyModal";
-import RequisitesModal from "./RequisitesModal";
 
 export default function WelcomeScreen({
   onSelectClient,
@@ -9,7 +8,6 @@ export default function WelcomeScreen({
   onSelectClient: () => void;
   onSelectEmployee: () => void;
 }) {
-  const [isRequisitesOpen, setIsRequisitesOpen] = useState(false);
   const [isPrivacyPolicyOpen, setIsPrivacyPolicyOpen] = useState(false);
 
   return (
@@ -45,21 +43,13 @@ export default function WelcomeScreen({
         </p>
         <button
           type="button"
-          onClick={() => setIsRequisitesOpen(true)}
-          className="underline-offset-4 transition-colors hover:text-gray-600 hover:underline"
-        >
-          Реквизиты сервиса
-        </button>
-        <button
-          type="button"
           onClick={() => setIsPrivacyPolicyOpen(true)}
-          className="underline-offset-4 transition-colors hover:text-gray-600 hover:underline"
+          className="mt-2 text-[10px] text-gray-300/70 hover:text-gray-400"
         >
           Политика конфиденциальности
         </button>
       </footer>
 
-      <RequisitesModal isOpen={isRequisitesOpen} onClose={() => setIsRequisitesOpen(false)} />
       <PrivacyPolicyModal
         isOpen={isPrivacyPolicyOpen}
         onClose={() => setIsPrivacyPolicyOpen(false)}

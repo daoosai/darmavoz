@@ -10,7 +10,7 @@ import {
   getEquipmentTariffs,
 } from "./EquipmentCatalogScreen";
 import { useAuthStore } from "./store";
-import { baseURL, extractApiErrorMessage, resolveMediaUrl } from "./utils";
+import { baseURL, extractApiErrorMessage, formatPhoneNumber, resolveMediaUrl } from "./utils";
 
 type Tab = "listings" | "moderation" | "types";
 
@@ -54,6 +54,11 @@ const normalizeManualPriority = (value?: number | null) => {
   const parsed = Number(value ?? 0);
   if (!Number.isFinite(parsed)) return 0;
   return Math.min(100, Math.max(0, Math.trunc(parsed)));
+};
+
+const normalizeContactPhoneForApi = (value: string) => {
+  const normalized = value.replace(/[^\d+]/g, "").trim();
+  return normalized || null;
 };
 
 export default function AdminEquipmentScreen({
@@ -179,7 +184,7 @@ export default function AdminEquipmentScreen({
             equipment_type: item.equipment_type || item.equipment_type_name,
             title: item.title,
             description: item.description,
-            contact_phone: item.contact_phone || "",
+            contact_phone: formatPhoneNumber(item.contact_phone || ""),
             tariffs: getEquipmentTariffs(item).map((tariff) => ({
               type: tariff.type,
               price: tariff.price?.toString() || "",
@@ -264,7 +269,7 @@ export default function AdminEquipmentScreen({
           equipment_type: listingForm.equipment_type,
           title: listingForm.title,
           description: listingForm.description,
-          contact_phone: listingForm.contact_phone || null,
+          contact_phone: normalizeContactPhoneForApi(listingForm.contact_phone),
           city: listingForm.city || null,
           district: listingForm.district || null,
           is_active: listingForm.is_active,
@@ -759,7 +764,10 @@ export default function AdminEquipmentScreen({
                 <input
                   value={listingForm.contact_phone}
                   onChange={(event) =>
-                    setListingForm({ ...listingForm, contact_phone: event.target.value })
+                    setListingForm({
+                      ...listingForm,
+                      contact_phone: formatPhoneNumber(event.target.value),
+                    })
                   }
                   className="mt-1 w-full rounded-xl bg-slate-100 p-3 font-normal"
                   placeholder="+7 (999) 000-00-00"

@@ -301,7 +301,7 @@ async def _list_admin_partner_users(
         select(User)
         .join(Role)
         .options(selectinload(User.pickup_points))
-        .where(Role.name == role)
+        .where(Role.name == role, User.is_deleted.is_(False))
         .order_by(func.coalesce(User.display_name, User.username))
     )
     partners = result.scalars().unique().all()
@@ -354,7 +354,11 @@ async def update_admin_supplier(
         select(User)
         .join(Role)
         .options(selectinload(User.pickup_points))
-        .where(User.id == supplier_id, Role.name.in_(["supplier", "equipment_owner"]))
+        .where(
+            User.id == supplier_id,
+            Role.name.in_(["supplier", "equipment_owner"]),
+            User.is_deleted.is_(False),
+        )
     )
     if supplier is None:
         raise HTTPException(
@@ -400,7 +404,7 @@ async def update_admin_supplier(
         select(User)
         .join(Role)
         .options(selectinload(User.pickup_points))
-        .where(User.id == supplier_id)
+        .where(User.id == supplier_id, User.is_deleted.is_(False))
     )
     if supplier is None:
         raise HTTPException(
@@ -443,6 +447,7 @@ async def delete_admin_partner_user(
         .where(
             User.id == user_id,
             Role.name.in_(["supplier", "equipment_owner"]),
+            User.is_deleted.is_(False),
         )
     )
     if user is None:
@@ -488,22 +493,16 @@ async def delete_admin_partner_user(
     )
 
     user.is_active = False
+    user.is_deleted = True
     user.username = _build_deleted_unique_value(user.username, max_length=50)
     user.display_name = None
     user.email = None
     user.fcm_token = None
     await db.commit()
-
-    try:
-        await db.delete(user)
-        await db.commit()
-        return {"action": "deleted", "detail": "Партнер удалён окончательно"}
-    except IntegrityError:
-        await db.rollback()
-        return {
-            "action": "archived",
-            "detail": "Партнер архивирован, доступ отключён",
-        }
+    return {
+        "action": "archived",
+        "detail": "Партнер архивирован, доступ отключён",
+    }
 
 
 @router.get("/logist-area")

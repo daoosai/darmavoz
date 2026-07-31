@@ -3,7 +3,7 @@ import uuid
 import pytest
 from sqlalchemy import select
 
-from app.models.models import Role, User
+from app.models.models import Role, SupportMessage, SupportTicket, User
 from app.security.jwt import create_access_token
 
 
@@ -215,3 +215,72 @@ async def test_admin_can_edit_supplier_and_phone_conflicts_are_rejected(
         json={},
     )
     assert empty_update.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_admin_soft_deletes_supplier_with_hidden_relations_without_500(
+    client, session_factory
+):
+    _admin, admin_token = await _create_user(session_factory, "admin")
+    supplier, supplier_token = await _create_user(
+        session_factory, "supplier", phone="+79995553001"
+    )
+    inactive_supplier, _inactive_supplier_token = await _create_user(
+        session_factory, "supplier", phone="+79995553002"
+    )
+
+    async with session_factory() as session:
+      ticket = SupportTicket(
+          user_id=supplier.id,
+          subject="Проверка удаления",
+          category="general",
+          context_type="general",
+          status="new",
+      )
+      session.add(ticket)
+      await session.flush()
+      session.add(
+          SupportMessage(
+              ticket_id=ticket.id,
+              author_user_id=supplier.id,
+              text="Связанный лог поддержки",
+          )
+      )
+      db_inactive_supplier = await session.get(User, inactive_supplier.id)
+      assert db_inactive_supplier is not None
+      db_inactive_supplier.is_active = False
+      await session.commit()
+
+    delete_response = await client.delete(
+        f"/api/v1/admin/suppliers/{supplier.id}",
+        headers=_headers(admin_token),
+    )
+    assert delete_response.status_code == 200
+    assert delete_response.json()["action"] == "archived"
+
+    async with session_factory() as session:
+        deleted_supplier = await session.get(User, supplier.id)
+        assert deleted_supplier is not None
+        assert deleted_supplier.is_active is False
+        assert deleted_supplier.is_deleted is True
+        assert deleted_supplier.username != "+79995553001"
+
+        preserved_ticket = await session.scalar(
+            select(SupportTicket).where(SupportTicket.user_id == supplier.id)
+        )
+        assert preserved_ticket is not None
+
+    supplier_session = await client.get(
+        "/api/v1/supplier/me",
+        headers=_headers(supplier_token),
+    )
+    assert supplier_session.status_code == 401
+
+    list_response = await client.get(
+        "/api/v1/admin/suppliers?role=supplier",
+        headers=_headers(admin_token),
+    )
+    assert list_response.status_code == 200
+    listed_ids = {item["id"] for item in list_response.json()}
+    assert str(supplier.id) not in listed_ids
+    assert str(inactive_supplier.id) in listed_ids

@@ -76,6 +76,13 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String(255))
     role_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("roles.id"))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_deleted: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        index=True,
+        server_default=text("false"),
+    )
     fcm_token: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
 
     role: Mapped["Role"] = relationship("Role", back_populates="users")

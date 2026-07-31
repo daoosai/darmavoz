@@ -574,8 +574,8 @@ export default function GlobalMapScreen() {
               className="absolute inset-0 z-10 bg-transparent"
               onClick={clearSelectedPoint}
             />
-            <div className="absolute inset-x-0 bottom-0 z-20 px-4 pb-[env(safe-area-inset-bottom,16px)] pt-4">
-              <div className="relative flex max-h-[80dvh] flex-col overflow-hidden rounded-t-[28px] bg-white shadow-2xl sm:rounded-[28px]">
+            <div className="fixed inset-x-4 bottom-[calc(5rem+env(safe-area-inset-bottom,0px))] z-40 md:inset-x-auto md:left-1/2 md:w-full md:max-w-md md:-translate-x-1/2">
+              <div className="relative flex max-h-[75dvh] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
                 <div className="flex shrink-0 items-start gap-3 border-b border-slate-100 px-4 py-4">
                   <button
                     type="button"
@@ -661,7 +661,7 @@ export default function GlobalMapScreen() {
                   </div>
                 </div>
 
-                <div className="shrink-0 border-t border-slate-100 bg-white px-4 pb-[env(safe-area-inset-bottom,16px)] pt-3">
+                <div className="shrink-0 border-t border-slate-100 bg-white px-4 pb-4 pt-3">
                   <button
                     type="button"
                     onClick={() =>

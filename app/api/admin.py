@@ -443,6 +443,7 @@ async def delete_admin_partner_user(
     del current_admin
     user = await db.scalar(
         select(User)
+        .options(selectinload(User.role))
         .join(Role)
         .where(
             User.id == user_id,

@@ -64,7 +64,7 @@ docker compose -f $deployDir/docker-compose.test.yml build backend_test;
 docker compose -f $deployDir/docker-compose.test.yml up -d --no-deps --force-recreate backend_test
 "@
 
-Write-Host "Start local build and deploy (Darmavoz Test 2.6.0)..." -ForegroundColor Cyan
+Write-Host "Start local build and deploy (Darmavoz Test 2.6.1)..." -ForegroundColor Cyan
 
 Push-Location $frontendDir
 try {

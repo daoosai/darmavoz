@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => {
   const packageJson = JSON.parse(
     readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8'),
   ) as { version?: string };
-  const appVersion = env.VITE_APP_VERSION || packageJson.version || '2.6.0';
+  const appVersion = env.VITE_APP_VERSION || packageJson.version || '2.6.1';
 
   return {
     plugins: [

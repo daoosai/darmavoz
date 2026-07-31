@@ -1,7 +1,7 @@
 apply plugin: 'com.android.application'
 
-def appVersionCode = (System.getenv("DARMAVOZ_VERSION_CODE") ?: "260").toInteger()
-def appVersionName = System.getenv("DARMAVOZ_VERSION_NAME") ?: "2.6.0"
+def appVersionCode = (System.getenv("DARMAVOZ_VERSION_CODE") ?: "261").toInteger()
+def appVersionName = System.getenv("DARMAVOZ_VERSION_NAME") ?: "2.6.1"
 
 android {
     namespace = "com.darmavoz.app"

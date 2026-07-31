@@ -204,7 +204,7 @@ export default function OrdersScreen({
 
   if (role !== "client") {
     return (
-      <div className="flex min-h-[400px] flex-col items-center justify-center p-6 text-center">
+      <div className="flex h-full flex-1 flex-col items-center justify-center px-4 text-center">
         <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-slate-100">
           <Info className="h-8 w-8 text-slate-400" />
         </div>

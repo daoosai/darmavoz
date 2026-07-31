@@ -14,6 +14,7 @@ import { NotificationToggle } from "./components/shared/NotificationToggle";
 import { logoutCurrentSession } from "./pushAuth";
 import { baseURL, APP_VERSION, extractApiErrorMessage, handleApiError } from "./utils";
 import { useAuthStore } from "./store";
+import UpdateBanner from "./UpdateBanner";
 import toast from "react-hot-toast";
 
 interface ClientData {
@@ -168,6 +169,10 @@ export default function ClientProfileScreen({
 
   return (
     <div className="flex min-h-[calc(100vh-68px)] flex-col bg-gray-50 pb-24">
+      <div className="px-4 pt-4">
+        <UpdateBanner />
+      </div>
+
       {/* Gradient Header */}
       <div className="bg-gradient-to-r from-[#2DB0E6] to-[#1D99D4] text-white p-6 pb-10 rounded-b-[32px] shadow-md flex items-center gap-4">
         <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center shrink-0 backdrop-blur-sm">

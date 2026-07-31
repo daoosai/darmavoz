@@ -37,6 +37,12 @@ export default function WelcomeScreen({
       </div>
 
       <footer className="mb-4 mt-6 flex flex-col space-y-2 text-center text-xs text-gray-400">
+        <p className="text-sm text-gray-500">
+          Служба поддержки{" "}
+          <a href="tel:+73452900900" className="font-bold text-gray-700">
+            8 (3452) 900 900
+          </a>
+        </p>
         <button
           type="button"
           onClick={() => setIsRequisitesOpen(true)}

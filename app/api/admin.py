@@ -441,23 +441,24 @@ async def delete_admin_partner_user(
     current_admin: User = Depends(get_current_admin_user),
 ) -> dict[str, str]:
     del current_admin
-    user = await db.scalar(
-        select(User)
-        .options(selectinload(User.role))
+    user_row = (
+        await db.execute(
+            select(User, Role.name)
         .join(Role)
         .where(
             User.id == user_id,
             Role.name.in_(["supplier", "equipment_owner"]),
             User.is_deleted.is_(False),
         )
-    )
-    if user is None:
+        )
+    ).first()
+    if user_row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Партнер не найден",
         )
 
-    role_name = user.role.name if user.role is not None else None
+    user, role_name = user_row
     active_points_count = await db.scalar(
         select(func.count(Quarry.id)).where(
             Quarry.owner_user_id == user.id,

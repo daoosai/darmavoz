@@ -10,6 +10,14 @@ from app.schemas.catalog import MediaFileOut
 TariffType = Literal["hour", "shift"]
 ApplicationStatus = Literal["new", "in_progress", "closed", "completed", "rejected", "cancelled"]
 DurationUnit = Literal["hours", "shifts"]
+ModerationStatusValue = Literal[
+    "incomplete",
+    "pending_moderation",
+    "has_pending_changes",
+    "approved",
+    "rejected",
+    "suspended",
+]
 
 
 class EquipmentTypeCreate(BaseModel):
@@ -103,19 +111,25 @@ def _normalize_tariffs(tariffs: list[EquipmentTariff]) -> list[EquipmentTariff]:
 
 
 class EquipmentListingBase(BaseModel):
-    equipment_type_id: UUID
+    equipment_type: str | None = Field(default=None, min_length=1, max_length=255)
+    equipment_type_id: UUID | None = None
     title: str = Field(min_length=1, max_length=255)
     description: str = Field(min_length=1, max_length=10000)
+    contact_phone: str | None = Field(default=None, max_length=20)
     tariffs: list[EquipmentTariff] = Field(min_length=1, max_length=2)
     city: str | None = Field(default=None, max_length=255)
     district: str | None = Field(default=None, max_length=255)
     is_active: bool = True
+    is_vip: bool = False
+    manual_priority: int = 0
     sort_order: int = 0
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
     @model_validator(mode="after")
     def validate_tariffs(self):
+        if self.equipment_type is None and self.equipment_type_id is None:
+            raise ValueError("equipment_type or equipment_type_id is required")
         self.tariffs = _normalize_tariffs(self.tariffs)
         return self
 
@@ -125,13 +139,17 @@ class EquipmentListingCreate(EquipmentListingBase):
 
 
 class EquipmentListingUpdate(BaseModel):
+    equipment_type: str | None = Field(default=None, min_length=1, max_length=255)
     equipment_type_id: UUID | None = None
     title: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = Field(default=None, min_length=1, max_length=10000)
+    contact_phone: str | None = Field(default=None, max_length=20)
     tariffs: list[EquipmentTariff] | None = Field(default=None, min_length=1, max_length=2)
     city: str | None = Field(default=None, max_length=255)
     district: str | None = Field(default=None, max_length=255)
     is_active: bool | None = None
+    is_vip: bool | None = None
+    manual_priority: int | None = None
     sort_order: int | None = None
 
     model_config = ConfigDict(str_strip_whitespace=True)
@@ -145,17 +163,26 @@ class EquipmentListingUpdate(BaseModel):
 
 class EquipmentListingOut(BaseModel):
     id: UUID
-    equipment_type_id: UUID
+    equipment_type: str
+    equipment_type_id: UUID | None = None
     equipment_type_name: str
     title: str
     description: str
+    contact_phone: str | None = None
     tariffs: list[EquipmentTariff]
     city: str | None
     district: str | None
     is_active: bool
+    is_vip: bool = False
+    manual_priority: int = 0
+    price_from: float | None = None
     sort_order: int
     media_files: list[MediaFileOut] = Field(default_factory=list)
     primary_image_url: str | None = None
+    owner_user_id: UUID | None = None
+    moderation_status: ModerationStatusValue
+    moderation_comment: str | None = None
+    pending_changes: dict | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -163,6 +190,23 @@ class EquipmentListingOut(BaseModel):
     @classmethod
     def validate_output_tariffs(cls, value: object) -> list[dict]:
         return _sanitize_tariffs_for_output(value)
+
+
+class OperatorEquipmentListingOut(EquipmentListingOut):
+    owner_name: str | None = None
+    owner_phone: str | None = None
+
+
+class EquipmentModerationDecision(BaseModel):
+    comment: str | None = Field(default=None, max_length=5000)
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+
+class EquipmentModerationRejection(BaseModel):
+    reason: str = Field(min_length=1, max_length=5000)
+
+    model_config = ConfigDict(str_strip_whitespace=True)
 
 
 class EquipmentApplicationCreate(BaseModel):

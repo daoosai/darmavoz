@@ -151,6 +151,8 @@ class ClientOrderCalculationOptionOut(BaseModel):
     quarry_name: str
     point_type: str
     rating: float = 5.0
+    is_vip: bool = False
+    manual_priority: int = 0
     distance: float
     material_cost: float
     delivery_cost: float

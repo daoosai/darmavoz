@@ -3,7 +3,7 @@ import {
   Home,
   List,
   ShoppingCart,
-  Tag,
+  Map,
   User,
   MapPin,
   Search,
@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Truck,
   Wrench,
+  X,
 } from "lucide-react";
 import { MaterialProps } from "./MaterialDetailScreen";
 import OrdersScreen from "./OrdersScreen";
@@ -19,7 +20,6 @@ import { getImageUrl, baseURL, APP_VERSION } from "./utils";
 
 import CartScreen from "./CartScreen";
 import ProfileScreen from "./ProfileScreen";
-import PromosScreen from "./PromosScreen";
 import MaterialBottomSheet from "./MaterialBottomSheet";
 
 import { Toaster } from "react-hot-toast";
@@ -47,8 +47,10 @@ import { usePushNotifications } from "./usePushNotifications";
 import SupplierPortalScreen from "./SupplierPortalScreen";
 import FloatingOrderTracker from "./FloatingOrderTracker";
 import EquipmentCatalogScreen from "./EquipmentCatalogScreen";
+import GlobalMapScreen from "./GlobalMapScreen";
 import SupportScreen from "./SupportScreen";
 import PickupPointMapScreen, { PickupPointSelection } from "./PickupPointMapScreen";
+import EquipmentOwnerPortalScreen from "./EquipmentOwnerPortalScreen";
 
 // Reuse Material type as MaterialProps by exporting it from MaterialDetailScreen or type matching
 export default function App() {
@@ -57,6 +59,14 @@ export default function App() {
     typeof window !== "undefined" ? window.location.pathname : "/",
   );
   const { role, token } = useAuthStore();
+  const resolveRouteForRole = (nextRole: string | null | undefined) => {
+    if (nextRole === "driver") return "driver" as const;
+    if (nextRole === "logist") return "logist" as const;
+    if (nextRole === "admin") return "admin" as const;
+    if (nextRole === "supplier") return "supplier" as const;
+    if (nextRole === "equipment_owner") return "equipment_owner" as const;
+    return "main" as const;
+  };
   const [currentRoute, setCurrentRoute] = useState<
     | "welcome"
     | "main"
@@ -65,7 +75,9 @@ export default function App() {
     | "logist"
     | "admin"
     | "supplier"
+    | "equipment_owner"
     | "supplier_register"
+    | "equipment_owner_register"
     | "driver_register"
   >(
     role === "client" && currentPath.startsWith("/client/orders/")
@@ -78,6 +90,8 @@ export default function App() {
           ? "admin"
           : role === "supplier"
             ? "supplier"
+            : role === "equipment_owner"
+              ? "equipment_owner"
           : "welcome",
   );
 
@@ -161,88 +175,34 @@ export default function App() {
   };
 
   const renderContent = () => {
+    const renderPartnerLogin = () => (
+      <LoginScreen
+        onLogin={(nextRole) => setCurrentRoute(resolveRouteForRole(nextRole))}
+        onBack={() => setCurrentRoute("welcome")}
+        onSelectSupplierRegister={() => setCurrentRoute("supplier_register")}
+        onSelectEquipmentOwnerRegister={() => setCurrentRoute("equipment_owner_register")}
+        onSelectDriverRegister={() => setCurrentRoute("driver_register")}
+      />
+    );
+
     if (currentPath === "/admin/orders") {
-      return role === "admin" ? (
-        <AdminOrdersListScreen role="admin" />
-      ) : (
-        <LoginScreen
-          onLogin={(r) =>
-            setCurrentRoute(
-              r === "driver"
-                ? "driver"
-                : r === "logist"
-                  ? "logist"
-                  : r === "admin"
-                    ? "admin"
-                    : "main",
-            )
-          }
-          onBack={() => setCurrentRoute("welcome")}
-        />
-      );
+      return role === "admin" ? <AdminOrdersListScreen role="admin" /> : renderPartnerLogin();
     }
 
     if (currentPath === "/logist/orders") {
       return role === "logist" ? (
         <LogistDashboardScreen onLogout={() => setCurrentRoute("login")} />
-      ) : (
-        <LoginScreen
-          onLogin={(r) =>
-            setCurrentRoute(
-              r === "driver"
-                ? "driver"
-                : r === "logist"
-                  ? "logist"
-                  : r === "admin"
-                    ? "admin"
-                    : "main",
-            )
-          }
-          onBack={() => setCurrentRoute("welcome")}
-        />
-      );
+      ) : renderPartnerLogin();
     }
 
     if (currentPath === "/admin/statistics") {
-      return role === "admin" ? (
-        <AdminStatisticsScreen role="admin" />
-      ) : (
-        <LoginScreen
-          onLogin={(r) =>
-            setCurrentRoute(
-              r === "driver"
-                ? "driver"
-                : r === "logist"
-                  ? "logist"
-                  : r === "admin"
-                    ? "admin"
-                    : "main",
-            )
-          }
-          onBack={() => setCurrentRoute("welcome")}
-        />
-      );
+      return role === "admin" ? <AdminStatisticsScreen role="admin" /> : renderPartnerLogin();
     }
 
     if (currentPath === "/logist/statistics") {
       return role === "logist" ? (
         <AdminStatisticsScreen role="logist" />
-      ) : (
-        <LoginScreen
-          onLogin={(r) =>
-            setCurrentRoute(
-              r === "driver"
-                ? "driver"
-                : r === "logist"
-                  ? "logist"
-                  : r === "admin"
-                    ? "admin"
-                    : "main",
-            )
-          }
-          onBack={() => setCurrentRoute("welcome")}
-        />
-      );
+      ) : renderPartnerLogin();
     }
     if (currentRoute === "welcome") {
       return (
@@ -251,7 +211,6 @@ export default function App() {
             setCurrentRoute("main");
           }}
           onSelectEmployee={() => setCurrentRoute("login")}
-          onSelectDriverRegister={() => setCurrentRoute("driver_register")}
         />
       );
     }
@@ -262,98 +221,42 @@ export default function App() {
           onRegister={(r) =>
             setCurrentRoute(r === "driver" ? "driver" : "main")
           }
-          onBack={() => setCurrentRoute("welcome")}
+          onBack={() => setCurrentRoute("login")}
         />
       );
     }
 
     if (currentRoute === "supplier_register" || currentRoute === "supplier") {
-      return <SupplierPortalScreen onBack={() => setCurrentRoute("welcome")} />;
+      return <SupplierPortalScreen onBack={() => setCurrentRoute("login")} />;
+    }
+
+    if (
+      currentRoute === "equipment_owner_register" ||
+      currentRoute === "equipment_owner"
+    ) {
+      return <EquipmentOwnerPortalScreen onBack={() => setCurrentRoute("login")} />;
     }
 
     if (currentRoute === "login") {
-      return (
-        <LoginScreen
-          onLogin={(r) =>
-            setCurrentRoute(
-              r === "driver"
-                ? "driver"
-                : r === "logist"
-                  ? "logist"
-                  : r === "admin"
-                    ? "admin"
-                    : r === "supplier"
-                      ? "supplier"
-                    : "main",
-            )
-          }
-          onBack={() => setCurrentRoute("welcome")}
-          onSelectSupplier={() => setCurrentRoute("supplier_register")}
-        />
-      );
+      return renderPartnerLogin();
     }
 
     if (currentRoute === "driver") {
       return role === "driver" ? (
         <DriverOrdersScreen onLogout={() => setCurrentRoute("login")} />
-      ) : (
-        <LoginScreen
-          onLogin={(r) =>
-            setCurrentRoute(
-              r === "driver"
-                ? "driver"
-                : r === "logist"
-                  ? "logist"
-                  : r === "admin"
-                    ? "admin"
-                    : "main",
-            )
-          }
-          onBack={() => setCurrentRoute("welcome")}
-        />
-      );
+      ) : renderPartnerLogin();
     }
 
     if (currentRoute === "logist") {
       return role === "logist" ? (
         <LogistDashboardScreen onLogout={() => setCurrentRoute("login")} />
-      ) : (
-        <LoginScreen
-          onLogin={(r) =>
-            setCurrentRoute(
-              r === "driver"
-                ? "driver"
-                : r === "logist"
-                  ? "logist"
-                  : r === "admin"
-                    ? "admin"
-                    : "main",
-            )
-          }
-          onBack={() => setCurrentRoute("welcome")}
-        />
-      );
+      ) : renderPartnerLogin();
     }
 
     if (currentRoute === "admin") {
       return role === "admin" ? (
         <AdminDashboardScreen onLogout={() => setCurrentRoute("login")} />
-      ) : (
-        <LoginScreen
-          onLogin={(r) =>
-            setCurrentRoute(
-              r === "driver"
-                ? "driver"
-                : r === "logist"
-                  ? "logist"
-                  : r === "admin"
-                    ? "admin"
-                    : "main",
-            )
-          }
-          onBack={() => setCurrentRoute("welcome")}
-        />
-      );
+      ) : renderPartnerLogin();
     }
 
     return (
@@ -378,6 +281,8 @@ export default function App() {
         focusedOrderId={focusedClientOrderId}
         onOpenOrder={openClientOrder}
         onClearFocusedOrder={clearFocusedClientOrder}
+        currentPath={currentPath}
+        setCurrentPath={setCurrentPath}
       />
     );
   };
@@ -422,6 +327,8 @@ function MainContent({
   focusedOrderId,
   onOpenOrder,
   onClearFocusedOrder,
+  currentPath,
+  setCurrentPath,
 }: any) {
   const { selectedAddress } = useAddressStore();
   const { token } = useAuthStore();
@@ -434,13 +341,15 @@ function MainContent({
       icon: ShoppingCart,
       badge: cartItemsCount > 0 ? cartItemsCount : undefined,
     },
-    { id: "promotions", label: "Акции", icon: Tag },
+    { id: "map", label: "Карта", icon: Map },
     { id: "profile", label: "Профиль", icon: User },
   ];
 
   const [showAddressSheet, setShowAddressSheet] = useState(false);
   const [serviceDirection, setServiceDirection] = useState<"delivery" | "equipment">("delivery");
   const [mapMaterial, setMapMaterial] = useState<MaterialProps | null>(null);
+  const [materialActionChoice, setMaterialActionChoice] = useState<MaterialProps | null>(null);
+  const [quickBuyMaterial, setQuickBuyMaterial] = useState<MaterialProps | null>(null);
   const [selectedPickupPoint, setSelectedPickupPoint] =
     useState<PickupPointSelection | null>(null);
 
@@ -455,6 +364,9 @@ function MainContent({
   const handleClientAuthenticated = () => {
     onClearFocusedOrder();
     setActiveTab("home");
+    if (quickBuyMaterial) {
+      setShowAddressSheet(true);
+    }
   };
 
   const closeMaterialSheet = () => {
@@ -462,9 +374,30 @@ function MainContent({
     setSelectedPickupPoint(null);
   };
 
+  const closeMaterialActionChoice = () => {
+    setMaterialActionChoice(null);
+  };
+
   const openDeliveryMap = (material: MaterialProps) => {
+    setMaterialActionChoice(null);
     setSelectedPickupPoint(null);
     setMapMaterial(material);
+  };
+
+  const startQuickBuy = (material: MaterialProps) => {
+    closeMaterialActionChoice();
+    setSelectedPickupPoint(null);
+    if (role !== "client" || !token) {
+      setQuickBuyMaterial(material);
+      setShowAuthSheet(true);
+      return;
+    }
+    if (!selectedAddress) {
+      setQuickBuyMaterial(material);
+      setShowAddressSheet(true);
+      return;
+    }
+    setSelectedMaterial(material);
   };
 
   const handlePickupPointSelected = (point: PickupPointSelection) => {
@@ -473,6 +406,27 @@ function MainContent({
     setSelectedMaterial(mapMaterial);
     setMapMaterial(null);
   };
+
+  useEffect(() => {
+    if (!quickBuyMaterial) return;
+    if (role !== "client" || !token) return;
+    if (!selectedAddress) return;
+    setSelectedPickupPoint(null);
+    setSelectedMaterial(quickBuyMaterial);
+    setQuickBuyMaterial(null);
+    setShowAddressSheet(false);
+    setShowAuthSheet(false);
+  }, [quickBuyMaterial, role, selectedAddress, setSelectedMaterial, token]);
+
+  useEffect(() => {
+    if (currentPath === "/map" && activeTab !== "map") {
+      setActiveTab("map");
+      return;
+    }
+    if (currentPath !== "/map" && activeTab === "map") {
+      setActiveTab("home");
+    }
+  }, [activeTab, currentPath, setActiveTab]);
 
   return (
     <div className="min-h-screen w-full bg-slate-100 flex sm:items-center justify-center text-slate-900">
@@ -483,7 +437,7 @@ function MainContent({
           {activeTab === "home" && (
             <>
               {/* Top Address Button */}
-              <div className="px-4 mb-4">
+              <div className="mb-4 px-4 pt-[calc(env(safe-area-inset-top,0px)+0.25rem)]">
                 <button
                   onClick={() => {
                     if (role !== "client") {
@@ -606,7 +560,7 @@ function MainContent({
                       <ProductCard
                         key={material.id}
                         material={material}
-                        onClick={() => openDeliveryMap(material)}
+                        onClick={() => setMaterialActionChoice(material)}
                       />
                     ))
                 )}
@@ -632,7 +586,7 @@ function MainContent({
             />
           )}
 
-          {activeTab === "promotions" && <PromosScreen />}
+          {activeTab === "map" && <GlobalMapScreen />}
 
           {activeTab === "profile" &&
             (role === "client" ? (
@@ -659,28 +613,58 @@ function MainContent({
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
+              const isPriority = ["orders", "cart", "map"].includes(tab.id);
               return (
                 <button
                   key={tab.id}
                   onClick={() => {
                     onClearFocusedOrder();
+                    const nextPath = tab.id === "map" ? "/map" : "/";
+                    if (typeof window !== "undefined" && window.location.pathname !== nextPath) {
+                      window.history.pushState({}, "", nextPath);
+                    }
+                    setCurrentPath(nextPath);
                     setActiveTab(tab.id);
                   }}
-                  className={`flex flex-col items-center gap-1 transition-opacity cursor-pointer relative ${
-                    isActive ? "opacity-100" : "opacity-40 hover:opacity-70"
+                  className={`relative flex min-w-0 flex-1 cursor-pointer flex-col items-center gap-1 rounded-xl px-1 py-1.5 transition-all ${
+                    isActive && isPriority
+                      ? "bg-[#2DB0E6] text-white shadow-[0_6px_16px_rgba(45,176,230,0.30)]"
+                      : isPriority
+                        ? "text-slate-500 opacity-45 hover:opacity-70"
+                        : isActive
+                          ? "text-[#2DB0E6] opacity-100"
+                          : "text-slate-500 opacity-45 hover:opacity-70"
                   }`}
                 >
-                  <Icon
-                    className={`w-5 h-5 ${isActive ? "text-[#2DB0E6]" : "text-slate-500"}`}
-                    strokeWidth={isActive ? 2.5 : 2}
-                  />
-                  {tab.badge !== undefined && (
-                    <span className="absolute -top-1 -right-2 bg-red-500 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full">
-                      {tab.badge}
-                    </span>
-                  )}
+                  <span className="relative inline-block">
+                    <Icon
+                      className={`h-5 w-5 ${
+                        isActive && isPriority
+                          ? "text-white"
+                          : isPriority
+                            ? "text-slate-500"
+                            : isActive
+                              ? "text-[#2DB0E6]"
+                              : "text-slate-500"
+                      }`}
+                      strokeWidth={isActive ? 2.5 : 2}
+                    />
+                    {tab.badge !== undefined && (
+                      <span className="absolute -right-2 -top-1 z-10 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white shadow-sm">
+                        {tab.badge}
+                      </span>
+                    )}
+                  </span>
                   <span
-                    className={`text-[10px] leading-none ${isActive ? "font-bold text-[#2DB0E6]" : "font-medium text-slate-500"}`}
+                    className={`whitespace-nowrap text-[10px] leading-none ${
+                      isActive && isPriority
+                        ? "font-bold text-white"
+                        : isPriority
+                          ? "font-medium text-slate-500"
+                          : isActive
+                            ? "font-bold text-[#2DB0E6]"
+                            : "font-medium text-slate-500"
+                    }`}
                   >
                     {tab.label}
                   </span>
@@ -693,6 +677,13 @@ function MainContent({
             <div className="w-32 h-1 bg-slate-200 rounded-full"></div>
           </div>
         </nav>
+
+        <QuickBuyChoiceModal
+          material={materialActionChoice}
+          onClose={closeMaterialActionChoice}
+          onQuickBuy={startQuickBuy}
+          onChooseOnMap={openDeliveryMap}
+        />
 
         {/* Bottom Sheet */}
         <MaterialBottomSheet
@@ -721,7 +712,73 @@ function MainContent({
         <ClientAddressBottomSheet
           isOpen={showAddressSheet}
           onClose={() => setShowAddressSheet(false)}
+          closeOnSelect={Boolean(quickBuyMaterial)}
         />
+      </div>
+    </div>
+  );
+}
+
+function QuickBuyChoiceModal({
+  material,
+  onClose,
+  onQuickBuy,
+  onChooseOnMap,
+}: {
+  material: MaterialProps | null;
+  onClose: () => void;
+  onQuickBuy: (material: MaterialProps) => void;
+  onChooseOnMap: (material: MaterialProps) => void;
+}) {
+  if (!material) return null;
+
+  return (
+    <div className="fixed inset-0 z-[102] flex items-end justify-center bg-slate-900/45 backdrop-blur-sm sm:items-center">
+      <div className="relative w-full rounded-t-[32px] bg-white px-5 pb-8 pt-6 shadow-2xl sm:max-w-md sm:rounded-[32px]">
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-4 top-4 rounded-full bg-slate-100 p-2 text-slate-500 hover:bg-slate-200"
+          aria-label="Закрыть"
+        >
+          <X className="h-5 w-5" />
+        </button>
+
+        <div className="mb-6 pr-12">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-500">
+            {material.name}
+          </p>
+          <h3 className="mt-2 text-2xl font-black text-slate-900">
+            Как хотите оформить заказ?
+          </h3>
+          <p className="mt-2 text-sm text-slate-500">
+            Можно сразу перейти к доставке или выбрать конкретный карьер на карте.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-3">
+          <button
+            type="button"
+            onClick={() => onQuickBuy(material)}
+            className="rounded-2xl bg-sky-500 px-5 py-4 text-left text-white shadow-[0_12px_30px_rgba(14,165,233,0.28)] transition hover:bg-sky-600"
+          >
+            <span className="block text-lg font-black">Купить с доставкой</span>
+            <span className="mt-1 block text-sm text-sky-50">
+              Мы автоматически подберем ближайший карьер с самой выгодной ценой.
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onChooseOnMap(material)}
+            className="rounded-2xl border border-slate-200 bg-white px-5 py-4 text-left text-slate-900 transition hover:border-sky-200 hover:bg-sky-50"
+          >
+            <span className="block text-lg font-black">Выбрать карьер на карте</span>
+            <span className="mt-1 block text-sm text-slate-500">
+              Посмотреть все доступные точки на карте и выбрать подходящую самостоятельно.
+            </span>
+          </button>
+        </div>
       </div>
     </div>
   );

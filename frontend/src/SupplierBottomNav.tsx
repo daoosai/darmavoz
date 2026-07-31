@@ -1,6 +1,6 @@
-import { MapPinned, UserRound } from "lucide-react";
+import { Headphones, MapPinned, UserRound } from "lucide-react";
 
-export type SupplierTab = "points" | "profile";
+export type SupplierTab = "points" | "support" | "profile";
 
 interface Props {
   activeTab: SupplierTab;
@@ -9,6 +9,7 @@ interface Props {
 
 const ITEMS = [
   { id: "points" as const, label: "Точки", icon: MapPinned },
+  { id: "support" as const, label: "Поддержка", icon: Headphones },
   { id: "profile" as const, label: "Профиль", icon: UserRound },
 ];
 

@@ -4,7 +4,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -14,6 +14,7 @@ from app.db.database import get_db
 from app.models.models import (
     Client,
     MediaFile,
+    ModerationStatus,
     SpecialEquipmentApplication,
     SpecialEquipmentListing,
     SpecialEquipmentType,
@@ -28,20 +29,44 @@ from app.schemas.equipment import (
     EquipmentListingCreate,
     EquipmentListingOut,
     EquipmentListingUpdate,
+    EquipmentModerationDecision,
+    EquipmentModerationRejection,
+    OperatorEquipmentListingOut,
     EquipmentTypeCreate,
     EquipmentTypeOut,
     EquipmentTypeUpdate,
 )
-from app.security.auth import get_current_admin_user, get_current_client, get_current_logist_user
+from app.security.auth import (
+    get_current_admin_user,
+    get_current_client,
+    get_current_equipment_owner_user,
+    get_current_logist_user,
+    get_current_supplier_user,
+)
 from app.services.notifications import (
     schedule_equipment_application_cancelled_notification,
     schedule_equipment_application_notification,
     schedule_equipment_application_rejected_notification,
 )
 from app.services.email_service import send_email
+from app.services.moderation import (
+    EQUIPMENT_ENTITY_TYPE,
+    clear_entity_pending_changes,
+    create_moderation_audit_log,
+    has_publicly_visible_moderation_status,
+    mark_entity_pending_changes,
+    serialize_moderation_value,
+    summarize_pending_changes,
+)
 from app.utils.phones import normalize_phone
 
 router = APIRouter()
+supplier_router = APIRouter()
+equipment_owner_router = APIRouter()
+OWNER_PENDING_EDIT_STATUSES = {
+    ModerationStatus.approved.value,
+    ModerationStatus.has_pending_changes.value,
+}
 
 
 def _format_duration_value(value: float) -> str:
@@ -90,9 +115,31 @@ def _normalize_listing_tariffs(raw_tariffs: object) -> list[dict]:
     return normalized
 
 
+def _extract_price_from_tariffs(raw_tariffs: object) -> float | None:
+    normalized = _normalize_listing_tariffs(raw_tariffs)
+    prices = [
+        Decimal(str(price)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        for item in normalized
+        for price in [item.get("price")]
+        if price is not None
+    ]
+    if not prices:
+        return None
+    return float(min(prices))
+
+
 def _slugify(value: str) -> str:
     slug = re.sub(r"[^a-z0-9а-яё]+", "-", value.strip().lower(), flags=re.IGNORECASE)
     return slug.strip("-") or "equipment"
+
+
+def _normalize_listing_contact_phone(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    return normalize_phone(normalized)
 
 
 async def _unique_type_slug(
@@ -127,21 +174,37 @@ async def _listing_media(db: AsyncSession, listing_id: UUID) -> list[MediaFile]:
     return list(result.scalars().all())
 
 
-async def _listing_payload(db: AsyncSession, listing: SpecialEquipmentListing) -> dict:
+async def _listing_payload(
+    db: AsyncSession,
+    listing: SpecialEquipmentListing,
+    *,
+    include_pending_changes: bool = False,
+) -> dict:
     media = await _listing_media(db, listing.id)
     return {
         "id": listing.id,
+        "equipment_type": listing.equipment_type,
         "equipment_type_id": listing.equipment_type_id,
-        "equipment_type_name": listing.equipment_type.name,
+        "equipment_type_name": listing.equipment_type,
         "title": listing.title,
         "description": listing.description,
+        "contact_phone": listing.contact_phone or (listing.owner.username if listing.owner else None),
         "tariffs": _normalize_listing_tariffs(listing.tariffs),
         "city": listing.city,
         "district": listing.district,
         "is_active": listing.is_active,
+        "is_vip": listing.is_vip,
+        "manual_priority": listing.manual_priority,
+        "price_from": float(listing.price_from) if listing.price_from is not None else None,
         "sort_order": listing.sort_order,
         "media_files": media,
         "primary_image_url": media[0].public_url if media else None,
+        "owner_user_id": listing.owner_user_id,
+        "owner_name": listing.owner.display_name if listing.owner else None,
+        "owner_phone": listing.owner.username if listing.owner else listing.contact_phone,
+        "moderation_status": listing.moderation_status,
+        "moderation_comment": listing.moderation_comment,
+        "pending_changes": serialize_moderation_value(listing.pending_changes) if include_pending_changes else None,
         "created_at": listing.created_at,
         "updated_at": listing.updated_at,
     }
@@ -184,7 +247,10 @@ async def _get_listing(
 ) -> SpecialEquipmentListing:
     stmt = (
         select(SpecialEquipmentListing)
-        .options(selectinload(SpecialEquipmentListing.equipment_type))
+        .options(
+            selectinload(SpecialEquipmentListing.equipment_type_ref),
+            selectinload(SpecialEquipmentListing.owner),
+        )
         .where(SpecialEquipmentListing.id == listing_id)
     )
     if not include_deleted:
@@ -194,6 +260,208 @@ async def _get_listing(
     if listing is None:
         raise HTTPException(status_code=404, detail="Объявление спецтехники не найдено")
     return listing
+
+
+async def _resolve_equipment_type(
+    db: AsyncSession,
+    *,
+    equipment_type: str | None,
+    equipment_type_id: UUID | None,
+) -> tuple[str, UUID | None]:
+    if equipment_type is not None:
+        normalized_type = equipment_type.strip()
+        matched_type = await db.scalar(
+            select(SpecialEquipmentType)
+            .where(
+                func.lower(SpecialEquipmentType.name) == normalized_type.lower(),
+                SpecialEquipmentType.is_active.is_(True),
+            )
+            .order_by(
+                SpecialEquipmentType.sort_order.asc(),
+                SpecialEquipmentType.id.asc(),
+            )
+            .limit(1)
+        )
+        return normalized_type, matched_type.id if matched_type else None
+
+    if equipment_type_id is None:
+        raise HTTPException(
+            status_code=422,
+            detail="equipment_type or equipment_type_id is required",
+        )
+    matched_type = await db.get(SpecialEquipmentType, equipment_type_id)
+    if matched_type is None:
+        raise HTTPException(status_code=400, detail="Тип спецтехники не найден")
+    return matched_type.name, matched_type.id
+
+
+def _reset_supplier_listing_moderation(listing: SpecialEquipmentListing) -> None:
+    if listing.moderation_status in {
+        ModerationStatus.approved.value,
+        ModerationStatus.rejected.value,
+    }:
+        listing.moderation_status = ModerationStatus.pending_moderation.value
+        listing.moderation_comment = None
+        listing.moderated_at = None
+        listing.moderated_by_user_id = None
+
+
+async def _normalize_listing_update_data(
+    db: AsyncSession,
+    payload: EquipmentListingUpdate,
+) -> dict:
+    changed = payload.model_fields_set
+    payload_data: dict = {}
+    if changed.intersection({"equipment_type", "equipment_type_id"}):
+        equipment_type, equipment_type_id = await _resolve_equipment_type(
+            db,
+            equipment_type=payload.equipment_type,
+            equipment_type_id=payload.equipment_type_id,
+        )
+        payload_data["equipment_type"] = equipment_type
+        payload_data["equipment_type_id"] = equipment_type_id
+    for field in (
+        "title",
+        "description",
+        "contact_phone",
+        "tariffs",
+        "city",
+        "district",
+        "is_active",
+    ):
+        if field not in changed:
+            continue
+        value = getattr(payload, field)
+        if field == "contact_phone":
+            value = _normalize_listing_contact_phone(value)
+        if field == "tariffs" and value is not None:
+            value = [tariff.model_dump() for tariff in value]
+        payload_data[field] = value
+    return payload_data
+
+    payload_data = await _normalize_listing_update_data(db, payload)
+    use_pending_changes = listing.moderation_status in OWNER_PENDING_EDIT_STATUSES
+    pending_changes = {}
+    if use_pending_changes:
+        if "is_active" in payload_data:
+            listing.is_active = payload_data["is_active"]
+        pending_changes = {
+            field: value
+            for field, value in payload_data.items()
+            if field != "is_active"
+        }
+        if pending_changes:
+            mark_entity_pending_changes(listing, pending_changes)
+    else:
+        _apply_listing_update_data(listing, payload_data)
+        _reset_supplier_listing_moderation(listing)
+    await create_moderation_audit_log(
+        db,
+        entity_type=EQUIPMENT_ENTITY_TYPE,
+        entity_id=listing.id,
+        user_id=current_owner.id,
+        action="edited",
+        comment=summarize_pending_changes(pending_changes) or listing.title,
+    )
+    await db.commit()
+    _schedule_supplier_listing_moderation_email(
+        background_tasks,
+        listing,
+        action="Р С‘Р В·Р СР ВµР Р…Р С‘Р В»",
+        fields_summary=summarize_pending_changes(pending_changes),
+    )
+    return await _listing_payload(
+        db,
+        await _get_listing(db, listing.id),
+        include_pending_changes=True,
+    )
+    changed = payload.model_fields_set
+    payload_data: dict = {}
+    if changed.intersection({"equipment_type", "equipment_type_id"}):
+        equipment_type, equipment_type_id = await _resolve_equipment_type(
+            db,
+            equipment_type=payload.equipment_type,
+            equipment_type_id=payload.equipment_type_id,
+        )
+        payload_data["equipment_type"] = equipment_type
+        payload_data["equipment_type_id"] = equipment_type_id
+    for field in ("title", "description", "contact_phone", "tariffs", "city", "district", "is_active"):
+        if field not in changed:
+            continue
+        value = getattr(payload, field)
+        if field == "contact_phone":
+            value = _normalize_listing_contact_phone(value)
+        if field == "tariffs" and value is not None:
+            value = [tariff.model_dump() for tariff in value]
+        payload_data[field] = value
+    return payload_data
+
+
+def _apply_listing_update_data(
+    listing: SpecialEquipmentListing,
+    payload_data: dict,
+) -> None:
+    for field, value in payload_data.items():
+        setattr(listing, field, value)
+    if "tariffs" in payload_data:
+        listing.price_from = _extract_price_from_tariffs(listing.tariffs)
+
+
+def _schedule_supplier_listing_moderation_email(
+    background_tasks: BackgroundTasks,
+    listing: SpecialEquipmentListing,
+    *,
+    action: str,
+    fields_summary: str | None = None,
+) -> None:
+    if not settings.ADMIN_EMAIL:
+        return
+
+    if listing.moderation_status == ModerationStatus.has_pending_changes.value:
+        equipment_type = (listing.equipment_type or "Спецтехника").strip() or "Спецтехника"
+        listing_title = (listing.title or "Без названия").strip() or "Без названия"
+        background_tasks.add_task(
+            send_email,
+            to_email=settings.ADMIN_EMAIL,
+            subject="Правки объявления спецтехники ожидают модерации",
+            body=(
+                f'Поставщик {action} правки объявления: {equipment_type} "{listing_title}". '
+                f"Изменены поля: {fields_summary or 'без деталей'}."
+            ),
+        )
+        return
+
+    equipment_type = (listing.equipment_type or "РЎРїРµС†С‚РµС…РЅРёРєР°").strip() or "РЎРїРµС†С‚РµС…РЅРёРєР°"
+    listing_title = (listing.title or "Р‘РµР· РЅР°Р·РІР°РЅРёСЏ").strip() or "Р‘РµР· РЅР°Р·РІР°РЅРёСЏ"
+    if listing.moderation_status == ModerationStatus.has_pending_changes.value:
+        background_tasks.add_task(
+            send_email,
+            to_email=settings.ADMIN_EMAIL,
+            subject="РџСЂР°РІРєРё РѕР±СЉСЏРІР»РµРЅРёСЏ СЃРїРµС†С‚РµС…РЅРёРєРё РѕР¶РёРґР°СЋС‚ РјРѕРґРµСЂР°С†РёРё",
+            body=(
+                f'РџРѕСЃС‚Р°РІС‰РёРє {action} РїСЂР°РІРєРё РѕР±СЉСЏРІР»РµРЅРёСЏ: {equipment_type} "{listing_title}". '
+                f"РР·РјРµРЅРµРЅС‹ РїРѕР»СЏ: {fields_summary or 'Р±РµР· РґРµС‚Р°Р»РµР№'}."
+            ),
+        )
+        return
+
+    if (
+        not settings.ADMIN_EMAIL
+        or listing.moderation_status != ModerationStatus.pending_moderation.value
+    ):
+        return
+
+    equipment_type = (listing.equipment_type or "Спецтехника").strip() or "Спецтехника"
+    listing_title = (listing.title or "Без названия").strip() or "Без названия"
+    background_tasks.add_task(
+        send_email,
+        to_email=settings.ADMIN_EMAIL,
+        subject="Объявление спецтехники ожидает модерации",
+        body=(
+            f'Поставщик {action} объявление: {equipment_type} "{listing_title}". '
+            "Требуется проверка."
+        ),
+    )
 
 
 def _calculate_application_total(
@@ -239,6 +507,7 @@ async def list_public_equipment_types(db: AsyncSession = Depends(get_db)):
 )
 async def list_public_equipment(
     equipment_type_id: UUID | None = None,
+    equipment_type: str | None = Query(default=None, max_length=255),
     city: str | None = Query(default=None, max_length=255),
     district: str | None = Query(default=None, max_length=255),
     search: str | None = Query(default=None, max_length=255),
@@ -246,16 +515,33 @@ async def list_public_equipment(
 ):
     stmt = (
         select(SpecialEquipmentListing)
-        .join(SpecialEquipmentListing.equipment_type)
-        .options(selectinload(SpecialEquipmentListing.equipment_type))
+        .outerjoin(SpecialEquipmentListing.equipment_type_ref)
+        .options(
+            selectinload(SpecialEquipmentListing.equipment_type_ref),
+            selectinload(SpecialEquipmentListing.owner),
+        )
         .where(
             SpecialEquipmentListing.is_active.is_(True),
             SpecialEquipmentListing.is_deleted.is_(False),
-            SpecialEquipmentType.is_active.is_(True),
+            SpecialEquipmentListing.moderation_status.in_(
+                (
+                    ModerationStatus.approved.value,
+                    ModerationStatus.has_pending_changes.value,
+                )
+            ),
+            or_(
+                SpecialEquipmentListing.equipment_type_id.is_(None),
+                SpecialEquipmentType.is_active.is_(True),
+            ),
         )
     )
     if equipment_type_id:
         stmt = stmt.where(SpecialEquipmentListing.equipment_type_id == equipment_type_id)
+    if equipment_type:
+        stmt = stmt.where(
+            func.lower(SpecialEquipmentListing.equipment_type)
+            == equipment_type.strip().lower()
+        )
     if city:
         stmt = stmt.where(func.lower(SpecialEquipmentListing.city) == city.strip().lower())
     if district:
@@ -268,7 +554,12 @@ async def list_public_equipment(
         )
     result = await db.execute(
         stmt.order_by(
-            SpecialEquipmentListing.sort_order.asc(),
+            SpecialEquipmentListing.is_vip.desc(),
+            case(
+                (SpecialEquipmentListing.manual_priority > 0, 0),
+                else_=1,
+            ).asc(),
+            SpecialEquipmentListing.manual_priority.asc(),
             SpecialEquipmentListing.created_at.desc(),
         )
     )
@@ -283,7 +574,14 @@ async def list_public_equipment(
 )
 async def get_public_equipment(listing_id: UUID, db: AsyncSession = Depends(get_db)):
     listing = await _get_listing(db, listing_id)
-    if not listing.is_active or not listing.equipment_type.is_active:
+    if (
+        not listing.is_active
+        or not has_publicly_visible_moderation_status(listing.moderation_status)
+        or (
+            listing.equipment_type_ref is not None
+            and not listing.equipment_type_ref.is_active
+        )
+    ):
         raise HTTPException(status_code=404, detail="Объявление спецтехники не найдено")
     return await _listing_payload(db, listing)
 
@@ -374,102 +672,175 @@ async def delete_equipment_type(
     return {"ok": True, "result": result}
 
 
-@router.get("/admin/equipment", response_model=list[EquipmentListingOut])
+@router.get("/admin/equipment", response_model=list[OperatorEquipmentListingOut])
 async def list_admin_equipment(
     equipment_type_id: UUID | None = None,
+    equipment_type: str | None = Query(default=None, max_length=255),
     is_active: bool | None = None,
+    moderation_status: ModerationStatus | None = None,
+    owner_user_id: UUID | None = None,
     search: str | None = Query(default=None, max_length=255),
     db: AsyncSession = Depends(get_db),
-    current_admin: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_logist_user),
 ):
-    del current_admin
-    stmt = select(SpecialEquipmentListing).options(
-        selectinload(SpecialEquipmentListing.equipment_type)
-    ).where(SpecialEquipmentListing.is_deleted.is_(False))
+    del current_user
+    stmt = (
+        select(SpecialEquipmentListing)
+        .options(
+            selectinload(SpecialEquipmentListing.equipment_type_ref),
+            selectinload(SpecialEquipmentListing.owner),
+        )
+        .where(SpecialEquipmentListing.is_deleted.is_(False))
+    )
     if equipment_type_id:
         stmt = stmt.where(SpecialEquipmentListing.equipment_type_id == equipment_type_id)
+    if equipment_type:
+        stmt = stmt.where(
+            func.lower(SpecialEquipmentListing.equipment_type)
+            == equipment_type.strip().lower()
+        )
     if is_active is not None:
         stmt = stmt.where(SpecialEquipmentListing.is_active.is_(is_active))
+    if moderation_status is not None:
+        if moderation_status == ModerationStatus.pending_moderation:
+            stmt = stmt.where(
+                SpecialEquipmentListing.moderation_status.in_(
+                    [
+                        ModerationStatus.pending_moderation.value,
+                        ModerationStatus.has_pending_changes.value,
+                    ]
+                )
+            )
+        else:
+            stmt = stmt.where(
+                SpecialEquipmentListing.moderation_status == moderation_status.value
+            )
+    if owner_user_id is not None:
+        stmt = stmt.where(SpecialEquipmentListing.owner_user_id == owner_user_id)
     if search:
         stmt = stmt.where(SpecialEquipmentListing.title.ilike(f"%{search.strip()}%"))
     result = await db.execute(
-        stmt.order_by(SpecialEquipmentListing.sort_order.asc(), SpecialEquipmentListing.created_at.desc())
+        stmt.order_by(
+            SpecialEquipmentListing.is_vip.desc(),
+            SpecialEquipmentListing.manual_priority.desc(),
+            SpecialEquipmentListing.price_from.asc().nullslast(),
+            SpecialEquipmentListing.created_at.desc(),
+        )
     )
-    return [await _listing_payload(db, item) for item in result.scalars().all()]
+    return [
+        await _listing_payload(db, item, include_pending_changes=True)
+        for item in result.scalars().all()
+    ]
 
 
 @router.post(
     "/admin/equipment",
-    response_model=EquipmentListingOut,
+    response_model=OperatorEquipmentListingOut,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_equipment_listing(
     payload: EquipmentListingCreate,
     db: AsyncSession = Depends(get_db),
-    current_admin: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_logist_user),
 ):
-    equipment_type = await db.get(SpecialEquipmentType, payload.equipment_type_id)
-    if equipment_type is None:
-        raise HTTPException(status_code=400, detail="Тип спецтехники не найден")
+    equipment_type, equipment_type_id = await _resolve_equipment_type(
+        db,
+        equipment_type=payload.equipment_type,
+        equipment_type_id=payload.equipment_type_id,
+    )
+    values = payload.model_dump(exclude={"equipment_type", "equipment_type_id"})
+    values["contact_phone"] = _normalize_listing_contact_phone(payload.contact_phone)
     listing = SpecialEquipmentListing(
-        **payload.model_dump(),
-        created_by_user_id=current_admin.id,
+        **values,
+        equipment_type=equipment_type,
+        equipment_type_id=equipment_type_id,
+        price_from=_extract_price_from_tariffs(values.get("tariffs")),
+        created_by_user_id=current_user.id,
+        moderation_status=ModerationStatus.approved.value,
+        moderated_by_user_id=current_user.id,
+        moderated_at=datetime.now(timezone.utc),
         is_deleted=False,
     )
     db.add(listing)
     await db.commit()
-    return await _listing_payload(db, await _get_listing(db, listing.id))
+    return await _listing_payload(
+        db,
+        await _get_listing(db, listing.id),
+        include_pending_changes=True,
+    )
 
 
-@router.get("/admin/equipment/{listing_id}", response_model=EquipmentListingOut)
+@router.get("/admin/equipment/{listing_id}", response_model=OperatorEquipmentListingOut)
 async def get_admin_equipment(
     listing_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_admin: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_logist_user),
 ):
-    del current_admin
-    return await _listing_payload(db, await _get_listing(db, listing_id))
+    del current_user
+    return await _listing_payload(
+        db,
+        await _get_listing(db, listing_id),
+        include_pending_changes=True,
+    )
 
 
-@router.patch("/admin/equipment/{listing_id}", response_model=EquipmentListingOut)
+@router.patch("/admin/equipment/{listing_id}", response_model=OperatorEquipmentListingOut)
 async def update_equipment_listing(
     listing_id: UUID,
     payload: EquipmentListingUpdate,
     db: AsyncSession = Depends(get_db),
-    current_admin: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_logist_user),
 ):
-    del current_admin
     listing = await _get_listing(db, listing_id)
     changed = payload.model_fields_set
-    if "equipment_type_id" in changed and payload.equipment_type_id is not None:
-        if await db.get(SpecialEquipmentType, payload.equipment_type_id) is None:
-            raise HTTPException(status_code=400, detail="Тип спецтехники не найден")
+    if changed.intersection({"equipment_type", "equipment_type_id"}):
+        equipment_type, equipment_type_id = await _resolve_equipment_type(
+            db,
+            equipment_type=payload.equipment_type,
+            equipment_type_id=payload.equipment_type_id,
+        )
+        listing.equipment_type = equipment_type
+        listing.equipment_type_id = equipment_type_id
     for field in (
-        "equipment_type_id",
         "title",
         "description",
+        "contact_phone",
         "tariffs",
         "city",
         "district",
         "is_active",
+        "is_vip",
+        "manual_priority",
         "sort_order",
     ):
         if field in changed:
             value = getattr(payload, field)
+            if field == "contact_phone":
+                value = _normalize_listing_contact_phone(value)
             if field == "tariffs" and value is not None:
                 value = [tariff.model_dump() for tariff in value]
             setattr(listing, field, value)
+    if "tariffs" in changed:
+        listing.price_from = _extract_price_from_tariffs(listing.tariffs)
+    listing.moderation_status = ModerationStatus.approved.value
+    listing.moderation_comment = None
+    listing.moderated_by_user_id = current_user.id
+    listing.moderated_at = datetime.now(timezone.utc)
     await db.commit()
-    return await _listing_payload(db, await _get_listing(db, listing.id))
+    return await _listing_payload(
+        db,
+        await _get_listing(db, listing.id),
+        include_pending_changes=True,
+    )
 
 
 @router.delete("/admin/equipment/{listing_id}")
 async def delete_equipment_listing(
     listing_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_admin: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_logist_user),
 ):
-    del current_admin
+    del current_user
     listing = await _get_listing(db, listing_id)
     listing.is_active = False
     listing.is_deleted = True
@@ -484,6 +855,443 @@ async def delete_equipment_listing(
     return {"ok": True, "result": "hidden"}
 
 
+async def _list_owner_equipment(
+    db: AsyncSession,
+    *,
+    current_owner: User,
+) -> list[dict]:
+    result = await db.execute(
+        select(SpecialEquipmentListing)
+        .options(
+            selectinload(SpecialEquipmentListing.equipment_type_ref),
+            selectinload(SpecialEquipmentListing.owner),
+        )
+        .where(
+            SpecialEquipmentListing.owner_user_id == current_owner.id,
+            SpecialEquipmentListing.is_deleted.is_(False),
+        )
+        .order_by(SpecialEquipmentListing.created_at.desc())
+    )
+    return [
+        await _listing_payload(db, item, include_pending_changes=True)
+        for item in result.scalars().all()
+    ]
+
+
+async def _create_owner_equipment(
+    payload: EquipmentListingCreate,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession,
+    *,
+    current_owner: User,
+) -> dict:
+    equipment_type, equipment_type_id = await _resolve_equipment_type(
+        db,
+        equipment_type=payload.equipment_type,
+        equipment_type_id=payload.equipment_type_id,
+    )
+    values = payload.model_dump(
+        exclude={
+            "equipment_type",
+            "equipment_type_id",
+            "is_active",
+            "is_vip",
+            "manual_priority",
+            "sort_order",
+        }
+    )
+    values["contact_phone"] = _normalize_listing_contact_phone(
+        payload.contact_phone or current_owner.username
+    )
+    listing = SpecialEquipmentListing(
+        **values,
+        equipment_type=equipment_type,
+        equipment_type_id=equipment_type_id,
+        price_from=_extract_price_from_tariffs(values.get("tariffs")),
+        is_active=True,
+        is_vip=False,
+        manual_priority=0,
+        is_deleted=False,
+        sort_order=0,
+        created_by_user_id=current_owner.id,
+        owner_user_id=current_owner.id,
+        moderation_status=ModerationStatus.pending_moderation.value,
+    )
+    db.add(listing)
+    await db.commit()
+    await create_moderation_audit_log(
+        db,
+        entity_type=EQUIPMENT_ENTITY_TYPE,
+        entity_id=listing.id,
+        user_id=current_owner.id,
+        action="created",
+        comment=listing.title,
+    )
+    await db.commit()
+    _schedule_supplier_listing_moderation_email(
+        background_tasks,
+        listing,
+        action="РґРѕР±Р°РІРёР»",
+    )
+    return await _listing_payload(
+        db,
+        await _get_listing(db, listing.id),
+        include_pending_changes=True,
+    )
+
+
+async def _update_owner_equipment(
+    listing_id: UUID,
+    payload: EquipmentListingUpdate,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession,
+    *,
+    current_owner: User,
+) -> dict:
+    listing = await _get_listing(db, listing_id)
+    if listing.owner_user_id == current_owner.id:
+        payload_data = await _normalize_listing_update_data(db, payload)
+        use_pending_changes = listing.moderation_status in OWNER_PENDING_EDIT_STATUSES
+        pending_changes: dict = {}
+        if use_pending_changes:
+            if "is_active" in payload_data:
+                listing.is_active = payload_data["is_active"]
+            pending_changes = {
+                field: value
+                for field, value in payload_data.items()
+                if field != "is_active"
+            }
+            if pending_changes:
+                mark_entity_pending_changes(listing, pending_changes)
+        else:
+            _apply_listing_update_data(listing, payload_data)
+            _reset_supplier_listing_moderation(listing)
+        await create_moderation_audit_log(
+            db,
+            entity_type=EQUIPMENT_ENTITY_TYPE,
+            entity_id=listing.id,
+            user_id=current_owner.id,
+            action="edited",
+            comment=summarize_pending_changes(pending_changes) or listing.title,
+        )
+        await db.commit()
+        _schedule_supplier_listing_moderation_email(
+            background_tasks,
+            listing,
+            action="изменил",
+            fields_summary=summarize_pending_changes(pending_changes),
+        )
+        return await _listing_payload(
+            db,
+            await _get_listing(db, listing.id),
+            include_pending_changes=True,
+        )
+    if listing.owner_user_id != current_owner.id:
+        raise HTTPException(status_code=404, detail="РћР±СЉСЏРІР»РµРЅРёРµ СЃРїРµС†С‚РµС…РЅРёРєРё РЅРµ РЅР°Р№РґРµРЅРѕ")
+    changed = payload.model_fields_set
+    if changed.intersection({"equipment_type", "equipment_type_id"}):
+        equipment_type, equipment_type_id = await _resolve_equipment_type(
+            db,
+            equipment_type=payload.equipment_type,
+            equipment_type_id=payload.equipment_type_id,
+        )
+        listing.equipment_type = equipment_type
+        listing.equipment_type_id = equipment_type_id
+    for field in ("title", "description", "contact_phone", "tariffs", "city", "district"):
+        if field not in changed:
+            continue
+        value = getattr(payload, field)
+        if field == "contact_phone":
+            value = _normalize_listing_contact_phone(value)
+        if field == "tariffs" and value is not None:
+            value = [tariff.model_dump() for tariff in value]
+        setattr(listing, field, value)
+    if "tariffs" in changed:
+        listing.price_from = _extract_price_from_tariffs(listing.tariffs)
+    _reset_supplier_listing_moderation(listing)
+    await db.commit()
+    _schedule_supplier_listing_moderation_email(
+        background_tasks,
+        listing,
+        action="РёР·РјРµРЅРёР»",
+    )
+    return await _listing_payload(db, await _get_listing(db, listing.id))
+
+
+@supplier_router.get("/equipment", response_model=list[EquipmentListingOut])
+@supplier_router.get(
+    "/equipment/",
+    response_model=list[EquipmentListingOut],
+    include_in_schema=False,
+)
+async def list_supplier_equipment(
+    db: AsyncSession = Depends(get_db),
+    current_supplier: User = Depends(get_current_supplier_user),
+):
+    return await _list_owner_equipment(db, current_owner=current_supplier)
+
+
+@supplier_router.post(
+    "/equipment",
+    response_model=EquipmentListingOut,
+    status_code=status.HTTP_201_CREATED,
+)
+@supplier_router.post(
+    "/equipment/",
+    response_model=EquipmentListingOut,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
+)
+async def create_supplier_equipment(
+    payload: EquipmentListingCreate,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    current_supplier: User = Depends(get_current_supplier_user),
+):
+    return await _create_owner_equipment(
+        payload,
+        background_tasks,
+        db,
+        current_owner=current_supplier,
+    )
+    equipment_type, equipment_type_id = await _resolve_equipment_type(
+        db,
+        equipment_type=payload.equipment_type,
+        equipment_type_id=payload.equipment_type_id,
+    )
+    values = payload.model_dump(
+        exclude={
+            "equipment_type",
+            "equipment_type_id",
+            "is_active",
+            "is_vip",
+            "manual_priority",
+            "sort_order",
+        }
+    )
+    values["contact_phone"] = _normalize_listing_contact_phone(
+        payload.contact_phone or current_supplier.username
+    )
+    listing = SpecialEquipmentListing(
+        **values,
+        equipment_type=equipment_type,
+        equipment_type_id=equipment_type_id,
+        price_from=_extract_price_from_tariffs(values.get("tariffs")),
+        is_active=True,
+        is_vip=False,
+        manual_priority=0,
+        is_deleted=False,
+        sort_order=0,
+        created_by_user_id=current_supplier.id,
+        owner_user_id=current_supplier.id,
+        moderation_status=ModerationStatus.pending_moderation.value,
+    )
+    db.add(listing)
+    await db.commit()
+    _schedule_supplier_listing_moderation_email(
+        background_tasks,
+        listing,
+        action="добавил",
+    )
+    return await _listing_payload(db, await _get_listing(db, listing.id))
+
+
+@supplier_router.patch("/equipment/{listing_id}", response_model=EquipmentListingOut)
+@supplier_router.patch(
+    "/equipment/{listing_id}/",
+    response_model=EquipmentListingOut,
+    include_in_schema=False,
+)
+async def update_supplier_equipment(
+    listing_id: UUID,
+    payload: EquipmentListingUpdate,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    current_supplier: User = Depends(get_current_supplier_user),
+):
+    return await _update_owner_equipment(
+        listing_id,
+        payload,
+        background_tasks,
+        db,
+        current_owner=current_supplier,
+    )
+    listing = await _get_listing(db, listing_id)
+    if listing.owner_user_id != current_supplier.id:
+        raise HTTPException(status_code=404, detail="Объявление спецтехники не найдено")
+    changed = payload.model_fields_set
+    if changed.intersection({"equipment_type", "equipment_type_id"}):
+        equipment_type, equipment_type_id = await _resolve_equipment_type(
+            db,
+            equipment_type=payload.equipment_type,
+            equipment_type_id=payload.equipment_type_id,
+        )
+        listing.equipment_type = equipment_type
+        listing.equipment_type_id = equipment_type_id
+    for field in ("title", "description", "contact_phone", "tariffs", "city", "district"):
+        if field not in changed:
+            continue
+        value = getattr(payload, field)
+        if field == "contact_phone":
+            value = _normalize_listing_contact_phone(value)
+        if field == "tariffs" and value is not None:
+            value = [tariff.model_dump() for tariff in value]
+        setattr(listing, field, value)
+    if "tariffs" in changed:
+        listing.price_from = _extract_price_from_tariffs(listing.tariffs)
+    _reset_supplier_listing_moderation(listing)
+    await db.commit()
+    _schedule_supplier_listing_moderation_email(
+        background_tasks,
+        listing,
+        action="изменил",
+    )
+    return await _listing_payload(db, await _get_listing(db, listing.id))
+
+
+@equipment_owner_router.get("/equipment", response_model=list[EquipmentListingOut])
+@equipment_owner_router.get(
+    "/equipment/",
+    response_model=list[EquipmentListingOut],
+    include_in_schema=False,
+)
+async def list_equipment_owner_equipment(
+    db: AsyncSession = Depends(get_db),
+    current_owner: User = Depends(get_current_equipment_owner_user),
+):
+    return await _list_owner_equipment(db, current_owner=current_owner)
+
+
+@equipment_owner_router.post(
+    "/equipment",
+    response_model=EquipmentListingOut,
+    status_code=status.HTTP_201_CREATED,
+)
+@equipment_owner_router.post(
+    "/equipment/",
+    response_model=EquipmentListingOut,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
+)
+async def create_equipment_owner_equipment(
+    payload: EquipmentListingCreate,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    current_owner: User = Depends(get_current_equipment_owner_user),
+):
+    return await _create_owner_equipment(
+        payload,
+        background_tasks,
+        db,
+        current_owner=current_owner,
+    )
+
+
+@equipment_owner_router.patch("/equipment/{listing_id}", response_model=EquipmentListingOut)
+@equipment_owner_router.patch(
+    "/equipment/{listing_id}/",
+    response_model=EquipmentListingOut,
+    include_in_schema=False,
+)
+async def update_equipment_owner_equipment(
+    listing_id: UUID,
+    payload: EquipmentListingUpdate,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    current_owner: User = Depends(get_current_equipment_owner_user),
+):
+    return await _update_owner_equipment(
+        listing_id,
+        payload,
+        background_tasks,
+        db,
+        current_owner=current_owner,
+    )
+
+
+@router.post(
+    "/admin/equipment/{listing_id}/approve",
+    response_model=OperatorEquipmentListingOut,
+)
+async def approve_supplier_equipment(
+    listing_id: UUID,
+    payload: EquipmentModerationDecision | None = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_logist_user),
+):
+    listing = await _get_listing(db, listing_id)
+    staged_changes = (
+        listing.pending_changes
+        if listing.moderation_status == ModerationStatus.has_pending_changes.value
+        else None
+    )
+    if staged_changes:
+        pending_payload = EquipmentListingUpdate.model_validate(staged_changes)
+        pending_data = await _normalize_listing_update_data(db, pending_payload)
+        _apply_listing_update_data(listing, pending_data)
+        clear_entity_pending_changes(listing)
+    await create_moderation_audit_log(
+        db,
+        entity_type=EQUIPMENT_ENTITY_TYPE,
+        entity_id=listing.id,
+        user_id=current_user.id,
+        action="approved",
+        comment=summarize_pending_changes(staged_changes) or (payload.comment if payload else None),
+    )
+    listing.moderation_status = ModerationStatus.approved.value
+    listing.moderation_comment = payload.comment if payload else None
+    listing.moderated_at = datetime.now(timezone.utc)
+    listing.moderated_by_user_id = current_user.id
+    if not staged_changes:
+        listing.is_active = True
+    await db.commit()
+    return await _listing_payload(
+        db,
+        await _get_listing(db, listing.id),
+        include_pending_changes=True,
+    )
+
+
+@router.post(
+    "/admin/equipment/{listing_id}/reject",
+    response_model=OperatorEquipmentListingOut,
+)
+async def reject_supplier_equipment(
+    listing_id: UUID,
+    payload: EquipmentModerationRejection,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_logist_user),
+):
+    listing = await _get_listing(db, listing_id)
+    staged_changes = (
+        listing.pending_changes
+        if listing.moderation_status == ModerationStatus.has_pending_changes.value
+        else None
+    )
+    if staged_changes:
+        listing.moderation_status = ModerationStatus.approved.value
+        clear_entity_pending_changes(listing)
+    else:
+        listing.moderation_status = ModerationStatus.rejected.value
+    listing.moderation_comment = payload.reason
+    listing.moderated_at = datetime.now(timezone.utc)
+    listing.moderated_by_user_id = current_user.id
+    await create_moderation_audit_log(
+        db,
+        entity_type=EQUIPMENT_ENTITY_TYPE,
+        entity_id=listing.id,
+        user_id=current_user.id,
+        action="rejected",
+        comment=payload.reason,
+    )
+    await db.commit()
+    return await _listing_payload(
+        db,
+        await _get_listing(db, listing.id),
+        include_pending_changes=True,
+    )
+
+
 @router.post(
     "/client/equipment-applications",
     response_model=EquipmentApplicationOut,
@@ -496,7 +1304,14 @@ async def create_equipment_application(
     current_client: Client = Depends(get_current_client),
 ):
     listing = await _get_listing(db, payload.listing_id)
-    if not listing.is_active or not listing.equipment_type.is_active:
+    if (
+        not listing.is_active
+        or listing.moderation_status != ModerationStatus.approved.value
+        or (
+            listing.equipment_type_ref is not None
+            and not listing.equipment_type_ref.is_active
+        )
+    ):
         raise HTTPException(status_code=400, detail="Объявление больше не активно")
     if payload.requested_date < date.today():
         raise HTTPException(status_code=400, detail="Дата работ не может быть в прошлом")

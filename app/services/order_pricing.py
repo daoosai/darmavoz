@@ -288,7 +288,7 @@ async def calculate_client_order_options(
             .join(quarry_materials, quarry_materials.c.quarry_id == Quarry.id)
             .where(
                 *public_pickup_point_filters(),
-                Quarry.point_type.in_(MARKETPLACE_POINT_TYPES),
+                Quarry.point_type == "quarry",
                 quarry_materials.c.material_id == material_id,
                 quarry_materials.c.is_active.is_(True),
             )
@@ -373,6 +373,9 @@ async def calculate_client_order_options(
 
     options.sort(
         key=lambda option: (
+            -int(bool(option.quarry.is_vip)),
+            0 if (option.quarry.manual_priority or 0) > 0 else 1,
+            option.quarry.manual_priority or 0,
             option.total_amount,
             option.mileage_km,
             option.quarry.name.casefold(),

@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Building2, Loader2, LogOut, Mail, Phone } from "lucide-react";
+import { Building2, Headphones, Loader2, LogOut, Mail, Phone } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
@@ -7,9 +7,14 @@ import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
 interface Props {
   token: string;
   onLogout: () => Promise<void>;
+  onOpenSupport?: () => void;
 }
 
-export default function SupplierProfileScreen({ token, onLogout }: Props) {
+export default function SupplierProfileScreen({
+  token,
+  onLogout,
+  onOpenSupport,
+}: Props) {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -68,7 +73,7 @@ export default function SupplierProfileScreen({ token, onLogout }: Props) {
   }
 
   return (
-    <div className="px-5 pb-8 pt-6 text-gray-900">
+    <div className="px-5 pb-8 pt-[max(env(safe-area-inset-top),1rem)] text-gray-900">
       <p className="text-xs font-bold uppercase tracking-[0.2em] text-sky-500">Кабинет поставщика</p>
       <h1 className="mt-1 text-3xl font-black">Профиль</h1>
 
@@ -117,6 +122,22 @@ export default function SupplierProfileScreen({ token, onLogout }: Props) {
           {isSaving ? <Loader2 className="h-5 w-5 animate-spin" /> : "Сохранить"}
         </button>
       </form>
+
+      <button
+        type="button"
+        onClick={onOpenSupport}
+        className="mt-5 flex w-full items-center gap-4 rounded-2xl border border-slate-100 bg-white p-4 text-left shadow-sm transition hover:border-sky-100 hover:bg-sky-50/40"
+      >
+        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-sky-50 text-sky-500">
+          <Headphones className="h-5 w-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="font-bold text-slate-900">Поддержка</p>
+          <p className="mt-1 text-sm text-slate-500">
+            Активные обращения, закрытые тикеты и чат с оператором
+          </p>
+        </div>
+      </button>
 
       <button
         type="button"

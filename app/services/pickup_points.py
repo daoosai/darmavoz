@@ -22,6 +22,7 @@ from app.models.models import (
     quarry_materials,
 )
 from app.schemas.quarry import QuarryMaterialOfferIn
+from app.services.moderation import has_publicly_visible_moderation_status, serialize_moderation_value
 
 
 DEFAULT_MIN_DELIVERY_PRICE = {
@@ -35,7 +36,10 @@ DEFAULT_MIN_DELIVERY_PRICE = {
 def public_pickup_point_filters():
     return (
         Quarry.is_active.is_(True),
-        Quarry.moderation_status == ModerationStatus.approved.value,
+        Quarry.moderation_status.in_(tuple(sorted({
+            ModerationStatus.approved.value,
+            ModerationStatus.has_pending_changes.value,
+        }))),
         or_(
             Quarry.subscription_end_date.is_(None),
             Quarry.subscription_end_date > func.now(),
@@ -48,7 +52,7 @@ def is_pickup_point_publicly_available(
     *,
     now: datetime | None = None,
 ) -> bool:
-    if not point.is_active or point.moderation_status != ModerationStatus.approved.value:
+    if not point.is_active or not has_publicly_visible_moderation_status(point.moderation_status):
         return False
     if point.subscription_end_date is None:
         return True
@@ -183,6 +187,7 @@ async def pickup_point_payload(
     point: Quarry,
     *,
     include_owner_contacts: bool = False,
+    include_pending_changes: bool = False,
 ) -> dict:
     await db.flush()
     await db.refresh(point, attribute_names=["created_at", "updated_at"])
@@ -270,9 +275,12 @@ async def pickup_point_payload(
         "lon": point.lon,
         "min_delivery_price": point.min_delivery_price,
         "rating": point.rating,
+        "is_vip": point.is_vip,
+        "manual_priority": point.manual_priority,
         "is_active": point.is_active,
         "moderation_status": point.moderation_status,
         "moderation_comment": point.moderation_comment,
+        "pending_changes": serialize_moderation_value(point.pending_changes) if include_pending_changes else None,
         "owner_user_id": point.owner_user_id,
         "material_ids": list(material_by_id),
         "materials": list(material_by_id.values()),
@@ -299,16 +307,28 @@ async def pickup_point_payload(
     return payload
 
 
-async def validate_point_can_be_approved(db: AsyncSession, point: Quarry) -> None:
+async def validate_point_can_be_approved(
+    db: AsyncSession,
+    point: Quarry,
+    *,
+    require_materials: bool = True,
+    require_media: bool = True,
+    require_coordinates: bool = True,
+) -> None:
     payload = await pickup_point_payload(db, point)
     missing: list[str] = []
-    if not payload["material_offers"] or not any(
-        offer["is_active"] and offer["price"] is not None and float(offer["price"]) > 0
-        for offer in payload["material_offers"]
+    if require_materials and (
+        not payload["material_offers"]
+        or not any(
+            offer["is_active"] and offer["price"] is not None and float(offer["price"]) > 0
+            for offer in payload["material_offers"]
+        )
     ):
         missing.append("хотя бы один активный материал с ценой")
-    if not payload["media_files"]:
+    if require_media and not payload["media_files"]:
         missing.append("фотография")
+    if require_coordinates and (payload["lat"] is None or payload["lon"] is None):
+        missing.append("координаты")
     if missing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

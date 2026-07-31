@@ -5,7 +5,7 @@ export const baseURL =
   import.meta.env.VITE_API_URL ||
   "/api/v1";
 
-export const APP_VERSION = import.meta.env.VITE_APP_VERSION || "2.5.0";
+export const APP_VERSION = import.meta.env.VITE_APP_VERSION || "2.6.0";
 
 export const orderStatusColors: Record<string, string> = {
   created: "bg-gray-200 text-gray-700 border border-gray-300",
@@ -52,7 +52,7 @@ export const formatPhoneNumber = (value: string) => {
   return formatted;
 };
 
-const formatValidationErrors = (detail: any[]): string | null => {
+export const formatValidationErrors = (detail: any[]): string | null => {
   const messages = detail
     .map((entry: any) => {
       if (!entry) return null;
@@ -72,7 +72,7 @@ const formatValidationErrors = (detail: any[]): string | null => {
     return null;
   }
 
-  return messages.join(", ");
+  return messages.join("\n");
 };
 
 const RUSSIAN_FALLBACKS_BY_STATUS: Record<number, string> = {
@@ -134,7 +134,9 @@ export const extractApiErrorMessage = (
 
   if (Array.isArray(detail)) {
     const validationMessage = formatValidationErrors(detail);
-    return sanitizeApiMessage(validationMessage, statusCode ?? 422, fallbackMessage);
+    return validationMessage
+      ? `Ошибка валидации:\n${validationMessage}`
+      : getRussianStatusFallback(statusCode ?? 422, fallbackMessage);
   }
 
   if (typeof detail === "string" && detail.trim()) {

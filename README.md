@@ -150,3 +150,7 @@ docker run --rm --entrypoint python --network daoos_kit_default \
   --env-file /opt/darmavoz/.env -v /opt/darmavoz:/app -w /app \
   darmavoz-backend -m pytest tests/test_logist_drivers_api.py -q
 ```
+
+## CI Note
+
+Regular push to `develop` should trigger the test pipeline build for web and APK artifacts.

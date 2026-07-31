@@ -15,6 +15,7 @@ from app.models.models import (
     User,
     quarry_materials,
 )
+from app.services.notifications import schedule_pickup_point_moderation_notification
 
 
 class FakeRedis:
@@ -88,8 +89,8 @@ async def test_supplier_auth_creates_only_user_and_allows_multiple_points(
         "point_type": "quarry",
         "address": "Test address",
         "description": None,
-        "lat": 57.15,
-        "lon": 65.53,
+        "lat": None,
+        "lon": None,
         "material_offers": [],
     }
     unauthorized = await client.post("/api/v1/supplier/points", json=point_payload)
@@ -122,6 +123,33 @@ async def test_supplier_auth_creates_only_user_and_allows_multiple_points(
         },
         headers=headers,
     )
+    minimal_point = await client.post(
+        "/api/v1/supplier/points",
+        json={
+            "name": "Minimal point",
+            "short_name": "Minimal point",
+            "point_type": "quarry",
+            "address": "Minimal address",
+            "description": None,
+            "material_ids": None,
+            "material_offers": None,
+            "delivery_option_ids": None,
+        },
+        headers=headers,
+    )
+    assert first_point.status_code == 201
+    assert second_point.status_code == 201
+    assert minimal_point.status_code == 201
+    assert first_point.json()["lat"] is None
+    assert first_point.json()["lon"] is None
+    assert minimal_point.json()["lat"] is None
+    assert minimal_point.json()["lon"] is None
+    assert {
+        first_point.json()["owner_user_id"],
+        second_point.json()["owner_user_id"],
+        minimal_point.json()["owner_user_id"],
+    } == {first_point.json()["owner_user_id"]}
+
     warehouse_point = await client.post(
         "/api/v1/supplier/points",
         json={
@@ -143,16 +171,8 @@ async def test_supplier_auth_creates_only_user_and_allows_multiple_points(
         headers=headers,
     )
 
-    assert first_point.status_code == 201
-    assert second_point.status_code == 201
-    assert warehouse_point.status_code == 201
-    assert supplier_point.status_code == 201
-    assert {
-        first_point.json()["owner_user_id"],
-        second_point.json()["owner_user_id"],
-        warehouse_point.json()["owner_user_id"],
-        supplier_point.json()["owner_user_id"],
-    } == {first_point.json()["owner_user_id"]}
+    assert warehouse_point.status_code == 422
+    assert supplier_point.status_code == 422
 
     async with session_factory() as session:
         stored_point = await session.get(Quarry, UUID(first_point.json()["id"]))
@@ -166,16 +186,16 @@ async def test_supplier_auth_creates_only_user_and_allows_multiple_points(
         headers=headers,
     )
     assert edited_point.status_code == 200
-    assert edited_point.json()["name"] == "Updated test point"
-    assert edited_point.json()["moderation_status"] == ModerationStatus.pending_moderation.value
+    assert edited_point.json()["name"] == "Test point"
+    assert edited_point.json()["moderation_status"] == ModerationStatus.has_pending_changes.value
+    assert edited_point.json()["pending_changes"]["name"] == "Updated test point"
 
     points = await client.get("/api/v1/supplier/points", headers=headers)
     assert points.status_code == 200
     assert {point["name"] for point in points.json()} == {
-        "Updated test point",
+        "Test point",
         "Test accumulator",
-        "Test warehouse",
-        "Test supplier",
+        "Minimal point",
     }
 
     async with session_factory() as session:
@@ -261,6 +281,149 @@ async def test_admin_approve_returns_clear_400_for_incomplete_point(
     assert response.status_code == 400
     assert "активный материал" in response.json()["detail"]
     assert "фотография" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_supplier_can_submit_pending_point_without_coords_but_admin_cannot_approve_it(
+    client,
+    session_factory,
+    monkeypatch,
+    admin_token,
+):
+    fake_redis = FakeRedis()
+
+    async def fake_send_sms(**_kwargs) -> str:
+        return "0000"
+
+    monkeypatch.setattr("app.api.supplier_auth.get_redis", lambda: fake_redis)
+    monkeypatch.setattr("app.api.supplier_auth.send_auth_sms_code", fake_send_sms)
+
+    challenge = await client.post(
+        "/api/v1/auth/supplier/register",
+        json={"phone": "+7 (999) 555-01-11"},
+    )
+    assert challenge.status_code == 202
+
+    verification = await client.post(
+        "/api/v1/auth/supplier/register/verify",
+        json={"phone": "+79995550111", "code": "0000"},
+    )
+    assert verification.status_code == 200
+
+    headers = {"Authorization": f"Bearer {verification.json()['access_token']}"}
+    profile = await client.patch(
+        "/api/v1/supplier/me",
+        json={"display_name": "Supplier Without Coords"},
+        headers=headers,
+    )
+    assert profile.status_code == 200
+
+    async with session_factory() as session:
+        category = Category(
+            name="Инертные",
+            slug=f"inert-{uuid4().hex[:8]}",
+            sort_order=0,
+            is_active=True,
+        )
+        material = Material(
+            category=category,
+            name="Песок карьерный",
+            description=None,
+            price=1800,
+            unit="м3",
+            min_volume=1,
+            is_active=True,
+            sort_order=0,
+        )
+        session.add_all([category, material])
+        await session.commit()
+        await session.refresh(material)
+        material_id = material.id
+
+    created = await client.post(
+        "/api/v1/supplier/points",
+        json={
+            "name": "Pending quarry",
+            "short_name": "Pending quarry",
+            "point_type": "quarry",
+            "address": "Tyumen",
+            "description": "Point without coordinates",
+            "lat": None,
+            "lon": None,
+            "materials": [
+                {
+                    "material_id": str(material_id),
+                    "price": 1950,
+                }
+            ],
+        },
+        headers=headers,
+    )
+    assert created.status_code == 201
+    point_id = created.json()["id"]
+    assert created.json()["material_offers"]
+    assert created.json()["material_offers"][0]["material_id"] == str(material_id)
+
+    async with session_factory() as session:
+        session.add(
+            MediaFile(
+                entity_type="quarry",
+                entity_id=UUID(point_id),
+                bucket="test-media",
+                object_key=f"supplier/{uuid4().hex}-primary.jpg",
+                public_url="https://cdn.example/pending-quarry-primary.jpg",
+                content_type="image/jpeg",
+                file_name="primary.jpg",
+                file_size=1024,
+                is_primary=True,
+            )
+        )
+        await session.commit()
+
+    submit = await client.post(
+        f"/api/v1/supplier/points/{point_id}/submit",
+        headers=headers,
+    )
+    assert submit.status_code == 200
+    assert submit.json()["moderation_status"] == ModerationStatus.pending_moderation.value
+    assert submit.json()["lat"] is None
+    assert submit.json()["lon"] is None
+
+    approve = await client.post(
+        f"/api/v1/admin/pickup-points/{point_id}/approve",
+        json={"comment": None},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert approve.status_code == 400
+    assert "координаты" in approve.json()["detail"]
+
+
+def test_pickup_point_moderation_notification_uses_point_specific_body(monkeypatch):
+    scheduled: dict[str, object] = {}
+
+    def fake_safe_schedule(func, title, body, data):
+        scheduled["func"] = func
+        scheduled["title"] = title
+        scheduled["body"] = body
+        scheduled["data"] = data
+
+    monkeypatch.setattr("app.services.notifications._safe_schedule", fake_safe_schedule)
+
+    point = Quarry(
+        name="Северный",
+        address="Тюмень",
+        point_type="quarry",
+        owner_user_id=uuid4(),
+    )
+
+    schedule_pickup_point_moderation_notification(point)
+
+    assert scheduled["title"] == "Новая заявка на модерацию"
+    assert scheduled["body"] == 'Поставщик добавил новый Карьер "Северный" и ожидает проверки.'
+    assert scheduled["data"] == {
+        "event": "pickup_point_pending_moderation",
+        "pickup_point_id": str(point.id),
+    }
 
 
 @pytest.mark.asyncio

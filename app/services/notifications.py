@@ -13,6 +13,7 @@ from app.services.push_service import (
     schedule_push_to_client,
     schedule_push_to_driver,
     schedule_push_to_logists,
+    schedule_push_to_user,
 )
 
 logger = logging.getLogger(__name__)
@@ -263,6 +264,12 @@ def schedule_logist_no_driver_found_notification(order: Order) -> None:
 
 
 def schedule_pickup_point_moderation_notification(point: Quarry) -> None:
+    point_type_ru = "Точка забора"
+    if point.point_type == "quarry":
+        point_type_ru = "Карьер"
+    elif point.point_type in {"accumulator", "warehouse", "supplier"}:
+        point_type_ru = "Накопитель"
+
     logger.info(
         "pickup_point_moderation_push_scheduled",
         extra={
@@ -274,7 +281,7 @@ def schedule_pickup_point_moderation_notification(point: Quarry) -> None:
     _safe_schedule(
         schedule_push_to_logists,
         "Новая заявка на модерацию",
-        "Поставщик добавил новую точку забора и ожидает проверки",
+        f'Поставщик добавил новый {point_type_ru} "{point.name}" и ожидает проверки.',
         {
             "event": "pickup_point_pending_moderation",
             "pickup_point_id": str(point.id),
@@ -406,6 +413,7 @@ async def _send_support_reply_notification(
     ticket_id: UUID,
     client_id: UUID | None = None,
     driver_id: UUID | None = None,
+    user_id: UUID | None = None,
 ) -> None:
     ticket = await _load_support_ticket(ticket_id)
     if ticket is None or not ticket.messages:
@@ -421,10 +429,18 @@ async def _send_support_reply_notification(
         _safe_schedule(schedule_push_to_client, client_id, title, body, data)
     elif driver_id is not None:
         _safe_schedule(schedule_push_to_driver, driver_id, title, body, data)
+    elif user_id is not None:
+        _safe_schedule(schedule_push_to_user, user_id, title, body, data)
 
 
 async def send_support_operator_notification(ticket_id: UUID, is_new: bool) -> None:
-    await _send_support_operator_notification(ticket_id, is_new=is_new)
+    try:
+        await _send_support_operator_notification(ticket_id, is_new=is_new)
+    except Exception:
+        logger.exception(
+            "support_operator_notification_failed",
+            extra={"ticket_id": str(ticket_id), "is_new": is_new},
+        )
 
 
 async def send_support_reply_notification(
@@ -432,12 +448,25 @@ async def send_support_reply_notification(
     ticket_id: UUID,
     client_id: UUID | None = None,
     driver_id: UUID | None = None,
+    user_id: UUID | None = None,
 ) -> None:
-    await _send_support_reply_notification(
-        ticket_id=ticket_id,
-        client_id=client_id,
-        driver_id=driver_id,
-    )
+    try:
+        await _send_support_reply_notification(
+            ticket_id=ticket_id,
+            client_id=client_id,
+            driver_id=driver_id,
+            user_id=user_id,
+        )
+    except Exception:
+        logger.exception(
+            "support_reply_notification_failed",
+            extra={
+                "ticket_id": str(ticket_id),
+                "client_id": str(client_id) if client_id is not None else None,
+                "driver_id": str(driver_id) if driver_id is not None else None,
+                "user_id": str(user_id) if user_id is not None else None,
+            },
+        )
 
 
 def schedule_support_operator_notification(ticket_id: UUID, *, is_new: bool) -> None:
@@ -457,6 +486,7 @@ def schedule_support_reply_notification(
     ticket_id: UUID,
     client_id: UUID | None = None,
     driver_id: UUID | None = None,
+    user_id: UUID | None = None,
 ) -> None:
     data = {"event": "support_operator_reply", "ticket_id": str(ticket_id)}
     if client_id is not None:
@@ -487,12 +517,14 @@ def schedule_support_reply_notification(
     ticket_id: UUID,
     client_id: UUID | None = None,
     driver_id: UUID | None = None,
+    user_id: UUID | None = None,
 ) -> None:
     asyncio.create_task(
         _send_support_reply_notification(
             ticket_id=ticket_id,
             client_id=client_id,
             driver_id=driver_id,
+            user_id=user_id,
         ),
         name=f"support-reply-push-{ticket_id}",
     )

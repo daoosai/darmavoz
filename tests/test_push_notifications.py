@@ -134,6 +134,40 @@ async def test_client_can_save_and_clear_fcm_token(client, session_factory):
 
 
 @pytest.mark.asyncio
+async def test_supplier_can_save_and_clear_fcm_token(client, session_factory):
+    async with session_factory() as session:
+        supplier_role = await ensure_role(session, "supplier")
+        supplier_user = await create_user(session, username="supplier_push_user", role=supplier_role)
+        await session.commit()
+        supplier_user_id = supplier_user.id
+
+    save_response = await client.post(
+        "/api/v1/supplier/me/fcm-token",
+        headers=auth_headers("supplier_push_user"),
+        json={"token": "supplier-token-123"},
+    )
+    assert save_response.status_code == 200
+    assert save_response.json() == {"ok": True, "token": "supplier-token-123"}
+
+    async with session_factory() as session:
+        updated_user = await session.scalar(select(User).where(User.id == supplier_user_id))
+        assert updated_user is not None
+        assert updated_user.fcm_token == "supplier-token-123"
+
+    delete_response = await client.delete(
+        "/api/v1/supplier/me/fcm-token",
+        headers=auth_headers("supplier_push_user"),
+    )
+    assert delete_response.status_code == 200
+    assert delete_response.json() == {"ok": True, "token": None}
+
+    async with session_factory() as session:
+        updated_user = await session.scalar(select(User).where(User.id == supplier_user_id))
+        assert updated_user is not None
+        assert updated_user.fcm_token is None
+
+
+@pytest.mark.asyncio
 async def test_manual_assign_schedules_client_and_driver_notifications(client, session_factory, monkeypatch):
     sent_notifications: list[tuple[str, str, str]] = []
 

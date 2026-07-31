@@ -220,7 +220,7 @@ async def test_delivery_option_must_be_allowed_for_point(monkeypatch, session_fa
 
 
 @pytest.mark.asyncio
-async def test_calculate_returns_best_option_and_sorted_alternatives(
+async def test_auto_calculate_uses_only_quarries_and_explicit_point_keeps_manual_choice(
     client,
     session_factory,
     monkeypatch,
@@ -297,31 +297,26 @@ async def test_calculate_returns_best_option_and_sorted_alternatives(
     payload = response.json()
     best_media_files = payload["best_option"].pop("media_files")
     assert [media["public_url"] for media in best_media_files] == [
-        "https://cdn.example/quarry.jpg"
-    ]
-    assert payload["best_option"] == {
-        "quarry_id": str(accumulator_id),
-        "quarry_name": accumulator.name,
-        "point_type": "accumulator",
-        "rating": 4.8,
-        "distance": 2.0,
-        "delivery_cost": 3000.0,
-        "material_cost": 3500.0,
-        "total_amount": 6500.0,
-        "primary_image_url": "https://cdn.example/quarry.jpg",
-    }
-    assert [option["quarry_id"] for option in payload["alternatives"]] == [str(quarry_id)]
-    assert payload["alternatives"][0]["total_amount"] == 8000.0
-    assert payload["alternatives"][0]["primary_image_url"] == "https://cdn.example/alternative-quarry.jpg"
-    assert [media["public_url"] for media in payload["alternatives"][0]["media_files"]] == [
         "https://cdn.example/alternative-quarry.jpg"
     ]
+    assert payload["best_option"] == {
+        "quarry_id": str(quarry_id),
+        "quarry_name": quarry.name,
+        "point_type": "quarry",
+        "rating": 5.0,
+        "distance": 10.0,
+        "delivery_cost": 5000.0,
+        "material_cost": 3000.0,
+        "total_amount": 8000.0,
+        "primary_image_url": "https://cdn.example/alternative-quarry.jpg",
+    }
+    assert payload["alternatives"] == []
 
     selected_response = await client.post(
         "/api/v1/client/orders/calculate",
         json={
             "material_id": str(material_id),
-            "quarry_id": str(quarry_id),
+            "quarry_id": str(accumulator_id),
             "delivery_option_id": str(delivery_option_id),
             "delivery_lat": 57.2,
             "delivery_lon": 65.6,
@@ -331,12 +326,11 @@ async def test_calculate_returns_best_option_and_sorted_alternatives(
 
     assert selected_response.status_code == 200
     selected_payload = selected_response.json()
-    assert selected_payload["best_option"]["quarry_id"] == str(quarry_id)
-    assert selected_payload["best_option"]["total_amount"] == 8000.0
-    assert selected_payload["best_option"]["primary_image_url"] == "https://cdn.example/alternative-quarry.jpg"
+    assert selected_payload["best_option"]["quarry_id"] == str(accumulator_id)
+    assert selected_payload["best_option"]["point_type"] == "accumulator"
+    assert selected_payload["best_option"]["total_amount"] == 6500.0
+    assert selected_payload["best_option"]["primary_image_url"] == "https://cdn.example/quarry.jpg"
     assert selected_payload["best_option"]["media_files"][0]["public_url"] == (
-        "https://cdn.example/alternative-quarry.jpg"
+        "https://cdn.example/quarry.jpg"
     )
-    assert [option["quarry_id"] for option in selected_payload["alternatives"]] == [
-        str(accumulator_id)
-    ]
+    assert selected_payload["alternatives"] == []

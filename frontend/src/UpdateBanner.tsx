@@ -4,11 +4,17 @@ import { RefreshCw } from "lucide-react";
 import { APP_VERSION, baseURL } from "./utils";
 
 const API_SUFFIX_RE = /\/api\/v1\/?$/;
-const APK_PATH = "/static/darmavoz.apk";
+const PROD_APK_PATH = "/static/darmavoz.apk";
+const TEST_APK_PATH = "/static/darmavoz-test.apk";
 
 const getPublicBaseUrl = () => {
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || baseURL;
   return apiBaseUrl.replace(API_SUFFIX_RE, "");
+};
+
+const isTestContour = () => {
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || baseURL;
+  return apiBaseUrl.includes("test.darmavoz.ru");
 };
 
 const getAbsolutePublicBaseUrl = () => {
@@ -26,7 +32,11 @@ const getAbsolutePublicBaseUrl = () => {
 
 const buildDownloadUrl = (downloadPath?: string | null) => {
   const publicBaseUrl = getAbsolutePublicBaseUrl();
-  const resolvedPath = downloadPath?.trim() || APK_PATH;
+  const defaultPath = isTestContour() ? TEST_APK_PATH : PROD_APK_PATH;
+  const trimmedDownloadPath = downloadPath?.trim() || "";
+  const resolvedPath = /^https?:\/\//i.test(trimmedDownloadPath)
+    ? trimmedDownloadPath
+    : defaultPath;
 
   if (/^https?:\/\//i.test(resolvedPath)) {
     return resolvedPath;
@@ -51,11 +61,13 @@ export default function UpdateBanner() {
         }
 
         const data = await res.json();
-        if (data.android_version && data.android_version !== APP_VERSION) {
+        const nextVersion = typeof data.android_version === "string" ? data.android_version.trim() : "";
+        const currentVersion = APP_VERSION.trim();
+        if (nextVersion && nextVersion !== currentVersion) {
           setUpdateInfo({
             show: true,
             downloadUrl: buildDownloadUrl(data.download_url),
-            version: data.android_version,
+            version: nextVersion,
           });
         }
       } catch {

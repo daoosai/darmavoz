@@ -4,6 +4,7 @@ const config: CapacitorConfig = {
   appId: 'ru.darmavoz.app',
   appName: 'Дармавоз',
   webDir: 'dist',
+  backgroundColor: '#ffffff',
 };
 
 export default config;

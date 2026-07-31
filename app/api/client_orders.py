@@ -28,6 +28,8 @@ async def calculate_order(
             quarry_name=pricing.quarry.name,
             point_type=pricing.quarry.point_type,
             rating=float(pricing.quarry.rating),
+            is_vip=bool(pricing.quarry.is_vip),
+            manual_priority=int(pricing.quarry.manual_priority or 0),
             distance=pricing.mileage_km,
             material_cost=pricing.material_cost,
             delivery_cost=pricing.delivery_cost,

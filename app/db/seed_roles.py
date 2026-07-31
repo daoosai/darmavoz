@@ -8,6 +8,7 @@ async def seed_roles(session: AsyncSession) -> None:
         {"name": "logist", "description": "Logistics operator responsible for order dispatching"},
         {"name": "manager", "description": "Managing role with read-only access to operational metrics"},
         {"name": "supplier", "description": "Pickup point owner"},
+        {"name": "equipment_owner", "description": "Special equipment owner"},
     ]
 
     for role_info in roles_data:

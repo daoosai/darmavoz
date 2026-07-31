@@ -84,7 +84,7 @@ export default function AdminStatisticsScreen({
   return (
     <div className="min-h-screen bg-slate-50 w-full">
       <div className="w-full max-w-7xl mx-auto flex flex-col min-h-screen">
-        <div className="px-4 sm:px-6 lg:px-8 py-4 border-b border-slate-100 bg-white sticky top-0 z-10">
+        <div className="px-4 sm:px-6 lg:px-8 py-4 pt-[max(env(safe-area-inset-top,0px),1rem)] border-b border-slate-100 bg-white sticky top-0 z-10">
           <a
             href={routeBase}
             className="inline-flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-700 transition-colors"

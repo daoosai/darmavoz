@@ -28,14 +28,19 @@ export const handleOpenNavigator = ({
 
   if (hasCoordinates) {
     if (isMobileNavigatorPlatform()) {
-      const geoLabel = label?.trim()
-        ? `?q=${lat},${lon}(${encodeURIComponent(label.trim())})`
-        : "";
-      window.location.href = `geo:${lat},${lon}${geoLabel}`;
+      window.location.href = normalizedAddress
+        ? `geo:${lat},${lon}?q=${encodeURIComponent(normalizedAddress)}`
+        : `geo:${lat},${lon}`;
       return true;
     }
 
-    window.open(`https://2gis.ru/geo/${lon},${lat}`, "_blank", "noopener,noreferrer");
+    window.open(
+      normalizedAddress
+        ? `https://2gis.ru/search/${encodeURIComponent(normalizedAddress)}`
+        : `https://2gis.ru/geo/${lon},${lat}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
     return true;
   }
 
@@ -53,5 +58,6 @@ export const handleOpenNavigator = ({
     return true;
   }
 
+  void label;
   return false;
 };

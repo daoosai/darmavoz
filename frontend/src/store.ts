@@ -100,7 +100,14 @@ interface CartState {
   getTotalPrice: () => number;
 }
 
-export type UserRole = "driver" | "logist" | "admin" | "client" | "supplier" | null;
+export type UserRole =
+  | "driver"
+  | "logist"
+  | "admin"
+  | "client"
+  | "supplier"
+  | "equipment_owner"
+  | null;
 
 export interface CurrentUserProfile {
   id: string;

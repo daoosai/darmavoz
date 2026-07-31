@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { logoutCurrentSession } from "./pushAuth";
+import SupportScreen from "./SupportScreen";
 import { useAuthStore } from "./store";
 import SupplierBottomNav, { type SupplierTab } from "./SupplierBottomNav";
 import SupplierDashboardScreen from "./SupplierDashboardScreen";
@@ -9,7 +10,7 @@ import SupplierRegisterScreen from "./SupplierRegisterScreen";
 
 export default function SupplierPortalScreen({ onBack }: { onBack: () => void }) {
   const { token, role } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<SupplierTab>("points");
+  const [activeView, setActiveView] = useState<SupplierTab>("points");
 
   if (token && role === "supplier") {
     const handleLogout = async () => {
@@ -18,16 +19,22 @@ export default function SupplierPortalScreen({ onBack }: { onBack: () => void })
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 pb-24 sm:mx-auto sm:max-w-md">
-        {activeTab === "points" ? (
+      <div className="min-h-screen bg-gray-50 pb-24 sm:mx-auto sm:max-w-md">
+        {activeView === "support" ? (
+          <SupportScreen onBack={() => setActiveView("profile")} />
+        ) : activeView === "points" ? (
           <SupplierDashboardScreen
             token={token}
-            onRequireProfile={() => setActiveTab("profile")}
+            onRequireProfile={() => setActiveView("profile")}
           />
         ) : (
-          <SupplierProfileScreen token={token} onLogout={handleLogout} />
+          <SupplierProfileScreen
+            token={token}
+            onLogout={handleLogout}
+            onOpenSupport={() => setActiveView("support")}
+          />
         )}
-        <SupplierBottomNav activeTab={activeTab} onChange={setActiveTab} />
+        <SupplierBottomNav activeTab={activeView} onChange={(tab) => setActiveView(tab)} />
       </div>
     );
   }

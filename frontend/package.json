@@ -1,7 +1,7 @@
 {
   "name": "react-example",
   "private": true,
-  "version": "2.5.0",
+  "version": "2.6.0",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
@@ -12,11 +12,14 @@
     "lint": "tsc --noEmit",
     "test:e2e": "playwright test",
     "assets:generate": "capacitor-assets generate",
+    "generate-icons": "npx pwa-asset-generator public/logo.png public/icons -i public/index.html -m public/manifest.webmanifest -v",
     "version:sync": "node scripts/sync_version.js"
   },
   "dependencies": {
+    "@capacitor/android": "^8.4.2",
     "@capacitor/cli": "^8.3.4",
     "@capacitor/core": "^8.4.1",
+    "@capacitor/geolocation": "^8.2.0",
     "@capacitor/ios": "^8.4.2",
     "@capacitor/push-notifications": "^8.1.1",
     "@google/genai": "^1.29.0",

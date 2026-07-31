@@ -100,6 +100,7 @@ const statusClasses = {
 const requesterRoleLabels: Record<string, string> = {
   client: "Клиент",
   driver: "Водитель",
+  supplier: "Поставщик",
   admin: "Администратор",
   logist: "Логист",
   operator: "Оператор",
@@ -107,11 +108,24 @@ const requesterRoleLabels: Record<string, string> = {
 const requesterRoleClasses: Record<string, string> = {
   client: "bg-slate-100 text-slate-600",
   driver: "bg-orange-100 text-orange-700",
+  supplier: "bg-slate-200 text-slate-700",
   admin: "bg-violet-100 text-violet-700",
   logist: "bg-sky-100 text-sky-700",
   operator: "bg-emerald-100 text-emerald-700",
 };
 const operatorAuthorRoles = new Set(["admin", "logist", "operator"]);
+const defaultSupportCategories = [
+  { value: "general", label: "Общий вопрос" },
+  { value: "order", label: "Заказ" },
+  { value: "pickup_point", label: "Точка забора" },
+  { value: "equipment", label: "Спецтехника" },
+  { value: "participant", label: "Участник системы" },
+];
+const supplierSupportCategories = [
+  { value: "pickup_point_removal", label: "Удаление точки забора" },
+  { value: "moderation_question", label: "Вопрос по модерации" },
+  { value: "general", label: "Общие вопросы" },
+];
 
 interface MessageGroup {
   dayKey: string;
@@ -225,6 +239,8 @@ export default function SupportScreen({
 
   const endpoint = operatorMode ? `${baseURL}/admin/support/tickets` : `${baseURL}/support/tickets`;
   const headers = { Authorization: `Bearer ${token}` };
+  const supportCategories =
+    role === "supplier" ? supplierSupportCategories : defaultSupportCategories;
   const visibleTickets = operatorMode
     ? tickets
     : tickets.filter((ticket) =>
@@ -752,7 +768,7 @@ export default function SupportScreen({
   };
 
   const deleteTicket = async (ticketId: string) => {
-    if (!window.confirm("Удалить этот чат навсегда?")) return;
+    if (!window.confirm("Удалить этот чат?")) return;
 
     const previousTickets = tickets;
     const previousSelected = selected;
@@ -761,7 +777,10 @@ export default function SupportScreen({
     removeTicketFromState(ticketId);
 
     try {
-      const response = await fetch(`${baseURL}/admin/support/tickets/${ticketId}`, {
+      const deleteEndpoint = operatorMode
+        ? `${baseURL}/admin/support/tickets/${ticketId}`
+        : `${baseURL}/support/tickets/${ticketId}`;
+      const response = await fetch(deleteEndpoint, {
         method: "DELETE",
         headers,
       });
@@ -870,11 +889,11 @@ export default function SupportScreen({
                       onChange={(event) => setForm({ ...form, category: event.target.value })}
                       className="mt-1 w-full rounded-xl bg-slate-100 p-3 font-normal"
                     >
-                      <option value="general">Общий вопрос</option>
-                      <option value="order">Заказ</option>
-                      <option value="pickup_point">Точка забора</option>
-                      <option value="equipment">Спецтехника</option>
-                      <option value="participant">Участник системы</option>
+                      {supportCategories.map((category) => (
+                        <option key={category.value} value={category.value}>
+                          {category.label}
+                        </option>
+                      ))}
                     </select>
                   </label>
                   <label className="block text-sm font-bold">
@@ -907,8 +926,8 @@ export default function SupportScreen({
   if (selected) {
     const messageGroups = groupMessagesByDay(selected.messages);
     return (
-      <div className="flex h-full min-h-[calc(100dvh-7rem)] flex-col overflow-hidden bg-slate-50 sm:min-h-full">
-        <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-slate-100 bg-white p-4">
+      <div className="flex h-[100dvh] flex-col overflow-hidden bg-white">
+        <div className="sticky top-0 z-10 flex-none flex items-center gap-3 border-b border-gray-100 bg-white p-4 pt-[max(env(safe-area-inset-top),1rem)]">
           <button
             onClick={() => setSelected(null)}
             className="rounded-full bg-slate-100 p-2"
@@ -940,7 +959,7 @@ export default function SupportScreen({
           </span>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-4">
           {selected.messages.length === 0 ? (
             <div className="flex h-full items-center justify-center text-center text-sm text-slate-400">
               Сообщений пока нет
@@ -1133,7 +1152,7 @@ export default function SupportScreen({
         {selected.status !== "closed" ? (
           <form
             onSubmit={sendReply}
-            className="mt-auto shrink-0 border-t border-slate-100 bg-white p-4"
+            className="flex-none border-t border-gray-100 bg-white p-4 pb-safe"
           >
             {editingMessage ? (
               <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3">
@@ -1230,7 +1249,7 @@ export default function SupportScreen({
             </div>
           </form>
         ) : (
-          <p className="mt-auto shrink-0 border-t bg-white p-4 text-center text-sm text-slate-500">
+          <p className="flex-none border-t border-gray-100 bg-white p-4 pb-safe text-center text-sm text-slate-500">
             Обращение закрыто. История доступна только для чтения.
           </p>
         )}
@@ -1240,7 +1259,7 @@ export default function SupportScreen({
   }
 
   return (
-    <div className="min-h-full bg-slate-50 p-4">
+    <div className="min-h-full bg-slate-50 p-4 pt-[max(env(safe-area-inset-top),1rem)]">
       <div className="mb-5 flex items-center justify-between">
         <div className="flex items-center gap-3">
           {onBack && (
@@ -1369,7 +1388,7 @@ export default function SupportScreen({
                 >
                   {statusLabels[ticket.status]}
                 </span>
-                {operatorMode ? (
+                {true ? (
                   <span
                     role="button"
                     tabIndex={0}

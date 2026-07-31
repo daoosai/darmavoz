@@ -303,10 +303,16 @@ class Quarry(Base):
     address: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     contact_phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    lat: Mapped[float] = mapped_column(Float, nullable=False)
-    lon: Mapped[float] = mapped_column(Float, nullable=False)
+    lat: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    lon: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     min_delivery_price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
     rating: Mapped[float] = mapped_column(Float, default=5.0, server_default="5.0", nullable=False)
+    is_vip: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, server_default=text("false")
+    )
+    manual_priority: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False, server_default=text("0")
+    )
     subscription_end_date: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
@@ -328,6 +334,7 @@ class Quarry(Base):
         nullable=False,
     )
     moderation_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    pending_changes: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     moderated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     moderated_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         ForeignKey("users.id"), nullable=True
@@ -468,7 +475,7 @@ class SpecialEquipmentType(Base):
     )
 
     listings: Mapped[List["SpecialEquipmentListing"]] = relationship(
-        "SpecialEquipmentListing", back_populates="equipment_type"
+        "SpecialEquipmentListing", back_populates="equipment_type_ref"
     )
 
 
@@ -476,11 +483,13 @@ class SpecialEquipmentListing(Base):
     __tablename__ = "special_equipment_listings"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    equipment_type_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("special_equipment_types.id"), nullable=False, index=True
+    equipment_type: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    equipment_type_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("special_equipment_types.id"), nullable=True, index=True
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
+    contact_phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     tariffs: Mapped[list[dict]] = mapped_column(
         JSONB, default=list, nullable=False, server_default="[]"
     )
@@ -494,17 +503,52 @@ class SpecialEquipmentListing(Base):
         index=True,
         server_default=text("false"),
     )
+    is_vip: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, server_default=text("false")
+    )
+    manual_priority: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False, server_default=text("0")
+    )
+    price_from: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    owner_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("users.id"), nullable=True, index=True
+    )
+    moderation_status: Mapped[str] = mapped_column(
+        SQLEnum(
+            "incomplete",
+            "pending_moderation",
+            "approved",
+            "rejected",
+            "suspended",
+            name="moderation_status",
+        ),
+        default="pending_moderation",
+        nullable=False,
+        index=True,
+    )
+    moderation_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    pending_changes: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    moderated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    moderated_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    equipment_type: Mapped["SpecialEquipmentType"] = relationship(
+    equipment_type_ref: Mapped[Optional["SpecialEquipmentType"]] = relationship(
         "SpecialEquipmentType", back_populates="listings"
     )
     created_by: Mapped["User"] = relationship("User", foreign_keys=[created_by_user_id])
+    owner: Mapped[Optional["User"]] = relationship("User", foreign_keys=[owner_user_id])
+    moderated_by: Mapped[Optional["User"]] = relationship(
+        "User", foreign_keys=[moderated_by_user_id]
+    )
     applications: Mapped[List["SpecialEquipmentApplication"]] = relationship(
         "SpecialEquipmentApplication", back_populates="listing"
     )
@@ -618,6 +662,24 @@ class SupportTicket(Base):
     )
 
 
+class ModerationAuditLog(Base):
+    __tablename__ = "moderation_audit_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    entity_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("users.id"), nullable=True, index=True
+    )
+    action: Mapped[str] = mapped_column(String(64), nullable=False)
+    comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped[Optional["User"]] = relationship("User", foreign_keys=[user_id])
+
+
 class SupportMessage(Base):
     __tablename__ = "support_messages"
 
@@ -682,6 +744,7 @@ class DriverStatus(str, Enum):
 class ModerationStatus(str, Enum):
     incomplete = "incomplete"
     pending_moderation = "pending_moderation"
+    has_pending_changes = "has_pending_changes"
     approved = "approved"
     rejected = "rejected"
     suspended = "suspended"

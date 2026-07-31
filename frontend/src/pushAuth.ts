@@ -12,6 +12,10 @@ export const getPushTokenEndpoint = (
       return "/clients/me/fcm-token";
     case "driver":
       return "/driver/fcm-token";
+    case "supplier":
+      return "/supplier/me/fcm-token";
+    case "equipment_owner":
+      return "/equipment-owner/me/fcm-token";
     case "logist":
     case "admin":
       return "/logist/me/fcm-token";

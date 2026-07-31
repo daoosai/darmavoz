@@ -9,8 +9,9 @@ jobs:
   build-test-apk:
     runs-on: ubuntu-latest
     env:
-      APK_REMOTE_DIR: /opt/darmavoz_test_deploy/static
+      APK_REMOTE_DIR: /opt/daoos-kit/sites/darmavoz_test/static
       APK_REMOTE_NAME: darmavoz-test.apk
+      APK_BUILD_PATH: frontend/android/app/build/outputs/apk/debug/app-debug.apk
       VITE_2GIS_KEY: ${{ secrets.VITE_2GIS_KEY }}
 
     steps:
@@ -98,25 +99,35 @@ jobs:
           export DARMAVOZ_VERSION_NAME="${RELEASE_VERSION}"
           export DARMAVOZ_VERSION_CODE="${RELEASE_VERSION_CODE}"
           ./gradlew assembleDebug
-          mv app/build/outputs/apk/debug/app-debug.apk ${{ github.workspace }}/darmavoz-test.apk
 
       - name: Prepare remote APK directories
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          host: ${{ secrets.HOST || secrets.SSH_HOST }}
+          username: ${{ secrets.USERNAME || secrets.SSH_USER }}
+          key: ${{ secrets.PRIVATE_KEY || secrets.SSH_PRIVATE_KEY }}
           envs: APK_REMOTE_DIR
           script: |
             set -euo pipefail
             mkdir -p "${APK_REMOTE_DIR}"
 
-      - name: Copy APK to server
-        uses: appleboy/scp-action@master
+      - name: Upload APK directly to server via SCP
+        uses: appleboy/scp-action@v0.1.4
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "darmavoz-test.apk"
-          target: "${{ env.APK_REMOTE_DIR }}/"
+          host: ${{ secrets.HOST || secrets.SSH_HOST }}
+          username: ${{ secrets.USERNAME || secrets.SSH_USER }}
+          key: ${{ secrets.PRIVATE_KEY || secrets.SSH_PRIVATE_KEY }}
+          source: "${{ env.APK_BUILD_PATH }}"
+          target: "/opt/daoos-kit/sites/darmavoz_test/static/"
+          strip_components: 7
           overwrite: true
+
+      - name: Rename APK on server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOST || secrets.SSH_HOST }}
+          username: ${{ secrets.USERNAME || secrets.SSH_USER }}
+          key: ${{ secrets.PRIVATE_KEY || secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -euo pipefail
+            mv /opt/daoos-kit/sites/darmavoz_test/static/app-debug.apk /opt/daoos-kit/sites/darmavoz_test/static/darmavoz-test.apk

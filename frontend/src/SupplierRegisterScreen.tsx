@@ -98,7 +98,7 @@ export default function SupplierRegisterScreen({ onBack }: Props) {
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 sm:mx-auto sm:max-w-md">
-      <header className="flex items-center px-5 py-4">
+      <header className="flex items-center px-5 pb-4 pt-[max(env(safe-area-inset-top,16px),1rem)]">
         <button
           onClick={onBack}
           className="rounded-full bg-white p-3 text-gray-700 shadow-sm hover:bg-gray-100"

@@ -6,7 +6,7 @@ from uuid import UUID
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from jose import JWTError, jwt
-from sqlalchemy import inspect as sa_inspect, select
+from sqlalchemy import delete, inspect as sa_inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -17,6 +17,7 @@ from app.models.models import (
     Driver,
     Order,
     Quarry,
+    Role,
     SpecialEquipmentListing,
     SupportMessage,
     SupportTicket,
@@ -83,9 +84,12 @@ async def get_support_actor(
         return SupportActor(role="client", client=await get_current_client(token=token, db=db))
     user = await get_current_user(token=token, db=db)
     role_name = user.role.name if user.role else ""
-    if role_name != "driver":
-        raise HTTPException(status_code=403, detail="Обращения доступны клиентам и водителям")
-    return SupportActor(role="driver", user=user)
+    if role_name not in {"driver", "supplier", "equipment_owner"}:
+        raise HTTPException(
+            status_code=403,
+            detail="Обращения доступны клиентам, водителям и поставщикам",
+        )
+    return SupportActor(role=role_name, user=user)
 
 
 async def get_support_session_actor(
@@ -101,10 +105,10 @@ async def get_support_session_actor(
         return SupportActor(role="client", client=await get_current_client(token=token, db=db))
     user = await get_current_user(token=token, db=db)
     role_name = user.role.name if user.role else ""
-    if role_name not in {"driver", "admin", "logist"}:
+    if role_name not in {"driver", "supplier", "equipment_owner", "admin", "logist"}:
         raise HTTPException(
             status_code=403,
-            detail="Обращения доступны клиентам, водителям, администраторам и логистам",
+            detail="Обращения доступны клиентам, водителям, поставщикам, администраторам и логистам",
         )
     return SupportActor(role=role_name, user=user)
 
@@ -163,23 +167,33 @@ def _validate_ticket_open_for_message(ticket: SupportTicket) -> None:
         raise HTTPException(status_code=409, detail="Обращение уже закрыто")
 
 
+async def _delete_ticket_with_messages(db: AsyncSession, ticket: SupportTicket) -> None:
+    await db.execute(delete(SupportMessage).where(SupportMessage.ticket_id == ticket.id))
+    await db.delete(ticket)
+    await db.commit()
+
+
 async def _resolve_support_reply_target(
     db: AsyncSession,
     ticket: SupportTicket,
-) -> tuple[UUID | None, UUID | None]:
+) -> tuple[UUID | None, UUID | None, UUID | None]:
     if ticket.client_id is not None:
-        return ticket.client_id, None
+        return ticket.client_id, None, None
 
     if ticket.user is not None:
         driver_profile = _get_loaded_driver_profile(ticket.user)
         if driver_profile is not None:
-            return None, driver_profile.id
+            return None, driver_profile.id, None
+        if ticket.user.role is not None and ticket.user.role.name == "supplier":
+            return None, None, ticket.user.id
 
     if ticket.user_id is None:
-        return None, None
+        return None, None, None
 
     driver_id = await db.scalar(select(Driver.id).where(Driver.user_id == ticket.user_id))
-    return None, driver_id
+    if driver_id is not None:
+        return None, driver_id, None
+    return None, None, ticket.user_id
 
 
 def _get_loaded_driver_profile(user: User | None) -> Driver | None:
@@ -377,6 +391,20 @@ async def get_own_support_ticket(
     return _ticket_payload(ticket, actor)
 
 
+@router.delete("/support/tickets/{ticket_id}", response_model=dict[str, bool])
+@message_router.delete("/tickets/{ticket_id}", response_model=dict[str, bool])
+async def delete_own_support_ticket(
+    ticket_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    actor: SupportActor = Depends(get_support_actor),
+):
+    ticket = await _get_ticket(db, ticket_id)
+    if not _actor_owns_ticket(actor, ticket):
+        raise HTTPException(status_code=403, detail="Нет доступа к удалению этого чата")
+    await _delete_ticket_with_messages(db, ticket)
+    return {"ok": True}
+
+
 @router.post("/support/tickets/{ticket_id}/messages", response_model=SupportTicketOut)
 async def add_own_support_message(
     ticket_id: UUID,
@@ -494,8 +522,8 @@ async def list_operator_support_tickets(
         stmt = stmt.where(SupportTicket.category == category)
     if requester_role == "client":
         stmt = stmt.where(SupportTicket.client_id.is_not(None))
-    elif requester_role == "driver":
-        stmt = stmt.where(SupportTicket.user_id.is_not(None))
+    elif requester_role:
+        stmt = stmt.join(SupportTicket.user).join(User.role).where(Role.name == requester_role)
     result = await db.execute(stmt.order_by(SupportTicket.updated_at.desc()))
     return [_ticket_payload(item, actor) for item in result.scalars().unique().all()]
 
@@ -511,6 +539,17 @@ async def get_operator_support_ticket(
         user=current_user,
     )
     return _ticket_payload(await _get_ticket(db, ticket_id), actor)
+
+
+@router.delete("/admin/support/tickets/{ticket_id}", response_model=dict[str, bool])
+async def delete_operator_support_ticket(
+    ticket_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_logist_user),
+):
+    ticket = await _get_ticket(db, ticket_id)
+    await _delete_ticket_with_messages(db, ticket)
+    return {"ok": True}
 
 
 @router.post("/admin/support/tickets/{ticket_id}/messages", response_model=SupportTicketOut)
@@ -538,12 +577,13 @@ async def add_operator_support_message(
     ticket.updated_at = datetime.now(timezone.utc)
     await db.commit()
     ticket = await _get_ticket(db, ticket.id)
-    client_id, driver_id = await _resolve_support_reply_target(db, ticket)
+    client_id, driver_id, user_id = await _resolve_support_reply_target(db, ticket)
     background_tasks.add_task(
         send_support_reply_notification,
         ticket_id=ticket.id,
         client_id=client_id,
         driver_id=driver_id,
+        user_id=user_id,
     )
     actor = SupportActor(
         role=current_user.role.name if current_user.role else "operator",

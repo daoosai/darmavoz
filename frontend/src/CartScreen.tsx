@@ -34,6 +34,8 @@ interface MarketplaceOption {
   primary_image_url?: string | null;
   image_url?: string | null;
   media_files?: Array<{ public_url?: string | null }>;
+  is_vip?: boolean;
+  manual_priority?: number;
 }
 
 interface MarketplaceCalculation {
@@ -710,7 +712,12 @@ export default function CartScreen({
                           const optionImageUrl = getMarketplaceImageUrl(option);
 
                           return (
-                            <article key={`${item.id}-${option.quarry_id}`} className="w-72 shrink-0 snap-start rounded-2xl border border-gray-100 bg-white p-4 shadow-sm flex flex-col justify-between">
+                            <article
+                              key={`${item.id}-${option.quarry_id}`}
+                              className={`w-72 shrink-0 snap-start rounded-2xl border bg-white p-4 shadow-sm flex flex-col justify-between ${
+                                option.is_vip ? "border-amber-300 shadow-amber-100/70" : "border-gray-100"
+                              }`}
+                            >
                               <div className="flex items-center gap-3">
                                 <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-slate-200">
                                   {optionImageUrl ? (
@@ -724,7 +731,14 @@ export default function CartScreen({
                                   )}
                                 </div>
                                 <div className="min-w-0">
-                                  <h5 className="line-clamp-2 text-sm font-bold text-slate-900">{option.quarry_name}</h5>
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <h5 className="line-clamp-2 text-sm font-bold text-slate-900">{option.quarry_name}</h5>
+                                    {option.is_vip ? (
+                                      <span className="inline-flex items-center rounded-full bg-amber-400 px-2.5 py-1 text-xs font-bold text-white">
+                                        {"\u2B50 \u0420\u0435\u043a\u043e\u043c\u0435\u043d\u0434\u0443\u0435\u043c"}
+                                      </span>
+                                    ) : null}
+                                  </div>
                                   <p className="mt-1 text-xs text-slate-500">{Number(option.distance).toFixed(1)} км от вашего адреса</p>
                                   <p className="mt-1 truncate text-[10px] font-semibold text-sky-600">{item.deliveryOption.title}</p>
                                 </div>

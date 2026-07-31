@@ -1,3 +1,5 @@
+import { Capacitor } from "@capacitor/core";
+import { Geolocation } from "@capacitor/geolocation";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
@@ -6,10 +8,12 @@ import {
   ChevronRight,
   ChevronUp,
   Loader2,
+  LocateFixed,
   MapPin,
   Mountain,
   Warehouse,
 } from "lucide-react";
+import toast from "react-hot-toast";
 import ClientAddressBottomSheet from "./ClientAddressBottomSheet";
 import { baseURL, formatPhoneNumber } from "./utils";
 import { MaterialProps } from "./MaterialDetailScreen";
@@ -116,6 +120,7 @@ export default function PickupPointMapScreen({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const markerRefs = useRef<any[]>([]);
+  const userMarkerRef = useRef<any | null>(null);
   const carouselRef = useRef<HTMLDivElement>(null);
   const carouselFrameRef = useRef<number | null>(null);
   const pointCardRefs = useRef<Map<string, HTMLElement>>(new Map());
@@ -125,6 +130,7 @@ export default function PickupPointMapScreen({
   const [filter, setFilter] = useState<"all" | "quarry" | "accumulator">("all");
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
   const [isLocationResolved, setIsLocationResolved] = useState(false);
+  const [isMapReady, setIsMapReady] = useState(false);
   const [activePointId, setActivePointId] = useState<string | null>(null);
   const [detailsLoadingId, setDetailsLoadingId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -181,30 +187,95 @@ export default function PickupPointMapScreen({
   const selectedDistance = selected && distanceLocation
     ? calculateDistance(distanceLocation.lat, distanceLocation.lon, selected.lat, selected.lon)
     : null;
+
+  const upsertUserMarker = (nextLocation: UserLocation | null) => {
+    const mapgl = (window as any).mapgl;
+    if (!isMapReady || !mapRef.current || !mapgl?.HtmlMarker) {
+      return;
+    }
+
+    if (!nextLocation) {
+      userMarkerRef.current?.destroy?.();
+      userMarkerRef.current = null;
+      return;
+    }
+
+    const coordinates: [number, number] = [nextLocation.lon, nextLocation.lat];
+    if (typeof userMarkerRef.current?.setCoordinates === "function") {
+      userMarkerRef.current.setCoordinates(coordinates);
+      return;
+    }
+
+    userMarkerRef.current?.destroy?.();
+    const element = document.createElement("div");
+    element.setAttribute("aria-label", "Вы здесь");
+    element.style.width = "18px";
+    element.style.height = "18px";
+    element.style.borderRadius = "999px";
+    element.style.background = "#0ea5e9";
+    element.style.border = "3px solid #ffffff";
+    element.style.boxShadow = "0 0 0 6px rgba(14, 165, 233, 0.24)";
+
+    userMarkerRef.current = new mapgl.HtmlMarker(mapRef.current, {
+      coordinates,
+      html: element,
+    });
+  };
+
+  const requestCurrentLocation = async (showErrorToast = false) => {
+    try {
+      if (Capacitor.isNativePlatform()) {
+        await Geolocation.requestPermissions();
+      }
+
+      const position = await Geolocation.getCurrentPosition({
+        enableHighAccuracy: false,
+        timeout: 10000,
+        maximumAge: 300000,
+      });
+
+      const nextLocation = {
+        lat: Number(position.coords.latitude),
+        lon: Number(position.coords.longitude),
+      };
+      setUserLocation(nextLocation);
+      return nextLocation;
+    } catch (locationError) {
+      if (showErrorToast) {
+        toast.error("Не удалось получить доступ к геопозиции");
+      }
+      return null;
+    }
+  };
+
+  const handleLocateMe = async () => {
+    const nextLocation = await requestCurrentLocation(true);
+    if (!nextLocation || !mapRef.current) {
+      return;
+    }
+
+    upsertUserMarker(nextLocation);
+    mapRef.current.setCenter([nextLocation.lon, nextLocation.lat], {
+      easing: "easeOutCubic",
+      duration: 700,
+    });
+    mapRef.current.setZoom(14, {
+      easing: "easeOutCubic",
+      duration: 700,
+    });
+  };
+
   useEffect(() => {
     if (deliveryLocation) {
       setIsLocationResolved(true);
       return;
     }
-    if (!("geolocation" in navigator)) {
-      setIsLocationResolved(true);
-      return;
-    }
-
     let mounted = true;
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
-        if (mounted) {
-          setUserLocation({ lat: coords.latitude, lon: coords.longitude });
-          setIsLocationResolved(true);
-        }
-      },
-      () => {
-        // The map remains usable when location access is unavailable or denied.
-        if (mounted) setIsLocationResolved(true);
-      },
-      { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 },
-    );
+    void requestCurrentLocation(false).finally(() => {
+      if (mounted) {
+        setIsLocationResolved(true);
+      }
+    });
 
     return () => {
       mounted = false;
@@ -273,9 +344,13 @@ export default function PickupPointMapScreen({
       zoom: 10,
       key,
     });
+    setIsMapReady(true);
     return () => {
       markerRefs.current.forEach((marker) => marker.destroy());
       markerRefs.current = [];
+      userMarkerRef.current?.destroy?.();
+      userMarkerRef.current = null;
+      setIsMapReady(false);
       mapRef.current?.destroy();
       mapRef.current = null;
       detailsAbortRef.current?.abort();
@@ -325,6 +400,10 @@ export default function PickupPointMapScreen({
       });
     });
   }, [points, filter, activePointId]);
+
+  useEffect(() => {
+    upsertUserMarker(userLocation);
+  }, [isMapReady, userLocation]);
 
   const activatePoint = (
     point: PickupPointMarker,
@@ -466,6 +545,17 @@ export default function PickupPointMapScreen({
       </header>
       )}
 
+      {!isAddressSheetOpen && (
+        <button
+          type="button"
+          onClick={() => void handleLocateMe()}
+          aria-label="Моё местоположение"
+          className="absolute bottom-24 right-4 z-[105] flex h-12 w-12 items-center justify-center rounded-full bg-white shadow-lg transition hover:bg-slate-50"
+        >
+          <LocateFixed className="h-5 w-5 text-sky-600" />
+        </button>
+      )}
+
       {!isAddressSheetOpen && (isLoading || error || (!isLoading && points.length === 0)) && (
         <div className="absolute inset-x-4 top-36 bg-white rounded-2xl shadow-xl p-4 flex items-center gap-3">
           {isLoading ? <Loader2 className="animate-spin" /> : <MapPin />}
@@ -604,8 +694,10 @@ export default function PickupPointMapScreen({
             )}
           </div>
           <div className="mt-4 min-w-0">
-            <span className="text-xs font-bold uppercase tracking-wide text-sky-500">{TYPE_LABELS[selected.point_type]}</span>
             <h2 className="text-xl font-bold text-gray-900">{selected.name}</h2>
+            <span className="mt-2 inline-block text-xs font-bold uppercase tracking-wide text-sky-500">
+              {TYPE_LABELS[selected.point_type]}
+            </span>
             {selectedPointAddress && <p className="mt-1 text-sm text-gray-500">{selectedPointAddress}</p>}
             {selectedDistance !== null && (
               <p className="mt-1 flex items-center gap-1 text-xs font-medium text-gray-400">

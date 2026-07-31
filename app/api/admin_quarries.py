@@ -36,6 +36,12 @@ from app.services.pickup_points import (
     sync_material_offers,
     validate_point_can_be_approved,
 )
+from app.services.moderation import (
+    QUARRY_ENTITY_TYPE,
+    clear_entity_pending_changes,
+    create_moderation_audit_log,
+    summarize_pending_changes,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -43,7 +49,12 @@ ACTIVATION_ERROR = "Невозможно активировать точку: о
 
 
 async def _admin_pickup_point_payload(db: AsyncSession, point: Quarry) -> dict:
-    return await pickup_point_payload(db, point, include_owner_contacts=True)
+    return await pickup_point_payload(
+        db,
+        point,
+        include_owner_contacts=True,
+        include_pending_changes=True,
+    )
 
 
 async def _get_point_or_404(db: AsyncSession, point_id: UUID) -> Quarry:
@@ -65,6 +76,61 @@ async def _validate_point_activation(db: AsyncSession, point: Quarry) -> None:
         raise
 
 
+async def _apply_point_changes(
+    db: AsyncSession,
+    point: Quarry,
+    payload_data: dict,
+) -> None:
+    for nullable_field in ("description", "contact_phone", "subscription_end_date", "short_name"):
+        if nullable_field in payload_data and isinstance(payload_data[nullable_field], str):
+            normalized = payload_data[nullable_field].strip()
+            payload_data[nullable_field] = normalized or None
+    if "name" in payload_data and "short_name" not in payload_data:
+        payload_data["short_name"] = payload_data["name"]
+    elif "short_name" in payload_data and not payload_data["short_name"]:
+        payload_data["short_name"] = payload_data.get("name") or point.name
+    changed = set(payload_data)
+    for field in (
+        "name",
+        "short_name",
+        "point_type",
+        "address",
+        "description",
+        "contact_phone",
+        "subscription_end_date",
+        "lat",
+        "lon",
+        "min_delivery_price",
+        "is_vip",
+        "manual_priority",
+        "is_active",
+    ):
+        if field in changed:
+            setattr(point, field, payload_data[field])
+
+    if "point_type" in changed and "min_delivery_price" not in changed:
+        point.min_delivery_price = default_min_delivery_price(point.point_type)
+    if "material_offers" in changed or "material_ids" in changed:
+        await sync_material_offers(
+            db,
+            quarry_id=point.id,
+            offers=payload_data.get("material_offers"),
+            legacy_material_ids=payload_data.get("material_ids"),
+        )
+    if "delivery_option_ids" in changed:
+        await sync_delivery_options(
+            db,
+            quarry_id=point.id,
+            delivery_option_ids=payload_data.get("delivery_option_ids") or [],
+        )
+    elif "point_type" in changed:
+        await sync_delivery_options(
+            db,
+            quarry_id=point.id,
+            delivery_option_ids=await default_delivery_option_ids(db, point.point_type),
+        )
+
+
 @router.get("/quarries", response_model=list[AdminPickupPointOut])
 @router.get("/pickup-points", response_model=list[AdminPickupPointOut])
 async def list_pickup_points(
@@ -78,7 +144,17 @@ async def list_pickup_points(
     del current_user
     stmt = select(Quarry)
     if moderation_status:
-        stmt = stmt.where(Quarry.moderation_status == moderation_status)
+        if moderation_status == ModerationStatus.pending_moderation.value:
+            stmt = stmt.where(
+                Quarry.moderation_status.in_(
+                    [
+                        ModerationStatus.pending_moderation.value,
+                        ModerationStatus.has_pending_changes.value,
+                    ]
+                )
+            )
+        else:
+            stmt = stmt.where(Quarry.moderation_status == moderation_status)
     if point_type:
         stmt = stmt.where(Quarry.point_type == point_type)
     if material_id:
@@ -127,6 +203,8 @@ async def create_pickup_point(
         lat=payload.lat,
         lon=payload.lon,
         min_delivery_price=min_price,
+        is_vip=payload.is_vip,
+        manual_priority=payload.manual_priority,
         is_active=payload.is_active,
         moderation_status=ModerationStatus.incomplete.value,
         moderated_by_user_id=current_admin.id,
@@ -168,52 +246,8 @@ async def update_pickup_point(
 ) -> dict:
     point = await _get_point_or_404(db, point_id)
     payload_data = payload.model_dump(exclude_unset=True)
-    for nullable_field in ("description", "contact_phone", "subscription_end_date", "short_name"):
-        if nullable_field in payload_data and isinstance(payload_data[nullable_field], str):
-            normalized = payload_data[nullable_field].strip()
-            payload_data[nullable_field] = normalized or None
-    if "name" in payload_data and "short_name" not in payload_data:
-        payload_data["short_name"] = payload_data["name"]
-    elif "short_name" in payload_data and not payload_data["short_name"]:
-        payload_data["short_name"] = payload_data.get("name") or point.name
+    await _apply_point_changes(db, point, payload_data)
     changed = set(payload_data)
-    for field in (
-        "name",
-        "short_name",
-        "point_type",
-        "address",
-        "description",
-        "contact_phone",
-        "subscription_end_date",
-        "lat",
-        "lon",
-        "min_delivery_price",
-        "is_active",
-    ):
-        if field in changed:
-            setattr(point, field, payload_data[field])
-
-    if "point_type" in changed and "min_delivery_price" not in changed:
-        point.min_delivery_price = default_min_delivery_price(point.point_type)
-    if "material_offers" in changed or "material_ids" in changed:
-        await sync_material_offers(
-            db,
-            quarry_id=point.id,
-            offers=payload.material_offers if "material_offers" in changed else None,
-            legacy_material_ids=payload_data.get("material_ids"),
-        )
-    if "delivery_option_ids" in changed:
-        await sync_delivery_options(
-            db,
-            quarry_id=point.id,
-            delivery_option_ids=payload_data.get("delivery_option_ids") or [],
-        )
-    elif "point_type" in changed:
-        await sync_delivery_options(
-            db,
-            quarry_id=point.id,
-            delivery_option_ids=await default_delivery_option_ids(db, point.point_type),
-        )
     publication_fields = {
         "is_active",
         "point_type",
@@ -227,6 +261,7 @@ async def update_pickup_point(
             await _validate_point_activation(db, point)
             point.moderation_status = ModerationStatus.approved.value
             point.moderation_comment = None
+            clear_entity_pending_changes(point)
             point.moderated_at = datetime.now(timezone.utc)
             point.moderated_by_user_id = current_user.id
         except HTTPException:
@@ -288,12 +323,30 @@ async def approve_pickup_point(
 ) -> dict:
     point = await _get_point_or_404(db, point_id)
     try:
+        staged_changes = point.pending_changes if point.moderation_status == ModerationStatus.has_pending_changes.value else None
+        if staged_changes:
+            pending_payload = QuarryUpdate.model_validate(staged_changes)
+            await _apply_point_changes(
+                db,
+                point,
+                pending_payload.model_dump(exclude_unset=True),
+            )
         await validate_point_can_be_approved(db, point)
         point.moderation_status = ModerationStatus.approved.value
         point.moderation_comment = payload.comment
         point.moderated_at = datetime.now(timezone.utc)
         point.moderated_by_user_id = current_user.id
-        point.is_active = True
+        if not staged_changes:
+            point.is_active = True
+        clear_entity_pending_changes(point)
+        await create_moderation_audit_log(
+            db,
+            entity_type=QUARRY_ENTITY_TYPE,
+            entity_id=point.id,
+            user_id=current_user.id,
+            action="approved",
+            comment=summarize_pending_changes(staged_changes) or payload.comment,
+        )
         await db.commit()
         await db.refresh(point)
         return await _admin_pickup_point_payload(db, point)
@@ -323,10 +376,23 @@ async def reject_pickup_point(
     current_user: User = Depends(get_current_logist_user),
 ) -> dict:
     point = await _get_point_or_404(db, point_id)
-    point.moderation_status = ModerationStatus.rejected.value
+    staged_changes = point.pending_changes if point.moderation_status == ModerationStatus.has_pending_changes.value else None
+    if staged_changes:
+        point.moderation_status = ModerationStatus.approved.value
+        clear_entity_pending_changes(point)
+    else:
+        point.moderation_status = ModerationStatus.rejected.value
     point.moderation_comment = payload.reason
     point.moderated_at = datetime.now(timezone.utc)
     point.moderated_by_user_id = current_user.id
+    await create_moderation_audit_log(
+        db,
+        entity_type=QUARRY_ENTITY_TYPE,
+        entity_id=point.id,
+        user_id=current_user.id,
+        action="rejected",
+        comment=payload.reason,
+    )
     await db.commit()
     return await _admin_pickup_point_payload(db, point)
 
@@ -343,6 +409,14 @@ async def suspend_pickup_point(
     point.moderation_comment = payload.comment
     point.moderated_at = datetime.now(timezone.utc)
     point.moderated_by_user_id = current_user.id
+    await create_moderation_audit_log(
+        db,
+        entity_type=QUARRY_ENTITY_TYPE,
+        entity_id=point.id,
+        user_id=current_user.id,
+        action="suspended",
+        comment=payload.comment,
+    )
     await db.commit()
     return await _admin_pickup_point_payload(db, point)
 

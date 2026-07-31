@@ -74,6 +74,19 @@ export default function ClientAddressBottomSheet({
   const mapRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
 
+  const createDraggableMarker = (mapInstance: any, coordinates: [number, number]) => {
+    const marker = new (window as any).mapgl.Marker(mapInstance, {
+      coordinates,
+      draggable: true,
+    });
+    marker.on("dragend", (event: any) => {
+      const [nextLon, nextLat] = event.target.getCoordinates();
+      setLat(nextLat);
+      setLon(nextLon);
+    });
+    return marker;
+  };
+
   useEffect(() => {
     if (isOpen && token && role === "client" && !isAdding) {
       fetchAddresses();
@@ -109,9 +122,7 @@ export default function ClientAddressBottomSheet({
         mapRef.current = mapInstance;
 
         if (lat && lon) {
-          markerRef.current = new (window as any).mapgl.Marker(mapInstance, {
-            coordinates: [lon, lat],
-          });
+          markerRef.current = createDraggableMarker(mapInstance, [lon, lat]);
         }
       }
     }
@@ -138,9 +149,7 @@ export default function ClientAddressBottomSheet({
       if (markerRef.current) {
         markerRef.current.setCoordinates(coords);
       } else {
-        markerRef.current = new (window as any).mapgl.Marker(mapRef.current, {
-          coordinates: coords,
-        });
+        markerRef.current = createDraggableMarker(mapRef.current, coords);
       }
     }
   }, [lat, lon]);

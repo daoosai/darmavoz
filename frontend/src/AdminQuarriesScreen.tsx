@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Plus, Edit2, ImagePlus, Star, Trash2 } from "lucide-react";
+import { Plus, Edit2, ImagePlus, Star, Trash2, Crown } from "lucide-react";
 import toast from "react-hot-toast";
 import {
   fetch2gisAddressSuggestions,
@@ -20,10 +20,13 @@ export interface Quarry {
   description?: string;
   contact_phone?: string | null;
   subscription_end_date?: string | null;
-  lat: number;
-  lon: number;
+  lat: number | null;
+  lon: number | null;
   min_delivery_price?: number;
+  is_vip?: boolean;
+  manual_priority?: number;
   moderation_status?: string;
+  pending_changes?: Record<string, unknown> | null;
   is_active: boolean;
   owner_user_id?: string | null;
   material_ids?: string[];
@@ -55,8 +58,27 @@ const MODERATION_BADGES: Record<string, { label: string; className: string }> = 
   suspended: { label: "Приостановлен", className: "bg-orange-100 text-orange-700" },
 };
 
+MODERATION_BADGES.has_pending_changes = {
+  label: "Есть правки",
+  className: "bg-sky-100 text-sky-800",
+};
+
 const moderationBadge = (status?: string) =>
   MODERATION_BADGES[status || "incomplete"] || MODERATION_BADGES.incomplete;
+
+const getPendingChangesSummary = (pendingChanges?: Record<string, unknown> | null) => {
+  if (!pendingChanges || typeof pendingChanges !== "object") {
+    return null;
+  }
+  const keys = Object.keys(pendingChanges);
+  return keys.length ? keys.join(", ") : null;
+};
+
+const normalizeManualPriority = (value?: number | null) => {
+  const parsed = Number(value ?? 0);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.min(100, Math.max(0, Math.trunc(parsed)));
+};
 
 const POINT_TYPE_LABELS: Record<Quarry["point_type"], string> = {
   quarry: "Карьер",
@@ -111,6 +133,17 @@ const serializeSubscriptionEndDate = (value?: string | null) => {
   return parsed ? parsed.toISOString() : null;
 };
 
+const subscriptionDateInputMin = new Date().toISOString().split("T")[0];
+
+const normalizeSubscriptionDateInput = (value: string) => {
+  if (!value) return "";
+  const truncated = value.slice(0, 10);
+  const [year = "", month = "", day = ""] = truncated.split("-");
+  return [year.slice(0, 4), month.slice(0, 2), day.slice(0, 2)]
+    .filter((part, index, parts) => part || parts.slice(index + 1).some(Boolean))
+    .join("-");
+};
+
 const normalizeOptionalText = (value?: string | null) => {
   if (typeof value !== "string") return null;
   const normalized = value.trim();
@@ -158,10 +191,12 @@ const buildQuarryFormData = (quarry: Quarry): QuarryFormData => ({
 
 interface AdminQuarriesScreenProps {
   materials: any[];
+  onPointsChanged?: () => void | Promise<void>;
 }
 
 export default function AdminQuarriesScreen({
   materials,
+  onPointsChanged,
 }: AdminQuarriesScreenProps) {
   const { token } = useAuthStore();
   const [quarries, setQuarries] = useState<Quarry[]>([]);
@@ -172,6 +207,8 @@ export default function AdminQuarriesScreen({
   const [typeFilter, setTypeFilter] = useState("");
   const [isModerating, setIsModerating] = useState(false);
   const [deletingPointId, setDeletingPointId] = useState<string | null>(null);
+  const [rejectPointId, setRejectPointId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
 
   const fetchQuarries = async () => {
     try {
@@ -202,6 +239,11 @@ export default function AdminQuarriesScreen({
     action: "approve" | "reject",
     reason?: string,
   ) => {
+    const point = quarries.find((item) => item.id === pointId);
+    if (action === "approve" && (point?.lat == null || point?.lon == null)) {
+      toast.error("Укажите координаты на карте перед одобрением");
+      return false;
+    }
     setIsModerating(true);
     try {
       const response = await fetch(`${baseURL}/admin/pickup-points/${pointId}/${action}`, {
@@ -216,6 +258,7 @@ export default function AdminQuarriesScreen({
       }
       toast.success(action === "approve" ? "Точка одобрена" : "Заявка отклонена");
       await fetchQuarries();
+      await onPointsChanged?.();
       return true;
     } catch {
       toast.error("Не удалось связаться с сервером");
@@ -226,9 +269,22 @@ export default function AdminQuarriesScreen({
   };
 
   const rejectPoint = (pointId: string) => {
-    const reason = window.prompt("Укажите причину отклонения:");
-    if (!reason?.trim()) return;
-    void moderatePoint(pointId, "reject", reason.trim());
+    setRejectPointId(pointId);
+    setRejectReason("");
+  };
+
+  const closeRejectModal = () => {
+    if (isModerating) return;
+    setRejectPointId(null);
+    setRejectReason("");
+  };
+
+  const submitRejectPoint = async () => {
+    if (!rejectPointId || !rejectReason.trim()) return;
+    const success = await moderatePoint(rejectPointId, "reject", rejectReason.trim());
+    if (success) {
+      closeRejectModal();
+    }
   };
 
   const deletePoint = async (point: Quarry) => {
@@ -251,6 +307,7 @@ export default function AdminQuarriesScreen({
           : "Точка скрыта, так как уже связана с заказами",
       );
       await fetchQuarries();
+      await onPointsChanged?.();
     } catch {
       toast.error("Не удалось связаться с сервером");
     } finally {
@@ -271,6 +328,8 @@ export default function AdminQuarriesScreen({
         subscription_end_date: "",
         lat: 57.152223,
         lon: 65.527202,
+        is_vip: false,
+        manual_priority: 0,
         is_active: false,
         material_ids: [],
         material_offers: [],
@@ -289,7 +348,7 @@ export default function AdminQuarriesScreen({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 pb-[calc(6rem+env(safe-area-inset-bottom,0px))]">
       <div className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
         <div className="flex items-center gap-3">
           <div>
@@ -315,6 +374,7 @@ export default function AdminQuarriesScreen({
           <option value="approved">Одобрено</option>
           <option value="rejected">Отклонено</option>
           <option value="suspended">Приостановлено</option>
+          <option value="has_pending_changes">Есть правки</option>
         </select>
         <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
           <option value="">Все типы</option>
@@ -372,9 +432,15 @@ export default function AdminQuarriesScreen({
                     </td>
                     <td className="p-4 text-sm text-slate-600 max-w-[250px] truncate">
                       {getQuarryAddress(quarry)}
+                      {getPendingChangesSummary(quarry.pending_changes) ? (
+                        <div className="mt-1 text-xs text-sky-700">
+                          Правки: {getPendingChangesSummary(quarry.pending_changes)}
+                        </div>
+                      ) : null}
                     </td>
                     <td className="p-4">
-                      {quarry.is_active ? (
+                      <div className="flex flex-wrap gap-2">
+                        {quarry.is_active ? (
                         <span className="inline-flex items-center px-2 py-1 rounded-lg bg-emerald-100 text-emerald-700 text-xs font-bold">
                           Активен
                         </span>
@@ -382,7 +448,19 @@ export default function AdminQuarriesScreen({
                         <span className="inline-flex items-center px-2 py-1 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold">
                           Скрыт
                         </span>
-                      )}
+                        )}
+                        {quarry.is_vip ? (
+                          <span className="inline-flex items-center gap-1 rounded-lg bg-amber-100 px-2 py-1 text-xs font-black uppercase tracking-wide text-amber-800">
+                            <Crown className="h-3.5 w-3.5" />
+                            VIP
+                          </span>
+                        ) : null}
+                        {(quarry.manual_priority || 0) > 0 ? (
+                          <span className="inline-flex items-center rounded-lg bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">
+                            #{quarry.manual_priority}
+                          </span>
+                        ) : null}
+                      </div>
                     </td>
                     <td className="p-4">
                       <span className={`inline-flex items-center rounded-lg px-2 py-1 text-xs font-bold ${moderationBadge(quarry.moderation_status).className}`}>
@@ -406,7 +484,7 @@ export default function AdminQuarriesScreen({
                         >
                           <Trash2 className="w-5 h-5" />
                         </button>
-                        {quarry.moderation_status === "pending_moderation" && quarry.id && (
+                        {["pending_moderation", "has_pending_changes"].includes(quarry.moderation_status || "") && quarry.id && (
                           <div className="flex flex-col items-stretch gap-2">
                             <button disabled={isModerating} onClick={() => void moderatePoint(quarry.id!, "approve")} className="w-28 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50">Одобрить</button>
                             <button disabled={isModerating} onClick={() => rejectPoint(quarry.id!)} className="w-28 rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-50">Отклонить</button>
@@ -444,6 +522,11 @@ export default function AdminQuarriesScreen({
               </div>
               <div className="text-sm text-gray-600">
                 {getQuarryAddress(quarry)}
+                {getPendingChangesSummary(quarry.pending_changes) ? (
+                  <div className="mt-1 text-xs text-sky-700">
+                    Правки: {getPendingChangesSummary(quarry.pending_changes)}
+                  </div>
+                ) : null}
               </div>
               {(quarry.owner_name || quarry.owner_phone) && (
                 <div className="text-xs font-medium text-slate-500">
@@ -465,6 +548,17 @@ export default function AdminQuarriesScreen({
                   <span className={`inline-flex items-center rounded-lg px-2 py-1 text-xs font-bold ${moderationBadge(quarry.moderation_status).className}`}>
                     {moderationBadge(quarry.moderation_status).label}
                   </span>
+                  {quarry.is_vip ? (
+                    <span className="inline-flex items-center gap-1 rounded-lg bg-amber-100 px-2 py-1 text-xs font-black uppercase tracking-wide text-amber-800">
+                      <Crown className="h-3.5 w-3.5" />
+                      VIP
+                    </span>
+                  ) : null}
+                  {(quarry.manual_priority || 0) > 0 ? (
+                    <span className="inline-flex items-center rounded-lg bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">
+                      #{quarry.manual_priority}
+                    </span>
+                  ) : null}
                 </div>
                 <div className="flex items-center justify-end gap-2">
                   <button
@@ -482,7 +576,7 @@ export default function AdminQuarriesScreen({
                   >
                     <Trash2 className="w-5 h-5" />
                   </button>
-                  {quarry.moderation_status === "pending_moderation" && quarry.id ? (
+                  {["pending_moderation", "has_pending_changes"].includes(quarry.moderation_status || "") && quarry.id ? (
                     <div className="flex flex-col items-stretch gap-2">
                       <button disabled={isModerating} onClick={() => void moderatePoint(quarry.id!, "approve")} className="w-28 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 disabled:opacity-50">Одобрить</button>
                       <button disabled={isModerating} onClick={() => rejectPoint(quarry.id!)} className="w-28 rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 disabled:opacity-50">Отклонить</button>
@@ -502,10 +596,50 @@ export default function AdminQuarriesScreen({
           onClose={() => setIsModalOpen(false)}
           onSave={() => {
             setIsModalOpen(false);
-            fetchQuarries();
+            void fetchQuarries();
+            void onPointsChanged?.();
           }}
         />
       )}
+
+      {rejectPointId ? (
+        <div className="fixed inset-0 z-50 bg-black/50">
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl">
+              <h3 className="text-xl font-black text-slate-900">Укажите причину отклонения</h3>
+              <p className="mt-2 text-sm text-slate-500">
+                Комментарий увидит поставщик в причине отказа по точке.
+              </p>
+              <textarea
+                value={rejectReason}
+                onChange={(event) => setRejectReason(event.target.value)}
+                placeholder="Например: добавьте фото, уточните описание или скорректируйте адрес."
+                autoFocus
+                rows={5}
+                className="mt-4 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-100"
+              />
+              <div className="mt-5 flex gap-3">
+                <button
+                  type="button"
+                  onClick={closeRejectModal}
+                  disabled={isModerating}
+                  className="flex-1 rounded-2xl bg-slate-100 px-4 py-3 font-bold text-slate-700 transition hover:bg-slate-200 disabled:opacity-50"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void submitRejectPoint()}
+                  disabled={isModerating || !rejectReason.trim()}
+                  className="flex-1 rounded-2xl bg-red-500 px-4 py-3 font-bold text-white transition hover:bg-red-600 disabled:opacity-50"
+                >
+                  Отклонить
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
     </div>
   );
@@ -550,6 +684,22 @@ function EditQuarryModal({
     if (lat === null || lon === null) return null;
     return { lat, lon };
   };
+  const createDraggableMarker = (mapInstance: any, coordinates: [number, number]) => {
+    const mapgl = (window as any).mapgl;
+    const marker = new mapgl.Marker(mapInstance, {
+      coordinates,
+      draggable: true,
+    });
+    marker.on("dragend", (event: any) => {
+      const [nextLon, nextLat] = event.target.getCoordinates();
+      setFormData((current) => ({
+        ...current,
+        lat: stringifyCoordinate(nextLat),
+        lon: stringifyCoordinate(nextLon),
+      }));
+    });
+    return marker;
+  };
   const totalPhotoCount = (formData.media_files?.length || 0) + pendingFiles.length;
 
   React.useEffect(() => {
@@ -569,9 +719,10 @@ function EditQuarryModal({
     mapRef.current = mapInstance;
 
     if (initialCoordinates) {
-      markerRef.current = new mapgl.Marker(mapInstance, {
-        coordinates: [initialCoordinates.lon, initialCoordinates.lat],
-      });
+      markerRef.current = createDraggableMarker(mapInstance, [
+        initialCoordinates.lon,
+        initialCoordinates.lat,
+      ]);
     }
 
     return () => {
@@ -614,9 +765,7 @@ function EditQuarryModal({
       return;
     }
 
-    markerRef.current = new mapgl.Marker(mapRef.current, {
-      coordinates: point,
-    });
+    markerRef.current = createDraggableMarker(mapRef.current, point);
   }, [formData.lat, formData.lon]);
 
   const handleLatChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -840,6 +989,8 @@ function EditQuarryModal({
         lat,
         lon,
         is_active: shouldDelayActivation ? false : requestedActive,
+        is_vip: Boolean(formData.is_vip),
+        manual_priority: normalizeManualPriority(formData.manual_priority),
         material_ids: Array.from(new Set((formData.material_ids || []).filter(Boolean))),
         material_offers: normalizedMaterialOffers,
         ...(usesOwnerPhone ? {} : { contact_phone: normalizeOptionalText(formData.contact_phone) }),
@@ -1091,7 +1242,7 @@ function EditQuarryModal({
 
         <form
           onSubmit={handleSave}
-          className="p-6 overflow-y-auto flex flex-col gap-5"
+          className="flex flex-col gap-5 overflow-y-auto p-6 pb-[max(env(safe-area-inset-bottom,16px),2rem)]"
         >
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
@@ -1154,12 +1305,13 @@ function EditQuarryModal({
               <input
                 type="date"
                 value={formData.subscription_end_date || ""}
-                min="2000-01-01"
+                min={subscriptionDateInputMin}
                 max="2099-12-31"
                 onChange={(event) =>
                   setFormData({
                     ...formData,
-                    subscription_end_date: event.target.value || null,
+                    subscription_end_date:
+                      normalizeSubscriptionDateInput(event.target.value) || null,
                   })
                 }
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3"
@@ -1417,6 +1569,22 @@ function EnhancedEditQuarryModal({
     if (lat === null || lon === null) return null;
     return { lat, lon };
   };
+  const createDraggableMarker = (mapInstance: any, coordinates: [number, number]) => {
+    const mapgl = (window as any).mapgl;
+    const marker = new mapgl.Marker(mapInstance, {
+      coordinates,
+      draggable: true,
+    });
+    marker.on("dragend", (event: any) => {
+      const [nextLon, nextLat] = event.target.getCoordinates();
+      setFormData((current) => ({
+        ...current,
+        lat: stringifyCoordinate(nextLat),
+        lon: stringifyCoordinate(nextLon),
+      }));
+    });
+    return marker;
+  };
 
   React.useEffect(() => {
     const mapgl = (window as any).mapgl;
@@ -1434,9 +1602,10 @@ function EnhancedEditQuarryModal({
 
     mapRef.current = mapInstance;
     if (initialCoordinates) {
-      markerRef.current = new mapgl.Marker(mapInstance, {
-        coordinates: [initialCoordinates.lon, initialCoordinates.lat],
-      });
+      markerRef.current = createDraggableMarker(mapInstance, [
+        initialCoordinates.lon,
+        initialCoordinates.lat,
+      ]);
     }
 
     return () => {
@@ -1476,9 +1645,7 @@ function EnhancedEditQuarryModal({
       markerRef.current.setCoordinates(point);
       return;
     }
-    markerRef.current = new mapgl.Marker(mapRef.current, {
-      coordinates: point,
-    });
+    markerRef.current = createDraggableMarker(mapRef.current, point);
   }, [formData.lat, formData.lon]);
 
   const geocodeAddress = async (address: string) => {
@@ -1824,6 +1991,8 @@ function EnhancedEditQuarryModal({
         lat,
         lon,
         is_active: shouldDelayActivation ? false : requestedActive,
+        is_vip: Boolean(formData.is_vip),
+        manual_priority: normalizeManualPriority(formData.manual_priority),
         material_ids: Array.from(new Set((formData.material_ids || []).filter(Boolean))),
         material_offers: normalizedMaterialOffers,
         ...(usesOwnerPhone ? {} : { contact_phone: normalizeOptionalText(formData.contact_phone) }),
@@ -1898,7 +2067,10 @@ function EnhancedEditQuarryModal({
           </button>
         </div>
 
-        <form onSubmit={handleSave} className="p-6 overflow-y-auto flex flex-col gap-5">
+        <form
+          onSubmit={handleSave}
+          className="flex flex-col gap-5 overflow-y-auto p-6 pb-[max(env(safe-area-inset-bottom,16px),2rem)]"
+        >
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Название</label>
             <input
@@ -1951,10 +2123,12 @@ function EnhancedEditQuarryModal({
               <input
                 type="date"
                 value={formData.subscription_end_date || ""}
+                min={subscriptionDateInputMin}
                 onChange={(event) =>
                   setFormData({
                     ...formData,
-                    subscription_end_date: event.target.value || null,
+                    subscription_end_date:
+                      normalizeSubscriptionDateInput(event.target.value) || null,
                   })
                 }
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3"
@@ -2169,6 +2343,37 @@ function EnhancedEditQuarryModal({
                 Фотографии пока не добавлены
               </div>
             ) : null}
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 rounded-2xl border border-amber-100 bg-amber-50/60 p-4 sm:grid-cols-2">
+            <label className="flex items-center gap-3 rounded-xl bg-white px-4 py-3 text-sm font-bold text-slate-800">
+              <input
+                type="checkbox"
+                checked={Boolean(formData.is_vip)}
+                onChange={(event) =>
+                  setFormData({ ...formData, is_vip: event.target.checked })
+                }
+                className="h-4 w-4 rounded border-amber-300 text-amber-500 focus:ring-amber-400"
+              />
+              VIP-статус
+            </label>
+            <label className="text-sm font-bold text-slate-800">
+              Ручной приоритет (0-100)
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="1"
+                value={formData.manual_priority ?? 0}
+                onChange={(event) =>
+                  setFormData({
+                    ...formData,
+                    manual_priority: normalizeManualPriority(Number(event.target.value)),
+                  })
+                }
+                className="mt-1 w-full rounded-xl bg-white px-4 py-3 font-normal"
+              />
+            </label>
           </div>
 
           <div className="flex items-center gap-3 pt-2">

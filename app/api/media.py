@@ -3,7 +3,7 @@ from uuid import UUID
 from pathlib import Path
 
 from botocore.exceptions import ClientError
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy import and_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,7 +15,7 @@ from app.schemas.media import (
     PresignUploadRequest,
     PresignUploadResponse,
 )
-from app.security.auth import get_current_admin_user, get_current_user
+from app.security.auth import get_current_user
 from app.services.storage import (
     StorageNotConfiguredError,
     StorageValidationError,
@@ -24,6 +24,13 @@ from app.services.storage import (
 from app.services.vehicle_moderation import (
     REQUIRED_VEHICLE_MEDIA_SLOTS,
     set_incomplete_moderation,
+)
+from app.services.moderation import (
+    EQUIPMENT_ENTITY_TYPE,
+    QUARRY_ENTITY_TYPE,
+    create_moderation_audit_log,
+    mark_entity_pending_changes,
+    schedule_admin_moderation_email,
 )
 
 router = APIRouter()
@@ -85,20 +92,41 @@ async def _resolve_media_entity_context(
     slot_key: str | None,
 ) -> tuple[str, UUID, Vehicle | None]:
     role_name = current_user.role.name if current_user.role else None
-    if role_name == "admin":
+    if role_name in {"admin", "logist"}:
         if entity_type is None:
             raise HTTPException(status_code=400, detail="entity_type is required")
         if entity_id is None:
             raise HTTPException(status_code=400, detail="entity_id is required")
+        if role_name == "logist" and entity_type != "equipment_listing":
+            raise HTTPException(
+                status_code=403,
+                detail="Logists can manage media only for equipment listings",
+            )
         entity = await _ensure_entity_exists(entity_type, entity_id, db)
         return entity_type, entity_id, entity if entity_type == "vehicle" else None
 
-    if role_name == "supplier":
-        if entity_type != "quarry" or entity_id is None:
+    if role_name == "equipment_owner":
+        if entity_id is None or entity_type != "equipment_listing":
             raise HTTPException(
                 status_code=403,
-                detail="Suppliers can upload media only for their pickup points",
+                detail="Equipment owners can upload media only for their own equipment listings",
             )
+        listing = await db.get(SpecialEquipmentListing, entity_id)
+        if listing is None or listing.owner_user_id != current_user.id:
+            raise HTTPException(status_code=404, detail="Equipment listing not found")
+        return "equipment_listing", entity_id, None
+
+    if role_name == "supplier":
+        if entity_id is None or entity_type not in {"quarry", "equipment_listing"}:
+            raise HTTPException(
+                status_code=403,
+                detail="Suppliers can upload media only for their own entities",
+            )
+        if entity_type == "equipment_listing":
+            listing = await db.get(SpecialEquipmentListing, entity_id)
+            if listing is None or listing.owner_user_id != current_user.id:
+                raise HTTPException(status_code=404, detail="Equipment listing not found")
+            return "equipment_listing", entity_id, None
         point = await db.get(Quarry, entity_id)
         if point is None or point.owner_user_id != current_user.id:
             raise HTTPException(status_code=404, detail="Pickup point not found")
@@ -132,6 +160,61 @@ async def _load_vehicle_media(db: AsyncSession, vehicle_id: UUID) -> list[MediaF
         .order_by(MediaFile.created_at.asc())
     )
     return list(result.scalars().all())
+
+
+async def _apply_supplier_media_moderation(
+    db: AsyncSession,
+    current_user: User,
+    *,
+    entity_type: str,
+    entity_id: UUID,
+    background_tasks: BackgroundTasks,
+    action_label: str,
+) -> None:
+    role_name = current_user.role.name if current_user.role else None
+    if role_name not in {"supplier", "equipment_owner"}:
+        return
+    entity = None
+    entity_label = None
+    entity_audit_type = None
+    if entity_type == "equipment_listing":
+        entity = await db.get(SpecialEquipmentListing, entity_id)
+        entity_label = entity.title if entity is not None else None
+        entity_audit_type = EQUIPMENT_ENTITY_TYPE
+    elif entity_type == "quarry":
+        entity = await db.get(Quarry, entity_id)
+        entity_label = entity.name if entity is not None else None
+        entity_audit_type = QUARRY_ENTITY_TYPE
+    if entity is None or entity_audit_type is None:
+        return
+
+    if entity.moderation_status in {
+        ModerationStatus.approved.value,
+        ModerationStatus.has_pending_changes.value,
+    }:
+        mark_entity_pending_changes(entity, {"media_updated": True})
+        schedule_admin_moderation_email(
+            background_tasks,
+            subject="Изменения фотографий ожидают модерации",
+            body=(
+                f'Пользователь изменил фотографии сущности "{entity_label or entity_id}". '
+                f"Действие: {action_label}."
+            ),
+        )
+    elif entity.moderation_status == ModerationStatus.rejected.value:
+        entity.moderation_status = ModerationStatus.pending_moderation.value
+        entity.moderation_comment = None
+        entity.moderated_at = None
+        entity.moderated_by_user_id = None
+
+    await create_moderation_audit_log(
+        db,
+        entity_type=entity_audit_type,
+        entity_id=entity_id,
+        user_id=current_user.id,
+        action="edited",
+        comment=f"media:{action_label}",
+    )
 
 
 @router.post("/presign-upload", response_model=PresignUploadResponse)
@@ -175,6 +258,7 @@ async def presign_upload(
 @router.post("/confirm", response_model=ConfirmUploadResponse, status_code=status.HTTP_201_CREATED)
 async def confirm_upload(
     payload: ConfirmUploadRequest,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ConfirmUploadResponse:
@@ -268,6 +352,14 @@ async def confirm_upload(
         if linked_driver is not None and linked_driver.moderation_status != ModerationStatus.suspended.value:
             set_incomplete_moderation(linked_driver)
 
+    await _apply_supplier_media_moderation(
+        db,
+        current_user,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        background_tasks=background_tasks,
+        action_label="upload",
+    )
     await db.commit()
     await db.refresh(media_file)
     logger.info("Confirmed media %s, Public URL: %s", media_file.id, media_file.public_url)
@@ -277,14 +369,25 @@ async def confirm_upload(
 @router.delete("/{media_id}", status_code=status.HTTP_200_OK)
 async def delete_media(
     media_id: UUID,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    current_admin: User = Depends(get_current_admin_user),
+    current_user: User = Depends(get_current_user),
 ) -> dict[str, bool]:
-    del current_admin
+    role_name = current_user.role.name if current_user.role else None
+    if role_name not in {"admin", "logist", "supplier", "equipment_owner"}:
+        raise HTTPException(status_code=403, detail="Media deletion is not allowed")
+
     result = await db.execute(select(MediaFile).where(MediaFile.id == media_id))
     media_file = result.scalar_one_or_none()
     if media_file is None:
         raise HTTPException(status_code=404, detail="Media file not found")
+    await _resolve_media_entity_context(
+        db=db,
+        current_user=current_user,
+        entity_type=media_file.entity_type,
+        entity_id=media_file.entity_id,
+        slot_key=media_file.slot_key,
+    )
 
     try:
         storage = get_storage_service()
@@ -302,6 +405,14 @@ async def delete_media(
     await db.delete(media_file)
     await db.flush()
     await _sync_entity_image_url(entity_type, entity_id, db)
+    await _apply_supplier_media_moderation(
+        db,
+        current_user,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        background_tasks=background_tasks,
+        action_label="delete",
+    )
     await db.commit()
     return {"ok": True}
 
@@ -309,6 +420,7 @@ async def delete_media(
 @router.post("/{media_id}/make-primary", status_code=status.HTTP_200_OK)
 async def make_media_primary(
     media_id: UUID,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, bool]:
@@ -337,5 +449,13 @@ async def make_media_primary(
     )
     media_file.is_primary = True
     await _sync_entity_image_url(media_file.entity_type, media_file.entity_id, db)
+    await _apply_supplier_media_moderation(
+        db,
+        current_user,
+        entity_type=media_file.entity_type,
+        entity_id=media_file.entity_id,
+        background_tasks=background_tasks,
+        action_label="make_primary",
+    )
     await db.commit()
     return {"ok": True}

@@ -405,7 +405,7 @@ export default function AdminEquipmentScreen({
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 pb-[calc(6rem+env(safe-area-inset-bottom,0px))]">
       <div className="flex gap-2 overflow-x-auto rounded-2xl bg-white p-2 shadow-sm">
         {[
           ["listings", "Объявления"],
@@ -698,7 +698,7 @@ export default function AdminEquipmentScreen({
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4">
           <form
             onSubmit={saveListing}
-            className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6"
+            className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 pb-[max(env(safe-area-inset-bottom,16px),2rem)]"
           >
             <div className="mb-5 flex justify-between">
               <h3 className="text-xl font-black">

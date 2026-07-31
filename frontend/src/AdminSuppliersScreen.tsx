@@ -233,7 +233,7 @@ export default function AdminSuppliersScreen() {
   };
 
   return (
-    <section className="flex flex-col gap-5">
+    <section className="flex flex-col gap-5 pb-[calc(6rem+env(safe-area-inset-bottom,0px))]">
       <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-500">
           Поставщики
@@ -402,7 +402,7 @@ export default function AdminSuppliersScreen() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4">
           <form
             onSubmit={saveSupplier}
-            className="w-full max-w-md space-y-4 rounded-3xl bg-white p-6 shadow-xl"
+            className="w-full max-w-md space-y-4 rounded-3xl bg-white p-6 pb-[max(env(safe-area-inset-bottom,16px),2rem)] shadow-xl"
           >
             <div className="flex items-center justify-between">
               <h3 className="text-xl font-black text-slate-900">

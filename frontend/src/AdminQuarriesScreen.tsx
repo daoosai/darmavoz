@@ -348,7 +348,7 @@ export default function AdminQuarriesScreen({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 pb-[calc(6rem+env(safe-area-inset-bottom,0px))]">
       <div className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
         <div className="flex items-center gap-3">
           <div>
@@ -1242,7 +1242,7 @@ function EditQuarryModal({
 
         <form
           onSubmit={handleSave}
-          className="p-6 overflow-y-auto flex flex-col gap-5"
+          className="flex flex-col gap-5 overflow-y-auto p-6 pb-[max(env(safe-area-inset-bottom,16px),2rem)]"
         >
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
@@ -2067,7 +2067,10 @@ function EnhancedEditQuarryModal({
           </button>
         </div>
 
-        <form onSubmit={handleSave} className="p-6 overflow-y-auto flex flex-col gap-5">
+        <form
+          onSubmit={handleSave}
+          className="flex flex-col gap-5 overflow-y-auto p-6 pb-[max(env(safe-area-inset-bottom,16px),2rem)]"
+        >
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Название</label>
             <input

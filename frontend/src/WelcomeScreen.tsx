@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import PrivacyPolicyModal from "./PrivacyPolicyModal";
-import RequisitesModal from "./RequisitesModal";
 
 export default function WelcomeScreen({
   onSelectClient,
@@ -9,7 +8,6 @@ export default function WelcomeScreen({
   onSelectClient: () => void;
   onSelectEmployee: () => void;
 }) {
-  const [isRequisitesOpen, setIsRequisitesOpen] = useState(false);
   const [isPrivacyPolicyOpen, setIsPrivacyPolicyOpen] = useState(false);
 
   return (
@@ -37,23 +35,21 @@ export default function WelcomeScreen({
       </div>
 
       <footer className="mb-4 mt-6 flex flex-col space-y-2 text-center text-xs text-gray-400">
-        <button
-          type="button"
-          onClick={() => setIsRequisitesOpen(true)}
-          className="underline-offset-4 transition-colors hover:text-gray-600 hover:underline"
-        >
-          Реквизиты сервиса
-        </button>
+        <p className="text-sm text-gray-500">
+          Служба поддержки{" "}
+          <a href="tel:+73452900900" className="font-bold text-gray-700">
+            8 (3452) 900 900
+          </a>
+        </p>
         <button
           type="button"
           onClick={() => setIsPrivacyPolicyOpen(true)}
-          className="underline-offset-4 transition-colors hover:text-gray-600 hover:underline"
+          className="mt-2 text-[10px] text-gray-300/70 hover:text-gray-400"
         >
           Политика конфиденциальности
         </button>
       </footer>
 
-      <RequisitesModal isOpen={isRequisitesOpen} onClose={() => setIsRequisitesOpen(false)} />
       <PrivacyPolicyModal
         isOpen={isPrivacyPolicyOpen}
         onClose={() => setIsPrivacyPolicyOpen(false)}

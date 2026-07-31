@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 
 import { APP_VERSION, baseURL } from "./utils";
+import { isServerVersionNewer } from "./version";
 
 const API_SUFFIX_RE = /\/api\/v1\/?$/;
 const PROD_APK_PATH = "/static/darmavoz.apk";
@@ -63,7 +64,7 @@ export default function UpdateBanner() {
         const data = await res.json();
         const nextVersion = typeof data.android_version === "string" ? data.android_version.trim() : "";
         const currentVersion = APP_VERSION.trim();
-        if (nextVersion && nextVersion !== currentVersion) {
+        if (nextVersion && isServerVersionNewer(nextVersion, currentVersion)) {
           setUpdateInfo({
             show: true,
             downloadUrl: buildDownloadUrl(data.download_url),

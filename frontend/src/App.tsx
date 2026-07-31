@@ -21,6 +21,7 @@ import { getImageUrl, baseURL, APP_VERSION } from "./utils";
 import CartScreen from "./CartScreen";
 import ProfileScreen from "./ProfileScreen";
 import MaterialBottomSheet from "./MaterialBottomSheet";
+import UpdateBanner from "./UpdateBanner";
 
 import { Toaster } from "react-hot-toast";
 
@@ -436,6 +437,10 @@ function MainContent({
         <main className="flex-1 overflow-y-auto pb-[calc(90px+env(safe-area-inset-bottom))] pt-4">
           {activeTab === "home" && (
             <>
+              <div className="px-4">
+                <UpdateBanner />
+              </div>
+
               {/* Top Address Button */}
               <div className="mb-4 px-4 pt-[calc(env(safe-area-inset-top,0px)+0.25rem)]">
                 <button

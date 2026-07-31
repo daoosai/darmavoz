@@ -1,7 +1,7 @@
 """add user soft delete flag
 
-Revision ID: a1b2c3d4e5f6
-Revises: f9e8d7c6b5a4
+Revision ID: b1c2d3e4f5a6
+Revises: a7c1d9e4f2b3
 Create Date: 2026-07-31 14:30:00.000000
 """
 
@@ -9,8 +9,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "a1b2c3d4e5f6"
-down_revision = "f9e8d7c6b5a4"
+revision = "b1c2d3e4f5a6"
+down_revision = "a7c1d9e4f2b3"
 branch_labels = None
 depends_on = None
 

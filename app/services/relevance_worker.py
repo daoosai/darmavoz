@@ -7,7 +7,11 @@ from sqlalchemy import select
 from app.core.config import settings
 from app.db.database import AsyncSessionLocal
 from app.models.models import PlacementStatus, Quarry, SpecialEquipmentListing
-from app.services.relevance import recalculate_status, utcnow
+from app.services.relevance import (
+    CONFIRMATION_OVERDUE_REASON,
+    recalculate_status,
+    utcnow,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -17,7 +21,19 @@ async def _process_model(session, model, *, limit: int) -> int:
     now = utcnow()
     result = await session.execute(
         select(model)
-        .where(model.placement_status != PlacementStatus.archived.value)
+        .where(
+            model.placement_status.notin_(
+                (
+                    PlacementStatus.expired.value,
+                    PlacementStatus.archived.value,
+                )
+            )
+        )
+        .where(
+            (model.placement_status != PlacementStatus.hidden.value)
+            | model.placement_hidden_reason.is_(None)
+            | (model.placement_hidden_reason != CONFIRMATION_OVERDUE_REASON)
+        )
         .where(
             (model.placement_ends_at.is_not(None) & (model.placement_ends_at <= now))
             | (model.next_confirmation_at.is_not(None) & (model.next_confirmation_at <= now))

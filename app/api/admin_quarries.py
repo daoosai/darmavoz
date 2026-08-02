@@ -109,6 +109,8 @@ async def _apply_point_changes(
     ):
         if field in changed:
             setattr(point, field, payload_data[field])
+    if "subscription_end_date" in changed:
+        point.placement_ends_at = point.subscription_end_date
 
     if "point_type" in changed and "min_delivery_price" not in changed:
         point.min_delivery_price = default_min_delivery_price(point.point_type)
@@ -205,6 +207,7 @@ async def create_pickup_point(
         description=payload.description,
         contact_phone=payload.contact_phone,
         subscription_end_date=payload.subscription_end_date,
+        placement_ends_at=payload.subscription_end_date,
         lat=payload.lat,
         lon=payload.lon,
         min_delivery_price=min_price,

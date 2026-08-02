@@ -123,6 +123,8 @@ async def _apply_supplier_point_patch(
     ):
         if field in changed:
             setattr(point, field, payload_data[field])
+    if "subscription_end_date" in changed:
+        point.placement_ends_at = point.subscription_end_date
     if "point_type" in changed:
         await sync_delivery_options(
             db,

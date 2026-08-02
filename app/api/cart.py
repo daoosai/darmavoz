@@ -7,8 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.database import get_db
-from app.models.models import CartItem, Material, ModerationStatus, Quarry, quarry_materials
+from app.models.models import CartItem, Material, Quarry, quarry_materials
 from app.schemas.catalog import CartItemCreate, CartItemUpdate, CartItemOut
+from app.services.relevance import is_publicly_available
 
 router = APIRouter()
 
@@ -47,8 +48,7 @@ async def add_cart_item(
         quarry = await db.get(Quarry, item.quarry_id)
         if (
             quarry is None
-            or not quarry.is_active
-            or quarry.moderation_status != ModerationStatus.approved.value
+            or not is_publicly_available(quarry)
         ):
             raise HTTPException(status_code=409, detail="POINT_NOT_AVAILABLE")
         unit_price = await db.scalar(

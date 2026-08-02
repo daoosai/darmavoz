@@ -33,6 +33,7 @@ import AdminProfileScreen from "./AdminProfileScreen";
 import AdminQuarriesScreen from "./AdminQuarriesScreen";
 import AdminSuppliersScreen from "./AdminSuppliersScreen";
 import AdminCategoriesPanel from "./AdminCategoriesPanel";
+import PlacementSummaryPanel from "./components/admin/PlacementSummaryPanel";
 import { DriverHistoryModal } from "./components/admin/DriverHistoryModal";
 import toast from "react-hot-toast";
 import { logoutCurrentSession } from "./pushAuth";
@@ -718,7 +719,7 @@ export default function AdminDashboardScreen({
         },
       );
       if (!res.ok) {
-        throw new Error("РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ С‚РѕС‡РєРё РЅР° РјРѕРґРµСЂР°С†РёРё");
+        throw new Error("Не удалось загрузить точки на модерации");
       }
       const data = await res.json().catch(() => []);
       const count = Array.isArray(data)
@@ -730,7 +731,7 @@ export default function AdminDashboardScreen({
     } catch (error) {
       setPendingPointModerationCount(0);
       if (!silent) {
-        toast.error("РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ С‚РѕС‡РєРё РЅР° РјРѕРґРµСЂР°С†РёРё");
+        toast.error("Не удалось загрузить точки на модерации");
       }
     }
   };
@@ -1756,6 +1757,11 @@ export default function AdminDashboardScreen({
       {/* Main Content */}
       <div className="flex-1 overflow-y-auto p-6 lg:p-8 sm:pb-8 pb-24 relative">
         <div className="max-w-6xl mx-auto flex flex-col gap-6">
+          <PlacementSummaryPanel
+            token={token || ""}
+            onOpenPoints={() => setActiveTab("quarries")}
+            onOpenEquipment={() => setActiveTab("equipment")}
+          />
           {activeTab === "materials" ? (
             <>
               <AdminCategoriesPanel

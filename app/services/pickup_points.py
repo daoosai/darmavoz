@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from datetime import datetime, timezone
+from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,7 +14,6 @@ from app.models.models import (
     DeliveryOption,
     Material,
     MediaFile,
-    ModerationStatus,
     PickupPointType,
     Quarry,
     User,
@@ -22,7 +21,12 @@ from app.models.models import (
     quarry_materials,
 )
 from app.schemas.quarry import QuarryMaterialOfferIn
-from app.services.moderation import has_publicly_visible_moderation_status, serialize_moderation_value
+from app.services.moderation import serialize_moderation_value
+from app.services.relevance import (
+    is_publicly_available,
+    placement_payload_fields,
+    public_placement_filters,
+)
 
 
 DEFAULT_MIN_DELIVERY_PRICE = {
@@ -34,17 +38,7 @@ DEFAULT_MIN_DELIVERY_PRICE = {
 
 
 def public_pickup_point_filters():
-    return (
-        Quarry.is_active.is_(True),
-        Quarry.moderation_status.in_(tuple(sorted({
-            ModerationStatus.approved.value,
-            ModerationStatus.has_pending_changes.value,
-        }))),
-        or_(
-            Quarry.subscription_end_date.is_(None),
-            Quarry.subscription_end_date > func.now(),
-        ),
-    )
+    return public_placement_filters(Quarry)
 
 
 def is_pickup_point_publicly_available(
@@ -52,12 +46,7 @@ def is_pickup_point_publicly_available(
     *,
     now: datetime | None = None,
 ) -> bool:
-    if not point.is_active or not has_publicly_visible_moderation_status(point.moderation_status):
-        return False
-    if point.subscription_end_date is None:
-        return True
-    current_time = now or datetime.now(timezone.utc)
-    return point.subscription_end_date > current_time
+    return is_publicly_available(point, now=now)
 
 
 def default_min_delivery_price(point_type: str) -> Decimal | None:
@@ -300,6 +289,7 @@ async def pickup_point_payload(
         "primary_image_url": media_files[0].public_url if media_files else None,
         "created_at": point.created_at,
         "updated_at": point.updated_at,
+        **placement_payload_fields(point),
     }
     if include_owner_contacts:
         payload["owner_name"] = owner.display_name if owner else None

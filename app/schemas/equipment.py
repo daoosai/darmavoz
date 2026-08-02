@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.schemas.catalog import MediaFileOut
+from app.schemas.placement import PlacementStatusValue
 
 
 TariffType = Literal["hour", "shift"]
@@ -181,6 +182,17 @@ class EquipmentListingOut(BaseModel):
     primary_image_url: str | None = None
     owner_user_id: UUID | None = None
     moderation_status: ModerationStatusValue
+    placement_status: PlacementStatusValue = "pending_moderation"
+    placement_started_at: datetime | None = None
+    trial_ends_at: datetime | None = None
+    placement_ends_at: datetime | None = None
+    last_confirmed_at: datetime | None = None
+    next_confirmation_at: datetime | None = None
+    confirmation_grace_ends_at: datetime | None = None
+    placement_hidden_reason: str | None = None
+    archived_at: datetime | None = None
+    can_confirm_relevance: bool = False
+    can_extend_placement: bool = False
     moderation_comment: str | None = None
     pending_changes: dict | None = None
     created_at: datetime

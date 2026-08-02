@@ -9,8 +9,9 @@ import {
   formatEquipmentPrice,
   getEquipmentTariffs,
 } from "./EquipmentCatalogScreen";
-import { useAuthStore } from "./store";
+import { useAuthStore, usePlacementStore } from "./store";
 import { baseURL, extractApiErrorMessage, formatPhoneNumber, resolveMediaUrl } from "./utils";
+import { PlacementBadge, PlacementDates, type PlacementStatus } from "./placement";
 
 type Tab = "listings" | "moderation" | "types";
 
@@ -77,6 +78,8 @@ export default function AdminEquipmentScreen({
   const [rejectingListing, setRejectingListing] = useState<EquipmentListing | null>(null);
   const [listingRejectReason, setListingRejectReason] = useState("");
   const [isRejectingListing, setIsRejectingListing] = useState(false);
+  const [placementFilter, setPlacementFilter] = useState<PlacementStatus | "">("");
+  const { policy, loadPolicy, loadSummary } = usePlacementStore();
 
   const headers = { Authorization: `Bearer ${token}` };
   const activeTypes = types.filter((item) => item.is_active);
@@ -103,7 +106,10 @@ export default function AdminEquipmentScreen({
           canManageTypes ? `${baseURL}/admin/equipment-types` : `${baseURL}/equipment/types`,
           { headers },
         ),
-        fetch(`${baseURL}/admin/equipment`, { headers }),
+        fetch(
+          `${baseURL}/admin/equipment${placementFilter ? `?placement_status=${placementFilter}` : ""}`,
+          { headers },
+        ),
       ]);
       if (!typesResponse.ok || !listingsResponse.ok) {
         throw new Error("load");
@@ -128,8 +134,24 @@ export default function AdminEquipmentScreen({
   };
 
   useEffect(() => {
+    if (!policy) void loadPolicy();
+  }, [loadPolicy, policy]);
+
+  const placementAction = async (item: EquipmentListing, action: "extend" | "hide" | "restore" | "archive") => {
+    const response = await fetch(`${baseURL}/admin/equipment/${item.id}/placement/${action}`, { method: "POST", headers });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      toast.error(extractApiErrorMessage(data, "Не удалось изменить размещение"));
+      return;
+    }
+    toast.success(action === "extend" ? `Размещение продлено на ${policy?.extension_days ?? "установленный срок"} дней` : "Статус размещения обновлён");
+    await load();
+    if (token) await loadSummary(token);
+  };
+
+  useEffect(() => {
     void load();
-  }, [token]);
+  }, [token, placementFilter]);
 
   const saveType = async () => {
     if (!newTypeName.trim()) return;
@@ -582,6 +604,21 @@ export default function AdminEquipmentScreen({
             </button>
           </div>
 
+          <select
+            value={placementFilter}
+            onChange={(event) => setPlacementFilter(event.target.value as PlacementStatus | "")}
+            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm sm:w-auto"
+          >
+            <option value="">Все статусы размещения</option>
+            <option value="active">Активно</option>
+            <option value="pending_moderation">На модерации</option>
+            <option value="hidden">Скрыто</option>
+            <option value="archived">Архив</option>
+            <option value="confirmation_required">Требует подтверждения</option>
+            <option value="trial">Тестовый период</option>
+            <option value="expired">Размещение завершено</option>
+          </select>
+
           <div className="grid gap-4 lg:grid-cols-2">
             {listings.map((item) => (
               <div key={item.id} className="overflow-hidden rounded-3xl bg-white shadow-sm">
@@ -617,6 +654,7 @@ export default function AdminEquipmentScreen({
                 <div className="p-4">
                   <p className="text-xs font-bold text-sky-600">{item.equipment_type_name}</p>
                   <div className="mt-2 flex flex-wrap gap-2">
+                    <PlacementBadge status={item.placement_status} />
                     {item.is_vip ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 text-xs font-black uppercase tracking-wide text-amber-800">
                         <Crown className="h-3.5 w-3.5" />
@@ -629,6 +667,7 @@ export default function AdminEquipmentScreen({
                       </span>
                     ) : null}
                   </div>
+                  <div className="mt-2"><PlacementDates item={item} /></div>
                   <span
                     className={`mt-1 inline-flex rounded-full px-2 py-1 text-[10px] font-black uppercase ${
                       item.moderation_status === "approved"
@@ -663,6 +702,11 @@ export default function AdminEquipmentScreen({
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {item.placement_status !== "archived" ? <button type="button" onClick={() => void placementAction(item, "extend")} className="rounded-xl bg-sky-50 px-3 py-2 text-xs font-bold text-sky-700">Продлить</button> : null}
+                    {item.placement_status === "hidden" || item.placement_status === "archived" ? <button type="button" onClick={() => void placementAction(item, "restore")} className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">Восстановить</button> : <button type="button" onClick={() => void placementAction(item, "hide")} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">Скрыть</button>}
+                    {item.placement_status !== "archived" ? <button type="button" onClick={() => void placementAction(item, "archive")} className="rounded-xl bg-gray-100 px-3 py-2 text-xs font-bold text-gray-700">В архив</button> : null}
                   </div>
 
                   <div className="mt-3 flex gap-2 overflow-x-auto">

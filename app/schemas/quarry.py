@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.schemas.catalog import DeliveryOptionOut, MediaFileOut
+from app.schemas.placement import PlacementStatusValue
 
 
 PickupPointTypeValue = Literal["quarry", "accumulator", "warehouse", "supplier"]
@@ -247,6 +248,17 @@ class QuarryOut(QuarryBase):
     manual_priority: int = 0
     is_active: bool
     moderation_status: ModerationStatusValue
+    placement_status: PlacementStatusValue = "pending_moderation"
+    placement_started_at: Optional[datetime] = None
+    trial_ends_at: Optional[datetime] = None
+    placement_ends_at: Optional[datetime] = None
+    last_confirmed_at: Optional[datetime] = None
+    next_confirmation_at: Optional[datetime] = None
+    confirmation_grace_ends_at: Optional[datetime] = None
+    placement_hidden_reason: Optional[str] = None
+    archived_at: Optional[datetime] = None
+    can_confirm_relevance: bool = False
+    can_extend_placement: bool = False
     moderation_comment: Optional[str] = None
     pending_changes: dict | None = None
     owner_user_id: Optional[UUID] = None

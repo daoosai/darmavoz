@@ -15,6 +15,7 @@ from app.models.models import (
     Client,
     MediaFile,
     ModerationStatus,
+    PlacementStatus,
     SpecialEquipmentApplication,
     SpecialEquipmentListing,
     SpecialEquipmentType,
@@ -53,10 +54,18 @@ from app.services.moderation import (
     EQUIPMENT_ENTITY_TYPE,
     clear_entity_pending_changes,
     create_moderation_audit_log,
-    has_publicly_visible_moderation_status,
     mark_entity_pending_changes,
     serialize_moderation_value,
     summarize_pending_changes,
+)
+from app.services.relevance import (
+    initialize_trial,
+    hide_placement,
+    is_publicly_available,
+    placement_payload_fields,
+    public_placement_filters,
+    recalculate_status,
+    restore_placement,
 )
 from app.utils.phones import normalize_phone
 
@@ -207,6 +216,7 @@ async def _listing_payload(
         "pending_changes": serialize_moderation_value(listing.pending_changes) if include_pending_changes else None,
         "created_at": listing.created_at,
         "updated_at": listing.updated_at,
+        **placement_payload_fields(listing),
     }
 
 
@@ -431,20 +441,6 @@ def _schedule_supplier_listing_moderation_email(
         )
         return
 
-    equipment_type = (listing.equipment_type or "РЎРїРµС†С‚РµС…РЅРёРєР°").strip() or "РЎРїРµС†С‚РµС…РЅРёРєР°"
-    listing_title = (listing.title or "Р‘РµР· РЅР°Р·РІР°РЅРёСЏ").strip() or "Р‘РµР· РЅР°Р·РІР°РЅРёСЏ"
-    if listing.moderation_status == ModerationStatus.has_pending_changes.value:
-        background_tasks.add_task(
-            send_email,
-            to_email=settings.ADMIN_EMAIL,
-            subject="РџСЂР°РІРєРё РѕР±СЉСЏРІР»РµРЅРёСЏ СЃРїРµС†С‚РµС…РЅРёРєРё РѕР¶РёРґР°СЋС‚ РјРѕРґРµСЂР°С†РёРё",
-            body=(
-                f'РџРѕСЃС‚Р°РІС‰РёРє {action} РїСЂР°РІРєРё РѕР±СЉСЏРІР»РµРЅРёСЏ: {equipment_type} "{listing_title}". '
-                f"РР·РјРµРЅРµРЅС‹ РїРѕР»СЏ: {fields_summary or 'Р±РµР· РґРµС‚Р°Р»РµР№'}."
-            ),
-        )
-        return
-
     if (
         not settings.ADMIN_EMAIL
         or listing.moderation_status != ModerationStatus.pending_moderation.value
@@ -521,14 +517,7 @@ async def list_public_equipment(
             selectinload(SpecialEquipmentListing.owner),
         )
         .where(
-            SpecialEquipmentListing.is_active.is_(True),
-            SpecialEquipmentListing.is_deleted.is_(False),
-            SpecialEquipmentListing.moderation_status.in_(
-                (
-                    ModerationStatus.approved.value,
-                    ModerationStatus.has_pending_changes.value,
-                )
-            ),
+            *public_placement_filters(SpecialEquipmentListing),
             or_(
                 SpecialEquipmentListing.equipment_type_id.is_(None),
                 SpecialEquipmentType.is_active.is_(True),
@@ -575,8 +564,7 @@ async def list_public_equipment(
 async def get_public_equipment(listing_id: UUID, db: AsyncSession = Depends(get_db)):
     listing = await _get_listing(db, listing_id)
     if (
-        not listing.is_active
-        or not has_publicly_visible_moderation_status(listing.moderation_status)
+        not is_publicly_available(listing)
         or (
             listing.equipment_type_ref is not None
             and not listing.equipment_type_ref.is_active
@@ -678,6 +666,7 @@ async def list_admin_equipment(
     equipment_type: str | None = Query(default=None, max_length=255),
     is_active: bool | None = None,
     moderation_status: ModerationStatus | None = None,
+    placement_status: PlacementStatus | None = None,
     owner_user_id: UUID | None = None,
     search: str | None = Query(default=None, max_length=255),
     db: AsyncSession = Depends(get_db),
@@ -715,6 +704,8 @@ async def list_admin_equipment(
             stmt = stmt.where(
                 SpecialEquipmentListing.moderation_status == moderation_status.value
             )
+    if placement_status is not None:
+        stmt = stmt.where(SpecialEquipmentListing.placement_status == placement_status.value)
     if owner_user_id is not None:
         stmt = stmt.where(SpecialEquipmentListing.owner_user_id == owner_user_id)
     if search:
@@ -762,6 +753,8 @@ async def create_equipment_listing(
         is_deleted=False,
     )
     db.add(listing)
+    await db.flush()
+    await initialize_trial(db, listing, actor_user_id=current_user.id)
     await db.commit()
     return await _listing_payload(
         db,
@@ -826,6 +819,7 @@ async def update_equipment_listing(
     listing.moderation_comment = None
     listing.moderated_by_user_id = current_user.id
     listing.moderated_at = datetime.now(timezone.utc)
+    await initialize_trial(db, listing, actor_user_id=current_user.id)
     await db.commit()
     return await _listing_payload(
         db,
@@ -966,6 +960,10 @@ async def _update_owner_equipment(
         else:
             _apply_listing_update_data(listing, payload_data)
             _reset_supplier_listing_moderation(listing)
+        if payload_data.get("is_active") is False:
+            await hide_placement(db, listing, actor_user_id=current_owner.id)
+        elif payload_data.get("is_active") is True:
+            await restore_placement(db, listing, actor_user_id=current_owner.id)
         await create_moderation_audit_log(
             db,
             entity_type=EQUIPMENT_ENTITY_TYPE,
@@ -987,7 +985,7 @@ async def _update_owner_equipment(
             include_pending_changes=True,
         )
     if listing.owner_user_id != current_owner.id:
-        raise HTTPException(status_code=404, detail="РћР±СЉСЏРІР»РµРЅРёРµ СЃРїРµС†С‚РµС…РЅРёРєРё РЅРµ РЅР°Р№РґРµРЅРѕ")
+        raise HTTPException(status_code=404, detail="Объявление спецтехники не найдено")
     changed = payload.model_fields_set
     if changed.intersection({"equipment_type", "equipment_type_id"}):
         equipment_type, equipment_type_id = await _resolve_equipment_type(
@@ -1244,6 +1242,7 @@ async def approve_supplier_equipment(
     listing.moderated_by_user_id = current_user.id
     if not staged_changes:
         listing.is_active = True
+    await initialize_trial(db, listing, actor_user_id=current_user.id)
     await db.commit()
     return await _listing_payload(
         db,
@@ -1276,6 +1275,9 @@ async def reject_supplier_equipment(
     listing.moderation_comment = payload.reason
     listing.moderated_at = datetime.now(timezone.utc)
     listing.moderated_by_user_id = current_user.id
+    await recalculate_status(
+        db, listing, actor_user_id=current_user.id, action="moderation_rejected"
+    )
     await create_moderation_audit_log(
         db,
         entity_type=EQUIPMENT_ENTITY_TYPE,
@@ -1305,8 +1307,7 @@ async def create_equipment_application(
 ):
     listing = await _get_listing(db, payload.listing_id)
     if (
-        not listing.is_active
-        or listing.moderation_status != ModerationStatus.approved.value
+        not is_publicly_available(listing)
         or (
             listing.equipment_type_ref is not None
             and not listing.equipment_type_ref.is_active

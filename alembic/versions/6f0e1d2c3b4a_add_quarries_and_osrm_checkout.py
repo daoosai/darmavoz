@@ -1,4 +1,4 @@
-﻿"""Add quarries and OSRM client order support
+"""Add quarries and OSRM client order support
 
 Revision ID: 6f0e1d2c3b4a
 Revises: 4c2d7f9e8a10

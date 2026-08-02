@@ -134,7 +134,7 @@ async def test_custom_equipment_supplier_moderation_and_legacy_compatibility(
     assert supplier_edit.status_code == 200
     assert supplier_edit.json()["moderation_status"] == "has_pending_changes"
     assert supplier_edit.json()["moderation_comment"] is None
-    assert supplier_edit.json()["pending_changes"]["title"] == "РњСѓР»СЊС‡РµСЂ РїРѕСЃР»Рµ РёР·РјРµРЅРµРЅРёСЏ"
+    assert supplier_edit.json()["pending_changes"]["title"] == "Мульчер после изменения"
     assert sent_emails[-1]["to_email"] == "admin@example.test"
     assert "title" in sent_emails[-1]["body"]
     _ = {
@@ -145,7 +145,7 @@ async def test_custom_equipment_supplier_moderation_and_legacy_compatibility(
 
     hidden_after_edit = await client.get(f"/api/v1/equipment/{listing_id}")
     assert hidden_after_edit.status_code == 200
-    assert hidden_after_edit.json()["title"] == "РњСѓР»СЊС‡РµСЂ РґР»СЏ СЂР°СЃС‡РёСЃС‚РєРё"
+    assert hidden_after_edit.json()["title"] == "Мульчер для расчистки"
 
     reject_response = await client.post(
         f"/api/v1/admin/equipment/{listing_id}/reject",

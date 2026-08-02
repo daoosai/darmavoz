@@ -28,6 +28,7 @@ from app.services.moderation import (
     schedule_admin_moderation_email,
     summarize_pending_changes,
 )
+from app.services.relevance import hide_placement, restore_placement
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -321,6 +322,10 @@ async def update_supplier_point(
         payload_data,
         use_pending_changes=point.moderation_status in SUPPLIER_PENDING_EDIT_STATUSES,
     )
+    if payload_data.get("is_active") is False:
+        await hide_placement(db, point, actor_user_id=current_user.id)
+    elif payload_data.get("is_active") is True:
+        await restore_placement(db, point, actor_user_id=current_user.id)
     await create_moderation_audit_log(
         db,
         entity_type=QUARRY_ENTITY_TYPE,

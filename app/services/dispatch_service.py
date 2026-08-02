@@ -51,6 +51,7 @@ from app.services.notifications import (
     schedule_logist_no_driver_found_notification,
     schedule_logist_timeout_notification,
 )
+from app.services.relevance import public_placement_filters
 from app.services.order_pricing import calculate_client_order_pricing, resolve_min_delivery_price
 from app.services.pickup_points import is_pickup_point_publicly_available
 from app.services.redis_client import enqueue_dispatch_order
@@ -641,8 +642,7 @@ async def _resolve_logist_order_quarry(
         select(Quarry)
         .join(quarry_materials, quarry_materials.c.quarry_id == Quarry.id)
         .where(
-            Quarry.is_active.is_(True),
-            Quarry.moderation_status == ModerationStatus.approved.value,
+            *public_placement_filters(Quarry),
             quarry_materials.c.material_id == material_id,
             quarry_materials.c.is_active.is_(True),
         )

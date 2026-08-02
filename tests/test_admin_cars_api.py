@@ -56,14 +56,14 @@ async def test_admin_cars_stats_groups_approved_cars_by_volume(client, session_f
         driver_user_2 = await create_user(session, username="+79990021002", role=driver_role)
         driver_user_3 = await create_user(session, username="+79990021003", role=driver_role)
 
-        option_5 = await create_delivery_option(session, capacity_m3=5.0, title="5 ?3")
-        option_20 = await create_delivery_option(session, capacity_m3=20.0, title="20 ?3")
-        option_25 = await create_delivery_option(session, capacity_m3=25.0, title="25 ?3")
+        option_5 = await create_delivery_option(session, capacity_m3=5.0, title="5 м3")
+        option_20 = await create_delivery_option(session, capacity_m3=20.0, title="20 м3")
+        option_25 = await create_delivery_option(session, capacity_m3=25.0, title="25 м3")
 
         vehicle_5 = Vehicle(
             title="Truck 5",
             body_volume_m3=5.0,
-            vehicle_type="????????",
+            vehicle_type="Самосвал",
             delivery_option_id=option_5.id,
             is_active=True,
             moderation_status=ModerationStatus.approved.value,
@@ -86,7 +86,7 @@ async def test_admin_cars_stats_groups_approved_cars_by_volume(client, session_f
         session.add_all(
             [
                 Driver(
-                    name="???????? 5",
+                    name="Водитель 5",
                     phone="+79990021001",
                     user_id=driver_user_1.id,
                     vehicle_id=vehicle_5.id,
@@ -95,7 +95,7 @@ async def test_admin_cars_stats_groups_approved_cars_by_volume(client, session_f
                     moderation_status=ModerationStatus.approved.value,
                 ),
                 Driver(
-                    name="???????? 20",
+                    name="Водитель 20",
                     phone="+79990021002",
                     user_id=driver_user_2.id,
                     vehicle_id=vehicle_20.id,
@@ -104,7 +104,7 @@ async def test_admin_cars_stats_groups_approved_cars_by_volume(client, session_f
                     moderation_status=ModerationStatus.approved.value,
                 ),
                 Driver(
-                    name="??????????? ????????",
+                    name="Отклонённый водитель",
                     phone="+79990021003",
                     user_id=driver_user_3.id,
                     vehicle_id=vehicle_25_rejected.id,
@@ -131,22 +131,22 @@ async def test_admin_cars_list_supports_filters_and_nested_driver(client, sessio
         driver_user_1 = await create_user(session, username="+79990022001", role=driver_role)
         driver_user_2 = await create_user(session, username="+79990022002", role=driver_role)
 
-        option_20 = await create_delivery_option(session, capacity_m3=20.0, title="20 ?3")
+        option_20 = await create_delivery_option(session, capacity_m3=20.0, title="20 м3")
 
         available_vehicle = Vehicle(
-            title="???????? ???????",
+            title="Доступный самосвал",
             body_volume_m3=20.0,
-            plate_number="?123??72",
-            vehicle_type="????????",
+            plate_number="А123ВС72",
+            vehicle_type="Самосвал",
             delivery_option_id=option_20.id,
             is_active=True,
             moderation_status=ModerationStatus.approved.value,
         )
         blocked_vehicle = Vehicle(
-            title="????????????? ????",
+            title="Заблокированный КамАЗ",
             body_volume_m3=20.0,
-            plate_number="?999??72",
-            vehicle_type="????????",
+            plate_number="А999ВС72",
+            vehicle_type="Самосвал",
             delivery_option_id=option_20.id,
             is_active=False,
             moderation_status=ModerationStatus.approved.value,
@@ -155,7 +155,7 @@ async def test_admin_cars_list_supports_filters_and_nested_driver(client, sessio
         await session.flush()
 
         available_driver = Driver(
-            name="???? ??????",
+            name="Иван Петров",
             phone="+79990022001",
             user_id=driver_user_1.id,
             vehicle_id=available_vehicle.id,
@@ -164,7 +164,7 @@ async def test_admin_cars_list_supports_filters_and_nested_driver(client, sessio
             moderation_status=ModerationStatus.approved.value,
         )
         blocked_driver = Driver(
-            name="?????? ???????",
+            name="Сергей Сидоров",
             phone="+79990022002",
             user_id=driver_user_2.id,
             vehicle_id=blocked_vehicle.id,
@@ -197,10 +197,10 @@ async def test_admin_cars_list_supports_filters_and_nested_driver(client, sessio
         "/api/v1/admin/cars",
         params={
             "volume": 20,
-            "car_type": "????????",
-            "status": "????????",
-            "plate_number": "?123",
-            "driver_name": "????",
+            "car_type": "Самосвал",
+            "status": "Свободен",
+            "plate_number": "А123",
+            "driver_name": "Иван",
         },
         headers=auth_headers(admin_user.username),
     )
@@ -210,27 +210,27 @@ async def test_admin_cars_list_supports_filters_and_nested_driver(client, sessio
     assert len(payload) == 1
     assert payload[0] == {
         "id": str(payload[0]["id"]),
-        "plate_number": "?123??72",
+        "plate_number": "А123ВС72",
         "volume": 20.0,
-        "car_type": "????????",
+        "car_type": "Самосвал",
         "photo_url": "https://public.example/admin-main.jpg",
         "driver": {
             "id": str(payload[0]["driver"]["id"]),
-            "name": "???? ??????",
+            "name": "Иван Петров",
             "phone": "+79990022001",
-            "status": "????????",
+            "status": "Свободен",
         },
     }
 
     blocked_response = await client.get(
         "/api/v1/admin/cars",
-        params={"status": "????????????", "driver_id": str(blocked_driver_id)},
+        params={"status": "Заблокирован", "driver_id": str(blocked_driver_id)},
         headers=auth_headers(admin_user.username),
     )
 
     assert blocked_response.status_code == 200
     blocked_payload = blocked_response.json()
     assert len(blocked_payload) == 1
-    assert blocked_payload[0]["plate_number"] == "?999??72"
-    assert blocked_payload[0]["driver"]["name"] == "?????? ???????"
-    assert blocked_payload[0]["driver"]["status"] == "????????????"
+    assert blocked_payload[0]["plate_number"] == "А999ВС72"
+    assert blocked_payload[0]["driver"]["name"] == "Сергей Сидоров"
+    assert blocked_payload[0]["driver"]["status"] == "Заблокирован"

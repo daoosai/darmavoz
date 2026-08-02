@@ -10,12 +10,13 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api import admin, admin_moderation, admin_quarries, auth, catalog, client_addresses, client_auth, client_orders, clients, driver_dispatch, drivers, equipment, equipment_owner_auth, equipment_owner_profile, geo, logist_orders, media, orders, pickup_points, supplier_auth, supplier_points, support, system, telemetry, webhooks
+from app.api import admin, admin_moderation, admin_quarries, auth, catalog, client_addresses, client_auth, client_orders, clients, driver_dispatch, drivers, equipment, equipment_owner_auth, equipment_owner_profile, geo, logist_orders, media, orders, pickup_points, placements, supplier_auth, supplier_points, support, system, telemetry, webhooks
 from app.core.config import settings
 from app.core.error_handling import register_exception_handlers
 from app.db.seed import seed_data
 from app.services.storage import StorageNotConfiguredError, get_storage_service
 from app.services.dispatch_worker import start_dispatch_worker, stop_dispatch_worker
+from app.services.relevance_worker import start_relevance_worker, stop_relevance_worker
 from app.services.redis_client import close_redis
 
 logger = logging.getLogger(__name__)
@@ -44,9 +45,11 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.exception("Failed to initialize S3 storage during startup")
     stop_event, task = await start_dispatch_worker()
+    relevance_stop_event, relevance_task = await start_relevance_worker()
     try:
         yield
     finally:
+        await stop_relevance_worker(relevance_stop_event, relevance_task)
         await stop_dispatch_worker(stop_event, task)
         await close_redis()
 
@@ -149,6 +152,7 @@ app.include_router(media.router, prefix="/api/v1/media", tags=["media"])
 app.include_router(geo.router, prefix="/api/v1/geo", tags=["geo"])
 app.include_router(orders.router, prefix="/api/v1/orders", tags=["orders"])
 app.include_router(system.router, prefix="/api/v1/system", tags=["system"])
+app.include_router(placements.router, prefix="/api/v1", tags=["placements"])
 app.include_router(telemetry.router, prefix="/api/v1", tags=["telemetry"])
 app.include_router(webhooks.router, prefix="/api/v1/webhooks")
 

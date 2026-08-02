@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { BarChart3, Building2, ClipboardList, Headphones, LogOut, Wrench } from "lucide-react";
 import { NotificationToggle } from "./components/shared/NotificationToggle";

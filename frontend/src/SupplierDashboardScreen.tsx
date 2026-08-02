@@ -5,6 +5,7 @@ import toast from "react-hot-toast";
 import { type MaterialProps } from "./MaterialDetailScreen";
 import SupplierCreatePointModal, { type SupplierPoint } from "./SupplierCreatePointModal";
 import { baseURL, extractApiErrorMessage } from "./utils";
+import { PlacementBadge, PlacementDates } from "./placement";
 
 const STATUS_LABELS: Record<string, string> = {
   incomplete: "Черновик",
@@ -272,6 +273,24 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
     }
   };
 
+  const confirmPointRelevance = async (point: SupplierPoint) => {
+    setIsBusy(true);
+    try {
+      const response = await fetch(`${baseURL}/supplier/points/${point.id}/confirm-relevance`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось подтвердить актуальность"));
+      await fetchPoints();
+      toast.success("Актуальность точки подтверждена");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось подтвердить актуальность");
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
   return (
     <div className="text-slate-900">
       <header className="px-5 pb-4 pt-[max(env(safe-area-inset-top),1rem)]">
@@ -322,6 +341,10 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
                       {getPointStatusMeta(point).label}
                     </span>
                   </div>
+                  <div className="mt-3 flex flex-wrap gap-2"><PlacementBadge status={point.placement_status} /></div>
+                  <div className="mt-3"><PlacementDates item={point} /></div>
+                  {point.placement_status === "confirmation_required" ? <p className="mt-3 rounded-2xl bg-orange-50 p-3 text-sm font-semibold text-orange-800">Подтвердите актуальность в течение льготного периода, иначе точка будет скрыта.</p> : null}
+                  {point.placement_status === "expired" ? <p className="mt-3 rounded-2xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">Срок размещения завершён. Обратитесь к оператору для продления.</p> : null}
 
                   <p className="mt-3 flex items-start gap-2 text-sm text-slate-500">
                     <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
@@ -409,6 +432,7 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
                   >
                     {point.is_active === false ? "Опубликовать" : "Скрыть"}
                   </button>
+                  {point.can_confirm_relevance ? <button type="button" disabled={isBusy} onClick={() => void confirmPointRelevance(point)} className="mt-3 w-full rounded-2xl bg-orange-50 px-3 py-3 text-sm font-bold text-orange-800 disabled:opacity-50">Подтвердить актуальность</button> : null}
                 </div>
               </article>
             ))}

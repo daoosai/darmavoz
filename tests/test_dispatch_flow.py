@@ -396,8 +396,8 @@ async def test_dispatch_tick_sends_driver_reminder_once_for_stale_assigned_order
             client_id=client_record.id,
             driver_id=driver.id,
             delivery_option_id=delivery_option.id,
-            address="???????, ???????? 1",
-            delivery_address="???????, ???????? 1",
+            address="Тюмень, Рабочая 1",
+            delivery_address="Тюмень, Рабочая 1",
             total_amount=21000.0,
             status=OrderStatus.driver_assigned.value,
             source="dispatcher",
@@ -452,10 +452,10 @@ async def test_driver_can_cancel_assigned_order_and_return_it_to_dispatch(client
     async with session_factory() as session:
         driver_role = await ensure_role(session, "driver")
 
-        category = Category(name="??????", slug="driver-cancel-order", sort_order=0, is_active=True)
+        category = Category(name="Песок", slug="driver-cancel-order", sort_order=0, is_active=True)
         material = Material(
             category=category,
-            name="?????? ??? ??????",
+            name="Песок для отмены",
             description="",
             price=2100.0,
             unit="m3",
@@ -476,7 +476,7 @@ async def test_driver_can_cancel_assigned_order_and_return_it_to_dispatch(client
 
         driver_user = await create_driver_user(session, username="driver_cancel_assigned", role=driver_role)
         vehicle = Vehicle(
-            title="???????? ??? ??????",
+            title="Самосвал для отмены",
             delivery_option_id=delivery_option.id,
             is_active=True,
             moderation_status=ModerationStatus.approved.value,
@@ -487,7 +487,7 @@ async def test_driver_can_cancel_assigned_order_and_return_it_to_dispatch(client
         driver = Driver(
             user_id=driver_user.id,
             vehicle_id=vehicle.id,
-            name="???????? ??????",
+            name="Водитель Отмены",
             phone="+79000000888",
             status=DriverStatus.busy.value,
             dispatch_priority=100,
@@ -498,7 +498,7 @@ async def test_driver_can_cancel_assigned_order_and_return_it_to_dispatch(client
         session.add(driver)
         await session.flush()
 
-        client_record = Client(name="?????? ??????", phone="+79990008888")
+        client_record = Client(name="Клиент Отмены", phone="+79990008888")
         session.add(client_record)
         await session.flush()
 
@@ -507,8 +507,8 @@ async def test_driver_can_cancel_assigned_order_and_return_it_to_dispatch(client
             client_id=client_record.id,
             driver_id=driver.id,
             delivery_option_id=delivery_option.id,
-            address="?????, ?????? 1",
-            delivery_address="?????, ?????? 1",
+            address="Томск, Лесная 1",
+            delivery_address="Томск, Лесная 1",
             total_amount=21000.0,
             status=OrderStatus.driver_assigned.value,
             source="mobile",
@@ -549,7 +549,7 @@ async def test_driver_can_cancel_assigned_order_and_return_it_to_dispatch(client
 
     response = await client.patch(
         f"/api/v1/orders/{order.id}/driver-cancel",
-        json={"reason": "????????? ??????"},
+        json={"reason": "Поломка машины"},
         headers=auth_headers("driver_cancel_assigned"),
     )
     assert response.status_code == 200
@@ -574,7 +574,7 @@ async def test_driver_can_cancel_assigned_order_and_return_it_to_dispatch(client
         refreshed_offer = await session.scalar(select(OrderOffer).where(OrderOffer.order_id == order.id))
         assert refreshed_offer is not None
         assert refreshed_offer.status == OrderOfferStatus.declined.value
-        assert refreshed_offer.decision_reason == "????????? ??????"
+        assert refreshed_offer.decision_reason == "Поломка машины"
 
         cancel_event = await session.scalar(
             select(EventLog).where(
@@ -583,7 +583,7 @@ async def test_driver_can_cancel_assigned_order_and_return_it_to_dispatch(client
             )
         )
         assert cancel_event is not None
-        assert "????????? ??????" in (cancel_event.description or "")
+        assert "Поломка машины" in (cancel_event.description or "")
 
 
 @pytest.mark.asyncio

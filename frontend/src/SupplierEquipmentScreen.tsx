@@ -10,6 +10,7 @@ import {
 } from "./EquipmentCatalogScreen";
 import { useAuthStore } from "./store";
 import { baseURL, extractApiErrorMessage, formatPhoneNumber, resolveMediaUrl } from "./utils";
+import { PlacementBadge, PlacementDates } from "./placement";
 
 interface Props {
   token: string;
@@ -529,6 +530,21 @@ export default function SupplierEquipmentScreen({
     }
   };
 
+  const confirmListingRelevance = async (listing: EquipmentListing) => {
+    try {
+      const response = await fetch(`${baseURL}${apiPrefix}/equipment/${listing.id}/confirm-relevance`, {
+        method: "POST",
+        headers,
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось подтвердить актуальность"));
+      toast.success("Актуальность объявления подтверждена");
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось подтвердить актуальность");
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -666,6 +682,10 @@ export default function SupplierEquipmentScreen({
                     <Edit2 className="h-4 w-4" />
                   </button>
                 </div>
+                <div className="flex flex-wrap gap-2"><PlacementBadge status={listing.placement_status} /></div>
+                <PlacementDates item={listing} />
+                {listing.placement_status === "confirmation_required" ? <p className="rounded-xl bg-orange-50 p-3 text-sm font-semibold text-orange-800">Подтвердите актуальность в течение льготного периода.</p> : null}
+                {listing.placement_status === "expired" ? <p className="rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">Срок размещения завершён. Для продления обратитесь к оператору.</p> : null}
                 <p className="font-bold">{formatEquipmentPrice(listing)}</p>
                 {listing.moderation_comment ? (
                   <p className="rounded-xl bg-rose-50 p-3 text-sm text-rose-700">
@@ -709,6 +729,7 @@ export default function SupplierEquipmentScreen({
                 >
                   {listing.is_active === false ? "Опубликовать" : "Скрыть"}
                 </button>
+                {listing.can_confirm_relevance ? <button type="button" onClick={() => void confirmListingRelevance(listing)} className="w-full rounded-xl bg-orange-50 px-4 py-3 text-sm font-bold text-orange-800">Подтвердить актуальность</button> : null}
               </div>
             </article>
           );

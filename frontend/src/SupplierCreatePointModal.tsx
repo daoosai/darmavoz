@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { ImagePlus, Loader2, MapPin, Search, X } from "lucide-react";
 import toast from "react-hot-toast";
+import type { PlacementFields } from "./placement";
 
 import {
   fetch2gisAddressSuggestions,
@@ -37,7 +38,7 @@ type SupplierPointFormState = {
   material_offers: MaterialOfferDraft[];
 };
 
-export interface SupplierPoint {
+export interface SupplierPoint extends PlacementFields {
   id: string;
   point_type: "quarry" | "accumulator" | "warehouse" | "supplier";
   name: string;

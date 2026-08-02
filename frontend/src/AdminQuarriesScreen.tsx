@@ -11,6 +11,7 @@ import {
 import { useAuthStore, usePlacementStore } from "./store";
 import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
 import { PlacementBadge, PlacementDates, type PlacementFields, type PlacementStatus } from "./placement";
+import MapWebGLFallback, { tryCreate2GisMap } from "./components/MapWebGLFallback";
 
 export interface Quarry extends PlacementFields {
   id?: string;
@@ -706,6 +707,7 @@ function EditQuarryModal({
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [isMapUnavailable, setIsMapUnavailable] = useState(false);
   const usesOwnerPhone = Boolean(formData.owner_user_id);
   const pointTitle =
     formData.point_type === "accumulator" || formData.point_type === "warehouse"
@@ -751,13 +753,18 @@ function EditQuarryModal({
     if (!mapgl || !key || !mapContainerRef.current || mapRef.current) return;
 
     const initialCoordinates = getParsedCoordinates();
-    const mapInstance = new mapgl.Map(mapContainerRef.current, {
-      center: initialCoordinates
-        ? [initialCoordinates.lon, initialCoordinates.lat]
-        : [65.527202, 57.152223],
-      zoom: 12,
-      key,
-    });
+    const mapInstance = tryCreate2GisMap(
+      () =>
+        new mapgl.Map(mapContainerRef.current, {
+          center: initialCoordinates
+            ? [initialCoordinates.lon, initialCoordinates.lat]
+            : [65.527202, 57.152223],
+          zoom: 12,
+          key,
+        }),
+      () => setIsMapUnavailable(true),
+    );
+    if (!mapInstance) return;
 
     mapRef.current = mapInstance;
 
@@ -1404,10 +1411,14 @@ function EditQuarryModal({
           </div>
 
           {/* Контейнер для карты 2ГИС */}
-          <div
-            id="quarry-map"
-            className="w-full h-48 min-h-[192px] bg-gray-200 rounded-xl my-4 overflow-hidden"
-          ></div>
+          {isMapUnavailable ? (
+            <MapWebGLFallback className="my-4 h-48 min-h-[192px] w-full rounded-xl" />
+          ) : (
+            <div
+              ref={mapContainerRef}
+              className="my-4 h-48 min-h-[192px] w-full overflow-hidden rounded-xl bg-gray-200"
+            />
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
@@ -1596,6 +1607,7 @@ function EnhancedEditQuarryModal({
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [isMapUnavailable, setIsMapUnavailable] = useState(false);
   const usesOwnerPhone = Boolean(formData.owner_user_id);
   const pointTitle = formData.point_type === "accumulator" ? "накопитель" : "карьер";
 
@@ -1637,13 +1649,18 @@ function EnhancedEditQuarryModal({
     if (!mapgl || !key || !mapContainerRef.current || mapRef.current) return;
 
     const initialCoordinates = getParsedCoordinates();
-    const mapInstance = new mapgl.Map(mapContainerRef.current, {
-      center: initialCoordinates
-        ? [initialCoordinates.lon, initialCoordinates.lat]
-        : [65.527202, 57.152223],
-      zoom: 12,
-      key,
-    });
+    const mapInstance = tryCreate2GisMap(
+      () =>
+        new mapgl.Map(mapContainerRef.current, {
+          center: initialCoordinates
+            ? [initialCoordinates.lon, initialCoordinates.lat]
+            : [65.527202, 57.152223],
+          zoom: 12,
+          key,
+        }),
+      () => setIsMapUnavailable(true),
+    );
+    if (!mapInstance) return;
 
     mapRef.current = mapInstance;
     if (initialCoordinates) {
@@ -2241,7 +2258,11 @@ function EnhancedEditQuarryModal({
             </p>
           </div>
 
-          <div ref={mapContainerRef} className="w-full h-48 min-h-[192px] bg-gray-200 rounded-xl overflow-hidden"></div>
+          {isMapUnavailable ? (
+            <MapWebGLFallback className="h-48 min-h-[192px] w-full rounded-xl" />
+          ) : (
+            <div ref={mapContainerRef} className="h-48 min-h-[192px] w-full overflow-hidden rounded-xl bg-gray-200" />
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">

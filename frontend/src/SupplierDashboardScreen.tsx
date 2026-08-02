@@ -5,7 +5,7 @@ import toast from "react-hot-toast";
 import { type MaterialProps } from "./MaterialDetailScreen";
 import SupplierCreatePointModal, { type SupplierPoint } from "./SupplierCreatePointModal";
 import { baseURL, extractApiErrorMessage } from "./utils";
-import { PlacementBadge, PlacementDates } from "./placement";
+import { PlacementBadge, PlacementDates, shouldShowConfirmationAction } from "./placement";
 
 const STATUS_LABELS: Record<string, string> = {
   incomplete: "Черновик",
@@ -432,7 +432,7 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
                   >
                     {point.is_active === false ? "Опубликовать" : "Скрыть"}
                   </button>
-                  {point.can_confirm_relevance ? <button type="button" disabled={isBusy} onClick={() => void confirmPointRelevance(point)} className="mt-3 w-full rounded-2xl bg-orange-50 px-3 py-3 text-sm font-bold text-orange-800 disabled:opacity-50">Подтвердить актуальность</button> : null}
+                  {shouldShowConfirmationAction(point) ? <button type="button" disabled={isBusy} onClick={() => void confirmPointRelevance(point)} className="mt-3 w-full rounded-2xl bg-orange-50 px-3 py-3 text-sm font-bold text-orange-800 disabled:opacity-50">Подтвердить актуальность</button> : null}
                 </div>
               </article>
             ))}

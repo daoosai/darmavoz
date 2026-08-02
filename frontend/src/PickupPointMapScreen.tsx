@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import ClientAddressBottomSheet from "./ClientAddressBottomSheet";
+import MapWebGLFallback, { tryCreate2GisMap } from "./components/MapWebGLFallback";
 import { baseURL, formatPhoneNumber } from "./utils";
 import { MaterialProps } from "./MaterialDetailScreen";
 import { useAddressStore } from "./store";
@@ -131,6 +132,7 @@ export default function PickupPointMapScreen({
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
   const [isLocationResolved, setIsLocationResolved] = useState(false);
   const [isMapReady, setIsMapReady] = useState(false);
+  const [isMapUnavailable, setIsMapUnavailable] = useState(false);
   const [activePointId, setActivePointId] = useState<string | null>(null);
   const [detailsLoadingId, setDetailsLoadingId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -339,11 +341,18 @@ export default function PickupPointMapScreen({
       if (!key) setError("Ключ карты 2ГИС не настроен");
       return;
     }
-    mapRef.current = new mapgl.Map(mapContainerRef.current, {
-      center: [65.527202, 57.152223],
-      zoom: 10,
-      key,
-    });
+    const mapInstance = tryCreate2GisMap(
+      () =>
+        new mapgl.Map(mapContainerRef.current, {
+          center: [65.527202, 57.152223],
+          zoom: 10,
+          key,
+        }),
+      () => setIsMapUnavailable(true),
+    );
+    if (!mapInstance) return;
+
+    mapRef.current = mapInstance;
     setIsMapReady(true);
     return () => {
       markerRefs.current.forEach((marker) => marker.destroy());
@@ -519,7 +528,11 @@ export default function PickupPointMapScreen({
 
   return (
     <div className="fixed inset-0 z-[90] overflow-hidden bg-gray-50 sm:mx-auto sm:max-w-md sm:rounded-[32px]">
-      <div ref={mapContainerRef} className="absolute inset-0" />
+      {isMapUnavailable ? (
+        <MapWebGLFallback className="absolute inset-0" />
+      ) : (
+        <div ref={mapContainerRef} className="absolute inset-0" />
+      )}
       {!isAddressSheetOpen && (
       <header className="absolute top-0 inset-x-0 p-4 pt-[max(1rem,env(safe-area-inset-top))] pointer-events-none">
         <div className="flex items-center gap-3 pointer-events-auto">

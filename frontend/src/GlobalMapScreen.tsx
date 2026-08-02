@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Loader2, LocateFixed, MapPin, Mountain, Phone, Route, Warehouse, X } from "lucide-react";
 import toast from "react-hot-toast";
 
+import MapWebGLFallback, { tryCreate2GisMap } from "./components/MapWebGLFallback";
 import { handleOpenNavigator } from "./openNavigator";
 import { baseURL, formatPhoneNumber, resolveMediaUrl } from "./utils";
 
@@ -119,6 +120,7 @@ export default function GlobalMapScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isMapReady, setIsMapReady] = useState(false);
+  const [isMapUnavailable, setIsMapUnavailable] = useState(false);
   const [isLocationResolved, setIsLocationResolved] = useState(false);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
@@ -352,11 +354,18 @@ export default function GlobalMapScreen() {
       return;
     }
 
-    mapRef.current = new mapgl.Map(mapContainerRef.current, {
-      center: DEFAULT_MAP_CENTER,
-      zoom: 10,
-      key,
-    });
+    const mapInstance = tryCreate2GisMap(
+      () =>
+        new mapgl.Map(mapContainerRef.current, {
+          center: DEFAULT_MAP_CENTER,
+          zoom: 10,
+          key,
+        }),
+      () => setIsMapUnavailable(true),
+    );
+    if (!mapInstance) return;
+
+    mapRef.current = mapInstance;
     setIsMapReady(true);
 
     return () => {
@@ -501,7 +510,11 @@ export default function GlobalMapScreen() {
       `}</style>
 
       <div className="relative flex-1 w-full overflow-hidden rounded-t-[28px] bg-slate-100 sm:rounded-[28px]">
-        <div ref={mapContainerRef} className="absolute inset-0 h-full w-full flex-1" />
+        {isMapUnavailable ? (
+          <MapWebGLFallback className="absolute inset-0 h-full w-full" />
+        ) : (
+          <div ref={mapContainerRef} className="absolute inset-0 h-full w-full flex-1" />
+        )}
 
         {selectedPoint === null && (
           <div className="pointer-events-none absolute inset-x-0 top-0 z-10 p-4">

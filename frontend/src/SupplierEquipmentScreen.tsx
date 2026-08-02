@@ -10,7 +10,7 @@ import {
 } from "./EquipmentCatalogScreen";
 import { useAuthStore } from "./store";
 import { baseURL, extractApiErrorMessage, formatPhoneNumber, resolveMediaUrl } from "./utils";
-import { PlacementBadge, PlacementDates } from "./placement";
+import { PlacementBadge, PlacementDates, shouldShowConfirmationAction } from "./placement";
 
 interface Props {
   token: string;
@@ -729,7 +729,7 @@ export default function SupplierEquipmentScreen({
                 >
                   {listing.is_active === false ? "Опубликовать" : "Скрыть"}
                 </button>
-                {listing.can_confirm_relevance ? <button type="button" onClick={() => void confirmListingRelevance(listing)} className="w-full rounded-xl bg-orange-50 px-4 py-3 text-sm font-bold text-orange-800">Подтвердить актуальность</button> : null}
+                {shouldShowConfirmationAction(listing) ? <button type="button" onClick={() => void confirmListingRelevance(listing)} className="w-full rounded-xl bg-orange-50 px-4 py-3 text-sm font-bold text-orange-800">Подтвердить актуальность</button> : null}
               </div>
             </article>
           );

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent 
 import { ImagePlus, Loader2, MapPin, Search, X } from "lucide-react";
 import toast from "react-hot-toast";
 import type { PlacementFields } from "./placement";
+import MapWebGLFallback, { tryCreate2GisMap } from "./components/MapWebGLFallback";
 
 import {
   fetch2gisAddressSuggestions,
@@ -179,6 +180,7 @@ export default function SupplierCreatePointModal({
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
+  const [isMapUnavailable, setIsMapUnavailable] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [pendingFilePreviews, setPendingFilePreviews] = useState<string[]>([]);
   const addressContainerRef = useRef<HTMLDivElement | null>(null);
@@ -242,13 +244,18 @@ export default function SupplierCreatePointModal({
     if (!mapgl || !key || !mapContainerRef.current || mapRef.current) return;
 
     const initialCoordinates = parsedCoordinates;
-    const mapInstance = new mapgl.Map(mapContainerRef.current, {
-      center: initialCoordinates
-        ? [initialCoordinates.lon, initialCoordinates.lat]
-        : DEFAULT_MAP_CENTER,
-      zoom: 12,
-      key,
-    });
+    const mapInstance = tryCreate2GisMap(
+      () =>
+        new mapgl.Map(mapContainerRef.current, {
+          center: initialCoordinates
+            ? [initialCoordinates.lon, initialCoordinates.lat]
+            : DEFAULT_MAP_CENTER,
+          zoom: 12,
+          key,
+        }),
+      () => setIsMapUnavailable(true),
+    );
+    if (!mapInstance) return;
 
     mapRef.current = mapInstance;
 
@@ -744,10 +751,14 @@ export default function SupplierCreatePointModal({
               <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
                 Карта 2ГИС
               </label>
-              <div
-                ref={mapContainerRef}
-                className="h-48 min-h-[192px] w-full overflow-hidden rounded-xl bg-slate-200"
-              />
+              {isMapUnavailable ? (
+                <MapWebGLFallback className="h-48 min-h-[192px] w-full rounded-xl" />
+              ) : (
+                <div
+                  ref={mapContainerRef}
+                  className="h-48 min-h-[192px] w-full overflow-hidden rounded-xl bg-slate-200"
+                />
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">

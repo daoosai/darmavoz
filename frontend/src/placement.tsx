@@ -40,6 +40,29 @@ export interface PlacementSummary {
   active_equipment: number;
 }
 
+const CONFIRMATION_ACTION_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
+
+export const shouldShowConfirmationAction = (
+  item: PlacementFields,
+  now: number = Date.now(),
+) => {
+  if (!item.can_confirm_relevance) return false;
+  if (item.placement_status === "confirmation_required") return true;
+  if (
+    item.placement_status === "hidden" &&
+    item.placement_hidden_reason === "confirmation_overdue"
+  ) {
+    return true;
+  }
+  if (!item.next_confirmation_at) return false;
+
+  const confirmationAt = new Date(item.next_confirmation_at).getTime();
+  return (
+    !Number.isNaN(confirmationAt) &&
+    confirmationAt <= now + CONFIRMATION_ACTION_WINDOW_MS
+  );
+};
+
 const META: Record<PlacementStatus, { label: string; className: string }> = {
   active: { label: "Активно", className: "bg-emerald-100 text-emerald-700" },
   pending_moderation: { label: "На модерации", className: "bg-amber-100 text-amber-800" },

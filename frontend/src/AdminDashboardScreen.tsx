@@ -154,6 +154,12 @@ interface AdminDashboardScreenProps {
   onLogout: () => void;
 }
 
+interface QuarrySummaryFilters {
+  statusFilter: string;
+  placementFilter: PlacementStatus | "";
+  typeFilter: string;
+}
+
 export default function AdminDashboardScreen({
   onLogout,
 }: AdminDashboardScreenProps) {
@@ -219,6 +225,8 @@ export default function AdminDashboardScreen({
   const [quarryStatusFilter, setQuarryStatusFilter] = useState("");
   const [quarryPlacementFilter, setQuarryPlacementFilter] = useState<PlacementStatus | "">("");
   const [quarryTypeFilter, setQuarryTypeFilter] = useState("");
+  const [quarrySummaryFilters, setQuarrySummaryFilters] =
+    useState<QuarrySummaryFilters | null>(null);
   const [equipmentPlacementFilter, setEquipmentPlacementFilter] = useState<PlacementStatus | "">("");
   const [equipmentTab, setEquipmentTab] = useState<AdminEquipmentTab>("listings");
   const [driverActiveOverrides, setDriverActiveOverrides] = useState<
@@ -229,6 +237,12 @@ export default function AdminDashboardScreen({
   const [isLoadingModeration, setIsLoadingModeration] = useState(false);
   const summaryManagedSection =
     activeTab === "quarries" ? "quarries" : activeTab === "equipment" ? "equipment" : null;
+  const effectiveQuarryStatusFilter =
+    quarrySummaryFilters?.statusFilter ?? quarryStatusFilter;
+  const effectiveQuarryPlacementFilter =
+    quarrySummaryFilters?.placementFilter ?? quarryPlacementFilter;
+  const effectiveQuarryTypeFilter =
+    quarrySummaryFilters?.typeFilter ?? quarryTypeFilter;
 
   const openSummaryPoints = ({
     statusFilter = "",
@@ -240,9 +254,29 @@ export default function AdminDashboardScreen({
     typeFilter?: string;
   }) => {
     setActiveTab("quarries");
+    setQuarrySummaryFilters({
+      statusFilter,
+      placementFilter,
+      typeFilter,
+    });
     setQuarryStatusFilter(statusFilter);
     setQuarryPlacementFilter(placementFilter);
     setQuarryTypeFilter(typeFilter);
+  };
+
+  const handleQuarryStatusFilterChange = (value: string) => {
+    setQuarrySummaryFilters(null);
+    setQuarryStatusFilter(value);
+  };
+
+  const handleQuarryPlacementFilterChange = (value: PlacementStatus | "") => {
+    setQuarrySummaryFilters(null);
+    setQuarryPlacementFilter(value);
+  };
+
+  const handleQuarryTypeFilterChange = (value: string) => {
+    setQuarrySummaryFilters(null);
+    setQuarryTypeFilter(value);
   };
 
   const openSummaryEquipment = ({
@@ -1738,9 +1772,9 @@ export default function AdminDashboardScreen({
             token={token || ""}
             activeSection={summaryManagedSection}
             pointFilters={{
-              statusFilter: quarryStatusFilter,
-              placementFilter: quarryPlacementFilter,
-              typeFilter: quarryTypeFilter,
+              statusFilter: effectiveQuarryStatusFilter,
+              placementFilter: effectiveQuarryPlacementFilter,
+              typeFilter: effectiveQuarryTypeFilter,
             }}
             equipmentFilters={{
               placementFilter: equipmentPlacementFilter,
@@ -3126,12 +3160,12 @@ export default function AdminDashboardScreen({
             <AdminQuarriesScreen
               materials={materials}
               onPointsChanged={() => fetchModerationCounts(true)}
-              statusFilter={quarryStatusFilter}
-              onStatusFilterChange={setQuarryStatusFilter}
-              placementFilter={quarryPlacementFilter}
-              onPlacementFilterChange={setQuarryPlacementFilter}
-              typeFilter={quarryTypeFilter}
-              onTypeFilterChange={setQuarryTypeFilter}
+              statusFilter={effectiveQuarryStatusFilter}
+              onStatusFilterChange={handleQuarryStatusFilterChange}
+              placementFilter={effectiveQuarryPlacementFilter}
+              onPlacementFilterChange={handleQuarryPlacementFilterChange}
+              typeFilter={effectiveQuarryTypeFilter}
+              onTypeFilterChange={handleQuarryTypeFilterChange}
             />
           ) : activeTab === "suppliers" ? (
             <AdminSuppliersScreen />

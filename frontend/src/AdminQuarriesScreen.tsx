@@ -202,6 +202,26 @@ interface AdminQuarriesScreenProps {
   onTypeFilterChange: (value: string) => void;
 }
 
+const ALLOWED_POINT_TYPES = new Set(["quarry", "accumulator", "warehouse", "supplier"]);
+const ALLOWED_MODERATION_FILTERS = new Set([
+  "",
+  "pending_moderation",
+  "approved",
+  "rejected",
+  "suspended",
+  "has_pending_changes",
+]);
+const ALLOWED_PLACEMENT_FILTERS = new Set<PlacementStatus | "">([
+  "",
+  "active",
+  "trial",
+  "confirmation_required",
+  "hidden",
+  "expired",
+  "archived",
+  "pending_moderation",
+]);
+
 export default function AdminQuarriesScreen({
   materials,
   onPointsChanged,
@@ -222,14 +242,29 @@ export default function AdminQuarriesScreen({
   const [rejectPointId, setRejectPointId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const { policy, loadPolicy, loadSummary } = usePlacementStore();
+  const normalizedStatusFilter = ALLOWED_MODERATION_FILTERS.has(statusFilter)
+    ? statusFilter
+    : "";
+  const normalizedPlacementFilter = ALLOWED_PLACEMENT_FILTERS.has(placementFilter)
+    ? placementFilter
+    : "";
+  const normalizedTypeFilter = ALLOWED_POINT_TYPES.has(typeFilter)
+    ? typeFilter
+    : "";
 
   const fetchQuarries = async () => {
     try {
       setIsLoading(true);
       const params = new URLSearchParams();
-      if (statusFilter) params.set("moderation_status", statusFilter);
-      if (placementFilter) params.set("placement_status", placementFilter);
-      if (typeFilter) params.set("point_type", typeFilter);
+      if (normalizedStatusFilter) {
+        params.set("moderation_status", normalizedStatusFilter);
+      }
+      if (normalizedPlacementFilter) {
+        params.set("placement_status", normalizedPlacementFilter);
+      }
+      if (normalizedTypeFilter) {
+        params.set("point_type", normalizedTypeFilter);
+      }
       const res = await fetch(`${baseURL}/admin/pickup-points?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -246,7 +281,7 @@ export default function AdminQuarriesScreen({
 
   useEffect(() => {
     fetchQuarries();
-  }, [statusFilter, placementFilter, typeFilter]);
+  }, [normalizedStatusFilter, normalizedPlacementFilter, normalizedTypeFilter]);
 
   useEffect(() => {
     if (!policy) void loadPolicy();
@@ -402,7 +437,7 @@ export default function AdminQuarriesScreen({
       </div>
 
       <div className="grid grid-cols-2 gap-3 bg-white p-3 rounded-2xl border border-slate-100">
-        <select value={statusFilter} onChange={(event) => onStatusFilterChange(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
+        <select value={normalizedStatusFilter} onChange={(event) => onStatusFilterChange(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
           <option value="">Все статусы</option>
           <option value="pending_moderation">На модерации</option>
           <option value="approved">Одобрено</option>
@@ -410,7 +445,7 @@ export default function AdminQuarriesScreen({
           <option value="suspended">Приостановлено</option>
           <option value="has_pending_changes">Есть правки</option>
         </select>
-        <select value={placementFilter} onChange={(event) => onPlacementFilterChange(event.target.value as PlacementStatus | "")} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
+        <select value={normalizedPlacementFilter} onChange={(event) => onPlacementFilterChange(event.target.value as PlacementStatus | "")} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
           <option value="">Все размещения</option>
           <option value="active">Активные</option>
           <option value="trial">Тестовый период</option>
@@ -419,7 +454,7 @@ export default function AdminQuarriesScreen({
           <option value="expired">Завершённые</option>
           <option value="archived">Архив</option>
         </select>
-        <select value={typeFilter} onChange={(event) => onTypeFilterChange(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
+        <select value={normalizedTypeFilter} onChange={(event) => onTypeFilterChange(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
           <option value="">Все типы</option>
           <option value="quarry">Карьеры</option>
           <option value="accumulator">Накопители</option>

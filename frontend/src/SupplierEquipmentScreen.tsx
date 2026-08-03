@@ -59,35 +59,47 @@ const normalizeContactPhoneForApi = (value: string) => {
 
 const STATUS_META: Record<string, { label: string; className: string }> = {
   pending_moderation: {
-    label: "?? ?????????",
+    label: "На модерации",
     className: "bg-amber-100 text-amber-700",
   },
   approved: {
-    label: "????????",
+    label: "Одобрено",
     className: "bg-emerald-100 text-emerald-700",
   },
   rejected: {
-    label: "?????????",
+    label: "Отклонено",
     className: "bg-rose-100 text-rose-700",
   },
   suspended: {
-    label: "??????????????",
+    label: "Приостановлено",
     className: "bg-slate-200 text-slate-700",
   },
 };
 
 STATUS_META.has_pending_changes = {
-  label: "???? ??????",
+  label: "Есть правки",
   className: "bg-sky-100 text-sky-800",
 };
 
 type ListingsTab = "active" | "moderation" | "archived";
 
 const LISTING_TAB_LABELS: Record<ListingsTab, string> = {
-  active: "????????",
-  moderation: "?? ?????????",
-  archived: "??????????? / ???????",
+  active: "Активные",
+  moderation: "На модерации",
+  archived: "Отклоненные / скрытые",
 };
+
+const SUPPLIER_EQUIPMENT_TEXT = {
+  pageTitle: "Моя спецтехника",
+  publishListing: "Опубликовать",
+  hideListing: "Скрыть",
+  confirmRelevance: "Подтвердить актуальность",
+  photos: "Фотографии",
+  addPhotos: "Добавить фотографии",
+  photoAlt: "Фото",
+  removePhoto: "Удалить фото",
+  photoHint: "Можно добавить фото сразу при создании или редактировании объявления.",
+} as const;
 
 const matchesListingTab = (listing: EquipmentListing, tab: ListingsTab) => {
   if (tab === "active") {
@@ -161,7 +173,7 @@ export default function SupplierEquipmentScreen({
         return loadedTypes.filter((item) => item.is_active);
       }
       if (response.status >= 500) {
-        throw new Error("?? ??????? ????????? ???? ???????");
+        throw new Error("Не удалось загрузить типы техники");
       }
     }
 
@@ -178,7 +190,7 @@ export default function SupplierEquipmentScreen({
         return Array.isArray(loadedListings) ? loadedListings : [];
       }
       if (response.status >= 500) {
-        throw new Error("?? ??????? ????????? ??????????");
+        throw new Error("Не удалось загрузить объявления");
       }
     }
 
@@ -195,7 +207,7 @@ export default function SupplierEquipmentScreen({
       setTypes(loadedTypes);
       setListings(loadedListings);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "?????? ????????");
+      toast.error(error instanceof Error ? error.message : "Ошибка загрузки");
     } finally {
       setLoading(false);
     }
@@ -219,11 +231,11 @@ export default function SupplierEquipmentScreen({
         const response = await fetch(`${baseURL}/equipment-owner/me`, { headers });
         const data = await response.json().catch(() => ({}));
         if (!response.ok) {
-          throw new Error(extractApiErrorMessage(data, "?? ??????? ????????? ???????"));
+          throw new Error(extractApiErrorMessage(data, "Не удалось загрузить профиль"));
         }
         setEquipmentOwnerName((data.display_name || "").trim());
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : "?? ??????? ????????? ???????");
+        toast.error(error instanceof Error ? error.message : "Не удалось загрузить профиль");
       }
     };
 
@@ -232,7 +244,7 @@ export default function SupplierEquipmentScreen({
 
   const openForm = (listing?: EquipmentListing) => {
     if (!listing && isEquipmentOwnerCreationBlocked) {
-      toast.error("??????? ????????? ??? ? ???????");
+      toast.error("Сначала заполните ФИО в профиле");
       return;
     }
     const hourTariff = listing
@@ -301,7 +313,7 @@ export default function SupplierEquipmentScreen({
     const presign = await presignResponse.json().catch(() => ({}));
     if (!presignResponse.ok) {
       throw new Error(
-        extractApiErrorMessage(presign, "?? ??????? ??????????? ????????"),
+        extractApiErrorMessage(presign, "Не удалось подготовить загрузку"),
       );
     }
 
@@ -311,7 +323,7 @@ export default function SupplierEquipmentScreen({
       body: file,
     });
     if (!uploadResponse.ok) {
-      throw new Error("?? ??????? ????????? ??????????");
+      throw new Error("Не удалось загрузить фотографию");
     }
 
     const confirmResponse = await fetch(`${baseURL}/media/confirm`, {
@@ -330,7 +342,7 @@ export default function SupplierEquipmentScreen({
     const confirmPayload = await confirmResponse.json().catch(() => ({}));
     if (!confirmResponse.ok) {
       throw new Error(
-        extractApiErrorMessage(confirmPayload, "?? ??????? ??????????? ??????????"),
+        extractApiErrorMessage(confirmPayload, "Не удалось подтвердить фотографию"),
       );
     }
   };
@@ -350,20 +362,20 @@ export default function SupplierEquipmentScreen({
     if (files.length > 0 && options?.showSuccess !== false) {
       toast.success(
         files.length === 1
-          ? "?????????? ?????????"
-          : `????????? ??????????: ${files.length}`,
+          ? "Фотография добавлена"
+          : `Добавлено фотографий: ${files.length}`,
       );
     }
   };
 
   const getSupplierRouteMissingMessage = (mode: "list" | "create" | "update") => {
     if (mode === "list") {
-      return "?? ??????? ?? ????????? ?????? ?????????? ??????????. ????????? ?????????? backend.";
+      return "На сервере не подключён раздел объявлений поставщика. Требуется обновление backend.";
     }
     if (mode === "update") {
-      return "?? ??????? ?? ????????? ??????? ?????????????? ?????????? ??????????. ????????? ?????????? backend.";
+      return "На сервере не подключён маршрут редактирования объявлений поставщика. Требуется обновление backend.";
     }
-    return "?? ??????? ?? ????????? ??????? ???????? ?????????? ??????????. ????????? ?????????? backend.";
+    return "На сервере не подключён маршрут создания объявлений поставщика. Требуется обновление backend.";
   };
 
   const requestSupplierEquipmentSave = async (
@@ -397,7 +409,7 @@ export default function SupplierEquipmentScreen({
       }
       if (response.status !== 404) {
         throw new Error(
-          extractApiErrorMessage(data, "?? ??????? ????????? ??????????"),
+          extractApiErrorMessage(data, "Не удалось сохранить объявление"),
         );
       }
       lastPayload = data;
@@ -445,8 +457,8 @@ export default function SupplierEquipmentScreen({
       }
       toast.success(
         pendingPhotos.length > 0
-          ? "?????????? ? ???? ?????????? ?? ?????????"
-          : "?????????? ?????????? ?? ?????????",
+          ? "Объявление и фото отправлены на модерацию"
+          : "Объявление отправлено на модерацию",
       );
       await load();
       return;
@@ -468,7 +480,7 @@ export default function SupplierEquipmentScreen({
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(
-          extractApiErrorMessage(data, "?? ??????? ????????? ??????????"),
+          extractApiErrorMessage(data, "Не удалось сохранить объявление"),
         );
       }
       if (pendingPhotos.length > 0) {
@@ -482,12 +494,12 @@ export default function SupplierEquipmentScreen({
       closeForm();
       toast.success(
         pendingPhotos.length > 0
-          ? "?????????? ? ???? ?????????? ?? ?????????"
-          : "?????????? ?????????? ?? ?????????",
+          ? "Объявление и фото отправлены на модерацию"
+          : "Объявление отправлено на модерацию",
       );
       await load();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "?????? ??????????");
+      toast.error(error instanceof Error ? error.message : "Ошибка сохранения");
     } finally {
       setSaving(false);
     }
@@ -498,18 +510,18 @@ export default function SupplierEquipmentScreen({
       await uploadPhotos(listing.id, [file], listing.media_files?.length || 0);
       await load();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "?????? ????????");
+      toast.error(error instanceof Error ? error.message : "Ошибка загрузки");
     }
   };
 
   const deletePhoto = async (mediaId: string) => {
-    if (!window.confirm("??????? ???????????")) return;
+    if (!window.confirm("Удалить фотографию?")) return;
     const response = await fetch(`${baseURL}/media/${mediaId}`, {
       method: "DELETE",
       headers,
     });
     if (!response.ok) {
-      toast.error("?? ??????? ??????? ??????????");
+      toast.error("Не удалось удалить фотографию");
       return;
     }
     await load();
@@ -525,13 +537,13 @@ export default function SupplierEquipmentScreen({
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(
-          extractApiErrorMessage(data, "?? ??????? ???????? ?????? ??????????"),
+          extractApiErrorMessage(data, "Не удалось изменить статус объявления"),
         );
       }
-      toast.success(listing.is_active === false ? "?????????? ????????????" : "?????????? ??????");
+      toast.success(listing.is_active === false ? "Объявление опубликовано" : "Объявление скрыто");
       await load();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "?? ??????? ???????? ??????????");
+      toast.error(error instanceof Error ? error.message : "Не удалось обновить объявление");
     }
   };
 
@@ -542,11 +554,11 @@ export default function SupplierEquipmentScreen({
         headers,
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(extractApiErrorMessage(data, "?? ??????? ??????????? ????????????"));
-      toast.success("???????????? ?????????? ????????????");
+      if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось подтвердить актуальность"));
+      toast.success("Актуальность объявления подтверждена");
       await load();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "?? ??????? ??????????? ????????????");
+      toast.error(error instanceof Error ? error.message : "Не удалось подтвердить актуальность");
     }
   };
 
@@ -583,13 +595,13 @@ export default function SupplierEquipmentScreen({
     <main className="space-y-5 p-4">
       <div className="rounded-3xl bg-gradient-to-br from-sky-500 to-cyan-400 p-5 text-white shadow-lg">
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-100">
-          ???????????
+          Спецтехника
         </p>
         <div className="mt-2 flex items-end justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-black">??? ??????????</h1>
+            <h1 className="text-2xl font-black">{SUPPLIER_EQUIPMENT_TEXT.pageTitle}</h1>
             <p className="mt-1 text-sm text-sky-50">
-              ????? ? ?????????? ?????????? ???????? ?????????
+              Новые и изменённые объявления проходят модерацию
             </p>
           </div>
           <button
@@ -597,7 +609,7 @@ export default function SupplierEquipmentScreen({
             onClick={() => openForm()}
             disabled={isEquipmentOwnerCreationBlocked}
             className="rounded-2xl bg-white p-3 text-sky-600 shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
-            aria-label="???????? ??????????"
+            aria-label="Добавить объявление"
           >
             <Plus className="h-6 w-6" />
           </button>
@@ -610,9 +622,9 @@ export default function SupplierEquipmentScreen({
             <AlertCircle className="h-5 w-5" />
           </div>
           <div>
-            <p className="font-bold">????????? ???????</p>
+            <p className="font-bold">Заполните профиль</p>
             <p className="mt-1 text-sm">
-              ??????????, ????????? ??? ? ???????, ????? ????????? ??????????
+              Пожалуйста, заполните ФИО в Профиле, чтобы создавать объявления
             </p>
           </div>
         </div>
@@ -629,7 +641,7 @@ export default function SupplierEquipmentScreen({
             }`}
           >
             {LISTING_TAB_LABELS[value]}
-            {tabCounts[value] ? ` ? ${tabCounts[value]}` : ""}
+            {tabCounts[value] ? ` · ${tabCounts[value]}` : ""}
           </button>
         ))}
       </div>
@@ -637,7 +649,7 @@ export default function SupplierEquipmentScreen({
       {listings.length === 0 || !hasVisibleListings ? (
         <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-10 text-center">
           <ImageIcon className="mx-auto h-12 w-12 text-slate-300" />
-          <p className="mt-4 font-bold text-slate-700">?????????? ???? ???</p>
+          <p className="mt-4 font-bold text-slate-700">Объявлений пока нет</p>
         </div>
       ) : (
         filteredListings.map((listing) => {
@@ -690,18 +702,18 @@ export default function SupplierEquipmentScreen({
                 <div className="flex flex-wrap gap-2"><PlacementBadge status={listing.placement_status} /></div>
                 <PlacementDates item={listing} />
                 <PlacementExpirationWarning item={listing} />
-                {listing.placement_status === "confirmation_required" ? <p className="rounded-xl bg-orange-50 p-3 text-sm font-semibold text-orange-800">??????????? ???????????? ? ??????? ????????? ???????.</p> : null}
-                {listing.placement_status === "expired" ? <p className="rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">???? ?????????? ????????. ??? ????????? ?????????? ? ?????????.</p> : null}
+                {listing.placement_status === "confirmation_required" ? <p className="rounded-xl bg-orange-50 p-3 text-sm font-semibold text-orange-800">Подтвердите актуальность в течение льготного периода.</p> : null}
+                {listing.placement_status === "expired" ? <p className="rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">Срок размещения завершён. Для продления обратитесь к оператору.</p> : null}
                 <p className="font-bold">{formatEquipmentPrice(listing)}</p>
                 {listing.moderation_comment ? (
                   <p className="rounded-xl bg-rose-50 p-3 text-sm text-rose-700">
-                    <span className="font-bold">??????????? ??????????:</span>{" "}
+                    <span className="font-bold">Комментарий модератора:</span>{" "}
                     {listing.moderation_comment}
                   </p>
                 ) : null}
                 {listing.moderation_status === "has_pending_changes" ? (
                   <p className="rounded-xl bg-sky-50 p-3 text-sm text-sky-700">
-                    ?? ????????? ??????: {getPendingChangesSummary(listing) || "???? ??????????"}
+                    На модерации правки: {getPendingChangesSummary(listing) || "есть обновления"}
                   </p>
                 ) : null}
                 {listing.media_files?.length ? (
@@ -733,9 +745,11 @@ export default function SupplierEquipmentScreen({
                       : "bg-slate-100 text-slate-700"
                   }`}
                 >
-                  {listing.is_active === false ? "????????????" : "??????"}
+                  {listing.is_active === false
+                    ? SUPPLIER_EQUIPMENT_TEXT.publishListing
+                    : SUPPLIER_EQUIPMENT_TEXT.hideListing}
                 </button>
-                {shouldShowConfirmationAction(listing) ? <button type="button" onClick={() => void confirmListingRelevance(listing)} className="w-full rounded-xl bg-orange-50 px-4 py-3 text-sm font-bold text-orange-800">??????????? ????????????</button> : null}
+                {shouldShowConfirmationAction(listing) ? <button type="button" onClick={() => void confirmListingRelevance(listing)} className="w-full rounded-xl bg-orange-50 px-4 py-3 text-sm font-bold text-orange-800">{SUPPLIER_EQUIPMENT_TEXT.confirmRelevance}</button> : null}
               </div>
             </article>
           );
@@ -750,36 +764,36 @@ export default function SupplierEquipmentScreen({
           >
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-black">
-                {form.id ? "????????????? ??????????" : "????? ??????????"}
+                {form.id ? "Редактировать объявление" : "Новое объявление"}
               </h2>
               <button type="button" onClick={closeForm}>
                 <X />
               </button>
             </div>
             <label className="block text-sm font-bold">
-              ??? ???????
+              Тип техники
               <input
                 required
                 list="supplier-equipment-types"
                 value={form.equipment_type}
                 onChange={(event) => setForm({ ...form, equipment_type: event.target.value })}
                 className="mt-1 w-full rounded-xl bg-slate-100 p-3 font-normal"
-                placeholder="????? ?????? ???? ???"
+                placeholder="Можно ввести свой тип"
               />
               <datalist id="supplier-equipment-types">
                 {types.map((item) => <option key={item.id} value={item.name} />)}
               </datalist>
             </label>
             <label className="block text-sm font-bold">
-              ??????????
+              {SUPPLIER_EQUIPMENT_TEXT.photos}
               <div className="mt-2 space-y-3">
                 <label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-sky-200 bg-sky-50/70 px-4 py-6 text-center transition-colors hover:border-sky-300 hover:bg-sky-50">
                   <UploadCloud className="h-8 w-8 text-sky-500" />
                   <span className="mt-2 text-sm font-bold text-sky-700">
-                    ???????? ??????????
+                    {SUPPLIER_EQUIPMENT_TEXT.addPhotos}
                   </span>
                   <span className="mt-1 text-xs font-normal text-slate-500">
-                    JPG, PNG, WebP. ????? ??????? ????????? ??????.
+                    JPG, PNG, WebP. Можно выбрать несколько файлов.
                   </span>
                   <input
                     type="file"
@@ -798,14 +812,14 @@ export default function SupplierEquipmentScreen({
                       <div key={`${previewUrl}-${index}`} className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
                         <img
                           src={previewUrl}
-                          alt={`???? ${index + 1}`}
+                          alt={`${SUPPLIER_EQUIPMENT_TEXT.photoAlt} ${index + 1}`}
                           className="h-24 w-full object-cover"
                         />
                         <button
                           type="button"
                           onClick={() => removePendingPhoto(index)}
                           className="absolute right-2 top-2 rounded-full bg-white/95 p-1.5 text-rose-600 shadow-sm"
-                          aria-label={`??????? ???? ${index + 1}`}
+                          aria-label={`${SUPPLIER_EQUIPMENT_TEXT.removePhoto} ${index + 1}`}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -814,13 +828,13 @@ export default function SupplierEquipmentScreen({
                   </div>
                 ) : (
                   <p className="text-xs font-normal text-slate-500">
-                    ????? ???????? ???? ????? ??? ???????? ??? ?????????????? ??????????.
+                    {SUPPLIER_EQUIPMENT_TEXT.photoHint}
                   </p>
                 )}
               </div>
             </label>
             <label className="block text-sm font-bold">
-              ????????
+              Название
               <input
                 required
                 value={form.title}
@@ -829,7 +843,7 @@ export default function SupplierEquipmentScreen({
               />
             </label>
             <label className="block text-sm font-bold">
-              ????????
+              Описание
               <textarea
                 required
                 rows={4}
@@ -839,7 +853,7 @@ export default function SupplierEquipmentScreen({
               />
             </label>
             <label className="block text-sm font-bold">
-              ?????????? ???????
+              Контактный телефон
               <input
                 value={form.contact_phone}
                 onChange={(event) =>
@@ -851,7 +865,7 @@ export default function SupplierEquipmentScreen({
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="text-sm font-bold">
-                ???? ?? ???
+                Цена за час
                 <input
                   required
                   type="number"
@@ -862,7 +876,7 @@ export default function SupplierEquipmentScreen({
                 />
               </label>
               <label className="text-sm font-bold">
-                ????? ? ?????
+                Часов в смене
                 <input
                   type="number"
                   min="1"
@@ -870,13 +884,13 @@ export default function SupplierEquipmentScreen({
                   value={form.shift_hours}
                   onChange={(event) => setForm({ ...form, shift_hours: event.target.value })}
                   className="mt-1 w-full rounded-xl bg-slate-100 p-3 font-normal"
-                  placeholder="?????????????"
+                  placeholder="Необязательно"
                 />
               </label>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <label className="text-sm font-bold">
-                ?????
+                Город
                 <input
                   value={form.city}
                   onChange={(event) => setForm({ ...form, city: event.target.value })}
@@ -884,7 +898,7 @@ export default function SupplierEquipmentScreen({
                 />
               </label>
               <label className="text-sm font-bold">
-                ?????
+                Район
                 <input
                   value={form.district}
                   onChange={(event) => setForm({ ...form, district: event.target.value })}
@@ -897,7 +911,7 @@ export default function SupplierEquipmentScreen({
               disabled={saving}
               className="w-full rounded-xl bg-sky-500 p-3 font-bold text-white disabled:opacity-50"
             >
-              {saving ? "??????????..." : "????????? ? ????????? ?? ?????????"}
+              {saving ? "Сохранение..." : "Сохранить и отправить на модерацию"}
             </button>
           </form>
         </div>
@@ -905,4 +919,3 @@ export default function SupplierEquipmentScreen({
     </main>
   );
 }
-

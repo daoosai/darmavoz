@@ -275,12 +275,27 @@ export default function AdminQuarriesScreen({
       const res = await fetch(requestUrl, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.ok) {
-        const data = await res.json();
-        setQuarries(data);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(
+          extractApiErrorMessage(data, "Не удалось загрузить список точек"),
+        );
       }
+      const data = await res.json().catch(() => []);
+      const loadedPoints = Array.isArray(data)
+        ? data
+        : Array.isArray((data as { items?: unknown[] }).items)
+          ? (data as { items: Quarry[] }).items
+          : Array.isArray((data as { results?: unknown[] }).results)
+            ? (data as { results: Quarry[] }).results
+            : [];
+      setQuarries(loadedPoints);
     } catch (e) {
       console.error("Error fetching quarries", e);
+      setQuarries([]);
+      toast.error(
+        e instanceof Error ? e.message : "Не удалось загрузить список точек",
+      );
     } finally {
       setIsLoading(false);
     }

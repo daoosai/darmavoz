@@ -265,7 +265,11 @@ export default function AdminQuarriesScreen({
       if (normalizedTypeFilter) {
         params.set("point_type", normalizedTypeFilter);
       }
-      const res = await fetch(`${baseURL}/admin/pickup-points?${params}`, {
+      const query = params.toString();
+      const requestUrl = query
+        ? `${baseURL}/admin/pickup-points?${query}`
+        : `${baseURL}/admin/pickup-points`;
+      const res = await fetch(requestUrl, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {

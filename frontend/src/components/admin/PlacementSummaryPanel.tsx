@@ -43,9 +43,38 @@ export default function PlacementSummaryPanel({
   }
   if (!summary) return null;
 
+  const resetPointFilters = () =>
+    onOpenPoints({
+      statusFilter: "",
+      placementFilter: "",
+      typeFilter: "",
+    });
+
+  const resetEquipmentFilters = () =>
+    onOpenEquipment({
+      tab: "listings",
+      placementFilter: "",
+    });
+
   const openStatusCard = (placementStatus: PlacementStatus) => {
     if (activeSection === "equipment") {
+      if (
+        equipmentFilters.tab === "listings" &&
+        equipmentFilters.placementFilter === placementStatus
+      ) {
+        resetEquipmentFilters();
+        return;
+      }
       onOpenEquipment({ tab: "listings", placementFilter: placementStatus });
+      return;
+    }
+    if (
+      activeSection === "quarries" &&
+      pointFilters.statusFilter === "" &&
+      pointFilters.placementFilter === placementStatus &&
+      pointFilters.typeFilter === ""
+    ) {
+      resetPointFilters();
       return;
     }
     onOpenPoints({
@@ -82,24 +111,34 @@ export default function PlacementSummaryPanel({
       label: "Активные карьеры",
       value: summary.active_quarries,
       isActive: isPointCardActive("active", "quarry"),
-      onClick: () =>
+      onClick: () => {
+        if (isPointCardActive("active", "quarry")) {
+          resetPointFilters();
+          return;
+        }
         onOpenPoints({
           statusFilter: "",
           placementFilter: "active",
           typeFilter: "quarry",
-        }),
+        });
+      },
     },
     {
       key: "active-accumulators",
       label: "Активные накопители",
       value: summary.active_accumulators,
       isActive: isPointCardActive("active", "accumulator"),
-      onClick: () =>
+      onClick: () => {
+        if (isPointCardActive("active", "accumulator")) {
+          resetPointFilters();
+          return;
+        }
         onOpenPoints({
           statusFilter: "",
           placementFilter: "active",
           typeFilter: "accumulator",
-        }),
+        });
+      },
     },
     {
       key: "active-equipment",
@@ -109,7 +148,17 @@ export default function PlacementSummaryPanel({
         activeSection === "equipment" &&
         equipmentFilters.tab === "listings" &&
         equipmentFilters.placementFilter === "active",
-      onClick: () => onOpenEquipment({ tab: "listings", placementFilter: "active" }),
+      onClick: () => {
+        if (
+          activeSection === "equipment" &&
+          equipmentFilters.tab === "listings" &&
+          equipmentFilters.placementFilter === "active"
+        ) {
+          resetEquipmentFilters();
+          return;
+        }
+        onOpenEquipment({ tab: "listings", placementFilter: "active" });
+      },
     },
     {
       key: "trial",

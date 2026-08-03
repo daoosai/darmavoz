@@ -254,11 +254,15 @@ export default function AdminDashboardScreen({
     typeFilter?: string;
   }) => {
     setActiveTab("quarries");
-    setQuarrySummaryFilters({
-      statusFilter,
-      placementFilter,
-      typeFilter,
-    });
+    if (!statusFilter && !placementFilter && !typeFilter) {
+      setQuarrySummaryFilters(null);
+    } else {
+      setQuarrySummaryFilters({
+        statusFilter,
+        placementFilter,
+        typeFilter,
+      });
+    }
     setQuarryStatusFilter(statusFilter);
     setQuarryPlacementFilter(placementFilter);
     setQuarryTypeFilter(typeFilter);

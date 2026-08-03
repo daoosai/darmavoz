@@ -1759,7 +1759,13 @@ export default function AdminDashboardScreen({
               </div>
               <button
                 type="button"
-                onClick={() => setActiveTab("quarries")}
+                onClick={() =>
+                  openSummaryPoints({
+                    statusFilter: "pending_moderation",
+                    placementFilter: "",
+                    typeFilter: "",
+                  })
+                }
                 className="inline-flex items-center justify-center rounded-xl bg-cyan-500 px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-cyan-600"
               >
                 Перейти

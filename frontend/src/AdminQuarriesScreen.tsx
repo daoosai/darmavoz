@@ -253,6 +253,9 @@ export default function AdminQuarriesScreen({
     : "";
 
   const fetchQuarries = async () => {
+    if (!token) {
+      return;
+    }
     try {
       setIsLoading(true);
       const params = new URLSearchParams();
@@ -284,8 +287,11 @@ export default function AdminQuarriesScreen({
   };
 
   useEffect(() => {
+    if (!token) {
+      return;
+    }
     fetchQuarries();
-  }, [normalizedStatusFilter, normalizedPlacementFilter, normalizedTypeFilter]);
+  }, [token, normalizedStatusFilter, normalizedPlacementFilter, normalizedTypeFilter]);
 
   useEffect(() => {
     if (!policy) void loadPolicy();

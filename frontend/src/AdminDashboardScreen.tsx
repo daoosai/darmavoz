@@ -37,8 +37,9 @@ import PlacementSummaryPanel from "./components/admin/PlacementSummaryPanel";
 import { DriverHistoryModal } from "./components/admin/DriverHistoryModal";
 import toast from "react-hot-toast";
 import { logoutCurrentSession } from "./pushAuth";
-import AdminEquipmentScreen from "./AdminEquipmentScreen";
+import AdminEquipmentScreen, { type AdminEquipmentTab } from "./AdminEquipmentScreen";
 import SupportScreen from "./SupportScreen";
+import { type PlacementStatus } from "./placement";
 
 interface AdminCategory {
   id: string;
@@ -212,12 +213,46 @@ export default function AdminDashboardScreen({
     useState(0);
   const [pendingEquipmentModerationCount, setPendingEquipmentModerationCount] =
     useState(0);
+  const [quarryStatusFilter, setQuarryStatusFilter] = useState("");
+  const [quarryPlacementFilter, setQuarryPlacementFilter] = useState<PlacementStatus | "">("");
+  const [quarryTypeFilter, setQuarryTypeFilter] = useState("");
+  const [equipmentPlacementFilter, setEquipmentPlacementFilter] = useState<PlacementStatus | "">("");
+  const [equipmentTab, setEquipmentTab] = useState<AdminEquipmentTab>("listings");
   const [driverActiveOverrides, setDriverActiveOverrides] = useState<
     Record<string, boolean>
   >({});
   const [categories, setCategories] = useState<AdminCategory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingModeration, setIsLoadingModeration] = useState(false);
+  const summaryManagedSection =
+    activeTab === "quarries" ? "quarries" : activeTab === "equipment" ? "equipment" : null;
+
+  const openSummaryPoints = ({
+    statusFilter = "",
+    placementFilter = "",
+    typeFilter = "",
+  }: {
+    statusFilter?: string;
+    placementFilter?: PlacementStatus | "";
+    typeFilter?: string;
+  }) => {
+    setActiveTab("quarries");
+    setQuarryStatusFilter(statusFilter);
+    setQuarryPlacementFilter(placementFilter);
+    setQuarryTypeFilter(typeFilter);
+  };
+
+  const openSummaryEquipment = ({
+    placementFilter = "",
+    tab = "listings",
+  }: {
+    placementFilter?: PlacementStatus | "";
+    tab?: AdminEquipmentTab;
+  }) => {
+    setActiveTab("equipment");
+    setEquipmentTab(tab);
+    setEquipmentPlacementFilter(placementFilter);
+  };
 
   const normalizeDriverModerationStatus = (value?: string | null) => {
     const normalized = value?.trim().toLowerCase();
@@ -1741,8 +1776,18 @@ export default function AdminDashboardScreen({
         <div className="max-w-6xl mx-auto flex flex-col gap-6">
           <PlacementSummaryPanel
             token={token || ""}
-            onOpenPoints={() => setActiveTab("quarries")}
-            onOpenEquipment={() => setActiveTab("equipment")}
+            activeSection={summaryManagedSection}
+            pointFilters={{
+              statusFilter: quarryStatusFilter,
+              placementFilter: quarryPlacementFilter,
+              typeFilter: quarryTypeFilter,
+            }}
+            equipmentFilters={{
+              placementFilter: equipmentPlacementFilter,
+              tab: equipmentTab,
+            }}
+            onOpenPoints={openSummaryPoints}
+            onOpenEquipment={openSummaryEquipment}
           />
           {activeTab === "materials" ? (
             <>
@@ -3121,12 +3166,22 @@ export default function AdminDashboardScreen({
             <AdminQuarriesScreen
               materials={materials}
               onPointsChanged={() => fetchPendingPointModerationCount(true)}
+              statusFilter={quarryStatusFilter}
+              onStatusFilterChange={setQuarryStatusFilter}
+              placementFilter={quarryPlacementFilter}
+              onPlacementFilterChange={setQuarryPlacementFilter}
+              typeFilter={quarryTypeFilter}
+              onTypeFilterChange={setQuarryTypeFilter}
             />
           ) : activeTab === "suppliers" ? (
             <AdminSuppliersScreen />
           ) : activeTab === "equipment" ? (
             <AdminEquipmentScreen
               onPendingModerationChanged={setPendingEquipmentModerationCount}
+              tab={equipmentTab}
+              onTabChange={setEquipmentTab}
+              placementFilter={equipmentPlacementFilter}
+              onPlacementFilterChange={setEquipmentPlacementFilter}
             />
           ) : activeTab === "support" ? (
             <SupportScreen operatorMode />

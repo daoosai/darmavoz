@@ -194,20 +194,29 @@ const buildQuarryFormData = (quarry: Quarry): QuarryFormData => ({
 interface AdminQuarriesScreenProps {
   materials: any[];
   onPointsChanged?: () => void | Promise<void>;
+  statusFilter: string;
+  onStatusFilterChange: (value: string) => void;
+  placementFilter: PlacementStatus | "";
+  onPlacementFilterChange: (value: PlacementStatus | "") => void;
+  typeFilter: string;
+  onTypeFilterChange: (value: string) => void;
 }
 
 export default function AdminQuarriesScreen({
   materials,
   onPointsChanged,
+  statusFilter,
+  onStatusFilterChange,
+  placementFilter,
+  onPlacementFilterChange,
+  typeFilter,
+  onTypeFilterChange,
 }: AdminQuarriesScreenProps) {
   const { token } = useAuthStore();
   const [quarries, setQuarries] = useState<Quarry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingQuarry, setEditingQuarry] = useState<Quarry | null>(null);
-  const [statusFilter, setStatusFilter] = useState("");
-  const [placementFilter, setPlacementFilter] = useState<PlacementStatus | "">("");
-  const [typeFilter, setTypeFilter] = useState("");
   const [isModerating, setIsModerating] = useState(false);
   const [deletingPointId, setDeletingPointId] = useState<string | null>(null);
   const [rejectPointId, setRejectPointId] = useState<string | null>(null);
@@ -393,7 +402,7 @@ export default function AdminQuarriesScreen({
       </div>
 
       <div className="grid grid-cols-2 gap-3 bg-white p-3 rounded-2xl border border-slate-100">
-        <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
+        <select value={statusFilter} onChange={(event) => onStatusFilterChange(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
           <option value="">Все статусы</option>
           <option value="pending_moderation">На модерации</option>
           <option value="approved">Одобрено</option>
@@ -401,7 +410,7 @@ export default function AdminQuarriesScreen({
           <option value="suspended">Приостановлено</option>
           <option value="has_pending_changes">Есть правки</option>
         </select>
-        <select value={placementFilter} onChange={(event) => setPlacementFilter(event.target.value as PlacementStatus | "")} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
+        <select value={placementFilter} onChange={(event) => onPlacementFilterChange(event.target.value as PlacementStatus | "")} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
           <option value="">Все размещения</option>
           <option value="active">Активные</option>
           <option value="trial">Тестовый период</option>
@@ -410,7 +419,7 @@ export default function AdminQuarriesScreen({
           <option value="expired">Завершённые</option>
           <option value="archived">Архив</option>
         </select>
-        <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
+        <select value={typeFilter} onChange={(event) => onTypeFilterChange(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
           <option value="">Все типы</option>
           <option value="quarry">Карьеры</option>
           <option value="accumulator">Накопители</option>

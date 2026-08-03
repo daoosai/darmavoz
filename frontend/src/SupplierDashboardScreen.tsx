@@ -36,6 +36,7 @@ const SUPPLIER_DASHBOARD_TEXT = {
   editPoint: "Изменить",
   hidePoint: "Скрыть",
   publishPoint: "Опубликовать",
+  qaResetTimer: "[QA] Сбросить таймер",
   confirmRelevance: "Подтвердить актуальность",
 } as const;
 
@@ -306,6 +307,26 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
     }
   };
 
+  const spoilPointConfirmationTimer = async (point: SupplierPoint) => {
+    setIsBusy(true);
+    try {
+      const response = await fetch(`${baseURL}/supplier/points/${point.id}/debug-spoil-confirmation`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(extractApiErrorMessage(data, "Не удалось сбросить таймер подтверждения"));
+      }
+      await fetchPoints();
+      toast.success("QA-таймер подтверждения сброшен");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось сбросить таймер подтверждения");
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
   return (
     <div className="text-slate-900">
       <header className="px-5 pb-4 pt-[max(env(safe-area-inset-top),1rem)]">
@@ -450,6 +471,17 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
                       ? SUPPLIER_DASHBOARD_TEXT.publishPoint
                       : SUPPLIER_DASHBOARD_TEXT.hidePoint}
                   </button>
+                  {(point.placement_status === "active" || point.placement_status === "trial") &&
+                  !shouldShowConfirmationAction(point) ? (
+                    <button
+                      type="button"
+                      disabled={isBusy}
+                      onClick={() => void spoilPointConfirmationTimer(point)}
+                      className="mt-3 w-full rounded-2xl bg-fuchsia-50 px-3 py-3 text-sm font-bold text-fuchsia-700 disabled:opacity-50"
+                    >
+                      {SUPPLIER_DASHBOARD_TEXT.qaResetTimer}
+                    </button>
+                  ) : null}
                   {shouldShowConfirmationAction(point) ? <button type="button" disabled={isBusy} onClick={() => void confirmPointRelevance(point)} className="mt-3 w-full rounded-2xl bg-orange-50 px-3 py-3 text-sm font-bold text-orange-800 disabled:opacity-50">{SUPPLIER_DASHBOARD_TEXT.confirmRelevance}</button> : null}
                 </div>
               </article>

@@ -20,6 +20,7 @@ from app.services.relevance import (
     extend_placement,
     hide_placement,
     restore_placement,
+    spoil_confirmation_timer,
 )
 
 
@@ -98,19 +99,15 @@ async def placement_summary(
         placement_status: sum(group[placement_status] for group in by_entity.values())
         for placement_status in statuses
     }
-    visible_statuses = (
-        PlacementStatus.active.value,
-        PlacementStatus.trial.value,
-        PlacementStatus.confirmation_required.value,
-    )
+    active_status = PlacementStatus.active.value
     return PlacementSummaryOut(
         generated_at=datetime.now(UTC),
         policy=_policy(),
         totals=totals,
         by_entity=by_entity,
-        active_quarries=sum(by_entity["quarry"][item] for item in visible_statuses),
-        active_accumulators=sum(by_entity["accumulator"][item] for item in visible_statuses),
-        active_equipment=sum(by_entity["equipment"][item] for item in visible_statuses),
+        active_quarries=by_entity["quarry"][active_status],
+        active_accumulators=by_entity["accumulator"][active_status],
+        active_equipment=by_entity["equipment"][active_status],
     )
 
 
@@ -173,9 +170,21 @@ async def _confirm_owned(db, entity, current_user) -> PlacementActionResult:
     return await _commit_action(db, entity)
 
 
+async def _spoil_confirmation_owned(db, entity, current_user) -> PlacementActionResult:
+    if entity.owner_user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="?????????? ?? ???????")
+    await spoil_confirmation_timer(db, entity, actor_user_id=current_user.id)
+    return await _commit_action(db, entity)
+
+
 @router.post("/supplier/points/{point_id}/confirm-relevance", response_model=PlacementActionResult)
 async def confirm_supplier_point(point_id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_supplier_user)):
     return await _confirm_owned(db, await _point_or_404(db, point_id), current_user)
+
+
+@router.post("/supplier/points/{point_id}/debug-spoil-confirmation", response_model=PlacementActionResult)
+async def debug_spoil_supplier_point_confirmation(point_id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_supplier_user)):
+    return await _spoil_confirmation_owned(db, await _point_or_404(db, point_id), current_user)
 
 
 @router.post("/supplier/equipment/{listing_id}/confirm-relevance", response_model=PlacementActionResult)
@@ -183,7 +192,17 @@ async def confirm_supplier_equipment(listing_id: UUID, db: AsyncSession = Depend
     return await _confirm_owned(db, await _equipment_or_404(db, listing_id), current_user)
 
 
+@router.post("/supplier/equipment/{listing_id}/debug-spoil-confirmation", response_model=PlacementActionResult)
+async def debug_spoil_supplier_equipment_confirmation(listing_id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_supplier_user)):
+    return await _spoil_confirmation_owned(db, await _equipment_or_404(db, listing_id), current_user)
+
+
 @router.post("/equipment-owner/equipment/{listing_id}/confirm-relevance", response_model=PlacementActionResult)
 async def confirm_owner_equipment(listing_id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_equipment_owner_user)):
     return await _confirm_owned(db, await _equipment_or_404(db, listing_id), current_user)
+
+
+@router.post("/equipment-owner/equipment/{listing_id}/debug-spoil-confirmation", response_model=PlacementActionResult)
+async def debug_spoil_owner_equipment_confirmation(listing_id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_equipment_owner_user)):
+    return await _spoil_confirmation_owned(db, await _equipment_or_404(db, listing_id), current_user)
 

@@ -93,6 +93,7 @@ const SUPPLIER_EQUIPMENT_TEXT = {
   pageTitle: "Моя спецтехника",
   publishListing: "Опубликовать",
   hideListing: "Скрыть",
+  qaResetTimer: "[QA] Сбросить таймер",
   confirmRelevance: "Подтвердить актуальность",
   photos: "Фотографии",
   addPhotos: "Добавить фотографии",
@@ -562,6 +563,26 @@ export default function SupplierEquipmentScreen({
     }
   };
 
+  const spoilListingConfirmationTimer = async (listing: EquipmentListing) => {
+    try {
+      const response = await fetch(
+        `${baseURL}${apiPrefix}/equipment/${listing.id}/debug-spoil-confirmation`,
+        {
+          method: "POST",
+          headers,
+        },
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(extractApiErrorMessage(data, "Не удалось сбросить таймер подтверждения"));
+      }
+      toast.success("QA-таймер подтверждения сброшен");
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось сбросить таймер подтверждения");
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -749,6 +770,16 @@ export default function SupplierEquipmentScreen({
                     ? SUPPLIER_EQUIPMENT_TEXT.publishListing
                     : SUPPLIER_EQUIPMENT_TEXT.hideListing}
                 </button>
+                {(listing.placement_status === "active" || listing.placement_status === "trial") &&
+                !shouldShowConfirmationAction(listing) ? (
+                  <button
+                    type="button"
+                    onClick={() => void spoilListingConfirmationTimer(listing)}
+                    className="w-full rounded-xl bg-fuchsia-50 px-4 py-3 text-sm font-bold text-fuchsia-700"
+                  >
+                    {SUPPLIER_EQUIPMENT_TEXT.qaResetTimer}
+                  </button>
+                ) : null}
                 {shouldShowConfirmationAction(listing) ? <button type="button" onClick={() => void confirmListingRelevance(listing)} className="w-full rounded-xl bg-orange-50 px-4 py-3 text-sm font-bold text-orange-800">{SUPPLIER_EQUIPMENT_TEXT.confirmRelevance}</button> : null}
               </div>
             </article>

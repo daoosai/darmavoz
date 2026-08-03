@@ -29,6 +29,16 @@ const TYPE_LABELS: Record<string, string> = {
   supplier: "Поставщик",
 };
 
+const SUPPLIER_DASHBOARD_TEXT = {
+  pageTitle: "Мои точки",
+  addPoint: "Добавить точку",
+  pointPhoto: "Фото",
+  editPoint: "Изменить",
+  hidePoint: "Скрыть",
+  publishPoint: "Опубликовать",
+  confirmRelevance: "Подтвердить актуальность",
+} as const;
+
 const getPointStatusMeta = (point: SupplierPoint) => {
   if (point.is_active === false || point.moderation_status === "suspended") {
     return { label: "Скрыт", className: "bg-gray-100 text-gray-800" };
@@ -302,7 +312,7 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-sky-500">
           Кабинет поставщика
         </p>
-        <h1 className="mt-1 text-3xl font-black">Мои точки</h1>
+        <h1 className="mt-1 text-3xl font-black">{SUPPLIER_DASHBOARD_TEXT.pageTitle}</h1>
       </header>
 
       <main className="px-5 pb-8">
@@ -311,7 +321,7 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
           className="mt-5 flex w-full items-center justify-center gap-3 rounded-2xl bg-sky-500 px-5 py-5 text-lg font-black text-white shadow-sm hover:bg-sky-600"
         >
           <Plus className="h-6 w-6" />
-          Добавить точку
+          {SUPPLIER_DASHBOARD_TEXT.addPoint}
         </button>
 
         {isLoading ? (
@@ -396,7 +406,7 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
                   <div className="mt-5 flex gap-2">
                     <label className="flex flex-1 cursor-pointer items-center justify-center rounded-2xl border border-slate-200 py-3 text-sm font-bold hover:bg-slate-50">
                       <Upload className="mr-2 h-4 w-4" />
-                      Фото
+                      {SUPPLIER_DASHBOARD_TEXT.pointPhoto}
                       <input
                         type="file"
                         accept="image/*"
@@ -412,7 +422,7 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
                       className="flex flex-1 items-center justify-center rounded-2xl border border-sky-200 bg-sky-50 px-3 py-3 text-sm font-bold text-sky-700 hover:bg-sky-100"
                     >
                       <Pencil className="mr-2 h-4 w-4" />
-                      Изменить
+                      {SUPPLIER_DASHBOARD_TEXT.editPoint}
                     </button>
 
                     {point.moderation_status === "incomplete" ? (
@@ -436,9 +446,11 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
                         : "bg-slate-100 text-slate-700"
                     } disabled:opacity-50`}
                   >
-                    {point.is_active === false ? "Опубликовать" : "Скрыть"}
+                    {point.is_active === false
+                      ? SUPPLIER_DASHBOARD_TEXT.publishPoint
+                      : SUPPLIER_DASHBOARD_TEXT.hidePoint}
                   </button>
-                  {shouldShowConfirmationAction(point) ? <button type="button" disabled={isBusy} onClick={() => void confirmPointRelevance(point)} className="mt-3 w-full rounded-2xl bg-orange-50 px-3 py-3 text-sm font-bold text-orange-800 disabled:opacity-50">Подтвердить актуальность</button> : null}
+                  {shouldShowConfirmationAction(point) ? <button type="button" disabled={isBusy} onClick={() => void confirmPointRelevance(point)} className="mt-3 w-full rounded-2xl bg-orange-50 px-3 py-3 text-sm font-bold text-orange-800 disabled:opacity-50">{SUPPLIER_DASHBOARD_TEXT.confirmRelevance}</button> : null}
                 </div>
               </article>
             ))}

@@ -44,6 +44,12 @@ export interface PlacementSummary {
 const CONFIRMATION_ACTION_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
 const PLACEMENT_EXPIRATION_WARNING_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
 
+const PLACEMENT_TEXT = {
+  warningTitle: "Внимание!",
+  warningBodyPrefix: "Срок размещения истекает",
+  warningBodySuffix: "Объявление будет скрыто. Пожалуйста, свяжитесь с поддержкой для продления.",
+} as const;
+
 const parsePlacementDeadline = (value?: string | null) => {
   if (!value) return Number.NaN;
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -199,9 +205,9 @@ export function PlacementExpirationWarning({
     >
       <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
       <p>
-        <span className="font-semibold">Внимание!</span> Срок размещения истекает{" "}
-        {formatPlacementWarningDate(placementEndsAt)}. Объявление будет скрыто. Пожалуйста,
-        свяжитесь с поддержкой для продления.
+        <span className="font-semibold">{PLACEMENT_TEXT.warningTitle}</span>{" "}
+        {PLACEMENT_TEXT.warningBodyPrefix} {formatPlacementWarningDate(placementEndsAt)}.{" "}
+        {PLACEMENT_TEXT.warningBodySuffix}
       </p>
     </div>
   );

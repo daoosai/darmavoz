@@ -357,6 +357,7 @@ class Quarry(Base):
         SQLEnum(
             "incomplete",
             "pending_moderation",
+            "has_pending_changes",
             "approved",
             "rejected",
             "suspended",
@@ -580,6 +581,7 @@ class SpecialEquipmentListing(Base):
         SQLEnum(
             "incomplete",
             "pending_moderation",
+            "has_pending_changes",
             "approved",
             "rejected",
             "suspended",

@@ -1635,24 +1635,6 @@ export default function AdminDashboardScreen({
               Модерация
             </button>
             <button
-              onClick={() => setActiveTab("equipment")}
-              className={`flex-1 sm:w-auto flex-shrink-0 whitespace-nowrap py-2 px-3 text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2 ${
-                activeTab === "equipment"
-                  ? "bg-white text-[#209ccf] shadow-sm"
-                  : "text-slate-500 hover:text-slate-700"
-              }`}
-            >
-              <div className="relative flex items-center justify-center">
-                <Wrench className="w-4 h-4" />
-                {pendingEquipmentModerationCount > 0 && (
-                  <div className="absolute -top-1.5 -right-2 min-w-4 rounded-full bg-rose-500 px-1 text-center text-[10px] font-bold leading-4 text-white shadow-sm">
-                    {pendingEquipmentModerationCount > 99 ? "99+" : pendingEquipmentModerationCount}
-                  </div>
-                )}
-              </div>
-              Техника
-            </button>
-            <button
               onClick={() => setActiveTab("profile")}
               className={`flex-1 sm:w-auto flex-shrink-0 whitespace-nowrap py-2 px-3 text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2 ${
                 activeTab === "profile"

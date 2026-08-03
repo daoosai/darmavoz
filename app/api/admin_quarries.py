@@ -43,7 +43,11 @@ from app.services.moderation import (
     create_moderation_audit_log,
     summarize_pending_changes,
 )
-from app.services.relevance import initialize_trial, recalculate_status
+from app.services.relevance import (
+    apply_manual_placement_end_date,
+    initialize_trial,
+    recalculate_status,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -236,7 +240,15 @@ async def create_pickup_point(
         try:
             await _validate_point_activation(db, point)
             point.moderation_status = ModerationStatus.approved.value
-            await initialize_trial(db, point, actor_user_id=current_admin.id)
+            if payload.subscription_end_date is not None:
+                await apply_manual_placement_end_date(
+                    db,
+                    point,
+                    ends_at=payload.subscription_end_date,
+                    actor_user_id=current_admin.id,
+                )
+            else:
+                await initialize_trial(db, point, actor_user_id=current_admin.id)
         except HTTPException:
             await db.rollback()
             raise
@@ -257,6 +269,19 @@ async def update_pickup_point(
     payload_data = payload.model_dump(exclude_unset=True)
     await _apply_point_changes(db, point, payload_data)
     changed = set(payload_data)
+    if "subscription_end_date" in changed and payload_data.get("is_active") is not False:
+        await apply_manual_placement_end_date(
+            db,
+            point,
+            ends_at=point.subscription_end_date,
+            actor_user_id=current_user.id,
+        )
+        if point.is_active:
+            try:
+                await _validate_point_activation(db, point)
+            except HTTPException:
+                await db.rollback()
+                raise
     publication_fields = {
         "is_active",
         "point_type",

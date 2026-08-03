@@ -120,6 +120,7 @@ class EquipmentListingBase(BaseModel):
     tariffs: list[EquipmentTariff] = Field(min_length=1, max_length=2)
     city: str | None = Field(default=None, max_length=255)
     district: str | None = Field(default=None, max_length=255)
+    placement_ends_at: datetime | None = None
     is_active: bool = True
     is_vip: bool = False
     manual_priority: int = 0
@@ -148,6 +149,7 @@ class EquipmentListingUpdate(BaseModel):
     tariffs: list[EquipmentTariff] | None = Field(default=None, min_length=1, max_length=2)
     city: str | None = Field(default=None, max_length=255)
     district: str | None = Field(default=None, max_length=255)
+    placement_ends_at: datetime | None = None
     is_active: bool | None = None
     is_vip: bool | None = None
     manual_priority: int | None = None

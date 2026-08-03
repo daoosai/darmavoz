@@ -289,6 +289,39 @@ async def extend_placement(
     _sync_legacy_visibility(entity)
 
 
+async def apply_manual_placement_end_date(
+    db: AsyncSession,
+    entity: PlacementEntity,
+    *,
+    ends_at: datetime | None,
+    actor_user_id: UUID | None = None,
+    now: datetime | None = None,
+) -> str:
+    current_time = now or utcnow()
+    preserve_manual_hide = (
+        entity.placement_status == PlacementStatus.hidden.value
+        and entity.placement_hidden_reason == MANUAL_HIDDEN_REASON
+    )
+    entity.placement_ends_at = ends_at
+    if isinstance(entity, Quarry):
+        entity.subscription_end_date = ends_at
+    if entity.placement_started_at is None:
+        entity.placement_started_at = current_time
+    entity.last_confirmed_at = current_time
+    entity.next_confirmation_at = current_time + timedelta(
+        days=settings.PLACEMENT_CONFIRMATION_INTERVAL_DAYS
+    )
+    if not preserve_manual_hide:
+        entity.placement_hidden_reason = None
+    return await recalculate_status(
+        db,
+        entity,
+        actor_user_id=actor_user_id,
+        action="manual_placement_date_updated",
+        now=current_time,
+    )
+
+
 async def hide_placement(
     db: AsyncSession,
     entity: PlacementEntity,

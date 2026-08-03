@@ -65,12 +65,24 @@ export const shouldShowConfirmationAction = (
 
 const META: Record<PlacementStatus, { label: string; className: string }> = {
   active: { label: "Активно", className: "bg-emerald-100 text-emerald-700" },
-  pending_moderation: { label: "На модерации", className: "bg-amber-100 text-amber-800" },
+  pending_moderation: {
+    label: "На модерации",
+    className: "bg-amber-100 text-amber-800",
+  },
   hidden: { label: "Скрыто", className: "bg-slate-100 text-slate-700" },
   archived: { label: "Архив", className: "bg-gray-200 text-gray-700" },
-  confirmation_required: { label: "Требует подтверждения", className: "bg-orange-100 text-orange-800" },
-  trial: { label: "Тестовый период", className: "bg-sky-100 text-sky-800" },
-  expired: { label: "Размещение завершено", className: "bg-rose-100 text-rose-700" },
+  confirmation_required: {
+    label: "Требует подтверждения",
+    className: "bg-orange-100 text-orange-800",
+  },
+  trial: {
+    label: "Тестовый период",
+    className: "bg-sky-100 text-sky-800",
+  },
+  expired: {
+    label: "Размещение завершено",
+    className: "bg-rose-100 text-rose-700",
+  },
 };
 
 export const placementMeta = (status?: PlacementStatus) =>
@@ -86,18 +98,46 @@ export const formatPlacementDate = (value?: string | null) => {
 
 export function PlacementBadge({ status }: { status?: PlacementStatus }) {
   const meta = placementMeta(status);
-  return <span className={`inline-flex rounded-lg px-2 py-1 text-xs font-bold ${meta.className}`}>{meta.label}</span>;
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${meta.className}`}
+    >
+      {meta.label}
+    </span>
+  );
 }
 
 export function PlacementDates({ item }: { item: PlacementFields }) {
   const rows: Array<[string, ReactNode]> = [
-    [item.placement_status === "trial" ? "Тестовый период до" : "Размещение до", formatPlacementDate(item.placement_status === "trial" ? item.trial_ends_at : item.placement_ends_at)],
-    ["Следующее подтверждение", formatPlacementDate(item.next_confirmation_at)],
+    [
+      item.placement_status === "trial"
+        ? "Тестовый период до"
+        : "Размещение до",
+      formatPlacementDate(
+        item.placement_status === "trial"
+          ? item.trial_ends_at
+          : item.placement_ends_at,
+      ),
+    ],
+    [
+      "Следующее подтверждение",
+      formatPlacementDate(item.next_confirmation_at),
+    ],
   ];
+
   return (
-    <div className="grid gap-1 text-xs text-slate-500">
-      {rows.map(([label, value]) => <div key={label}><span className="font-semibold">{label}:</span> {value}</div>)}
-      {item.placement_hidden_reason === "confirmation_overdue" ? <div className="font-semibold text-rose-600">Скрыто из-за просроченного подтверждения</div> : null}
+    <div className="grid gap-1 text-sm">
+      {rows.map(([label, value]) => (
+        <div key={label} className="flex flex-wrap gap-1">
+          <span className="text-gray-500">{label}:</span>
+          <span className="text-gray-900">{value}</span>
+        </div>
+      ))}
+      {item.placement_hidden_reason === "confirmation_overdue" ? (
+        <div className="text-sm font-semibold text-rose-600">
+          Скрыто из-за просроченного подтверждения
+        </div>
+      ) : null}
     </div>
   );
 }

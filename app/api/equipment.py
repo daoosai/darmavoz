@@ -59,6 +59,7 @@ from app.services.moderation import (
     summarize_pending_changes,
 )
 from app.services.relevance import (
+    apply_manual_placement_end_date,
     initialize_trial,
     hide_placement,
     is_publicly_available,
@@ -754,7 +755,15 @@ async def create_equipment_listing(
     )
     db.add(listing)
     await db.flush()
-    await initialize_trial(db, listing, actor_user_id=current_user.id)
+    if payload.placement_ends_at is not None:
+        await apply_manual_placement_end_date(
+            db,
+            listing,
+            ends_at=payload.placement_ends_at,
+            actor_user_id=current_user.id,
+        )
+    else:
+        await initialize_trial(db, listing, actor_user_id=current_user.id)
     await db.commit()
     return await _listing_payload(
         db,
@@ -801,6 +810,7 @@ async def update_equipment_listing(
         "tariffs",
         "city",
         "district",
+        "placement_ends_at",
         "is_active",
         "is_vip",
         "manual_priority",
@@ -819,7 +829,15 @@ async def update_equipment_listing(
     listing.moderation_comment = None
     listing.moderated_by_user_id = current_user.id
     listing.moderated_at = datetime.now(timezone.utc)
-    await initialize_trial(db, listing, actor_user_id=current_user.id)
+    if "placement_ends_at" in changed:
+        await apply_manual_placement_end_date(
+            db,
+            listing,
+            ends_at=listing.placement_ends_at,
+            actor_user_id=current_user.id,
+        )
+    else:
+        await initialize_trial(db, listing, actor_user_id=current_user.id)
     await db.commit()
     return await _listing_payload(
         db,

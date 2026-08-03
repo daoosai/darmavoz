@@ -473,17 +473,9 @@ export default function AdminQuarriesScreen({
                       ) : null}
                     </td>
                     <td className="p-4">
-                      <div className="flex flex-wrap gap-2">
+                      <div className="mb-2 flex flex-wrap gap-1">
                         <PlacementBadge status={quarry.placement_status} />
-                        {quarry.is_active ? (
-                        <span className="inline-flex items-center px-2 py-1 rounded-lg bg-emerald-100 text-emerald-700 text-xs font-bold">
-                          Активен
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-1 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold">
-                          Скрыт
-                        </span>
-                        )}
+                        
                         {quarry.is_vip ? (
                           <span className="inline-flex items-center gap-1 rounded-lg bg-amber-100 px-2 py-1 text-xs font-black uppercase tracking-wide text-amber-800">
                             <Crown className="h-3.5 w-3.5" />
@@ -519,7 +511,6 @@ export default function AdminQuarriesScreen({
                           disabled={deletingPointId === quarry.id}
                           onClick={() => void deletePoint(quarry)}
                           className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all disabled:opacity-50"
-                          title="Удалить точку"
                         >
                           <Trash2 className="w-5 h-5" />
                         </button>
@@ -573,18 +564,10 @@ export default function AdminQuarriesScreen({
                   {quarry.owner_phone ? `, ${quarry.owner_phone}` : ""}
                 </div>
               )}
-              <div className="flex items-center justify-between gap-2 mt-1">
-                <div className="flex flex-wrap gap-2">
+              <div className="mt-1 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div className="mb-2 flex flex-wrap gap-1">
                   <PlacementBadge status={quarry.placement_status} />
-                  {quarry.is_active ? (
-                    <span className="inline-flex items-center px-2 py-1 rounded-lg bg-emerald-100 text-emerald-700 text-xs font-bold">
-                      Активен
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center px-2 py-1 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold">
-                      Скрыт
-                    </span>
-                  )}
+                  
                   <span className={`inline-flex items-center rounded-lg px-2 py-1 text-xs font-bold ${moderationBadge(quarry.moderation_status).className}`}>
                     {moderationBadge(quarry.moderation_status).label}
                   </span>
@@ -601,7 +584,7 @@ export default function AdminQuarriesScreen({
                   ) : null}
                 </div>
                 <PlacementDates item={quarry} />
-                <div className="flex items-center justify-end gap-2">
+                <div className="flex flex-wrap gap-2 mt-3 md:mt-0 md:justify-end">
                   <button
                     onClick={() => handleOpenModal(quarry)}
                     className="p-2 text-slate-400 hover:text-[#2DB0E6] hover:bg-[#2DB0E6]/10 rounded-xl transition-all"
@@ -616,7 +599,6 @@ export default function AdminQuarriesScreen({
                     disabled={deletingPointId === quarry.id}
                     onClick={() => void deletePoint(quarry)}
                     className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all disabled:opacity-50"
-                    title="Удалить точку"
                   >
                     <Trash2 className="w-5 h-5" />
                   </button>
@@ -1355,9 +1337,6 @@ function EditQuarryModal({
               <input
                 type="date"
                 value={formData.subscription_end_date || ""}
-                disabled
-                title="Срок изменяется кнопкой продления"
-                min={subscriptionDateInputMin}
                 max="2099-12-31"
                 onChange={(event) =>
                   setFormData({
@@ -2185,9 +2164,6 @@ function EnhancedEditQuarryModal({
               <input
                 type="date"
                 value={formData.subscription_end_date || ""}
-                disabled
-                title="Срок изменяется кнопкой продления"
-                min={subscriptionDateInputMin}
                 onChange={(event) =>
                   setFormData({
                     ...formData,

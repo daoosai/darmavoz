@@ -431,7 +431,7 @@ export default function AdminQuarriesScreen({
                 <th className="p-4 border-b border-slate-100">Адрес</th>
                 <th className="p-4 border-b border-slate-100">Статус</th>
                 <th className="p-4 border-b border-slate-100">Модерация</th>
-                <th className="p-4 border-b border-slate-100">Действия</th>
+                <th className="min-w-[280px] p-4 border-b border-slate-100">Действия</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -495,8 +495,8 @@ export default function AdminQuarriesScreen({
                         {moderationBadge(quarry.moderation_status).label}
                       </span>
                     </td>
-                    <td className="p-4">
-                      <div className="flex items-center gap-3">
+                    <td className="min-w-[280px] align-top p-4">
+                      <div className="flex flex-wrap gap-2">
                         <button
                           onClick={() => handleOpenModal(quarry)}
                           className="p-2 text-slate-400 hover:text-[#2DB0E6] hover:bg-[#2DB0E6]/10 rounded-xl transition-all"
@@ -1308,7 +1308,7 @@ function EditQuarryModal({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 items-start md:grid-cols-2">
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
                 Контактный телефон
@@ -2139,7 +2139,7 @@ function EnhancedEditQuarryModal({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 items-start md:grid-cols-2">
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Контактный телефон</label>
               <input

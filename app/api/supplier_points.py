@@ -69,6 +69,23 @@ def _reset_point_moderation_after_supplier_edit(point: Quarry) -> None:
         point.moderation_comment = None
 
 
+def _notify_point_moderation(point: Quarry, *, is_resubmission: bool) -> None:
+    try:
+        schedule_pickup_point_moderation_notification(
+            point,
+            is_resubmission=is_resubmission,
+        )
+    except Exception as exc:
+        logger.error(
+            "pickup_point_moderation_notification_failed",
+            extra={
+                "pickup_point_id": str(point.id),
+                "is_resubmission": is_resubmission,
+            },
+            exc_info=exc,
+        )
+
+
 async def _apply_supplier_point_patch(
     db: AsyncSession,
     point: Quarry,
@@ -315,6 +332,7 @@ async def update_supplier_point(
     current_user: User = Depends(get_current_supplier_user),
 ) -> dict:
     point = await _owned_point(db, current_user, point_id)
+    previous_status = point.moderation_status
     if payload.point_type is not None and payload.point_type not in SUPPLIER_POINT_TYPES:
         raise HTTPException(status_code=422, detail="Suppliers may create only quarry or accumulator points")
     payload_data = payload.model_dump(exclude_unset=True)
@@ -346,9 +364,21 @@ async def update_supplier_point(
                 f"Изменены поля: {summarize_pending_changes(pending_changes) or 'без деталей'}."
             ),
         )
+        _notify_point_moderation(point, is_resubmission=True)
+    elif (
+        previous_status in SUPPLIER_EDIT_REMODERATION_STATUSES
+        and point.moderation_status == ModerationStatus.pending_moderation.value
+    ):
+        schedule_admin_moderation_email(
+            background_tasks,
+            subject="Точка повторно отправлена на модерацию",
+            body=(
+                f'Поставщик обновил точку "{point.name}" и повторно отправил её '
+                "на модерацию."
+            ),
+        )
+        _notify_point_moderation(point, is_resubmission=True)
     return await pickup_point_payload(db, point, include_pending_changes=True)
-
-
 @router.put("/points/{point_id}/offers", response_model=QuarryOut)
 async def replace_supplier_offers(
     point_id: UUID,
@@ -357,6 +387,7 @@ async def replace_supplier_offers(
     current_user: User = Depends(get_current_supplier_user),
 ) -> dict:
     point = await _owned_point(db, current_user, point_id)
+    previous_status = point.moderation_status
     await sync_material_offers(db, quarry_id=point.id, offers=offers)
     _reset_point_moderation_after_supplier_edit(point)
     await create_moderation_audit_log(
@@ -368,9 +399,12 @@ async def replace_supplier_offers(
         comment="material_offers",
     )
     await db.commit()
+    if (
+        previous_status in SUPPLIER_EDIT_REMODERATION_STATUSES
+        and point.moderation_status == ModerationStatus.pending_moderation.value
+    ):
+        _notify_point_moderation(point, is_resubmission=True)
     return await pickup_point_payload(db, point, include_pending_changes=True)
-
-
 @router.post("/points/{point_id}/submit", response_model=QuarryOut)
 async def submit_supplier_point(
     point_id: UUID,
@@ -378,6 +412,7 @@ async def submit_supplier_point(
     current_user: User = Depends(get_current_supplier_user),
 ) -> dict:
     point = await _owned_point(db, current_user, point_id)
+    previous_status = point.moderation_status
     await validate_point_can_be_approved(
         db,
         point,
@@ -388,12 +423,8 @@ async def submit_supplier_point(
     point.moderation_comment = None
     await db.commit()
     await db.refresh(point)
-    try:
-        schedule_pickup_point_moderation_notification(point)
-    except Exception as exc:
-        logger.error(
-            "pickup_point_moderation_notification_failed",
-            extra={"pickup_point_id": str(point.id)},
-            exc_info=exc,
-        )
+    _notify_point_moderation(
+        point,
+        is_resubmission=previous_status in SUPPLIER_PENDING_EDIT_STATUSES,
+    )
     return await pickup_point_payload(db, point, include_pending_changes=True)

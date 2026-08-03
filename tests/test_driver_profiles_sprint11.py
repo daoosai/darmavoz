@@ -2,7 +2,17 @@ import pytest
 from sqlalchemy import select
 
 from main import app
-from app.models.models import DeliveryOption, Driver, MediaFile, ModerationStatus, Role, User, Vehicle
+from app.models.models import (
+    DeliveryOption,
+    Driver,
+    MediaFile,
+    ModerationStatus,
+    Quarry,
+    Role,
+    SpecialEquipmentListing,
+    User,
+    Vehicle,
+)
 from app.security.auth import get_password_hash
 from app.security.jwt import create_access_token
 
@@ -1090,6 +1100,69 @@ async def test_admin_pending_moderation_endpoint_returns_aggregated_queue(client
     assert pending_item["vehicle_left_url"] == "https://example.com/left.jpg"
     assert pending_item["vehicle_plate_url"] == "https://example.com/plate.jpg"
     assert all(item["driver_name"] != "Incomplete Queue Driver" for item in payload)
+
+
+@pytest.mark.asyncio
+async def test_admin_moderation_count_endpoint_includes_re_moderation_statuses(
+    client, session_factory
+):
+    async with session_factory() as session:
+        admin_role = await ensure_role(session, "admin")
+        driver_role = await ensure_role(session, "driver")
+        admin_user = await create_user(session, username="moderation_count_admin", role=admin_role)
+        driver_user = await create_user(session, username="+79990011414", role=driver_role)
+        delivery_option = await create_delivery_option(
+            session,
+            capacity_m3=18.0,
+            title="Самосвал 18 м3",
+        )
+        vehicle = Vehicle(
+            title="Remoderation vehicle",
+            delivery_option_id=delivery_option.id,
+            is_active=True,
+            moderation_status=ModerationStatus.has_pending_changes.value,
+        )
+        session.add(vehicle)
+        await session.flush()
+        driver = Driver(
+            name="Remoderation Driver",
+            phone="+79990011414",
+            user_id=driver_user.id,
+            vehicle_id=vehicle.id,
+            status="offline",
+            moderation_status=ModerationStatus.approved.value,
+        )
+        point = Quarry(
+            name="Повторная точка",
+            short_name="Повторная точка",
+            point_type="quarry",
+            address="Тестовый адрес",
+            moderation_status=ModerationStatus.has_pending_changes.value,
+            is_active=True,
+        )
+        listing = SpecialEquipmentListing(
+            title="Повторное объявление",
+            equipment_type="Экскаватор",
+            moderation_status=ModerationStatus.pending_moderation.value,
+            is_active=True,
+            is_deleted=False,
+        )
+        session.add_all([driver, point, listing])
+        await session.commit()
+        admin_username = admin_user.username
+
+    response = await client.get(
+        "/api/v1/admin/moderation/count",
+        headers=auth_headers(admin_username),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "drivers": 1,
+        "points": 1,
+        "equipment": 1,
+        "total": 3,
+    }
 
 
 @pytest.mark.asyncio

@@ -119,6 +119,22 @@ export interface CurrentUserProfile {
   phone?: string | null;
 }
 
+export interface AdminModerationNotification {
+  event: string;
+  title: string;
+  body: string;
+  receivedAt: number;
+}
+
+const ADMIN_MODERATION_EVENTS = new Set([
+  "pickup_point_pending_moderation",
+  "equipment_listing_pending_moderation",
+]);
+
+export const isAdminModerationEvent = (
+  event: string | null | undefined,
+): event is string => Boolean(event && ADMIN_MODERATION_EVENTS.has(event));
+
 interface AuthState {
   token: string | null;
   role: UserRole;
@@ -142,6 +158,7 @@ export const useAuthStore = create<AuthState>()(
         set({ token: null, role: null, driverId: null, currentUser: null });
         useAddressStore.getState().clearSelectedAddress();
         useClientOrdersStore.getState().clearOrders();
+        useAdminModerationStore.getState().reset();
         localStorage.removeItem('address-storage');
       },
       setCurrentUser: (currentUser) => set({ currentUser }),
@@ -209,6 +226,33 @@ export const usePlacementStore = create<PlacementState>((set) => ({
       set({ isLoading: false });
     }
   },
+}));
+
+interface AdminModerationState {
+  lastNotification: AdminModerationNotification | null;
+  refreshNonce: number;
+  registerNotification: (payload: {
+    event: string;
+    title?: string | null;
+    body?: string | null;
+  }) => void;
+  reset: () => void;
+}
+
+export const useAdminModerationStore = create<AdminModerationState>((set) => ({
+  lastNotification: null,
+  refreshNonce: 0,
+  registerNotification: ({ event, title, body }) =>
+    set((state) => ({
+      lastNotification: {
+        event,
+        title: title?.trim() || "",
+        body: body?.trim() || "",
+        receivedAt: Date.now(),
+      },
+      refreshNonce: state.refreshNonce + 1,
+    })),
+  reset: () => set({ lastNotification: null, refreshNonce: 0 }),
 }));
 
 export const useCartStore = create<CartState>()(

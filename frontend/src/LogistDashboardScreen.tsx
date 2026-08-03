@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import PullToRefresh from "react-simple-pull-to-refresh";
 import { useAuthStore } from "./store";
 import { getOrderStatusText } from "./utils/statusMapper";
+import type { PlacementStatus } from "./placement";
 import {
   baseURL,
   
@@ -42,7 +43,7 @@ import LogistCreateOrderModal from "./LogistCreateOrderModal";
 import LogistEditOrderModal from "./LogistEditOrderModal";
 import { OrdersFilterBar } from "./components/admin/OrdersFilterBar";
 import { logoutCurrentSession } from "./pushAuth";
-import AdminEquipmentScreen from "./AdminEquipmentScreen";
+import AdminEquipmentScreen, { type AdminEquipmentTab } from "./AdminEquipmentScreen";
 import SupportScreen from "./SupportScreen";
 
 interface AdminOrder {
@@ -163,6 +164,9 @@ export default function LogistDashboardScreen({
   const [activeTab, setActiveTab] = useState<"orders" | "drivers" | "equipment" | "support" | "profile">(
     "orders",
   );
+  const [equipmentTab, setEquipmentTab] = useState<AdminEquipmentTab>("listings");
+  const [equipmentPlacementFilter, setEquipmentPlacementFilter] =
+    useState<PlacementStatus | "">("");
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [drivers, setDrivers] = useState<AdminDriver[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -1122,7 +1126,12 @@ export default function LogistDashboardScreen({
               )}
             </>
           ) : activeTab === "equipment" ? (
-            <AdminEquipmentScreen />
+            <AdminEquipmentScreen
+              tab={equipmentTab}
+              onTabChange={setEquipmentTab}
+              placementFilter={equipmentPlacementFilter}
+              onPlacementFilterChange={setEquipmentPlacementFilter}
+            />
           ) : activeTab === "support" ? (
             <SupportScreen operatorMode />
           ) : activeTab === "profile" ? (

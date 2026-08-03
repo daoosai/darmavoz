@@ -79,6 +79,12 @@ from app.services.vehicle_moderation import (
 
 router = APIRouter()
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+MODERATION_PENDING_STATUSES = (
+    ModerationStatus.pending_moderation.value,
+    ModerationStatus.has_pending_changes.value,
+)
+
+
 def _error_detail(code: str, message: str) -> dict[str, str]:
     return {"code": code, "message": message}
 
@@ -165,6 +171,13 @@ class AdminStatisticsOut(BaseModel):
 
 class PendingCountOut(BaseModel):
     count: int
+
+
+class ModerationCountsOut(BaseModel):
+    drivers: int
+    points: int
+    equipment: int
+    total: int
 
 
 
@@ -954,7 +967,7 @@ async def _list_pending_moderation_items(db: AsyncSession) -> list[PendingModera
         )
         .where(Driver.vehicle_id.is_not(None))
         .where(
-            Vehicle.moderation_status == ModerationStatus.pending_moderation.value
+            Vehicle.moderation_status.in_(MODERATION_PENDING_STATUSES)
         )
         .join(Vehicle, Driver.vehicle_id == Vehicle.id)
         .order_by(Driver.id.asc())
@@ -1202,11 +1215,50 @@ async def get_pending_driver_moderation_count(
 ) -> PendingCountOut:
     del current_admin
     count = await db.scalar(
-        select(func.count(Driver.id)).where(
-            Driver.moderation_status == ModerationStatus.pending_moderation.value
+        select(func.count(func.distinct(Driver.id)))
+        .join(Vehicle, Driver.vehicle_id == Vehicle.id)
+        .where(
+            Driver.vehicle_id.is_not(None),
+            Vehicle.moderation_status.in_(MODERATION_PENDING_STATUSES),
         )
     )
     return PendingCountOut(count=int(count or 0))
+
+
+@router.get("/moderation/count", response_model=ModerationCountsOut)
+async def get_moderation_counts(
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+) -> ModerationCountsOut:
+    del current_admin
+    driver_count = await db.scalar(
+        select(func.count(func.distinct(Driver.id)))
+        .join(Vehicle, Driver.vehicle_id == Vehicle.id)
+        .where(
+            Driver.vehicle_id.is_not(None),
+            Vehicle.moderation_status.in_(MODERATION_PENDING_STATUSES),
+        )
+    )
+    point_count = await db.scalar(
+        select(func.count(Quarry.id)).where(
+            Quarry.moderation_status.in_(MODERATION_PENDING_STATUSES)
+        )
+    )
+    equipment_count = await db.scalar(
+        select(func.count(SpecialEquipmentListing.id)).where(
+            SpecialEquipmentListing.is_deleted.is_(False),
+            SpecialEquipmentListing.moderation_status.in_(MODERATION_PENDING_STATUSES),
+        )
+    )
+    drivers = int(driver_count or 0)
+    points = int(point_count or 0)
+    equipment = int(equipment_count or 0)
+    return ModerationCountsOut(
+        drivers=drivers,
+        points=points,
+        equipment=equipment,
+        total=drivers + points + equipment,
+    )
 
 
 @router.get("/drivers/{driver_id}", response_model=DriverResponse)

@@ -38,11 +38,21 @@ async def test_custom_equipment_supplier_moderation_and_legacy_compatibility(
     client, session_factory, monkeypatch
 ):
     sent_emails: list[dict[str, str]] = []
+    moderation_notifications: list[dict[str, object]] = []
     monkeypatch.setattr(
         "app.api.equipment.send_email",
         lambda **kwargs: sent_emails.append(kwargs),
     )
     monkeypatch.setattr("app.api.equipment.settings.ADMIN_EMAIL", "admin@example.test")
+    monkeypatch.setattr(
+        "app.api.equipment.schedule_equipment_listing_moderation_notification",
+        lambda listing, is_resubmission=False: moderation_notifications.append(
+            {
+                "listing_id": listing.id,
+                "is_resubmission": is_resubmission,
+            }
+        ),
+    )
 
     admin, admin_token = await _create_user(session_factory, "admin")
     _logist, logist_token = await _create_user(session_factory, "logist")
@@ -137,6 +147,10 @@ async def test_custom_equipment_supplier_moderation_and_legacy_compatibility(
     assert supplier_edit.json()["pending_changes"]["title"] == "Мульчер после изменения"
     assert sent_emails[-1]["to_email"] == "admin@example.test"
     assert "title" in sent_emails[-1]["body"]
+    assert moderation_notifications[-1] == {
+        "listing_id": uuid.UUID(listing_id),
+        "is_resubmission": True,
+    }
     _ = {
         "to_email": "admin@example.test",
         "subject": "Объявление спецтехники ожидает модерации",

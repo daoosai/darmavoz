@@ -13,37 +13,37 @@ import {
 } from "./placement";
 
 const STATUS_LABELS: Record<string, string> = {
-  incomplete: "Черновик",
-  pending_moderation: "На модерации",
-  approved: "Одобрено",
-  rejected: "Отклонено",
-  suspended: "Приостановлено",
+  incomplete: "????????",
+  pending_moderation: "?? ?????????",
+  approved: "????????",
+  rejected: "?????????",
+  suspended: "??????????????",
 };
 
-STATUS_LABELS.has_pending_changes = "Есть правки";
+STATUS_LABELS.has_pending_changes = "???? ??????";
 
 const TYPE_LABELS: Record<string, string> = {
-  quarry: "Карьер",
-  accumulator: "Накопитель",
-  warehouse: "База / склад",
-  supplier: "Поставщик",
+  quarry: "??????",
+  accumulator: "??????????",
+  warehouse: "???? / ?????",
+  supplier: "?????????",
 };
 
 const getPointStatusMeta = (point: SupplierPoint) => {
   if (point.is_active === false || point.moderation_status === "suspended") {
-    return { label: "Скрыт", className: "bg-gray-100 text-gray-800" };
+    return { label: "?????", className: "bg-gray-100 text-gray-800" };
   }
   if (point.moderation_status === "pending_moderation") {
-    return { label: "На модерации", className: "bg-yellow-100 text-yellow-800" };
+    return { label: "?? ?????????", className: "bg-yellow-100 text-yellow-800" };
   }
   if (point.moderation_status === "has_pending_changes") {
-    return { label: "Есть правки", className: "bg-sky-100 text-sky-800" };
+    return { label: "???? ??????", className: "bg-sky-100 text-sky-800" };
   }
   if (point.moderation_status === "approved") {
-    return { label: "Одобрено", className: "bg-green-100 text-green-800" };
+    return { label: "????????", className: "bg-green-100 text-green-800" };
   }
   if (point.moderation_status === "rejected") {
-    return { label: "Отклонено", className: "bg-red-100 text-red-800" };
+    return { label: "?????????", className: "bg-red-100 text-red-800" };
   }
   return {
     label: STATUS_LABELS[point.moderation_status] || point.moderation_status,
@@ -85,11 +85,11 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
           data && typeof data === "object" && !Array.isArray(data)
             ? { ...data, status: response.status }
             : { detail: data, status: response.status };
-        throw new Error(extractApiErrorMessage(errorSource, "Не удалось загрузить точки"));
+        throw new Error(extractApiErrorMessage(errorSource, "?? ??????? ????????? ?????"));
       }
       setPoints(Array.isArray(data) ? data : []);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось загрузить точки");
+      toast.error(error instanceof Error ? error.message : "?? ??????? ????????? ?????");
     } finally {
       setIsLoading(false);
     }
@@ -103,7 +103,7 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(
-          extractApiErrorMessage(data, "Не удалось загрузить профиль поставщика"),
+          extractApiErrorMessage(data, "?? ??????? ????????? ??????? ??????????"),
         );
       }
       setDisplayName(data.display_name || "");
@@ -111,7 +111,7 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
       toast.error(
         error instanceof Error
           ? error.message
-          : "Не удалось загрузить профиль поставщика",
+          : "?? ??????? ????????? ??????? ??????????",
       );
     }
   };
@@ -121,12 +121,12 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
       const response = await fetch(`${baseURL}/catalog/materials/`);
       const data = await response.json().catch(() => []);
       if (!response.ok) {
-        throw new Error(extractApiErrorMessage(data, "Не удалось загрузить материалы"));
+        throw new Error(extractApiErrorMessage(data, "?? ??????? ????????? ?????????"));
       }
       const items = Array.isArray(data) ? data : data.results || [];
       setMaterials(items.filter((item: MaterialProps & { is_active?: boolean }) => item.is_active !== false));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось загрузить материалы");
+      toast.error(error instanceof Error ? error.message : "?? ??????? ????????? ?????????");
     }
   };
 
@@ -141,7 +141,7 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
       setShowCreatePoint(true);
       return;
     }
-    toast.error("Укажите ваше ФИО в профиле перед добавлением точки");
+    toast.error("??????? ???? ??? ? ??????? ????? ??????????? ?????");
     onRequireProfile?.();
   };
 
@@ -167,7 +167,7 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
       });
       const presign = await presignResponse.json().catch(() => ({}));
       if (!presignResponse.ok) {
-        throw new Error(extractApiErrorMessage(presign, "Не удалось подготовить загрузку"));
+        throw new Error(extractApiErrorMessage(presign, "?? ??????? ??????????? ????????"));
       }
 
       const storageResponse = await fetch(presign.upload_url, {
@@ -176,7 +176,7 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
         body: file,
       });
       if (!storageResponse.ok) {
-        throw new Error("Не удалось загрузить фотографию");
+        throw new Error("?? ??????? ????????? ??????????");
       }
 
       const confirmResponse = await fetch(`${baseURL}/media/confirm`, {
@@ -194,13 +194,13 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
       });
       const confirmed = await confirmResponse.json().catch(() => ({}));
       if (!confirmResponse.ok) {
-        throw new Error(extractApiErrorMessage(confirmed, "Не удалось подтвердить фотографию"));
+        throw new Error(extractApiErrorMessage(confirmed, "?? ??????? ??????????? ??????????"));
       }
 
       await fetchPoints();
-      toast.success("Фотография добавлена");
+      toast.success("?????????? ?????????");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось загрузить фотографию");
+      toast.error(error instanceof Error ? error.message : "?? ??????? ????????? ??????????");
     } finally {
       setIsBusy(false);
     }
@@ -216,13 +216,13 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(
-          extractApiErrorMessage(data, "Не удалось выбрать главную фотографию"),
+          extractApiErrorMessage(data, "?? ??????? ??????? ??????? ??????????"),
         );
       }
       await fetchPoints();
-      toast.success("Главная фотография обновлена");
+      toast.success("??????? ?????????? ?????????");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось выбрать главную фотографию");
+      toast.error(error instanceof Error ? error.message : "?? ??????? ??????? ??????? ??????????");
     } finally {
       setIsBusy(false);
     }
@@ -241,12 +241,12 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
           data && typeof data === "object" && !Array.isArray(data)
             ? { ...data, status: response.status }
             : { detail: data, status: response.status };
-        throw new Error(extractApiErrorMessage(errorSource, "Анкета заполнена не полностью"));
+        throw new Error(extractApiErrorMessage(errorSource, "?????? ????????? ?? ?????????"));
       }
       await fetchPoints();
-      toast.success("Точка отправлена на модерацию");
+      toast.success("????? ?????????? ?? ?????????");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось отправить точку");
+      toast.error(error instanceof Error ? error.message : "?? ??????? ????????? ?????");
     } finally {
       setIsBusy(false);
     }
@@ -266,13 +266,13 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(
-          extractApiErrorMessage(data, "Не удалось изменить статус точки"),
+          extractApiErrorMessage(data, "?? ??????? ???????? ?????? ?????"),
         );
       }
       await fetchPoints();
-      toast.success(point.is_active === false ? "Точка опубликована" : "Точка скрыта");
+      toast.success(point.is_active === false ? "????? ????????????" : "????? ??????");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось обновить точку");
+      toast.error(error instanceof Error ? error.message : "?? ??????? ???????? ?????");
     } finally {
       setIsBusy(false);
     }
@@ -286,31 +286,11 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось подтвердить актуальность"));
+      if (!response.ok) throw new Error(extractApiErrorMessage(data, "?? ??????? ??????????? ????????????"));
       await fetchPoints();
-      toast.success("Актуальность точки подтверждена");
+      toast.success("???????????? ????? ????????????");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось подтвердить актуальность");
-    } finally {
-      setIsBusy(false);
-    }
-  };
-
-  const spoilPointConfirmationTimer = async (point: SupplierPoint) => {
-    setIsBusy(true);
-    try {
-      const response = await fetch(`${baseURL}/supplier/points/${point.id}/debug-spoil-confirmation`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(extractApiErrorMessage(data, "Не удалось сбросить таймер подтверждения"));
-      }
-      await fetchPoints();
-      toast.success("QA-таймер подтверждения сброшен");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось сбросить таймер подтверждения");
+      toast.error(error instanceof Error ? error.message : "?? ??????? ??????????? ????????????");
     } finally {
       setIsBusy(false);
     }
@@ -320,9 +300,9 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
     <div className="text-slate-900">
       <header className="px-5 pb-4 pt-[max(env(safe-area-inset-top),1rem)]">
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-sky-500">
-          Кабинет поставщика
+          ??????? ??????????
         </p>
-        <h1 className="mt-1 text-3xl font-black">Мои точки</h1>
+        <h1 className="mt-1 text-3xl font-black">??? ?????</h1>
       </header>
 
       <main className="px-5 pb-8">
@@ -331,7 +311,7 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
           className="mt-5 flex w-full items-center justify-center gap-3 rounded-2xl bg-sky-500 px-5 py-5 text-lg font-black text-white shadow-sm hover:bg-sky-600"
         >
           <Plus className="h-6 w-6" />
-          Добавить точку
+          ???????? ?????
         </button>
 
         {isLoading ? (
@@ -339,9 +319,9 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
         ) : points.length === 0 ? (
           <section className="mt-8 rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
             <Building2 className="mx-auto h-12 w-12 text-slate-300" />
-            <h2 className="mt-5 text-xl font-black">Точек пока нет</h2>
+            <h2 className="mt-5 text-xl font-black">????? ???? ???</h2>
             <p className="mt-2 text-sm text-slate-500">
-              Добавьте карьер или накопитель. Каждая анкета проходит модерацию отдельно.
+              ???????? ?????? ??? ??????????. ?????? ?????? ???????? ????????? ????????.
             </p>
           </section>
         ) : (
@@ -369,12 +349,12 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
                   <div className="mt-3 flex flex-wrap gap-2"><PlacementBadge status={point.placement_status} /></div>
                   <div className="mt-3"><PlacementDates item={point} /></div>
                   <PlacementExpirationWarning item={point} className="mt-3" />
-                  {point.placement_status === "confirmation_required" ? <p className="mt-3 rounded-2xl bg-orange-50 p-3 text-sm font-semibold text-orange-800">Подтвердите актуальность в течение льготного периода, иначе точка будет скрыта.</p> : null}
-                  {point.placement_status === "expired" ? <p className="mt-3 rounded-2xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">Срок размещения завершён. Обратитесь к оператору для продления.</p> : null}
+                  {point.placement_status === "confirmation_required" ? <p className="mt-3 rounded-2xl bg-orange-50 p-3 text-sm font-semibold text-orange-800">??????????? ???????????? ? ??????? ????????? ???????, ????? ????? ????? ??????.</p> : null}
+                  {point.placement_status === "expired" ? <p className="mt-3 rounded-2xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">???? ?????????? ????????. ?????????? ? ????????? ??? ?????????.</p> : null}
 
                   <p className="mt-3 flex items-start gap-2 text-sm text-slate-500">
                     <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
-                    {point.address || "Адрес уточняется модератором"}
+                    {point.address || "????? ?????????? ???????????"}
                   </p>
 
                   {point.moderation_comment ? (
@@ -385,7 +365,7 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
 
                   {point.moderation_status === "has_pending_changes" ? (
                     <p className="mt-4 rounded-2xl bg-sky-50 p-3 text-sm text-sky-700">
-                      На модерации правки: {getPendingChangesSummary(point) || "есть обновления"}
+                      ?? ????????? ??????: {getPendingChangesSummary(point) || "???? ??????????"}
                     </p>
                   ) : null}
 
@@ -395,13 +375,13 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
                         <div key={media.id} className="relative aspect-square overflow-hidden rounded-2xl bg-slate-100">
                           <img
                             src={media.public_url}
-                            alt="Фотография точки"
+                            alt="?????????? ?????"
                             className="h-full w-full object-cover"
                           />
                           <button
                             type="button"
-                            title={media.is_primary ? "Главная фотография" : "Сделать главной"}
-                            aria-label={media.is_primary ? "Главная фотография" : "Сделать главной"}
+                            title={media.is_primary ? "??????? ??????????" : "??????? ???????"}
+                            aria-label={media.is_primary ? "??????? ??????????" : "??????? ???????"}
                             disabled={media.is_primary || isBusy}
                             onClick={() => void makePrimaryPhoto(media.id)}
                             className="absolute bottom-1.5 left-1.5 grid h-8 w-8 place-items-center rounded-full bg-white/90 text-amber-500 shadow disabled:bg-amber-100"
@@ -416,7 +396,7 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
                   <div className="mt-5 flex gap-2">
                     <label className="flex flex-1 cursor-pointer items-center justify-center rounded-2xl border border-slate-200 py-3 text-sm font-bold hover:bg-slate-50">
                       <Upload className="mr-2 h-4 w-4" />
-                      Фото
+                      ????
                       <input
                         type="file"
                         accept="image/*"
@@ -432,7 +412,7 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
                       className="flex flex-1 items-center justify-center rounded-2xl border border-sky-200 bg-sky-50 px-3 py-3 text-sm font-bold text-sky-700 hover:bg-sky-100"
                     >
                       <Pencil className="mr-2 h-4 w-4" />
-                      Изменить
+                      ????????
                     </button>
 
                     {point.moderation_status === "incomplete" ? (
@@ -441,7 +421,7 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
                         onClick={() => void submitPoint(point.id)}
                         className="flex-1 rounded-2xl bg-sky-500 px-3 py-3 text-sm font-bold text-white hover:bg-sky-600 disabled:opacity-40"
                       >
-                        На модерацию
+                        ?? ?????????
                       </button>
                     ) : null}
                   </div>
@@ -456,20 +436,9 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
                         : "bg-slate-100 text-slate-700"
                     } disabled:opacity-50`}
                   >
-                    {point.is_active === false ? "Опубликовать" : "Скрыть"}
+                    {point.is_active === false ? "????????????" : "??????"}
                   </button>
-                  {(point.placement_status === "active" || point.placement_status === "trial") &&
-                  !shouldShowConfirmationAction(point) ? (
-                    <button
-                      type="button"
-                      disabled={isBusy}
-                      onClick={() => void spoilPointConfirmationTimer(point)}
-                      className="mt-3 w-full rounded-2xl bg-rose-50 px-3 py-3 text-sm font-bold text-rose-700 disabled:opacity-50"
-                    >
-                      [QA] Сбросить таймер
-                    </button>
-                  ) : null}
-                  {shouldShowConfirmationAction(point) ? <button type="button" disabled={isBusy} onClick={() => void confirmPointRelevance(point)} className="mt-3 w-full rounded-2xl bg-orange-50 px-3 py-3 text-sm font-bold text-orange-800 disabled:opacity-50">Подтвердить актуальность</button> : null}
+                  {shouldShowConfirmationAction(point) ? <button type="button" disabled={isBusy} onClick={() => void confirmPointRelevance(point)} className="mt-3 w-full rounded-2xl bg-orange-50 px-3 py-3 text-sm font-bold text-orange-800 disabled:opacity-50">??????????? ????????????</button> : null}
                 </div>
               </article>
             ))}
@@ -506,3 +475,4 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
     </div>
   );
 }
+

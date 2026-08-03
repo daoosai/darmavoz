@@ -238,7 +238,7 @@ async def confirm_relevance(
     if not can_confirm_relevance(entity):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={"code": "PLACEMENT_CONFIRMATION_NOT_ALLOWED", "message": "Актуальность этого размещения сейчас подтвердить нельзя"},
+            detail={"code": "PLACEMENT_CONFIRMATION_NOT_ALLOWED", "message": "???????????? ????? ?????????? ?????? ??????????? ??????"},
         )
     entity.last_confirmed_at = current_time
     entity.next_confirmation_at = current_time + timedelta(
@@ -252,24 +252,6 @@ async def confirm_relevance(
         target,
         action="relevance_confirmed",
         actor_user_id=actor_user_id,
-        now=current_time,
-    )
-
-
-async def spoil_confirmation_timer(
-    db: AsyncSession,
-    entity: PlacementEntity,
-    *,
-    actor_user_id: UUID,
-    now: datetime | None = None,
-) -> None:
-    current_time = now or utcnow()
-    entity.next_confirmation_at = current_time + timedelta(hours=1)
-    await recalculate_status(
-        db,
-        entity,
-        actor_user_id=actor_user_id,
-        action="debug_confirmation_timer_spoiled",
         now=current_time,
     )
 
@@ -419,3 +401,4 @@ def placement_payload_fields(entity: PlacementEntity) -> dict:
         "archived_at": entity.archived_at,
         "can_confirm_relevance": can_confirm_relevance(entity),
     }
+

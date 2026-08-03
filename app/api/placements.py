@@ -20,7 +20,6 @@ from app.services.relevance import (
     extend_placement,
     hide_placement,
     restore_placement,
-    spoil_confirmation_timer,
 )
 
 
@@ -47,14 +46,14 @@ def _action_result(entity: Quarry | SpecialEquipmentListing) -> PlacementActionR
 async def _point_or_404(db: AsyncSession, point_id: UUID) -> Quarry:
     point = await db.get(Quarry, point_id)
     if point is None:
-        raise HTTPException(status_code=404, detail="Точка не найдена")
+        raise HTTPException(status_code=404, detail="????? ?? ???????")
     return point
 
 
 async def _equipment_or_404(db: AsyncSession, listing_id: UUID) -> SpecialEquipmentListing:
     listing = await db.get(SpecialEquipmentListing, listing_id)
     if listing is None or listing.is_deleted:
-        raise HTTPException(status_code=404, detail="Объявление спецтехники не найдено")
+        raise HTTPException(status_code=404, detail="?????????? ??????????? ?? ???????")
     return listing
 
 
@@ -169,15 +168,8 @@ async def archive_equipment(listing_id: UUID, db: AsyncSession = Depends(get_db)
 
 async def _confirm_owned(db, entity, current_user) -> PlacementActionResult:
     if entity.owner_user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Размещение не найдено")
+        raise HTTPException(status_code=404, detail="?????????? ?? ???????")
     await confirm_relevance(db, entity, actor_user_id=current_user.id)
-    return await _commit_action(db, entity)
-
-
-async def _spoil_confirmation_owned(db, entity, current_user) -> PlacementActionResult:
-    if entity.owner_user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Размещение не найдено")
-    await spoil_confirmation_timer(db, entity, actor_user_id=current_user.id)
     return await _commit_action(db, entity)
 
 
@@ -186,26 +178,12 @@ async def confirm_supplier_point(point_id: UUID, db: AsyncSession = Depends(get_
     return await _confirm_owned(db, await _point_or_404(db, point_id), current_user)
 
 
-@router.post("/supplier/points/{point_id}/debug-spoil-confirmation", response_model=PlacementActionResult)
-async def debug_spoil_supplier_point_confirmation(point_id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_supplier_user)):
-    return await _spoil_confirmation_owned(db, await _point_or_404(db, point_id), current_user)
-
-
 @router.post("/supplier/equipment/{listing_id}/confirm-relevance", response_model=PlacementActionResult)
 async def confirm_supplier_equipment(listing_id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_supplier_user)):
     return await _confirm_owned(db, await _equipment_or_404(db, listing_id), current_user)
-
-
-@router.post("/supplier/equipment/{listing_id}/debug-spoil-confirmation", response_model=PlacementActionResult)
-async def debug_spoil_supplier_equipment_confirmation(listing_id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_supplier_user)):
-    return await _spoil_confirmation_owned(db, await _equipment_or_404(db, listing_id), current_user)
 
 
 @router.post("/equipment-owner/equipment/{listing_id}/confirm-relevance", response_model=PlacementActionResult)
 async def confirm_owner_equipment(listing_id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_equipment_owner_user)):
     return await _confirm_owned(db, await _equipment_or_404(db, listing_id), current_user)
 
-
-@router.post("/equipment-owner/equipment/{listing_id}/debug-spoil-confirmation", response_model=PlacementActionResult)
-async def debug_spoil_owner_equipment_confirmation(listing_id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_equipment_owner_user)):
-    return await _spoil_confirmation_owned(db, await _equipment_or_404(db, listing_id), current_user)

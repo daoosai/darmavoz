@@ -5,7 +5,12 @@ import toast from "react-hot-toast";
 import { type MaterialProps } from "./MaterialDetailScreen";
 import SupplierCreatePointModal, { type SupplierPoint } from "./SupplierCreatePointModal";
 import { baseURL, extractApiErrorMessage } from "./utils";
-import { PlacementBadge, PlacementDates, shouldShowConfirmationAction } from "./placement";
+import {
+  PlacementBadge,
+  PlacementDates,
+  PlacementExpirationWarning,
+  shouldShowConfirmationAction,
+} from "./placement";
 
 const STATUS_LABELS: Record<string, string> = {
   incomplete: "Черновик",
@@ -343,6 +348,7 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2"><PlacementBadge status={point.placement_status} /></div>
                   <div className="mt-3"><PlacementDates item={point} /></div>
+                  <PlacementExpirationWarning item={point} className="mt-3" />
                   {point.placement_status === "confirmation_required" ? <p className="mt-3 rounded-2xl bg-orange-50 p-3 text-sm font-semibold text-orange-800">Подтвердите актуальность в течение льготного периода, иначе точка будет скрыта.</p> : null}
                   {point.placement_status === "expired" ? <p className="mt-3 rounded-2xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">Срок размещения завершён. Обратитесь к оператору для продления.</p> : null}
 

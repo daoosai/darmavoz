@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { AlertTriangle } from "lucide-react";
 
 export type PlacementStatus =
   | "active"
@@ -41,6 +42,24 @@ export interface PlacementSummary {
 }
 
 const CONFIRMATION_ACTION_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
+const PLACEMENT_EXPIRATION_WARNING_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
+
+const parsePlacementDeadline = (value?: string | null) => {
+  if (!value) return Number.NaN;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split("-").map(Number);
+    return new Date(year, month - 1, day, 23, 59, 59, 999).getTime();
+  }
+
+  return new Date(value).getTime();
+};
+
+const formatPlacementWarningDate = (value?: string | null) => {
+  if (!value) return "Дата не указана";
+  const timestamp = parsePlacementDeadline(value);
+  if (Number.isNaN(timestamp)) return "Дата не указана";
+  return new Date(timestamp).toLocaleDateString("ru-RU", { dateStyle: "long" });
+};
 
 export const shouldShowConfirmationAction = (
   item: PlacementFields,
@@ -96,6 +115,25 @@ export const formatPlacementDate = (value?: string | null) => {
     : date.toLocaleString("ru-RU", { dateStyle: "medium", timeStyle: "short" });
 };
 
+export const shouldShowPlacementExpirationWarning = (
+  item: PlacementFields,
+  now: number = Date.now(),
+) => {
+  if (item.placement_status !== "active" && item.placement_status !== "trial") {
+    return false;
+  }
+
+  const placementEndsAt =
+    item.placement_ends_at || (item.placement_status === "trial" ? item.trial_ends_at : null);
+  const placementDeadline = parsePlacementDeadline(placementEndsAt);
+  if (Number.isNaN(placementDeadline)) {
+    return false;
+  }
+
+  const timeRemaining = placementDeadline - now;
+  return timeRemaining >= 0 && timeRemaining <= PLACEMENT_EXPIRATION_WARNING_WINDOW_MS;
+};
+
 export function PlacementBadge({ status }: { status?: PlacementStatus }) {
   const meta = placementMeta(status);
   return (
@@ -138,6 +176,33 @@ export function PlacementDates({ item }: { item: PlacementFields }) {
           Скрыто из-за просроченного подтверждения
         </div>
       ) : null}
+    </div>
+  );
+}
+
+export function PlacementExpirationWarning({
+  item,
+  className = "",
+}: {
+  item: PlacementFields;
+  className?: string;
+}) {
+  const placementEndsAt =
+    item.placement_ends_at || (item.placement_status === "trial" ? item.trial_ends_at : null);
+  if (!shouldShowPlacementExpirationWarning(item)) {
+    return null;
+  }
+
+  return (
+    <div
+      className={`flex items-start gap-3 rounded-2xl bg-amber-50 p-3 text-sm text-amber-900 ${className}`.trim()}
+    >
+      <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+      <p>
+        <span className="font-semibold">Внимание!</span> Срок размещения истекает{" "}
+        {formatPlacementWarningDate(placementEndsAt)}. Объявление будет скрыто. Пожалуйста,
+        свяжитесь с поддержкой для продления.
+      </p>
     </div>
   );
 }

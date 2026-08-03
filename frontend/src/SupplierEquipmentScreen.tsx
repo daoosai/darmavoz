@@ -10,7 +10,12 @@ import {
 } from "./EquipmentCatalogScreen";
 import { useAuthStore } from "./store";
 import { baseURL, extractApiErrorMessage, formatPhoneNumber, resolveMediaUrl } from "./utils";
-import { PlacementBadge, PlacementDates, shouldShowConfirmationAction } from "./placement";
+import {
+  PlacementBadge,
+  PlacementDates,
+  PlacementExpirationWarning,
+  shouldShowConfirmationAction,
+} from "./placement";
 
 interface Props {
   token: string;
@@ -684,6 +689,7 @@ export default function SupplierEquipmentScreen({
                 </div>
                 <div className="flex flex-wrap gap-2"><PlacementBadge status={listing.placement_status} /></div>
                 <PlacementDates item={listing} />
+                <PlacementExpirationWarning item={listing} />
                 {listing.placement_status === "confirmation_required" ? <p className="rounded-xl bg-orange-50 p-3 text-sm font-semibold text-orange-800">Подтвердите актуальность в течение льготного периода.</p> : null}
                 {listing.placement_status === "expired" ? <p className="rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">Срок размещения завершён. Для продления обратитесь к оператору.</p> : null}
                 <p className="font-bold">{formatEquipmentPrice(listing)}</p>

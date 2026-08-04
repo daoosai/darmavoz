@@ -43,6 +43,10 @@ export default function PlacementSummaryPanel({
   }
   if (!summary) return null;
 
+  const pointStatusTotal = (placementStatus: PlacementStatus) =>
+    summary.by_entity.quarry[placementStatus] +
+    summary.by_entity.accumulator[placementStatus];
+
   const resetPointFilters = () =>
     onOpenPoints({
       statusFilter: "",
@@ -170,28 +174,28 @@ export default function PlacementSummaryPanel({
     {
       key: "confirmation-required",
       label: "Требует подтверждения",
-      value: summary.totals.confirmation_required,
+      value: pointStatusTotal("confirmation_required"),
       isActive: isStatusCardActive("confirmation_required"),
       onClick: () => openStatusCard("confirmation_required"),
     },
     {
       key: "hidden",
       label: "Скрыто",
-      value: summary.totals.hidden,
+      value: pointStatusTotal("hidden"),
       isActive: isStatusCardActive("hidden"),
       onClick: () => openStatusCard("hidden"),
     },
     {
       key: "expired",
       label: "Размещение завершено",
-      value: summary.totals.expired,
+      value: pointStatusTotal("expired"),
       isActive: isStatusCardActive("expired"),
       onClick: () => openStatusCard("expired"),
     },
     {
       key: "archived",
       label: "Архив",
-      value: summary.totals.archived,
+      value: pointStatusTotal("archived"),
       isActive: isStatusCardActive("archived"),
       onClick: () => openStatusCard("archived"),
     },

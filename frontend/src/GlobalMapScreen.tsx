@@ -607,8 +607,8 @@ export default function GlobalMapScreen() {
                     <X className="h-5 w-5" />
                   </button>
                   <div className="min-w-0">
-                    <h3 className="text-xl font-black text-slate-900">{selectedPoint.name}</h3>
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-xl font-black text-slate-900">{selectedPoint.name}</h3>
                       <span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-bold text-sky-700">
                         {TYPE_LABELS[selectedPoint.point_type]}
                       </span>
@@ -639,7 +639,7 @@ export default function GlobalMapScreen() {
 
                     <div className="min-w-0">
                       {selectedPoint.description ? (
-                        <p className="text-sm leading-6 text-slate-600">{selectedPoint.description}</p>
+                        <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-700">{selectedPoint.description}</p>
                       ) : null}
 
                       <div className="mt-4 grid gap-3 sm:grid-cols-2">

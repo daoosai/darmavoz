@@ -13,6 +13,7 @@ from app.models.models import (
     CartItem,
     MediaFile,
     ModerationStatus,
+    PlacementStatus,
     Order,
     Quarry,
     User,
@@ -41,6 +42,11 @@ from app.services.moderation import (
     clear_entity_pending_changes,
     create_moderation_audit_log,
     summarize_pending_changes,
+)
+from app.services.relevance import (
+    apply_manual_placement_end_date,
+    initialize_trial,
+    recalculate_status,
 )
 
 router = APIRouter()
@@ -107,6 +113,8 @@ async def _apply_point_changes(
     ):
         if field in changed:
             setattr(point, field, payload_data[field])
+    if "subscription_end_date" in changed:
+        point.placement_ends_at = point.subscription_end_date
 
     if "point_type" in changed and "min_delivery_price" not in changed:
         point.min_delivery_price = default_min_delivery_price(point.point_type)
@@ -135,6 +143,7 @@ async def _apply_point_changes(
 @router.get("/pickup-points", response_model=list[AdminPickupPointOut])
 async def list_pickup_points(
     moderation_status: str | None = None,
+    placement_status: PlacementStatus | None = None,
     point_type: str | None = None,
     material_id: UUID | None = None,
     search: str | None = Query(default=None, max_length=100),
@@ -155,6 +164,8 @@ async def list_pickup_points(
             )
         else:
             stmt = stmt.where(Quarry.moderation_status == moderation_status)
+    if placement_status is not None:
+        stmt = stmt.where(Quarry.placement_status == placement_status.value)
     if point_type:
         stmt = stmt.where(Quarry.point_type == point_type)
     if material_id:
@@ -200,6 +211,7 @@ async def create_pickup_point(
         description=payload.description,
         contact_phone=payload.contact_phone,
         subscription_end_date=payload.subscription_end_date,
+        placement_ends_at=payload.subscription_end_date,
         lat=payload.lat,
         lon=payload.lon,
         min_delivery_price=min_price,
@@ -228,6 +240,15 @@ async def create_pickup_point(
         try:
             await _validate_point_activation(db, point)
             point.moderation_status = ModerationStatus.approved.value
+            if payload.subscription_end_date is not None:
+                await apply_manual_placement_end_date(
+                    db,
+                    point,
+                    ends_at=payload.subscription_end_date,
+                    actor_user_id=current_admin.id,
+                )
+            else:
+                await initialize_trial(db, point, actor_user_id=current_admin.id)
         except HTTPException:
             await db.rollback()
             raise
@@ -248,6 +269,19 @@ async def update_pickup_point(
     payload_data = payload.model_dump(exclude_unset=True)
     await _apply_point_changes(db, point, payload_data)
     changed = set(payload_data)
+    if "subscription_end_date" in changed and payload_data.get("is_active") is not False:
+        await apply_manual_placement_end_date(
+            db,
+            point,
+            ends_at=point.subscription_end_date,
+            actor_user_id=current_user.id,
+        )
+        if point.is_active:
+            try:
+                await _validate_point_activation(db, point)
+            except HTTPException:
+                await db.rollback()
+                raise
     publication_fields = {
         "is_active",
         "point_type",
@@ -264,6 +298,7 @@ async def update_pickup_point(
             clear_entity_pending_changes(point)
             point.moderated_at = datetime.now(timezone.utc)
             point.moderated_by_user_id = current_user.id
+            await initialize_trial(db, point, actor_user_id=current_user.id)
         except HTTPException:
             await db.rollback()
             raise
@@ -339,6 +374,7 @@ async def approve_pickup_point(
         if not staged_changes:
             point.is_active = True
         clear_entity_pending_changes(point)
+        await initialize_trial(db, point, actor_user_id=current_user.id)
         await create_moderation_audit_log(
             db,
             entity_type=QUARRY_ENTITY_TYPE,
@@ -385,6 +421,7 @@ async def reject_pickup_point(
     point.moderation_comment = payload.reason
     point.moderated_at = datetime.now(timezone.utc)
     point.moderated_by_user_id = current_user.id
+    await recalculate_status(db, point, actor_user_id=current_user.id, action="moderation_rejected")
     await create_moderation_audit_log(
         db,
         entity_type=QUARRY_ENTITY_TYPE,
@@ -409,6 +446,7 @@ async def suspend_pickup_point(
     point.moderation_comment = payload.comment
     point.moderated_at = datetime.now(timezone.utc)
     point.moderated_by_user_id = current_user.id
+    await recalculate_status(db, point, actor_user_id=current_user.id, action="moderation_suspended")
     await create_moderation_audit_log(
         db,
         entity_type=QUARRY_ENTITY_TYPE,

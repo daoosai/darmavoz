@@ -119,7 +119,9 @@ jobs:
           # выполняться одним процессом, иначе PostgreSQL DDL может столкнуться
           # с параллельным запуском Alembic из entrypoint.sh.
           docker compose -f "${COMPOSE_FILE}" up -d db_test redis_test minio_test --force-recreate
-          docker compose -f "${COMPOSE_FILE}" build backend_test
+          docker compose -f "${COMPOSE_FILE}" build \
+            --build-arg APP_BUILD_COMMIT="${DEPLOY_REF}" \
+            backend_test
 
           for attempt in $(seq 1 30); do
             if [ "$(docker inspect -f '{{.State.Health.Status}}' db_test 2>/dev/null || true)" = "healthy" ]; then
@@ -132,7 +134,9 @@ jobs:
             sleep 2
           done
 
-          docker compose -f "${COMPOSE_FILE}" run --rm --no-deps --entrypoint alembic backend_test upgrade heads
+          # Compose run по умолчанию подключает stdin контейнера и может поглотить
+          # остаток SSH heredoc. /dev/null гарантирует продолжение deploy-скрипта.
+          docker compose -f "${COMPOSE_FILE}" run --rm -T --no-deps --entrypoint alembic backend_test upgrade heads </dev/null
           docker rm -f backend_test || true
           docker compose -f "${COMPOSE_FILE}" up -d --no-deps --force-recreate backend_test
           docker compose -f "${COMPOSE_FILE}" restart backend_test
@@ -155,6 +159,17 @@ jobs:
 
           with urllib.request.urlopen("http://127.0.0.1:8001/openapi.json", timeout=15) as response:
               openapi = json.load(response)
+
+          required_sprint18_paths = {
+              "/api/v1/admin/placements/summary",
+              "/api/v1/system/placement-policy",
+              "/api/v1/supplier/points/{point_id}/confirm-relevance",
+          }
+          missing_paths = required_sprint18_paths.difference(openapi["paths"])
+          if missing_paths:
+              raise SystemExit(
+                  f"Sprint 18 routes are missing after deploy: {sorted(missing_paths)}"
+              )
 
           quarry_create = openapi["components"]["schemas"]["QuarryCreate"]
           required_fields = set(quarry_create.get("required", []))

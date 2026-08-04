@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Crown, Headphones, ImageIcon, MapPin, Phone, Wrench } from "lucide-react";
 import toast from "react-hot-toast";
+import type { PlacementFields } from "./placement";
 
 import SupportScreen from "./SupportScreen";
 import { useAuthStore } from "./store";
@@ -20,7 +21,7 @@ export interface EquipmentTariff {
   hours?: number | null;
 }
 
-export interface EquipmentListing {
+export interface EquipmentListing extends PlacementFields {
   id: string;
   equipment_type: string;
   equipment_type_id?: string | null;

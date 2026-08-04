@@ -10,6 +10,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the code
+ARG APP_BUILD_COMMIT=unknown
+LABEL org.opencontainers.image.revision=$APP_BUILD_COMMIT
 COPY . .
 
 # Convert entrypoint.sh to Unix line endings and make it executable

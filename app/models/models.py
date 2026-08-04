@@ -13,6 +13,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    Index,
     Numeric,
     String,
     Table,
@@ -325,6 +326,30 @@ class Quarry(Base):
         nullable=True,
         index=True,
     )
+    placement_status: Mapped[str] = mapped_column(
+        SQLEnum(
+            "active",
+            "pending_moderation",
+            "hidden",
+            "archived",
+            "confirmation_required",
+            "trial",
+            "expired",
+            name="placement_status",
+        ),
+        default="pending_moderation",
+        server_default="pending_moderation",
+        nullable=False,
+        index=True,
+    )
+    placement_started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    trial_ends_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    placement_ends_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_confirmation_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    placement_status_changed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    placement_hidden_reason: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     owner_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         ForeignKey("users.id"), nullable=True, index=True
     )
@@ -332,6 +357,7 @@ class Quarry(Base):
         SQLEnum(
             "incomplete",
             "pending_moderation",
+            "has_pending_changes",
             "approved",
             "rejected",
             "suspended",
@@ -350,6 +376,11 @@ class Quarry(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_quarries_placement_status_ends", "placement_status", "placement_ends_at"),
+        Index("ix_quarries_placement_status_confirmation", "placement_status", "next_confirmation_at"),
     )
 
     material_links: Mapped[List["QuarryMaterial"]] = relationship(
@@ -516,6 +547,30 @@ class SpecialEquipmentListing(Base):
     manual_priority: Mapped[int] = mapped_column(
         Integer, default=0, nullable=False, server_default=text("0")
     )
+    placement_status: Mapped[str] = mapped_column(
+        SQLEnum(
+            "active",
+            "pending_moderation",
+            "hidden",
+            "archived",
+            "confirmation_required",
+            "trial",
+            "expired",
+            name="placement_status",
+        ),
+        default="pending_moderation",
+        server_default="pending_moderation",
+        nullable=False,
+        index=True,
+    )
+    placement_started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    trial_ends_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    placement_ends_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_confirmation_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    placement_status_changed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    placement_hidden_reason: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     price_from: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
@@ -526,6 +581,7 @@ class SpecialEquipmentListing(Base):
         SQLEnum(
             "incomplete",
             "pending_moderation",
+            "has_pending_changes",
             "approved",
             "rejected",
             "suspended",
@@ -546,6 +602,11 @@ class SpecialEquipmentListing(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_special_equipment_placement_status_ends", "placement_status", "placement_ends_at"),
+        Index("ix_special_equipment_placement_status_confirmation", "placement_status", "next_confirmation_at"),
     )
 
     equipment_type_ref: Mapped[Optional["SpecialEquipmentType"]] = relationship(
@@ -687,6 +748,31 @@ class ModerationAuditLog(Base):
     user: Mapped[Optional["User"]] = relationship("User", foreign_keys=[user_id])
 
 
+class PlacementAuditLog(Base):
+    __tablename__ = "placement_audit_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    entity_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    actor_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("users.id"), nullable=True, index=True
+    )
+    old_status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    new_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    action: Mapped[str] = mapped_column(String(64), nullable=False)
+    reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    details: Mapped[Optional[dict]] = mapped_column("metadata", JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    actor: Mapped[Optional["User"]] = relationship("User", foreign_keys=[actor_user_id])
+
+    __table_args__ = (
+        Index("ix_placement_audit_entity_created", "entity_type", "entity_id", "created_at"),
+    )
+
+
 class SupportMessage(Base):
     __tablename__ = "support_messages"
 
@@ -755,6 +841,16 @@ class ModerationStatus(str, Enum):
     approved = "approved"
     rejected = "rejected"
     suspended = "suspended"
+
+
+class PlacementStatus(str, Enum):
+    active = "active"
+    pending_moderation = "pending_moderation"
+    hidden = "hidden"
+    archived = "archived"
+    confirmation_required = "confirmation_required"
+    trial = "trial"
+    expired = "expired"
 
 
 class VehicleRateMode(str, Enum):

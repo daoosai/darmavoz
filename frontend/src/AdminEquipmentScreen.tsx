@@ -9,10 +9,11 @@ import {
   formatEquipmentPrice,
   getEquipmentTariffs,
 } from "./EquipmentCatalogScreen";
-import { useAuthStore } from "./store";
+import { useAuthStore, usePlacementStore } from "./store";
 import { baseURL, extractApiErrorMessage, formatPhoneNumber, resolveMediaUrl } from "./utils";
+import { PlacementBadge, PlacementDates, type PlacementStatus } from "./placement";
 
-type Tab = "listings" | "moderation" | "types";
+export type AdminEquipmentTab = "listings" | "moderation" | "types";
 
 interface ListingTariffForm {
   type: "hour" | "shift";
@@ -29,6 +30,7 @@ interface ListingForm {
   tariffs: ListingTariffForm[];
   city: string;
   district: string;
+  placement_ends_at: string;
   is_active: boolean;
   is_vip: boolean;
   manual_priority: number;
@@ -44,6 +46,7 @@ const emptyListing: ListingForm = {
   tariffs: [{ type: "hour", price: "", hours: "" }],
   city: "",
   district: "",
+  placement_ends_at: "",
   is_active: true,
   is_vip: false,
   manual_priority: 0,
@@ -61,13 +64,36 @@ const normalizeContactPhoneForApi = (value: string) => {
   return normalized || null;
 };
 
+const normalizeDateInputValue = (value?: string | null) => {
+  if (!value) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
+    return value.trim();
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().split("T")[0];
+};
+
+const serializeDateInputValue = (value: string) => {
+  if (!value) return null;
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(Date.UTC(year, month - 1, day)).toISOString();
+};
+
 export default function AdminEquipmentScreen({
   onPendingModerationChanged,
+  tab,
+  onTabChange,
+  placementFilter,
+  onPlacementFilterChange,
 }: {
   onPendingModerationChanged?: (count: number) => void;
+  tab: AdminEquipmentTab;
+  onTabChange: (value: AdminEquipmentTab) => void;
+  placementFilter: PlacementStatus | "";
+  onPlacementFilterChange: (value: PlacementStatus | "") => void;
 }) {
   const { token, role } = useAuthStore();
-  const [tab, setTab] = useState<Tab>("listings");
   const [types, setTypes] = useState<EquipmentTypeItem[]>([]);
   const [listings, setListings] = useState<EquipmentListing[]>([]);
   const [loading, setLoading] = useState(true);
@@ -77,6 +103,7 @@ export default function AdminEquipmentScreen({
   const [rejectingListing, setRejectingListing] = useState<EquipmentListing | null>(null);
   const [listingRejectReason, setListingRejectReason] = useState("");
   const [isRejectingListing, setIsRejectingListing] = useState(false);
+  const { policy, loadPolicy, loadSummary } = usePlacementStore();
 
   const headers = { Authorization: `Bearer ${token}` };
   const activeTypes = types.filter((item) => item.is_active);
@@ -103,7 +130,10 @@ export default function AdminEquipmentScreen({
           canManageTypes ? `${baseURL}/admin/equipment-types` : `${baseURL}/equipment/types`,
           { headers },
         ),
-        fetch(`${baseURL}/admin/equipment`, { headers }),
+        fetch(
+          `${baseURL}/admin/equipment${placementFilter ? `?placement_status=${placementFilter}` : ""}`,
+          { headers },
+        ),
       ]);
       if (!typesResponse.ok || !listingsResponse.ok) {
         throw new Error("load");
@@ -128,8 +158,24 @@ export default function AdminEquipmentScreen({
   };
 
   useEffect(() => {
+    if (!policy) void loadPolicy();
+  }, [loadPolicy, policy]);
+
+  const placementAction = async (item: EquipmentListing, action: "extend" | "hide" | "restore" | "archive") => {
+    const response = await fetch(`${baseURL}/admin/equipment/${item.id}/placement/${action}`, { method: "POST", headers });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      toast.error(extractApiErrorMessage(data, "Не удалось изменить размещение"));
+      return;
+    }
+    toast.success(action === "extend" ? `Размещение продлено на ${policy?.extension_days ?? "установленный срок"} дней` : "Статус размещения обновлён");
+    await load();
+    if (token) await loadSummary(token);
+  };
+
+  useEffect(() => {
     void load();
-  }, [token]);
+  }, [token, placementFilter]);
 
   const saveType = async () => {
     if (!newTypeName.trim()) return;
@@ -192,6 +238,7 @@ export default function AdminEquipmentScreen({
             })),
             city: item.city || "",
             district: item.district || "",
+            placement_ends_at: normalizeDateInputValue(item.placement_ends_at),
             is_active: item.is_active !== false,
             is_vip: Boolean(item.is_vip),
             manual_priority: normalizeManualPriority(item.manual_priority),
@@ -272,6 +319,7 @@ export default function AdminEquipmentScreen({
           contact_phone: normalizeContactPhoneForApi(listingForm.contact_phone),
           city: listingForm.city || null,
           district: listingForm.district || null,
+          placement_ends_at: serializeDateInputValue(listingForm.placement_ends_at),
           is_active: listingForm.is_active,
           is_vip: listingForm.is_vip,
           manual_priority: manualPriority,
@@ -419,7 +467,7 @@ export default function AdminEquipmentScreen({
         ].map(([value, label]) => (
           <button
             key={value}
-            onClick={() => setTab(value as Tab)}
+            onClick={() => onTabChange(value as AdminEquipmentTab)}
             className={`shrink-0 rounded-xl px-5 py-3 text-sm font-bold ${
               tab === value ? "bg-sky-500 text-white" : "text-slate-500"
             }`}
@@ -582,8 +630,27 @@ export default function AdminEquipmentScreen({
             </button>
           </div>
 
+          <select
+            value={placementFilter}
+            onChange={(event) => onPlacementFilterChange(event.target.value as PlacementStatus | "")}
+            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm sm:w-auto"
+          >
+            <option value="">Все статусы размещения</option>
+            <option value="active">Активно</option>
+            <option value="pending_moderation">На модерации</option>
+            <option value="hidden">Скрыто</option>
+            <option value="archived">Архив</option>
+            <option value="confirmation_required">Требует подтверждения</option>
+            <option value="trial">Тестовый период</option>
+            <option value="expired">Размещение завершено</option>
+          </select>
+
           <div className="grid gap-4 lg:grid-cols-2">
-            {listings.map((item) => (
+            {listings.length === 0 ? (
+              <p className="rounded-2xl bg-white p-10 text-center text-slate-500 shadow-sm lg:col-span-2">
+                Нет спецтехники
+              </p>
+            ) : listings.map((item) => (
               <div key={item.id} className="overflow-hidden rounded-3xl bg-white shadow-sm">
                 <div className="relative bg-slate-100">
                   {item.primary_image_url ? (
@@ -616,27 +683,38 @@ export default function AdminEquipmentScreen({
 
                 <div className="p-4">
                   <p className="text-xs font-bold text-sky-600">{item.equipment_type_name}</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
+                  <div className="mb-2 mt-2 flex flex-wrap gap-1">
+                    <PlacementBadge status={item.placement_status} />
+                    <span
+                      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${
+                        item.moderation_status === "approved"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : item.moderation_status === "rejected"
+                            ? "bg-rose-100 text-rose-700"
+                            : "bg-amber-100 text-amber-700"
+                      }`}
+                    >
+                      {item.moderation_status === "approved"
+                        ? "Одобрен"
+                        : item.moderation_status === "rejected"
+                          ? "Отклонен"
+                          : "На модерации"}
+                    </span>
                     {item.is_vip ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 text-xs font-black uppercase tracking-wide text-amber-800">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-amber-800">
                         <Crown className="h-3.5 w-3.5" />
                         VIP
                       </span>
                     ) : null}
                     {item.manual_priority ? (
-                      <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
+                      <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
                         Приоритет: {item.manual_priority}
                       </span>
                     ) : null}
                   </div>
+                  <PlacementDates item={item} />
                   <span
-                    className={`mt-1 inline-flex rounded-full px-2 py-1 text-[10px] font-black uppercase ${
-                      item.moderation_status === "approved"
-                        ? "bg-emerald-100 text-emerald-700"
-                        : item.moderation_status === "rejected"
-                          ? "bg-rose-100 text-rose-700"
-                          : "bg-amber-100 text-amber-700"
-                    }`}
+                    className="hidden"
                   >
                     {item.moderation_status === "approved"
                       ? "Одобрено"
@@ -644,15 +722,15 @@ export default function AdminEquipmentScreen({
                         ? "Отклонено"
                         : "На модерации"}
                   </span>
-                  <div className="mt-2 flex justify-between gap-2">
-                    <div>
+                  <div className="mt-3 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div className="min-w-0">
                       <h3 className="text-lg font-black">{item.title}</h3>
                       <p className="font-bold">{formatEquipmentPrice(item)}</p>
                       {item.contact_phone ? (
                         <p className="mt-1 text-sm text-slate-500">{item.contact_phone}</p>
                       ) : null}
                     </div>
-                    <div className="flex">
+                    <div className="flex shrink-0 items-start">
                       <button onClick={() => openListing(item)} className="p-2 text-slate-500">
                         <Edit2 className="h-4 w-4" />
                       </button>
@@ -663,6 +741,11 @@ export default function AdminEquipmentScreen({
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2 md:mt-0 md:justify-end">
+                    {item.placement_status !== "archived" ? <button type="button" onClick={() => void placementAction(item, "extend")} className="rounded-xl bg-sky-50 px-3 py-2 text-xs font-bold text-sky-700">Продлить</button> : null}
+                    {item.placement_status === "hidden" || item.placement_status === "archived" ? <button type="button" onClick={() => void placementAction(item, "restore")} className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">Восстановить</button> : <button type="button" onClick={() => void placementAction(item, "hide")} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">Скрыть</button>}
+                    {item.placement_status !== "archived" ? <button type="button" onClick={() => void placementAction(item, "archive")} className="rounded-xl bg-gray-100 px-3 py-2 text-xs font-bold text-gray-700">В архив</button> : null}
                   </div>
 
                   <div className="mt-3 flex gap-2 overflow-x-auto">
@@ -881,6 +964,18 @@ export default function AdminEquipmentScreen({
                   />
                 </label>
               </div>
+
+              <label className="block text-sm font-bold">
+                Действует до
+                <input
+                  type="date"
+                  value={listingForm.placement_ends_at}
+                  onChange={(event) =>
+                    setListingForm({ ...listingForm, placement_ends_at: event.target.value })
+                  }
+                  className="mt-1 w-full rounded-xl bg-slate-100 p-3 font-normal"
+                />
+              </label>
 
               <div className="grid grid-cols-1 gap-3 rounded-2xl border border-amber-100 bg-amber-50/60 p-4 sm:grid-cols-2">
                 <label className="flex items-center gap-3 rounded-xl bg-white px-4 py-3 text-sm font-bold text-slate-800">

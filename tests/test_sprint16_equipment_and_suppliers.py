@@ -3,7 +3,14 @@ import uuid
 import pytest
 from sqlalchemy import select
 
-from app.models.models import Role, SupportMessage, SupportTicket, User
+from app.models.models import (
+    PlacementStatus,
+    Role,
+    SpecialEquipmentListing,
+    SupportMessage,
+    SupportTicket,
+    User,
+)
 from app.security.jwt import create_access_token
 
 
@@ -34,15 +41,60 @@ def _headers(token: str) -> dict[str, str]:
 
 
 @pytest.mark.asyncio
+async def test_admin_archived_equipment_filter_includes_soft_deleted_listings(
+    client, session_factory
+):
+    _admin, admin_token = await _create_user(session_factory, "admin")
+    create_response = await client.post(
+        "/api/v1/admin/equipment",
+        headers=_headers(admin_token),
+        json={
+            "equipment_type": "Экскаватор",
+            "title": "Архивный экскаватор",
+            "description": "Тест архивного фильтра",
+            "tariffs": [{"type": "hour", "price": 5000}],
+        },
+    )
+    assert create_response.status_code == 201
+    listing_id = create_response.json()["id"]
+
+    async with session_factory() as session:
+        listing = await session.get(SpecialEquipmentListing, listing_id)
+        assert listing is not None
+        listing.is_deleted = True
+        listing.placement_status = PlacementStatus.archived.value
+        await session.commit()
+
+    archived_response = await client.get(
+        "/api/v1/admin/equipment",
+        params={"placement_status": "archived"},
+        headers=_headers(admin_token),
+    )
+
+    assert archived_response.status_code == 200
+    assert listing_id in {item["id"] for item in archived_response.json()}
+
+
+@pytest.mark.asyncio
 async def test_custom_equipment_supplier_moderation_and_legacy_compatibility(
     client, session_factory, monkeypatch
 ):
     sent_emails: list[dict[str, str]] = []
+    moderation_notifications: list[dict[str, object]] = []
     monkeypatch.setattr(
         "app.api.equipment.send_email",
         lambda **kwargs: sent_emails.append(kwargs),
     )
     monkeypatch.setattr("app.api.equipment.settings.ADMIN_EMAIL", "admin@example.test")
+    monkeypatch.setattr(
+        "app.api.equipment.schedule_equipment_listing_moderation_notification",
+        lambda listing, is_resubmission=False: moderation_notifications.append(
+            {
+                "listing_id": listing.id,
+                "is_resubmission": is_resubmission,
+            }
+        ),
+    )
 
     admin, admin_token = await _create_user(session_factory, "admin")
     _logist, logist_token = await _create_user(session_factory, "logist")
@@ -134,9 +186,13 @@ async def test_custom_equipment_supplier_moderation_and_legacy_compatibility(
     assert supplier_edit.status_code == 200
     assert supplier_edit.json()["moderation_status"] == "has_pending_changes"
     assert supplier_edit.json()["moderation_comment"] is None
-    assert supplier_edit.json()["pending_changes"]["title"] == "РњСѓР»СЊС‡РµСЂ РїРѕСЃР»Рµ РёР·РјРµРЅРµРЅРёСЏ"
+    assert supplier_edit.json()["pending_changes"]["title"] == "Мульчер после изменения"
     assert sent_emails[-1]["to_email"] == "admin@example.test"
     assert "title" in sent_emails[-1]["body"]
+    assert moderation_notifications[-1] == {
+        "listing_id": uuid.UUID(listing_id),
+        "is_resubmission": True,
+    }
     _ = {
         "to_email": "admin@example.test",
         "subject": "Объявление спецтехники ожидает модерации",
@@ -145,7 +201,7 @@ async def test_custom_equipment_supplier_moderation_and_legacy_compatibility(
 
     hidden_after_edit = await client.get(f"/api/v1/equipment/{listing_id}")
     assert hidden_after_edit.status_code == 200
-    assert hidden_after_edit.json()["title"] == "РњСѓР»СЊС‡РµСЂ РґР»СЏ СЂР°СЃС‡РёСЃС‚РєРё"
+    assert hidden_after_edit.json()["title"] == "Мульчер для расчистки"
 
     reject_response = await client.post(
         f"/api/v1/admin/equipment/{listing_id}/reject",

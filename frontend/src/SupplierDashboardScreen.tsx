@@ -5,6 +5,12 @@ import toast from "react-hot-toast";
 import { type MaterialProps } from "./MaterialDetailScreen";
 import SupplierCreatePointModal, { type SupplierPoint } from "./SupplierCreatePointModal";
 import { baseURL, extractApiErrorMessage } from "./utils";
+import {
+  PlacementBadge,
+  PlacementDates,
+  PlacementExpirationWarning,
+  shouldShowConfirmationAction,
+} from "./placement";
 
 const STATUS_LABELS: Record<string, string> = {
   incomplete: "Черновик",
@@ -22,6 +28,16 @@ const TYPE_LABELS: Record<string, string> = {
   warehouse: "База / склад",
   supplier: "Поставщик",
 };
+
+const SUPPLIER_DASHBOARD_TEXT = {
+  pageTitle: "Мои точки",
+  addPoint: "Добавить точку",
+  pointPhoto: "Фото",
+  editPoint: "Изменить",
+  hidePoint: "Скрыть",
+  publishPoint: "Опубликовать",
+  confirmRelevance: "Подтвердить актуальность",
+} as const;
 
 const getPointStatusMeta = (point: SupplierPoint) => {
   if (point.is_active === false || point.moderation_status === "suspended") {
@@ -272,13 +288,31 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
     }
   };
 
+  const confirmPointRelevance = async (point: SupplierPoint) => {
+    setIsBusy(true);
+    try {
+      const response = await fetch(`${baseURL}/supplier/points/${point.id}/confirm-relevance`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось подтвердить актуальность"));
+      await fetchPoints();
+      toast.success("Актуальность точки подтверждена");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось подтвердить актуальность");
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
   return (
     <div className="text-slate-900">
       <header className="px-5 pb-4 pt-[max(env(safe-area-inset-top),1rem)]">
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-sky-500">
           Кабинет поставщика
         </p>
-        <h1 className="mt-1 text-3xl font-black">Мои точки</h1>
+        <h1 className="mt-1 text-3xl font-black">{SUPPLIER_DASHBOARD_TEXT.pageTitle}</h1>
       </header>
 
       <main className="px-5 pb-8">
@@ -287,7 +321,7 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
           className="mt-5 flex w-full items-center justify-center gap-3 rounded-2xl bg-sky-500 px-5 py-5 text-lg font-black text-white shadow-sm hover:bg-sky-600"
         >
           <Plus className="h-6 w-6" />
-          Добавить точку
+          {SUPPLIER_DASHBOARD_TEXT.addPoint}
         </button>
 
         {isLoading ? (
@@ -322,6 +356,11 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
                       {getPointStatusMeta(point).label}
                     </span>
                   </div>
+                  <div className="mt-3 flex flex-wrap gap-2"><PlacementBadge status={point.placement_status} /></div>
+                  <div className="mt-3"><PlacementDates item={point} /></div>
+                  <PlacementExpirationWarning item={point} className="mt-3" />
+                  {point.placement_status === "confirmation_required" ? <p className="mt-3 rounded-2xl bg-orange-50 p-3 text-sm font-semibold text-orange-800">Подтвердите актуальность в течение льготного периода, иначе точка будет скрыта.</p> : null}
+                  {point.placement_status === "expired" ? <p className="mt-3 rounded-2xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">Срок размещения завершён. Обратитесь к оператору для продления.</p> : null}
 
                   <p className="mt-3 flex items-start gap-2 text-sm text-slate-500">
                     <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
@@ -367,7 +406,7 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
                   <div className="mt-5 flex gap-2">
                     <label className="flex flex-1 cursor-pointer items-center justify-center rounded-2xl border border-slate-200 py-3 text-sm font-bold hover:bg-slate-50">
                       <Upload className="mr-2 h-4 w-4" />
-                      Фото
+                      {SUPPLIER_DASHBOARD_TEXT.pointPhoto}
                       <input
                         type="file"
                         accept="image/*"
@@ -383,7 +422,7 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
                       className="flex flex-1 items-center justify-center rounded-2xl border border-sky-200 bg-sky-50 px-3 py-3 text-sm font-bold text-sky-700 hover:bg-sky-100"
                     >
                       <Pencil className="mr-2 h-4 w-4" />
-                      Изменить
+                      {SUPPLIER_DASHBOARD_TEXT.editPoint}
                     </button>
 
                     {point.moderation_status === "incomplete" ? (
@@ -407,8 +446,11 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
                         : "bg-slate-100 text-slate-700"
                     } disabled:opacity-50`}
                   >
-                    {point.is_active === false ? "Опубликовать" : "Скрыть"}
+                    {point.is_active === false
+                      ? SUPPLIER_DASHBOARD_TEXT.publishPoint
+                      : SUPPLIER_DASHBOARD_TEXT.hidePoint}
                   </button>
+                  {shouldShowConfirmationAction(point) ? <button type="button" disabled={isBusy} onClick={() => void confirmPointRelevance(point)} className="mt-3 w-full rounded-2xl bg-orange-50 px-3 py-3 text-sm font-bold text-orange-800 disabled:opacity-50">{SUPPLIER_DASHBOARD_TEXT.confirmRelevance}</button> : null}
                 </div>
               </article>
             ))}

@@ -3,6 +3,8 @@ import { persist } from "zustand/middleware";
 import { MaterialProps, DeliveryOption } from "./MaterialDetailScreen";
 import { PickupPointSelection } from "./PickupPointMapScreen";
 import toast from "react-hot-toast";
+import { baseURL } from "./utils";
+import type { PlacementPolicy, PlacementSummary } from "./placement";
 
 export const getDeliveryOptionsForVolume = (
   deliveryOptions: DeliveryOption[],
@@ -117,6 +119,22 @@ export interface CurrentUserProfile {
   phone?: string | null;
 }
 
+export interface AdminModerationNotification {
+  event: string;
+  title: string;
+  body: string;
+  receivedAt: number;
+}
+
+const ADMIN_MODERATION_EVENTS = new Set([
+  "pickup_point_pending_moderation",
+  "equipment_listing_pending_moderation",
+]);
+
+export const isAdminModerationEvent = (
+  event: string | null | undefined,
+): event is string => Boolean(event && ADMIN_MODERATION_EVENTS.has(event));
+
 interface AuthState {
   token: string | null;
   role: UserRole;
@@ -140,6 +158,7 @@ export const useAuthStore = create<AuthState>()(
         set({ token: null, role: null, driverId: null, currentUser: null });
         useAddressStore.getState().clearSelectedAddress();
         useClientOrdersStore.getState().clearOrders();
+        useAdminModerationStore.getState().reset();
         localStorage.removeItem('address-storage');
       },
       setCurrentUser: (currentUser) => set({ currentUser }),
@@ -175,6 +194,65 @@ export const useClientOrdersStore = create<ClientOrdersState>((set) => ({
   setOrders: (orders) => set({ orders, isLoading: false }),
   setIsLoading: (isLoading) => set({ isLoading }),
   clearOrders: () => set({ orders: [], isLoading: false }),
+}));
+
+interface PlacementState {
+  policy: PlacementPolicy | null;
+  summary: PlacementSummary | null;
+  isLoading: boolean;
+  loadPolicy: () => Promise<void>;
+  loadSummary: (token: string) => Promise<void>;
+}
+
+export const usePlacementStore = create<PlacementState>((set) => ({
+  policy: null,
+  summary: null,
+  isLoading: false,
+  loadPolicy: async () => {
+    const response = await fetch(`${baseURL}/system/placement-policy`);
+    if (!response.ok) return;
+    set({ policy: await response.json() });
+  },
+  loadSummary: async (token) => {
+    set({ isLoading: true });
+    try {
+      const response = await fetch(`${baseURL}/admin/placements/summary`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error("Не удалось загрузить сводку размещений");
+      const summary: PlacementSummary = await response.json();
+      set({ summary, policy: summary.policy });
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+}));
+
+interface AdminModerationState {
+  lastNotification: AdminModerationNotification | null;
+  refreshNonce: number;
+  registerNotification: (payload: {
+    event: string;
+    title?: string | null;
+    body?: string | null;
+  }) => void;
+  reset: () => void;
+}
+
+export const useAdminModerationStore = create<AdminModerationState>((set) => ({
+  lastNotification: null,
+  refreshNonce: 0,
+  registerNotification: ({ event, title, body }) =>
+    set((state) => ({
+      lastNotification: {
+        event,
+        title: title?.trim() || "",
+        body: body?.trim() || "",
+        receivedAt: Date.now(),
+      },
+      refreshNonce: state.refreshNonce + 1,
+    })),
+  reset: () => set({ lastNotification: null, refreshNonce: 0 }),
 }));
 
 export const useCartStore = create<CartState>()(

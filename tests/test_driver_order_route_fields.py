@@ -56,10 +56,10 @@ async def test_driver_current_order_endpoints_include_route_fields(client, sessi
         driver_role = await ensure_role(session, "driver")
         driver_user = await create_user(session, username="route_driver", role=driver_role)
 
-        category = Category(name="???????", slug="route-fields", sort_order=0, is_active=True)
+        category = Category(name="Материалы", slug="route-fields", sort_order=0, is_active=True)
         material = Material(
             category=category,
-            name="?????",
+            name="Песок",
             description="",
             price=2500.0,
             unit="m3",
@@ -69,25 +69,25 @@ async def test_driver_current_order_endpoints_include_route_fields(client, sessi
         )
         delivery_option = DeliveryOption(
             capacity_m3=10.0,
-            title="10 ?3",
+            title="10 м3",
             description="",
             base_price=0.0,
             is_active=True,
             sort_order=0,
         )
         quarry = Quarry(
-            name="???????? ??????",
-            address="??????, ????????? 1",
+            name="Карьер Северный",
+            address="Тюмень, Карьерная 1",
             lat=57.012969,
             lon=65.963904,
             is_active=True,
         )
-        client_record = Client(name="??????", phone="+79990044000")
+        client_record = Client(name="Клиент", phone="+79990044000")
         session.add_all([category, material, delivery_option, quarry, client_record])
         await session.flush()
 
         vehicle = Vehicle(
-            title="?????",
+            title="КамАЗ",
             delivery_option_id=delivery_option.id,
             is_active=True,
             moderation_status=ModerationStatus.approved.value,
@@ -96,7 +96,7 @@ async def test_driver_current_order_endpoints_include_route_fields(client, sessi
         await session.flush()
 
         driver = Driver(
-            name="???????? ????????",
+            name="Водитель Маршрута",
             phone="+79990044001",
             user_id=driver_user.id,
             vehicle_id=vehicle.id,
@@ -112,7 +112,7 @@ async def test_driver_current_order_endpoints_include_route_fields(client, sessi
             driver_id=driver.id,
             delivery_option_id=delivery_option.id,
             quarry_id=quarry.id,
-            address="??????, ?????? 10",
+            address="Тюмень, Лесная 10",
             delivery_address=None,
             delivery_lat=57.152223,
             delivery_lon=65.527202,
@@ -128,7 +128,7 @@ async def test_driver_current_order_endpoints_include_route_fields(client, sessi
             driver_id=None,
             delivery_option_id=delivery_option.id,
             quarry_id=quarry.id,
-            address="??????, ?????????? 20",
+            address="Тюмень, Полевая 20",
             delivery_address=None,
             delivery_lat=57.140000,
             delivery_lon=65.600000,
@@ -182,10 +182,10 @@ async def test_driver_current_order_endpoints_include_route_fields(client, sessi
     )
     assert incoming_response.status_code == 200
     incoming_payload = incoming_response.json()
-    assert incoming_payload["order"]["pickup_address"] == "??????, ????????? 1"
+    assert incoming_payload["order"]["pickup_address"] == "Тюмень, Карьерная 1"
     assert incoming_payload["order"]["pickup_lat"] == 57.012969
     assert incoming_payload["order"]["pickup_lon"] == 65.963904
-    assert incoming_payload["order"]["delivery_address"] == "??????, ?????????? 20"
+    assert incoming_payload["order"]["delivery_address"] == "Тюмень, Полевая 20"
     assert incoming_payload["order"]["delivery_lat"] == 57.14
     assert incoming_payload["order"]["delivery_lon"] == 65.6
 
@@ -195,9 +195,9 @@ async def test_driver_current_order_endpoints_include_route_fields(client, sessi
     )
     assert assigned_response.status_code == 200
     assigned_payload = assigned_response.json()
-    assert assigned_payload["order"]["pickup_address"] == "??????, ????????? 1"
+    assert assigned_payload["order"]["pickup_address"] == "Тюмень, Карьерная 1"
     assert assigned_payload["order"]["pickup_lat"] == 57.012969
     assert assigned_payload["order"]["pickup_lon"] == 65.963904
-    assert assigned_payload["order"]["delivery_address"] == "??????, ?????? 10"
+    assert assigned_payload["order"]["delivery_address"] == "Тюмень, Лесная 10"
     assert assigned_payload["order"]["delivery_lat"] == 57.152223
     assert assigned_payload["order"]["delivery_lon"] == 65.527202

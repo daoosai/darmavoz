@@ -8,10 +8,12 @@ import {
   get2gisSuggestionLabel,
   withTyumenBias,
 } from "./addressSearch";
-import { useAuthStore } from "./store";
+import { useAuthStore, usePlacementStore } from "./store";
 import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
+import { PlacementBadge, PlacementDates, type PlacementFields, type PlacementStatus } from "./placement";
+import MapWebGLFallback, { tryCreate2GisMap } from "./components/MapWebGLFallback";
 
-export interface Quarry {
+export interface Quarry extends PlacementFields {
   id?: string;
   name: string;
   short_name?: string;
@@ -192,47 +194,139 @@ const buildQuarryFormData = (quarry: Quarry): QuarryFormData => ({
 interface AdminQuarriesScreenProps {
   materials: any[];
   onPointsChanged?: () => void | Promise<void>;
+  statusFilter: string;
+  onStatusFilterChange: (value: string) => void;
+  placementFilter: PlacementStatus | "";
+  onPlacementFilterChange: (value: PlacementStatus | "") => void;
+  typeFilter: string;
+  onTypeFilterChange: (value: string) => void;
 }
+
+const ALLOWED_POINT_TYPES = new Set(["quarry", "accumulator", "warehouse", "supplier"]);
+const ALLOWED_MODERATION_FILTERS = new Set([
+  "",
+  "pending_moderation",
+  "approved",
+  "rejected",
+  "suspended",
+  "has_pending_changes",
+]);
+const ALLOWED_PLACEMENT_FILTERS = new Set<PlacementStatus | "">([
+  "",
+  "active",
+  "trial",
+  "confirmation_required",
+  "hidden",
+  "expired",
+  "archived",
+  "pending_moderation",
+]);
 
 export default function AdminQuarriesScreen({
   materials,
   onPointsChanged,
+  statusFilter,
+  onStatusFilterChange,
+  placementFilter,
+  onPlacementFilterChange,
+  typeFilter,
+  onTypeFilterChange,
 }: AdminQuarriesScreenProps) {
   const { token } = useAuthStore();
   const [quarries, setQuarries] = useState<Quarry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingQuarry, setEditingQuarry] = useState<Quarry | null>(null);
-  const [statusFilter, setStatusFilter] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
   const [isModerating, setIsModerating] = useState(false);
   const [deletingPointId, setDeletingPointId] = useState<string | null>(null);
   const [rejectPointId, setRejectPointId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const { policy, loadPolicy, loadSummary } = usePlacementStore();
+  const normalizedStatusFilter = ALLOWED_MODERATION_FILTERS.has(statusFilter)
+    ? statusFilter
+    : "";
+  const normalizedPlacementFilter = ALLOWED_PLACEMENT_FILTERS.has(placementFilter)
+    ? placementFilter
+    : "";
+  const normalizedTypeFilter = ALLOWED_POINT_TYPES.has(typeFilter)
+    ? typeFilter
+    : "";
 
   const fetchQuarries = async () => {
+    if (!token) {
+      return;
+    }
     try {
       setIsLoading(true);
       const params = new URLSearchParams();
-      if (statusFilter) params.set("moderation_status", statusFilter);
-      if (typeFilter) params.set("point_type", typeFilter);
-      const res = await fetch(`${baseURL}/admin/pickup-points?${params}`, {
+      if (normalizedStatusFilter) {
+        params.set("moderation_status", normalizedStatusFilter);
+      }
+      if (normalizedPlacementFilter) {
+        params.set("placement_status", normalizedPlacementFilter);
+      }
+      if (normalizedTypeFilter) {
+        params.set("point_type", normalizedTypeFilter);
+      }
+      const query = params.toString();
+      const requestUrl = query
+        ? `${baseURL}/admin/pickup-points?${query}`
+        : `${baseURL}/admin/pickup-points`;
+      const res = await fetch(requestUrl, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.ok) {
-        const data = await res.json();
-        setQuarries(data);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(
+          extractApiErrorMessage(data, "Не удалось загрузить список точек"),
+        );
       }
+      const data = await res.json().catch(() => []);
+      const loadedPoints = Array.isArray(data)
+        ? data
+        : Array.isArray((data as { items?: unknown[] }).items)
+          ? (data as { items: Quarry[] }).items
+          : Array.isArray((data as { results?: unknown[] }).results)
+            ? (data as { results: Quarry[] }).results
+            : [];
+      setQuarries(loadedPoints);
     } catch (e) {
       console.error("Error fetching quarries", e);
+      setQuarries([]);
+      toast.error(
+        e instanceof Error ? e.message : "Не удалось загрузить список точек",
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
+    if (!token) {
+      return;
+    }
     fetchQuarries();
-  }, [statusFilter, typeFilter]);
+  }, [token, normalizedStatusFilter, normalizedPlacementFilter, normalizedTypeFilter]);
+
+  useEffect(() => {
+    if (!policy) void loadPolicy();
+  }, [loadPolicy, policy]);
+
+  const placementAction = async (point: Quarry, action: "extend" | "hide" | "restore" | "archive") => {
+    if (!point.id) return;
+    const response = await fetch(`${baseURL}/admin/pickup-points/${point.id}/placement/${action}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      toast.error(extractApiErrorMessage(data, "Не удалось изменить размещение"));
+      return;
+    }
+    toast.success(action === "extend" ? `Размещение продлено на ${policy?.extension_days ?? "установленный срок"} дней` : "Статус размещения обновлён");
+    await fetchQuarries();
+    if (token) await loadSummary(token);
+  };
 
   const moderatePoint = async (
     pointId: string,
@@ -368,7 +462,7 @@ export default function AdminQuarriesScreen({
       </div>
 
       <div className="grid grid-cols-2 gap-3 bg-white p-3 rounded-2xl border border-slate-100">
-        <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
+        <select value={normalizedStatusFilter} onChange={(event) => onStatusFilterChange(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
           <option value="">Все статусы</option>
           <option value="pending_moderation">На модерации</option>
           <option value="approved">Одобрено</option>
@@ -376,7 +470,16 @@ export default function AdminQuarriesScreen({
           <option value="suspended">Приостановлено</option>
           <option value="has_pending_changes">Есть правки</option>
         </select>
-        <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
+        <select value={normalizedPlacementFilter} onChange={(event) => onPlacementFilterChange(event.target.value as PlacementStatus | "")} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
+          <option value="">Все размещения</option>
+          <option value="active">Активные</option>
+          <option value="trial">Тестовый период</option>
+          <option value="confirmation_required">Требуют подтверждения</option>
+          <option value="hidden">Скрытые</option>
+          <option value="expired">Завершённые</option>
+          <option value="archived">Архив</option>
+        </select>
+        <select value={normalizedTypeFilter} onChange={(event) => onTypeFilterChange(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
           <option value="">Все типы</option>
           <option value="quarry">Карьеры</option>
           <option value="accumulator">Накопители</option>
@@ -386,24 +489,23 @@ export default function AdminQuarriesScreen({
       </div>
 
       {/* Desktop View */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden hidden md:block">
-        <div className="overflow-x-auto w-full">
-          <table className="w-full text-left border-collapse min-w-[720px]">
+      <div className="hidden overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm md:block">
+        <div className="w-full">
+          <table className="w-full border-collapse text-left">
             <thead>
               <tr className="bg-slate-50/80 text-slate-500 text-xs uppercase tracking-wider font-bold">
-                <th className="p-4 border-b border-slate-100">ID</th>
                 <th className="p-4 border-b border-slate-100">Тип</th>
                 <th className="p-4 border-b border-slate-100">Название</th>
                 <th className="p-4 border-b border-slate-100">Адрес</th>
                 <th className="p-4 border-b border-slate-100">Статус</th>
                 <th className="p-4 border-b border-slate-100">Модерация</th>
-                <th className="p-4 border-b border-slate-100">Действия</th>
+                <th className="w-[340px] min-w-[340px] whitespace-nowrap p-4 border-b border-slate-100">Действия</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {quarries.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-500">
+                  <td colSpan={6} className="p-8 text-center text-slate-500">
                     Нет точек
                   </td>
                 </tr>
@@ -413,9 +515,6 @@ export default function AdminQuarriesScreen({
                     key={quarry.id}
                     className="hover:bg-slate-50/50 transition-colors"
                   >
-                    <td className="p-4 text-sm font-medium text-slate-600">
-                      #{quarry.id}
-                    </td>
                     <td className="p-4">
                       <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
                         {POINT_TYPE_LABELS[quarry.point_type] || quarry.point_type}
@@ -439,16 +538,9 @@ export default function AdminQuarriesScreen({
                       ) : null}
                     </td>
                     <td className="p-4">
-                      <div className="flex flex-wrap gap-2">
-                        {quarry.is_active ? (
-                        <span className="inline-flex items-center px-2 py-1 rounded-lg bg-emerald-100 text-emerald-700 text-xs font-bold">
-                          Активен
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-1 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold">
-                          Скрыт
-                        </span>
-                        )}
+                      <div className="mb-2 flex flex-wrap gap-1">
+                        <PlacementBadge status={quarry.placement_status} />
+                        
                         {quarry.is_vip ? (
                           <span className="inline-flex items-center gap-1 rounded-lg bg-amber-100 px-2 py-1 text-xs font-black uppercase tracking-wide text-amber-800">
                             <Crown className="h-3.5 w-3.5" />
@@ -461,26 +553,29 @@ export default function AdminQuarriesScreen({
                           </span>
                         ) : null}
                       </div>
+                      <PlacementDates item={quarry} />
                     </td>
                     <td className="p-4">
                       <span className={`inline-flex items-center rounded-lg px-2 py-1 text-xs font-bold ${moderationBadge(quarry.moderation_status).className}`}>
                         {moderationBadge(quarry.moderation_status).label}
                       </span>
                     </td>
-                    <td className="p-4">
-                      <div className="flex items-center gap-3">
+                    <td className="w-[340px] min-w-[340px] align-top p-4">
+                      <div className="flex flex-wrap gap-2 md:flex-nowrap md:whitespace-nowrap">
                         <button
                           onClick={() => handleOpenModal(quarry)}
                           className="p-2 text-slate-400 hover:text-[#2DB0E6] hover:bg-[#2DB0E6]/10 rounded-xl transition-all"
                         >
                           <Edit2 className="w-5 h-5" />
                         </button>
+                        {quarry.placement_status !== "archived" ? <button type="button" onClick={() => void placementAction(quarry, "extend")} className="rounded-xl bg-sky-50 px-3 py-2 text-xs font-bold text-sky-700">Продлить</button> : null}
+                        {quarry.placement_status === "hidden" || quarry.placement_status === "archived" ? <button type="button" onClick={() => void placementAction(quarry, "restore")} className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">Восстановить</button> : <button type="button" onClick={() => void placementAction(quarry, "hide")} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">Скрыть</button>}
+                        {quarry.placement_status !== "archived" ? <button type="button" onClick={() => void placementAction(quarry, "archive")} className="rounded-xl bg-gray-100 px-3 py-2 text-xs font-bold text-gray-700">В архив</button> : null}
                         <button
                           type="button"
                           disabled={deletingPointId === quarry.id}
                           onClick={() => void deletePoint(quarry)}
                           className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all disabled:opacity-50"
-                          title="Удалить точку"
                         >
                           <Trash2 className="w-5 h-5" />
                         </button>
@@ -534,17 +629,10 @@ export default function AdminQuarriesScreen({
                   {quarry.owner_phone ? `, ${quarry.owner_phone}` : ""}
                 </div>
               )}
-              <div className="flex items-center justify-between gap-2 mt-1">
-                <div className="flex flex-wrap gap-2">
-                  {quarry.is_active ? (
-                    <span className="inline-flex items-center px-2 py-1 rounded-lg bg-emerald-100 text-emerald-700 text-xs font-bold">
-                      Активен
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center px-2 py-1 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold">
-                      Скрыт
-                    </span>
-                  )}
+              <div className="mt-1 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div className="mb-2 flex flex-wrap gap-1">
+                  <PlacementBadge status={quarry.placement_status} />
+                  
                   <span className={`inline-flex items-center rounded-lg px-2 py-1 text-xs font-bold ${moderationBadge(quarry.moderation_status).className}`}>
                     {moderationBadge(quarry.moderation_status).label}
                   </span>
@@ -560,19 +648,22 @@ export default function AdminQuarriesScreen({
                     </span>
                   ) : null}
                 </div>
-                <div className="flex items-center justify-end gap-2">
+                <PlacementDates item={quarry} />
+                <div className="flex flex-wrap gap-2 mt-3 md:mt-0 md:justify-end">
                   <button
                     onClick={() => handleOpenModal(quarry)}
                     className="p-2 text-slate-400 hover:text-[#2DB0E6] hover:bg-[#2DB0E6]/10 rounded-xl transition-all"
                   >
                     <Edit2 className="w-5 h-5" />
                   </button>
+                  {quarry.placement_status !== "archived" ? <button type="button" onClick={() => void placementAction(quarry, "extend")} className="rounded-xl bg-sky-50 px-3 py-2 text-xs font-bold text-sky-700">Продлить</button> : null}
+                  {quarry.placement_status === "hidden" || quarry.placement_status === "archived" ? <button type="button" onClick={() => void placementAction(quarry, "restore")} className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">Восстановить</button> : <button type="button" onClick={() => void placementAction(quarry, "hide")} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">Скрыть</button>}
+                  {quarry.placement_status !== "archived" ? <button type="button" onClick={() => void placementAction(quarry, "archive")} className="rounded-xl bg-gray-100 px-3 py-2 text-xs font-bold text-gray-700">В архив</button> : null}
                   <button
                     type="button"
                     disabled={deletingPointId === quarry.id}
                     onClick={() => void deletePoint(quarry)}
                     className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all disabled:opacity-50"
-                    title="Удалить точку"
                   >
                     <Trash2 className="w-5 h-5" />
                   </button>
@@ -663,6 +754,7 @@ function EditQuarryModal({
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [isMapUnavailable, setIsMapUnavailable] = useState(false);
   const usesOwnerPhone = Boolean(formData.owner_user_id);
   const pointTitle =
     formData.point_type === "accumulator" || formData.point_type === "warehouse"
@@ -708,13 +800,18 @@ function EditQuarryModal({
     if (!mapgl || !key || !mapContainerRef.current || mapRef.current) return;
 
     const initialCoordinates = getParsedCoordinates();
-    const mapInstance = new mapgl.Map(mapContainerRef.current, {
-      center: initialCoordinates
-        ? [initialCoordinates.lon, initialCoordinates.lat]
-        : [65.527202, 57.152223],
-      zoom: 12,
-      key,
-    });
+    const mapInstance = tryCreate2GisMap(
+      () =>
+        new mapgl.Map(mapContainerRef.current, {
+          center: initialCoordinates
+            ? [initialCoordinates.lon, initialCoordinates.lat]
+            : [65.527202, 57.152223],
+          zoom: 12,
+          key,
+        }),
+      () => setIsMapUnavailable(true),
+    );
+    if (!mapInstance) return;
 
     mapRef.current = mapInstance;
 
@@ -952,7 +1049,7 @@ function EditQuarryModal({
       if (lat === null || lon === null) {
         const geocoded = await getCoordsFromBackend(addressTrimmed);
         if (!geocoded) {
-          throw new Error("РќРµ СѓРґР°Р»РѕСЃСЊ РѕРїСЂРµРґРµР»РёС‚СЊ РєРѕРѕСЂРґРёРЅР°С‚С‹ РїРѕ Р°РґСЂРµСЃСѓ");
+          throw new Error("Не удалось определить координаты по адресу");
         }
         lat = geocoded.lat;
         lon = geocoded.lon;
@@ -967,7 +1064,7 @@ function EditQuarryModal({
       const requestedActive = Boolean(formData.is_active);
       const shouldDelayActivation = !formData.id && requestedActive && pendingFiles.length > 0;
       const finalAddress =
-        addressTrimmed || `РџРѕ РєРѕРѕСЂРґРёРЅР°С‚Р°Рј: ${lat}, ${lon}`;
+        addressTrimmed || `По координатам: ${lat}, ${lon}`;
       const url = formData.id
         ? `${baseURL}/admin/quarries/${formData.id}`
         : `${baseURL}/admin/quarries`;
@@ -1276,7 +1373,7 @@ function EditQuarryModal({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 items-start md:grid-cols-2">
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
                 Контактный телефон
@@ -1305,7 +1402,6 @@ function EditQuarryModal({
               <input
                 type="date"
                 value={formData.subscription_end_date || ""}
-                min={subscriptionDateInputMin}
                 max="2099-12-31"
                 onChange={(event) =>
                   setFormData({
@@ -1359,10 +1455,14 @@ function EditQuarryModal({
           </div>
 
           {/* Контейнер для карты 2ГИС */}
-          <div
-            id="quarry-map"
-            className="w-full h-48 min-h-[192px] bg-gray-200 rounded-xl my-4 overflow-hidden"
-          ></div>
+          {isMapUnavailable ? (
+            <MapWebGLFallback className="my-4 h-48 min-h-[192px] w-full rounded-xl" />
+          ) : (
+            <div
+              ref={mapContainerRef}
+              className="my-4 h-48 min-h-[192px] w-full overflow-hidden rounded-xl bg-gray-200"
+            />
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
@@ -1551,6 +1651,7 @@ function EnhancedEditQuarryModal({
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [isMapUnavailable, setIsMapUnavailable] = useState(false);
   const usesOwnerPhone = Boolean(formData.owner_user_id);
   const pointTitle = formData.point_type === "accumulator" ? "накопитель" : "карьер";
 
@@ -1592,13 +1693,18 @@ function EnhancedEditQuarryModal({
     if (!mapgl || !key || !mapContainerRef.current || mapRef.current) return;
 
     const initialCoordinates = getParsedCoordinates();
-    const mapInstance = new mapgl.Map(mapContainerRef.current, {
-      center: initialCoordinates
-        ? [initialCoordinates.lon, initialCoordinates.lat]
-        : [65.527202, 57.152223],
-      zoom: 12,
-      key,
-    });
+    const mapInstance = tryCreate2GisMap(
+      () =>
+        new mapgl.Map(mapContainerRef.current, {
+          center: initialCoordinates
+            ? [initialCoordinates.lon, initialCoordinates.lat]
+            : [65.527202, 57.152223],
+          zoom: 12,
+          key,
+        }),
+      () => setIsMapUnavailable(true),
+    );
+    if (!mapInstance) return;
 
     mapRef.current = mapInstance;
     if (initialCoordinates) {
@@ -2098,7 +2204,7 @@ function EnhancedEditQuarryModal({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 items-start md:grid-cols-2">
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Контактный телефон</label>
               <input
@@ -2123,7 +2229,6 @@ function EnhancedEditQuarryModal({
               <input
                 type="date"
                 value={formData.subscription_end_date || ""}
-                min={subscriptionDateInputMin}
                 onChange={(event) =>
                   setFormData({
                     ...formData,
@@ -2194,7 +2299,11 @@ function EnhancedEditQuarryModal({
             </p>
           </div>
 
-          <div ref={mapContainerRef} className="w-full h-48 min-h-[192px] bg-gray-200 rounded-xl overflow-hidden"></div>
+          {isMapUnavailable ? (
+            <MapWebGLFallback className="h-48 min-h-[192px] w-full rounded-xl" />
+          ) : (
+            <div ref={mapContainerRef} className="h-48 min-h-[192px] w-full overflow-hidden rounded-xl bg-gray-200" />
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">

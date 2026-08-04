@@ -1,9 +1,9 @@
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
 
-from app.models.models import Category, Material, ModerationStatus, Quarry, Role, User
+from app.models.models import Category, Material, ModerationStatus, PlacementStatus, Quarry, Role, User
 from app.security.auth import get_password_hash
 from app.security.jwt import create_access_token
 
@@ -109,4 +109,55 @@ async def test_admin_can_patch_quarry_with_date_and_material_offers(client, sess
         updated_quarry = await session.get(Quarry, quarry_id)
 
     assert updated_quarry is not None
+    assert updated_quarry.subscription_end_date is not None
+
+
+@pytest.mark.asyncio
+async def test_admin_manual_quarry_date_reactivates_expired_point(client, session_factory):
+    now = datetime.now(UTC)
+    async with session_factory() as session:
+        logist_role = await ensure_role(session, "logist")
+        await create_user(session, username="quarry_reactivate_logist", role=logist_role)
+
+        quarry = Quarry(
+            name="Expired Quarry",
+            short_name="Expired Quarry",
+            point_type="quarry",
+            address="Tyumen, Expired street, 3",
+            description="Expired point",
+            lat=57.15,
+            lon=65.53,
+            min_delivery_price=5000.0,
+            moderation_status=ModerationStatus.approved.value,
+            placement_status=PlacementStatus.expired.value,
+            placement_started_at=now - timedelta(days=30),
+            placement_ends_at=now - timedelta(days=1),
+            subscription_end_date=now - timedelta(days=1),
+            last_confirmed_at=now - timedelta(days=10),
+            next_confirmation_at=now - timedelta(days=1),
+            is_active=False,
+        )
+        session.add(quarry)
+        await session.commit()
+        await session.refresh(quarry)
+        quarry_id = quarry.id
+
+    subscription_end_date = (date.today() + timedelta(days=30)).isoformat()
+    response = await client.patch(
+        f"/api/v1/admin/quarries/{quarry_id}",
+        headers=auth_headers("quarry_reactivate_logist"),
+        json={"subscription_end_date": subscription_end_date},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["placement_status"] == PlacementStatus.active.value
+    assert payload["subscription_end_date"] is not None
+
+    async with session_factory() as session:
+        updated_quarry = await session.get(Quarry, quarry_id)
+
+    assert updated_quarry is not None
+    assert updated_quarry.is_active is True
+    assert updated_quarry.placement_status == PlacementStatus.active.value
     assert updated_quarry.subscription_end_date is not None

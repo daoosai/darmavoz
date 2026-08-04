@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import PullToRefresh from "react-simple-pull-to-refresh";
 import { useAuthStore } from "./store";
 import { getOrderStatusText } from "./utils/statusMapper";

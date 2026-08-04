@@ -51,6 +51,7 @@ from app.services.notifications import (
     schedule_logist_no_driver_found_notification,
     schedule_logist_timeout_notification,
 )
+from app.services.relevance import public_placement_filters
 from app.services.order_pricing import calculate_client_order_pricing, resolve_min_delivery_price
 from app.services.pickup_points import is_pickup_point_publicly_available
 from app.services.redis_client import enqueue_dispatch_order
@@ -493,9 +494,16 @@ async def create_checkout_order(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="delivery_address or address_id is required",
         )
+    if resolved_delivery_lat is None or resolved_delivery_lon is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="delivery coordinates are required to calculate the route",
+        )
 
     selected_quarry: Quarry | None = None
-    resolved_mileage_km: float | None = round(mileage_km, 2) if mileage_km is not None else None
+    # Client-provided mileage is intentionally ignored. Delivery price must only
+    # be based on a route built by the backend routing provider.
+    resolved_mileage_km: float | None = None
     delivery_rate_per_km_snapshot: float | None = None
     delivery_cost: float | None = None
     route_calculated_at: datetime | None = None
@@ -511,24 +519,17 @@ async def create_checkout_order(
         ):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Quarry not found")
 
-        if resolved_delivery_lat is not None and resolved_delivery_lon is not None:
-            pricing = await calculate_client_order_pricing(
-                session,
-                material_id=material_id,
-                delivery_option_id=delivery_option_id,
-                delivery_lat=resolved_delivery_lat,
-                delivery_lon=resolved_delivery_lon,
-                quantity=quantity,
-                quarry_id=quarry_id,
-            )
-            selected_quarry = pricing.quarry
-            resolved_mileage_km = pricing.mileage_km
-        elif resolved_mileage_km is None:
-            if resolved_delivery_lat is None or resolved_delivery_lon is None:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail="mileage_km or delivery coordinates are required when quarry_id is provided",
-                )
+        pricing = await calculate_client_order_pricing(
+            session,
+            material_id=material_id,
+            delivery_option_id=delivery_option_id,
+            delivery_lat=resolved_delivery_lat,
+            delivery_lon=resolved_delivery_lon,
+            quantity=quantity,
+            quarry_id=quarry_id,
+        )
+        selected_quarry = pricing.quarry
+        resolved_mileage_km = pricing.mileage_km
 
         if delivery_option.delivery_rate_per_km is None:
             raise HTTPException(
@@ -641,8 +642,7 @@ async def _resolve_logist_order_quarry(
         select(Quarry)
         .join(quarry_materials, quarry_materials.c.quarry_id == Quarry.id)
         .where(
-            Quarry.is_active.is_(True),
-            Quarry.moderation_status == ModerationStatus.approved.value,
+            *public_placement_filters(Quarry),
             quarry_materials.c.material_id == material_id,
             quarry_materials.c.is_active.is_(True),
         )

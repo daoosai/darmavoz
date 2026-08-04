@@ -20,6 +20,7 @@ import { baseURL, handleApiError } from "./utils";
 import { useAuthStore, useAddressStore } from "./store";
 import toast from "react-hot-toast";
 import SwipeableBottomSheet from "./SwipeableBottomSheet";
+import MapWebGLFallback, { tryCreate2GisMap } from "./components/MapWebGLFallback";
 
 interface Address {
   id?: string;
@@ -65,6 +66,7 @@ export default function ClientAddressBottomSheet({
   const [lat, setLat] = useState<number | null>(null);
   const [lon, setLon] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isMapUnavailable, setIsMapUnavailable] = useState(false);
   const [localSelectedId, setLocalSelectedId] = useState<string | null>(null);
   const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
 
@@ -113,11 +115,16 @@ export default function ClientAddressBottomSheet({
         const initialLon = lon || 65.527202;
         const initialLat = lat || 57.152223;
 
-        mapInstance = new (window as any).mapgl.Map("client-map", {
-          center: [initialLon, initialLat],
-          zoom: 12,
-          key: import.meta.env.VITE_2GIS_KEY,
-        });
+        mapInstance = tryCreate2GisMap(
+          () =>
+            new (window as any).mapgl.Map("client-map", {
+              center: [initialLon, initialLat],
+              zoom: 12,
+              key: import.meta.env.VITE_2GIS_KEY,
+            }),
+          () => setIsMapUnavailable(true),
+        );
+        if (!mapInstance) return;
 
         mapRef.current = mapInstance;
 
@@ -397,10 +404,14 @@ export default function ClientAddressBottomSheet({
         <div className="flex-1 overflow-y-auto flex flex-col">
           <div className="flex flex-col shrink-0 bg-slate-50 px-6 pt-4">
             {/* Map Container */}
-            <div
-              id="client-map"
-              className="w-full h-48 bg-gray-100 rounded-xl overflow-hidden"
-            />
+            {isMapUnavailable ? (
+              <MapWebGLFallback className="h-48 w-full rounded-xl" />
+            ) : (
+              <div
+                id="client-map"
+                className="w-full h-48 bg-gray-100 rounded-xl overflow-hidden"
+              />
+            )}
           </div>
           {isAdding ? (
             <div className="flex flex-col h-full bg-slate-50">

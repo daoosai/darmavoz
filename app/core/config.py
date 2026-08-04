@@ -50,11 +50,17 @@ class Settings(BaseSettings):
     DISPATCH_TIMEOUT_PENALTY_SECONDS: int = 1800
     DRIVER_ORDER_REMINDER_DELAY_SECONDS: int = 600
     DISPATCH_LOCK_TTL_SECONDS: int = 30
+    PLACEMENT_TRIAL_DAYS: int = 14
+    PLACEMENT_EXTENSION_DAYS: int = 30
+    PLACEMENT_CONFIRMATION_INTERVAL_DAYS: int = 14
+    PLACEMENT_CONFIRMATION_GRACE_DAYS: int = 3
+    PLACEMENT_WORKER_INTERVAL_SECONDS: int = 300
+    PLACEMENT_WORKER_BATCH_SIZE: int = 200
     DRIVER_TEST_USERNAME: str = "driver1"
     DRIVER_TEST_PASSWORD: str = "driver123"
-    ANDROID_VERSION: str = "2.6.1"
-    IOS_VERSION: str = "2.6.1"
-    WEB_VERSION: str = "2.6.1"
+    ANDROID_VERSION: str = "2.7.0"
+    IOS_VERSION: str = "2.7.0"
+    WEB_VERSION: str = "2.7.0"
     APK_DOWNLOAD_URL: str = "/static/darmavoz.apk"
     APK_FORCE_UPDATE: bool = False
     SMTP_HOST: str | None = None
@@ -106,3 +112,4 @@ class Settings(BaseSettings):
         return candidates
 
 settings = Settings()
+

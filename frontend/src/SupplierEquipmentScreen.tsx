@@ -10,6 +10,12 @@ import {
 } from "./EquipmentCatalogScreen";
 import { useAuthStore } from "./store";
 import { baseURL, extractApiErrorMessage, formatPhoneNumber, resolveMediaUrl } from "./utils";
+import {
+  PlacementBadge,
+  PlacementDates,
+  PlacementExpirationWarning,
+  shouldShowConfirmationAction,
+} from "./placement";
 
 interface Props {
   token: string;
@@ -82,6 +88,18 @@ const LISTING_TAB_LABELS: Record<ListingsTab, string> = {
   moderation: "На модерации",
   archived: "Отклоненные / скрытые",
 };
+
+const SUPPLIER_EQUIPMENT_TEXT = {
+  pageTitle: "Моя спецтехника",
+  publishListing: "Опубликовать",
+  hideListing: "Скрыть",
+  confirmRelevance: "Подтвердить актуальность",
+  photos: "Фотографии",
+  addPhotos: "Добавить фотографии",
+  photoAlt: "Фото",
+  removePhoto: "Удалить фото",
+  photoHint: "Можно добавить фото сразу при создании или редактировании объявления.",
+} as const;
 
 const matchesListingTab = (listing: EquipmentListing, tab: ListingsTab) => {
   if (tab === "active") {
@@ -529,6 +547,21 @@ export default function SupplierEquipmentScreen({
     }
   };
 
+  const confirmListingRelevance = async (listing: EquipmentListing) => {
+    try {
+      const response = await fetch(`${baseURL}${apiPrefix}/equipment/${listing.id}/confirm-relevance`, {
+        method: "POST",
+        headers,
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось подтвердить актуальность"));
+      toast.success("Актуальность объявления подтверждена");
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось подтвердить актуальность");
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -566,7 +599,7 @@ export default function SupplierEquipmentScreen({
         </p>
         <div className="mt-2 flex items-end justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-black">Мои объявления</h1>
+            <h1 className="text-2xl font-black">{SUPPLIER_EQUIPMENT_TEXT.pageTitle}</h1>
             <p className="mt-1 text-sm text-sky-50">
               Новые и изменённые объявления проходят модерацию
             </p>
@@ -666,6 +699,11 @@ export default function SupplierEquipmentScreen({
                     <Edit2 className="h-4 w-4" />
                   </button>
                 </div>
+                <div className="flex flex-wrap gap-2"><PlacementBadge status={listing.placement_status} /></div>
+                <PlacementDates item={listing} />
+                <PlacementExpirationWarning item={listing} />
+                {listing.placement_status === "confirmation_required" ? <p className="rounded-xl bg-orange-50 p-3 text-sm font-semibold text-orange-800">Подтвердите актуальность в течение льготного периода.</p> : null}
+                {listing.placement_status === "expired" ? <p className="rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">Срок размещения завершён. Для продления обратитесь к оператору.</p> : null}
                 <p className="font-bold">{formatEquipmentPrice(listing)}</p>
                 {listing.moderation_comment ? (
                   <p className="rounded-xl bg-rose-50 p-3 text-sm text-rose-700">
@@ -707,8 +745,11 @@ export default function SupplierEquipmentScreen({
                       : "bg-slate-100 text-slate-700"
                   }`}
                 >
-                  {listing.is_active === false ? "Опубликовать" : "Скрыть"}
+                  {listing.is_active === false
+                    ? SUPPLIER_EQUIPMENT_TEXT.publishListing
+                    : SUPPLIER_EQUIPMENT_TEXT.hideListing}
                 </button>
+                {shouldShowConfirmationAction(listing) ? <button type="button" onClick={() => void confirmListingRelevance(listing)} className="w-full rounded-xl bg-orange-50 px-4 py-3 text-sm font-bold text-orange-800">{SUPPLIER_EQUIPMENT_TEXT.confirmRelevance}</button> : null}
               </div>
             </article>
           );
@@ -744,12 +785,12 @@ export default function SupplierEquipmentScreen({
               </datalist>
             </label>
             <label className="block text-sm font-bold">
-              Фотографии
+              {SUPPLIER_EQUIPMENT_TEXT.photos}
               <div className="mt-2 space-y-3">
                 <label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-sky-200 bg-sky-50/70 px-4 py-6 text-center transition-colors hover:border-sky-300 hover:bg-sky-50">
                   <UploadCloud className="h-8 w-8 text-sky-500" />
                   <span className="mt-2 text-sm font-bold text-sky-700">
-                    Добавить фотографии
+                    {SUPPLIER_EQUIPMENT_TEXT.addPhotos}
                   </span>
                   <span className="mt-1 text-xs font-normal text-slate-500">
                     JPG, PNG, WebP. Можно выбрать несколько файлов.
@@ -771,14 +812,14 @@ export default function SupplierEquipmentScreen({
                       <div key={`${previewUrl}-${index}`} className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
                         <img
                           src={previewUrl}
-                          alt={`Фото ${index + 1}`}
+                          alt={`${SUPPLIER_EQUIPMENT_TEXT.photoAlt} ${index + 1}`}
                           className="h-24 w-full object-cover"
                         />
                         <button
                           type="button"
                           onClick={() => removePendingPhoto(index)}
                           className="absolute right-2 top-2 rounded-full bg-white/95 p-1.5 text-rose-600 shadow-sm"
-                          aria-label={`Удалить фото ${index + 1}`}
+                          aria-label={`${SUPPLIER_EQUIPMENT_TEXT.removePhoto} ${index + 1}`}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -787,7 +828,7 @@ export default function SupplierEquipmentScreen({
                   </div>
                 ) : (
                   <p className="text-xs font-normal text-slate-500">
-                    Можно добавить фото сразу при создании или редактировании объявления.
+                    {SUPPLIER_EQUIPMENT_TEXT.photoHint}
                   </p>
                 )}
               </div>

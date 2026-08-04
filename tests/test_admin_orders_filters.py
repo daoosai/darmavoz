@@ -47,10 +47,10 @@ async def test_admin_orders_supports_driver_and_date_filters(client, session_fac
         driver_user_1 = await create_user(session, username="orders_driver_1", role=driver_role)
         driver_user_2 = await create_user(session, username="orders_driver_2", role=driver_role)
 
-        category = Category(name="??????", slug="orders-filter", sort_order=0, is_active=True)
+        category = Category(name="Песок", slug="orders-filter", sort_order=0, is_active=True)
         material = Material(
             category=category,
-            name="??????",
+            name="Песок",
             description="",
             price=3000.0,
             unit="m3",
@@ -60,13 +60,13 @@ async def test_admin_orders_supports_driver_and_date_filters(client, session_fac
         )
         delivery_option = DeliveryOption(
             capacity_m3=20.0,
-            title="20 ?3",
+            title="20 м3",
             description="",
             base_price=0.0,
             is_active=True,
             sort_order=0,
         )
-        client_record = Client(name="??????", phone="+79990033000")
+        client_record = Client(name="Клиент", phone="+79990033000")
         session.add_all([category, material, delivery_option, client_record])
         await session.flush()
 
@@ -76,7 +76,7 @@ async def test_admin_orders_supports_driver_and_date_filters(client, session_fac
         await session.flush()
 
         driver_1 = Driver(
-            name="???????? 1",
+            name="Водитель 1",
             phone="+79990033001",
             user_id=driver_user_1.id,
             vehicle_id=vehicle_1.id,
@@ -85,7 +85,7 @@ async def test_admin_orders_supports_driver_and_date_filters(client, session_fac
             moderation_status="approved",
         )
         driver_2 = Driver(
-            name="???????? 2",
+            name="Водитель 2",
             phone="+79990033002",
             user_id=driver_user_2.id,
             vehicle_id=vehicle_2.id,
@@ -100,8 +100,8 @@ async def test_admin_orders_supports_driver_and_date_filters(client, session_fac
             client_id=client_record.id,
             driver_id=driver_1.id,
             delivery_option_id=delivery_option.id,
-            delivery_address="??????, ?????? 1",
-            address="??????, ?????? 1",
+            delivery_address="Тюмень, Лесная 1",
+            address="Тюмень, Лесная 1",
             total_amount=15000.0,
             status="driver_assigned",
             source="dispatcher",
@@ -111,8 +111,8 @@ async def test_admin_orders_supports_driver_and_date_filters(client, session_fac
             client_id=client_record.id,
             driver_id=driver_2.id,
             delivery_option_id=delivery_option.id,
-            delivery_address="??????, ?????????? 2",
-            address="??????, ?????????? 2",
+            delivery_address="Тюмень, Полевая 2",
+            address="Тюмень, Полевая 2",
             total_amount=18000.0,
             status="driver_assigned",
             source="dispatcher",
@@ -122,8 +122,8 @@ async def test_admin_orders_supports_driver_and_date_filters(client, session_fac
             client_id=client_record.id,
             driver_id=driver_1.id,
             delivery_option_id=delivery_option.id,
-            delivery_address="??????, ??????????? 3",
-            address="??????, ??????????? 3",
+            delivery_address="Тюмень, Центральная 3",
+            address="Тюмень, Центральная 3",
             total_amount=19000.0,
             status="driver_assigned",
             source="dispatcher",
@@ -170,8 +170,8 @@ async def test_admin_orders_supports_driver_and_date_filters(client, session_fac
     assert by_date.status_code == 200
     by_date_payload = by_date.json()
     assert [item["delivery_address"] for item in by_date_payload] == [
-        "??????, ?????????? 2",
-        "??????, ?????? 1",
+        "Тюмень, Полевая 2",
+        "Тюмень, Лесная 1",
     ]
 
     legacy_by_date = await client.get(
@@ -191,4 +191,4 @@ async def test_admin_orders_supports_driver_and_date_filters(client, session_fac
     by_driver_and_date_payload = by_driver_and_date.json()
     assert len(by_driver_and_date_payload) == 1
     assert by_driver_and_date_payload[0]["driver_id"] == str(driver_1.id)
-    assert by_driver_and_date_payload[0]["delivery_address"] == "??????, ?????? 1"
+    assert by_driver_and_date_payload[0]["delivery_address"] == "Тюмень, Лесная 1"

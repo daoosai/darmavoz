@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { ImagePlus, Loader2, MapPin, Search, X } from "lucide-react";
 import toast from "react-hot-toast";
+import type { PlacementFields } from "./placement";
+import MapWebGLFallback, { load2GisMapSdk, tryCreate2GisMap } from "./components/MapWebGLFallback";
 
 import {
   fetch2gisAddressSuggestions,
@@ -37,7 +39,7 @@ type SupplierPointFormState = {
   material_offers: MaterialOfferDraft[];
 };
 
-export interface SupplierPoint {
+export interface SupplierPoint extends PlacementFields {
   id: string;
   point_type: "quarry" | "accumulator" | "warehouse" | "supplier";
   name: string;
@@ -178,6 +180,7 @@ export default function SupplierCreatePointModal({
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
+  const [isMapUnavailable, setIsMapUnavailable] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [pendingFilePreviews, setPendingFilePreviews] = useState<string[]>([]);
   const addressContainerRef = useRef<HTMLDivElement | null>(null);
@@ -217,6 +220,8 @@ export default function SupplierCreatePointModal({
     if (lat === null || lon === null) return null;
     return { lat, lon };
   }, [form.lat, form.lon]);
+  const parsedCoordinatesRef = useRef(parsedCoordinates);
+  parsedCoordinatesRef.current = parsedCoordinates;
 
   const createDraggableMarker = (mapInstance: any, coordinates: [number, number]) => {
     const mapgl = (window as any).mapgl;
@@ -236,29 +241,41 @@ export default function SupplierCreatePointModal({
   };
 
   useEffect(() => {
-    const mapgl = (window as any).mapgl;
+    let disposed = false;
     const key = import.meta.env.VITE_2GIS_KEY;
-    if (!mapgl || !key || !mapContainerRef.current || mapRef.current) return;
+    if (!key || !mapContainerRef.current || mapRef.current) return;
 
-    const initialCoordinates = parsedCoordinates;
-    const mapInstance = new mapgl.Map(mapContainerRef.current, {
-      center: initialCoordinates
-        ? [initialCoordinates.lon, initialCoordinates.lat]
-        : DEFAULT_MAP_CENTER,
-      zoom: 12,
-      key,
-    });
-
-    mapRef.current = mapInstance;
-
-    if (initialCoordinates) {
-      markerRef.current = createDraggableMarker(mapInstance, [
-        initialCoordinates.lon,
-        initialCoordinates.lat,
-      ]);
-    }
+    void load2GisMapSdk()
+      .then((mapgl) => {
+        if (disposed || !mapContainerRef.current || mapRef.current) return;
+        const initialCoordinates = parsedCoordinatesRef.current;
+        const mapInstance = tryCreate2GisMap(
+          () => new mapgl.Map(mapContainerRef.current, {
+            center: initialCoordinates
+              ? [initialCoordinates.lon, initialCoordinates.lat]
+              : DEFAULT_MAP_CENTER,
+            zoom: 12,
+            key,
+          }),
+          () => setIsMapUnavailable(true),
+        );
+        if (!mapInstance) return;
+        if (disposed) {
+          mapInstance.destroy();
+          return;
+        }
+        mapRef.current = mapInstance;
+        if (initialCoordinates) {
+          markerRef.current = createDraggableMarker(mapInstance, [
+            initialCoordinates.lon,
+            initialCoordinates.lat,
+          ]);
+        }
+      })
+      .catch(() => !disposed && setIsMapUnavailable(true));
 
     return () => {
+      disposed = true;
       if (markerRef.current) {
         markerRef.current.destroy();
         markerRef.current = null;
@@ -268,7 +285,7 @@ export default function SupplierCreatePointModal({
         mapRef.current = null;
       }
     };
-  }, [parsedCoordinates]);
+  }, []);
 
   useEffect(() => {
     const mapgl = (window as any).mapgl;
@@ -743,10 +760,14 @@ export default function SupplierCreatePointModal({
               <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
                 Карта 2ГИС
               </label>
-              <div
-                ref={mapContainerRef}
-                className="h-48 min-h-[192px] w-full overflow-hidden rounded-xl bg-slate-200"
-              />
+              {isMapUnavailable ? (
+                <MapWebGLFallback className="h-48 min-h-[192px] w-full rounded-xl" />
+              ) : (
+                <div
+                  ref={mapContainerRef}
+                  className="h-48 min-h-[192px] w-full overflow-hidden rounded-xl bg-slate-200"
+                />
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">

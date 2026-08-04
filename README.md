@@ -82,6 +82,7 @@ npm run build
 ## Публичные URL
 
 - `https://darmavoz.ru/app` - web-клиент
+- `https://test.darmavoz.ru/app` - тестовый web-клиент (ветка `develop`)
 - `https://darmavoz.ru/api/v1/catalog/categories/`
 - `https://darmavoz.ru/api/v1/catalog/materials/`
 - `https://darmavoz.ru/api/v1/catalog/delivery-options/`

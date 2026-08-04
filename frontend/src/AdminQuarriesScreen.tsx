@@ -489,9 +489,9 @@ export default function AdminQuarriesScreen({
       </div>
 
       {/* Desktop View */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden hidden md:block">
+      <div className="hidden overflow-x-auto rounded-2xl border border-slate-100 bg-white shadow-sm md:block">
         <div className="overflow-x-auto w-full">
-          <table className="w-full text-left border-collapse min-w-[720px]">
+          <table className="min-w-[1480px] w-full border-collapse text-left">
             <thead>
               <tr className="bg-slate-50/80 text-slate-500 text-xs uppercase tracking-wider font-bold">
                 <th className="p-4 border-b border-slate-100">ID</th>
@@ -500,7 +500,7 @@ export default function AdminQuarriesScreen({
                 <th className="p-4 border-b border-slate-100">Адрес</th>
                 <th className="p-4 border-b border-slate-100">Статус</th>
                 <th className="p-4 border-b border-slate-100">Модерация</th>
-                <th className="min-w-[380px] p-4 border-b border-slate-100">Действия</th>
+                <th className="w-[380px] min-w-[380px] whitespace-nowrap p-4 border-b border-slate-100">Действия</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -564,7 +564,7 @@ export default function AdminQuarriesScreen({
                         {moderationBadge(quarry.moderation_status).label}
                       </span>
                     </td>
-                    <td className="min-w-[380px] align-top p-4">
+                    <td className="w-[380px] min-w-[380px] align-top p-4">
                       <div className="flex flex-wrap gap-2 md:flex-nowrap md:whitespace-nowrap">
                         <button
                           onClick={() => handleOpenModal(quarry)}

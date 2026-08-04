@@ -425,6 +425,18 @@ export default function CartScreen({
     const res = calcResults[item.id];
     return acc + (isMarketplaceCalculation(res) ? Number(res.best_option.delivery_cost) || 0 : 0);
   }, 0);
+  const hasValidDeliveryCalculation =
+    cartItems.length > 0
+    && !isCalculating
+    && !hasCalculationError
+    && deliveryCoords !== null
+    && cartItems.every((item) => {
+      const result = calcResults[item.id];
+      return isMarketplaceCalculation(result)
+        && Number.isFinite(Number(result.best_option.delivery_cost))
+        && Number(result.best_option.delivery_cost) > 0;
+    });
+  const isCheckoutDisabled = isSubmitting || !globalAddress.trim() || !hasValidDeliveryCalculation;
 
   const finalTotal = Math.round(
     hasCalculations && !isCalculating && !hasCalculationError
@@ -809,15 +821,9 @@ export default function CartScreen({
               </span>
             </div>
             <button
-              disabled={
-                isSubmitting ||
-                !globalAddress.trim() ||
-                hasCalculationError ||
-                !hasCalculations ||
-                totalDeliveryCost === 0
-              }
+              disabled={isCheckoutDisabled}
               onClick={handleCheckout}
-              className="bg-[#2DB0E6] text-white px-8 py-3.5 rounded-xl font-semibold shadow-sm active:bg-[#209dd0] transition-colors disabled:opacity-50 flex items-center gap-2"
+              className="bg-[#2DB0E6] text-white px-8 py-3.5 rounded-xl font-semibold shadow-sm active:bg-[#209dd0] transition-colors disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-none flex items-center gap-2"
             >
               {isSubmitting ? (
                 <>

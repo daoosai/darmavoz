@@ -118,9 +118,10 @@ async def get_2gis_route_distance(
                 "lat": lat_b,
             },
         ],
-        "transport": "truck",
+        # Truck routing is not available for every 2GIS key. Use the broadly
+        # supported driving profile for the financial calculation.
+        "transport": "driving",
         "route_mode": "fastest",
-        "traffic_mode": "jam",
         "output": "summary",
         "locale": "ru",
     }
@@ -156,6 +157,8 @@ async def get_2gis_route_distance(
 
     try:
         response_data = response.json()
+        if not isinstance(response_data, dict):
+            raise ValueError("2GIS response must be an object")
         api_status = response_data.get("status")
         if api_status and api_status != "OK":
             logger.error(
@@ -167,10 +170,15 @@ async def get_2gis_route_distance(
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=ROUTE_BUILD_ERROR_MESSAGE)
 
         routes = response_data.get("result")
+        if isinstance(routes, dict):
+            routes = routes.get("routes") or routes.get("items")
         if not isinstance(routes, list) or not routes:
             raise ValueError("2GIS response does not contain routes")
 
-        meters = float(routes[0]["total_distance"])
+        route = routes[0]
+        if not isinstance(route, dict):
+            raise ValueError("2GIS route must be an object")
+        meters = float(route.get("total_distance"))
         if meters <= 0:
             raise ValueError("2GIS distance must be positive")
 

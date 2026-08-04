@@ -646,7 +646,11 @@ export default function AdminEquipmentScreen({
           </select>
 
           <div className="grid gap-4 lg:grid-cols-2">
-            {listings.map((item) => (
+            {listings.length === 0 ? (
+              <p className="rounded-2xl bg-white p-10 text-center text-slate-500 shadow-sm lg:col-span-2">
+                Нет спецтехники
+              </p>
+            ) : listings.map((item) => (
               <div key={item.id} className="overflow-hidden rounded-3xl bg-white shadow-sm">
                 <div className="relative bg-slate-100">
                   {item.primary_image_url ? (

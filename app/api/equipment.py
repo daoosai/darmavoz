@@ -681,8 +681,9 @@ async def list_admin_equipment(
             selectinload(SpecialEquipmentListing.equipment_type_ref),
             selectinload(SpecialEquipmentListing.owner),
         )
-        .where(SpecialEquipmentListing.is_deleted.is_(False))
     )
+    if placement_status != PlacementStatus.archived:
+        stmt = stmt.where(SpecialEquipmentListing.is_deleted.is_(False))
     if equipment_type_id:
         stmt = stmt.where(SpecialEquipmentListing.equipment_type_id == equipment_type_id)
     if equipment_type:

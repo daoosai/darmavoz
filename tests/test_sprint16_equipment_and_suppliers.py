@@ -3,7 +3,14 @@ import uuid
 import pytest
 from sqlalchemy import select
 
-from app.models.models import Role, SupportMessage, SupportTicket, User
+from app.models.models import (
+    PlacementStatus,
+    Role,
+    SpecialEquipmentListing,
+    SupportMessage,
+    SupportTicket,
+    User,
+)
 from app.security.jwt import create_access_token
 
 
@@ -31,6 +38,41 @@ async def _create_user(session_factory, role_name: str, *, phone: str | None = N
 
 def _headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.mark.asyncio
+async def test_admin_archived_equipment_filter_includes_soft_deleted_listings(
+    client, session_factory
+):
+    _admin, admin_token = await _create_user(session_factory, "admin")
+    create_response = await client.post(
+        "/api/v1/admin/equipment",
+        headers=_headers(admin_token),
+        json={
+            "equipment_type": "Экскаватор",
+            "title": "Архивный экскаватор",
+            "description": "Тест архивного фильтра",
+            "tariffs": [{"type": "hour", "price": 5000}],
+        },
+    )
+    assert create_response.status_code == 201
+    listing_id = create_response.json()["id"]
+
+    async with session_factory() as session:
+        listing = await session.get(SpecialEquipmentListing, listing_id)
+        assert listing is not None
+        listing.is_deleted = True
+        listing.placement_status = PlacementStatus.archived.value
+        await session.commit()
+
+    archived_response = await client.get(
+        "/api/v1/admin/equipment",
+        params={"placement_status": "archived"},
+        headers=_headers(admin_token),
+    )
+
+    assert archived_response.status_code == 200
+    assert listing_id in {item["id"] for item in archived_response.json()}
 
 
 @pytest.mark.asyncio

@@ -178,7 +178,10 @@ async def get_2gis_route_distance(
         route = routes[0]
         if not isinstance(route, dict):
             raise ValueError("2GIS route must be an object")
-        meters = float(route.get("total_distance"))
+        distance_m = route.get("length") or route.get("total_distance")
+        if distance_m is None:
+            raise ValueError("2GIS route does not contain a distance")
+        meters = float(distance_m)
         if meters <= 0:
             raise ValueError("2GIS distance must be positive")
 

@@ -500,7 +500,7 @@ export default function AdminQuarriesScreen({
                 <th className="p-4 border-b border-slate-100">Адрес</th>
                 <th className="p-4 border-b border-slate-100">Статус</th>
                 <th className="p-4 border-b border-slate-100">Модерация</th>
-                <th className="min-w-[280px] p-4 border-b border-slate-100">Действия</th>
+                <th className="min-w-[380px] p-4 border-b border-slate-100">Действия</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -564,8 +564,8 @@ export default function AdminQuarriesScreen({
                         {moderationBadge(quarry.moderation_status).label}
                       </span>
                     </td>
-                    <td className="min-w-[280px] align-top p-4">
-                      <div className="flex flex-wrap gap-2">
+                    <td className="min-w-[380px] align-top p-4">
+                      <div className="flex flex-wrap gap-2 md:flex-nowrap md:whitespace-nowrap">
                         <button
                           onClick={() => handleOpenModal(quarry)}
                           className="p-2 text-slate-400 hover:text-[#2DB0E6] hover:bg-[#2DB0E6]/10 rounded-xl transition-all"

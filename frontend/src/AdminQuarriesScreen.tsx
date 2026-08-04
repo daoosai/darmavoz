@@ -489,24 +489,23 @@ export default function AdminQuarriesScreen({
       </div>
 
       {/* Desktop View */}
-      <div className="hidden overflow-x-auto rounded-2xl border border-slate-100 bg-white shadow-sm md:block">
-        <div className="overflow-x-auto w-full">
-          <table className="min-w-[1480px] w-full border-collapse text-left">
+      <div className="hidden overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm md:block">
+        <div className="w-full">
+          <table className="w-full border-collapse text-left">
             <thead>
               <tr className="bg-slate-50/80 text-slate-500 text-xs uppercase tracking-wider font-bold">
-                <th className="p-4 border-b border-slate-100">ID</th>
                 <th className="p-4 border-b border-slate-100">Тип</th>
                 <th className="p-4 border-b border-slate-100">Название</th>
                 <th className="p-4 border-b border-slate-100">Адрес</th>
                 <th className="p-4 border-b border-slate-100">Статус</th>
                 <th className="p-4 border-b border-slate-100">Модерация</th>
-                <th className="w-[380px] min-w-[380px] whitespace-nowrap p-4 border-b border-slate-100">Действия</th>
+                <th className="w-[340px] min-w-[340px] whitespace-nowrap p-4 border-b border-slate-100">Действия</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {quarries.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-500">
+                  <td colSpan={6} className="p-8 text-center text-slate-500">
                     Нет точек
                   </td>
                 </tr>
@@ -516,9 +515,6 @@ export default function AdminQuarriesScreen({
                     key={quarry.id}
                     className="hover:bg-slate-50/50 transition-colors"
                   >
-                    <td className="p-4 text-sm font-medium text-slate-600">
-                      #{quarry.id}
-                    </td>
                     <td className="p-4">
                       <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
                         {POINT_TYPE_LABELS[quarry.point_type] || quarry.point_type}
@@ -564,7 +560,7 @@ export default function AdminQuarriesScreen({
                         {moderationBadge(quarry.moderation_status).label}
                       </span>
                     </td>
-                    <td className="w-[380px] min-w-[380px] align-top p-4">
+                    <td className="w-[340px] min-w-[340px] align-top p-4">
                       <div className="flex flex-wrap gap-2 md:flex-nowrap md:whitespace-nowrap">
                         <button
                           onClick={() => handleOpenModal(quarry)}

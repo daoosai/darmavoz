@@ -1,4 +1,4 @@
-from math import asin, cos, isfinite, radians, sin, sqrt
+from math import isfinite
 from typing import Any
 
 import logging
@@ -14,7 +14,6 @@ TYUMEN_CITY_NAME = "Тюмень"
 TYUMEN_LOCATION = "65.534328,57.152286"
 TYUMEN_BOUND = "65.10,56.95,65.95,57.45"
 GEOCODE_FALLBACK_ERROR_MESSAGE = "Не удалось рассчитать маршрут. Проверьте адрес доставки."
-ROUTE_DISTANCE_FALLBACK_FACTOR = 1.3
 
 
 def _extract_2gis_error(payload: dict[str, Any]) -> str | None:
@@ -49,44 +48,6 @@ def _parse_coordinate(value: Any) -> float | None:
     except (TypeError, ValueError):
         return None
     return parsed if isfinite(parsed) else None
-
-
-def _get_straight_distance_km(lat_a: float, lon_a: float, lat_b: float, lon_b: float) -> float:
-    radius_km = 6371.0
-    delta_lat = radians(lat_b - lat_a)
-    delta_lon = radians(lon_b - lon_a)
-    lat_a_rad = radians(lat_a)
-    lat_b_rad = radians(lat_b)
-    haversine = (
-        sin(delta_lat / 2) ** 2
-        + cos(lat_a_rad) * cos(lat_b_rad) * sin(delta_lon / 2) ** 2
-    )
-    arc = 2 * asin(sqrt(haversine))
-    return radius_km * arc
-
-
-def _build_route_distance_fallback(
-    pickup_lat: float,
-    pickup_lon: float,
-    delivery_lat: float,
-    delivery_lon: float,
-) -> dict[str, Any]:
-    fallback_km = round(
-        _get_straight_distance_km(
-            pickup_lat,
-            pickup_lon,
-            delivery_lat,
-            delivery_lon,
-        ) * ROUTE_DISTANCE_FALLBACK_FACTOR,
-        2,
-    )
-    return {
-        "distance_km": fallback_km,
-        "geometry": [
-            {"lat": pickup_lat, "lon": pickup_lon},
-            {"lat": delivery_lat, "lon": delivery_lon},
-        ],
-    }
 
 
 async def _fallback_geocode(address: str) -> dict[str, float]:
@@ -265,13 +226,8 @@ async def get_route_distance(
     delivery_lon: float = Query(..., ge=-180, le=180),
 ) -> dict[str, Any]:
     if not settings.TWOGIS_API_KEY:
-        logger.warning("2GIS key is not configured, using fallback route distance")
-        return _build_route_distance_fallback(
-            pickup_lat,
-            pickup_lon,
-            delivery_lat,
-            delivery_lon,
-        )
+        logger.error("2GIS key is not configured")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=GEOCODE_FALLBACK_ERROR_MESSAGE)
 
     payload = {
         "points": [
@@ -286,9 +242,10 @@ async def get_route_distance(
                 "lat": delivery_lat,
             },
         ],
-        "transport": "driving",
+        "transport": "truck",
         "route_mode": "fastest",
         "traffic_mode": "jam",
+        "output": "detailed",
         "locale": "ru",
     }
 
@@ -301,81 +258,46 @@ async def get_route_distance(
                 headers={"Accept": "application/json"},
             )
     except httpx.HTTPError as exc:
-        logger.warning("2GIS router is unavailable, using fallback route distance: %s", exc)
-        return _build_route_distance_fallback(
-            pickup_lat,
-            pickup_lon,
-            delivery_lat,
-            delivery_lon,
-        )
+        logger.warning("2GIS router is unavailable: %s", exc)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=GEOCODE_FALLBACK_ERROR_MESSAGE) from exc
 
     if response.status_code != status.HTTP_200_OK:
         logger.error(f"2GIS Routing Error: {response.status_code} - {response.text}")
-        return _build_route_distance_fallback(
-            pickup_lat,
-            pickup_lon,
-            delivery_lat,
-            delivery_lon,
-        )
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=GEOCODE_FALLBACK_ERROR_MESSAGE)
 
     try:
         data = response.json()
         if data.get("status") and data["status"] != "OK":
             router_error = _extract_2gis_error(data) or data["status"]
             logger.warning(
-                "2GIS router returned business error, using fallback route distance: %s",
+                "2GIS router returned business error: %s",
                 router_error,
             )
-            return _build_route_distance_fallback(
-                pickup_lat,
-                pickup_lon,
-                delivery_lat,
-                delivery_lon,
-            )
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=GEOCODE_FALLBACK_ERROR_MESSAGE)
 
         router_error = _extract_2gis_error(data)
         if router_error:
             logger.warning(
-                "2GIS router returned business message, using fallback route distance: %s",
+                "2GIS router returned business message: %s",
                 router_error,
             )
-            return _build_route_distance_fallback(
-                pickup_lat,
-                pickup_lon,
-                delivery_lat,
-                delivery_lon,
-            )
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=GEOCODE_FALLBACK_ERROR_MESSAGE)
 
         routes = data["result"]
         if not routes:
-            logger.warning("2GIS router returned no routes, using fallback route distance")
-            return _build_route_distance_fallback(
-                pickup_lat,
-                pickup_lon,
-                delivery_lat,
-                delivery_lon,
-            )
+            logger.warning("2GIS router returned no routes")
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=GEOCODE_FALLBACK_ERROR_MESSAGE)
 
         route = routes[0]
         total_distance_m = float(route["total_distance"])
         if total_distance_m <= 0:
-            logger.warning("2GIS router returned non-positive distance, using fallback route distance")
-            return _build_route_distance_fallback(
-                pickup_lat,
-                pickup_lon,
-                delivery_lat,
-                delivery_lon,
-            )
+            logger.warning("2GIS router returned non-positive distance")
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=GEOCODE_FALLBACK_ERROR_MESSAGE)
 
         return {
             "distance_km": round(total_distance_m / 1000.0, 2),
             "geometry": _collect_route_geometry(route),
         }
     except (KeyError, ValueError, TypeError, IndexError) as exc:
-        logger.warning("Invalid 2GIS router response, using fallback route distance: %s", exc)
-        return _build_route_distance_fallback(
-            pickup_lat,
-            pickup_lon,
-            delivery_lat,
-            delivery_lon,
-        )
+        logger.warning("Invalid 2GIS router response: %s", exc)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=GEOCODE_FALLBACK_ERROR_MESSAGE) from exc

@@ -203,6 +203,7 @@ export default function CartScreen({
   };
 
   useEffect(() => {
+    const controller = new AbortController();
     const calculateDelivery = async () => {
       if (
         cartItems.length === 0 ||
@@ -220,6 +221,7 @@ export default function CartScreen({
           `${baseURL}/geo/geocode?address=${encodeURIComponent(globalAddress)}`,
           {
             headers: { Authorization: `Bearer ${token}` },
+            signal: controller.signal,
           },
         );
 
@@ -236,6 +238,7 @@ export default function CartScreen({
         if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lon))) {
           throw new Error("Не удалось определить координаты адреса доставки.");
         }
+        if (controller.signal.aborted) return;
         setDeliveryCoords({ lat, lon });
 
         // Fetch calculation for each item
@@ -247,6 +250,7 @@ export default function CartScreen({
               "Content-Type": "application/json",
               Authorization: `Bearer ${token}`,
             },
+            signal: controller.signal,
             body: JSON.stringify({
               material_id: item.material.id,
               delivery_option_id: item.deliveryOption.id,
@@ -266,8 +270,9 @@ export default function CartScreen({
             newResults[item.id] = { error: true, errorText };
           }
         }
-        setCalcResults(newResults);
+        if (!controller.signal.aborted) setCalcResults(newResults);
       } catch (e) {
+        if (controller.signal.aborted) return;
         setDeliveryCoords(null);
         console.error("Calculation error", e);
         const errorText = extractApiErrorMessage(
@@ -281,12 +286,15 @@ export default function CartScreen({
         }
         setCalcResults(errResults);
       } finally {
-        setIsCalculating(false);
+        if (!controller.signal.aborted) setIsCalculating(false);
       }
     };
 
     const timer = setTimeout(calculateDelivery, 800);
-    return () => clearTimeout(timer);
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
   }, [globalAddress, cartItems, token, role, preferredPointIds]);
 
   const handleAddressChange = (e: React.ChangeEvent<HTMLInputElement>) => {

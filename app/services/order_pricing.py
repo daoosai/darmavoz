@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from dataclasses import dataclass
-from math import asin, cos, isfinite, radians, sin, sqrt
+from math import isfinite
 from uuid import UUID
 
 import httpx
@@ -90,29 +90,6 @@ async def load_pickup_point_media_files(
     return media_by_point
 
 
-def get_straight_distance_km(lat_a: float, lon_a: float, lat_b: float, lon_b: float) -> float:
-    radius_km = 6371.0
-    delta_lat = radians(lat_b - lat_a)
-    delta_lon = radians(lon_b - lon_a)
-    lat_a_rad = radians(lat_a)
-    lat_b_rad = radians(lat_b)
-    haversine = (
-        sin(delta_lat / 2) ** 2
-        + cos(lat_a_rad) * cos(lat_b_rad) * sin(delta_lon / 2) ** 2
-    )
-    arc = 2 * asin(sqrt(haversine))
-    return radius_km * arc
-
-
-def _resolve_route_distance_failure(*, strict: bool, fallback_km: float) -> float:
-    if strict:
-        logger.warning(
-            "2GIS routing fallback applied for explicitly selected pickup point",
-            extra={"fallback_km": fallback_km},
-        )
-    return fallback_km
-
-
 async def get_2gis_route_distance(
     lat_a: float,
     lon_a: float,
@@ -121,13 +98,12 @@ async def get_2gis_route_distance(
     *,
     strict: bool = False,
 ) -> float:
-    fallback_km = round(get_straight_distance_km(lat_a, lon_a, lat_b, lon_b) * 1.3, 2)
     log_context = {
         "lat_a": lat_a,
         "lon_a": lon_a,
         "lat_b": lat_b,
         "lon_b": lon_b,
-        "fallback_km": fallback_km,
+        "strict": strict,
     }
     payload = {
         "points": [
@@ -142,15 +118,16 @@ async def get_2gis_route_distance(
                 "lat": lat_b,
             },
         ],
-        "transport": "driving",
-        "route_mode": "shortest",
-        "traffic_mode": "disabled",
+        "transport": "truck",
+        "route_mode": "fastest",
+        "traffic_mode": "jam",
+        "output": "summary",
         "locale": "ru",
     }
 
     if not settings.TWOGIS_API_KEY:
-        logger.error("2gis_distance_fallback: TWOGIS_API_KEY is not configured", extra=log_context)
-        return _resolve_route_distance_failure(strict=strict, fallback_km=fallback_km)
+        logger.error("2gis_route_unavailable: TWOGIS_API_KEY is not configured", extra=log_context)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=ROUTE_BUILD_ERROR_MESSAGE)
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
@@ -164,8 +141,8 @@ async def get_2gis_route_distance(
                 },
             )
     except httpx.HTTPError:
-        logger.exception("2gis_distance_fallback_request_error", extra=log_context)
-        return _resolve_route_distance_failure(strict=strict, fallback_km=fallback_km)
+        logger.exception("2gis_route_request_error", extra=log_context)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=ROUTE_BUILD_ERROR_MESSAGE)
 
     response_text = response.text
     if response.status_code != status.HTTP_200_OK:
@@ -175,7 +152,7 @@ async def get_2gis_route_distance(
             response_text,
             extra=log_context,
         )
-        return _resolve_route_distance_failure(strict=strict, fallback_km=fallback_km)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=ROUTE_BUILD_ERROR_MESSAGE)
 
     try:
         response_data = response.json()
@@ -187,7 +164,7 @@ async def get_2gis_route_distance(
                 response_text,
                 extra=log_context,
             )
-            return _resolve_route_distance_failure(strict=strict, fallback_km=fallback_km)
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=ROUTE_BUILD_ERROR_MESSAGE)
 
         routes = response_data.get("result")
         if not isinstance(routes, list) or not routes:
@@ -198,12 +175,12 @@ async def get_2gis_route_distance(
             raise ValueError("2GIS distance must be positive")
 
         return round(meters / 1000.0, 2)
-    except Exception:
+    except (AttributeError, KeyError, TypeError, ValueError):
         logger.exception(
-            "2gis_distance_fallback_parse_error",
+            "2gis_route_parse_error",
             extra={**log_context, "response_text": response_text},
         )
-        return _resolve_route_distance_failure(strict=strict, fallback_km=fallback_km)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=ROUTE_BUILD_ERROR_MESSAGE)
 
 
 async def calculate_client_order_pricing(

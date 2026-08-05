@@ -59,7 +59,7 @@ jobs:
             xcodebuild -workspace ios/App/App.xcworkspace \
                        -scheme App \
                        -sdk iphonesimulator \
-                       -destination 'platform=iOS Simulator,name=iPhone 16,OS=26.2,arch=arm64' \
+                       -destination 'generic/platform=iOS Simulator' \
                        -configuration Debug \
                        -derivedDataPath ios/build \
                        ONLY_ACTIVE_ARCH=YES \
@@ -70,7 +70,7 @@ jobs:
             xcodebuild -project ios/App/App.xcodeproj \
                        -scheme App \
                        -sdk iphonesimulator \
-                       -destination 'platform=iOS Simulator,name=iPhone 16,OS=26.2,arch=arm64' \
+                       -destination 'generic/platform=iOS Simulator' \
                        -configuration Debug \
                        -derivedDataPath ios/build \
                        ONLY_ACTIVE_ARCH=YES \

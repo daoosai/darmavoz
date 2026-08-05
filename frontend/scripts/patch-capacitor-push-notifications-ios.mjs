@@ -6,7 +6,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const packageRoot = resolve(root, 'node_modules/@capacitor/push-notifications');
 const packageJson = JSON.parse(readFileSync(resolve(packageRoot, 'package.json'), 'utf8'));
 
-if (packageJson.version !== '8.1.2') {
+if (packageJson.version !== '8.1.3-nightly-20260804T154935.0') {
   throw new Error(`Unsupported @capacitor/push-notifications version: ${packageJson.version}`);
 }
 

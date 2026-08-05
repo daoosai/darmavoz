@@ -31,8 +31,10 @@ jobs:
       - name: Build Web Assets
         run: npm run build
 
-      - name: Capacitor Sync iOS & Pod Install
+      - name: Capacitor Sync iOS & Reset SPM
         run: |
+          rm -f ios/App/CapApp-SPM/Package.resolved
+          rm -f ios/App/Package.resolved
           npx cap sync ios
           if [ -f "ios/App/Podfile" ]; then
             cd ios/App && pod install && cd ../..

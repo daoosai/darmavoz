@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     S3_PRESIGN_ENDPOINT: str | None = None
     S3_PRESIGN_TTL_SECONDS: int = 900
     S3_PREFIX: str = "prod"
-    CORS_ORIGINS: str = "http://localhost,https://localhost,capacitor://localhost"
+    CORS_ORIGINS: str = "http://localhost,https://localhost,capacitor://localhost,http://localhost:5173"
     MEDIA_MAX_FILE_SIZE_BYTES: int = 10485760
     DISPATCH_POLL_INTERVAL_SECONDS: int = 5
     DISPATCH_OFFER_TIMEOUT_SECONDS: int = 120

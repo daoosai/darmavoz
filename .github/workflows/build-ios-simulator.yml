@@ -31,19 +31,38 @@ jobs:
       - name: Build Web Assets
         run: npm run build
 
-      - name: Capacitor Sync iOS
-        run: npx cap sync ios
+      - name: Capacitor Sync iOS & Pod Install
+        run: |
+          npx cap sync ios
+          if [ -f "ios/App/Podfile" ]; then
+            cd ios/App && pod install && cd ../..
+          fi
 
       - name: Build for iOS Simulator
         run: |
-          xcodebuild -workspace ios/App/App.xcworkspace \
-                     -scheme App \
-                     -sdk iphonesimulator \
-                     -configuration Debug \
-                     -derivedDataPath ios/build \
-                     CODE_SIGN_IDENTITY="" \
-                     CODE_SIGNING_REQUIRED=NO \
-                     CODE_SIGNING_ALLOWED=NO
+          if [ -d "ios/App/App.xcworkspace" ]; then
+            xcodebuild -workspace ios/App/App.xcworkspace \
+                       -scheme App \
+                       -sdk iphonesimulator \
+                       -configuration Debug \
+                       -derivedDataPath ios/build \
+                       CODE_SIGN_IDENTITY="" \
+                       CODE_SIGNING_REQUIRED=NO \
+                       CODE_SIGNING_ALLOWED=NO
+          elif [ -d "ios/App/App.xcodeproj" ]; then
+            xcodebuild -project ios/App/App.xcodeproj \
+                       -scheme App \
+                       -sdk iphonesimulator \
+                       -configuration Debug \
+                       -derivedDataPath ios/build \
+                       CODE_SIGN_IDENTITY="" \
+                       CODE_SIGNING_REQUIRED=NO \
+                       CODE_SIGNING_ALLOWED=NO
+          else
+            echo "Error: Neither App.xcworkspace nor App.xcodeproj found!"
+            ls -la ios/App || true
+            exit 1
+          fi
 
       - name: Zip Simulator App
         run: |

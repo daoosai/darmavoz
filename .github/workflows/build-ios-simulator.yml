@@ -8,7 +8,7 @@ on:
       - '.github/workflows/build-ios-simulator.yml'
       - 'frontend/package.json'
       - 'frontend/package-lock.json'
-      - 'frontend/scripts/patch-capacitor-push-notifications-ios.mjs'
+      - 'frontend/scripts/**'
       - 'frontend/ios/**'
   workflow_dispatch: # Запуск вручную из вкладки Actions
 

@@ -14,7 +14,7 @@
     "assets:generate": "capacitor-assets generate",
     "generate-icons": "npx pwa-asset-generator public/logo.png public/icons -i public/index.html -m public/manifest.webmanifest -v",
     "version:sync": "node scripts/sync_version.js",
-    "postinstall": "node scripts/patch-capacitor-push-notifications-ios.mjs"
+    "postinstall": "node scripts/patch-capacitor-ios-swift-api.mjs && node scripts/patch-capacitor-push-notifications-ios.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.2",

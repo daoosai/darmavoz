@@ -42,7 +42,7 @@ jobs:
       - name: Build Web Assets
         run: npm run build
         env:
-          VITE_API_BASE_URL: https://test.darmavoz.ru
+          VITE_API_BASE_URL: https://test.darmavoz.ru/api/v1
 
       - name: Capacitor Sync iOS & Reset SPM
         run: |

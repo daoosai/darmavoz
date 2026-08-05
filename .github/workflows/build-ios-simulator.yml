@@ -83,11 +83,20 @@ jobs:
 
       - name: Zip Simulator App
         run: |
-          cd ios/build/Build/Products/Debug-iphonesimulator
-          zip -r App.app.zip App.app
+          APP_PATH=$(find ios/build -name "*.app" -type d | head -n 1)
+          echo "Found compiled app at: $APP_PATH"
+          if [ -z "$APP_PATH" ]; then
+            echo "Error: No .app directory found in ios/build!"
+            exit 1
+          fi
+          APP_DIR=$(dirname "$APP_PATH")
+          APP_NAME=$(basename "$APP_PATH")
+          cd "$APP_DIR"
+          zip -r App.app.zip "$APP_NAME"
+          echo "Successfully created App.app.zip in $APP_DIR"
 
       - name: Upload Artifact for Appetize
         uses: actions/upload-artifact@v4
         with:
           name: ios-simulator-app
-          path: frontend/ios/build/Build/Products/Debug-iphonesimulator/App.app.zip
+          path: frontend/ios/build/**/App.app.zip

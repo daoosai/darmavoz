@@ -1,6 +1,11 @@
 name: Build iOS Simulator App
 
 on:
+  push:
+    branches:
+      - develop
+    paths:
+      - '.github/workflows/build-ios-simulator.yml'
   workflow_dispatch: # Запуск вручную из вкладки Actions
 
 jobs:

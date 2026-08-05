@@ -13,7 +13,7 @@ import { useAuthStore, usePlacementStore } from "./store";
 import { baseURL, extractApiErrorMessage, formatPhoneNumber, resolveMediaUrl } from "./utils";
 import { PlacementBadge, PlacementDates, type PlacementStatus } from "./placement";
 
-type Tab = "listings" | "moderation" | "types";
+export type AdminEquipmentTab = "listings" | "moderation" | "types";
 
 interface ListingTariffForm {
   type: "hour" | "shift";
@@ -82,11 +82,18 @@ const serializeDateInputValue = (value: string) => {
 
 export default function AdminEquipmentScreen({
   onPendingModerationChanged,
+  tab,
+  onTabChange,
+  placementFilter,
+  onPlacementFilterChange,
 }: {
   onPendingModerationChanged?: (count: number) => void;
+  tab: AdminEquipmentTab;
+  onTabChange: (value: AdminEquipmentTab) => void;
+  placementFilter: PlacementStatus | "";
+  onPlacementFilterChange: (value: PlacementStatus | "") => void;
 }) {
   const { token, role } = useAuthStore();
-  const [tab, setTab] = useState<Tab>("listings");
   const [types, setTypes] = useState<EquipmentTypeItem[]>([]);
   const [listings, setListings] = useState<EquipmentListing[]>([]);
   const [loading, setLoading] = useState(true);
@@ -96,7 +103,6 @@ export default function AdminEquipmentScreen({
   const [rejectingListing, setRejectingListing] = useState<EquipmentListing | null>(null);
   const [listingRejectReason, setListingRejectReason] = useState("");
   const [isRejectingListing, setIsRejectingListing] = useState(false);
-  const [placementFilter, setPlacementFilter] = useState<PlacementStatus | "">("");
   const { policy, loadPolicy, loadSummary } = usePlacementStore();
 
   const headers = { Authorization: `Bearer ${token}` };
@@ -461,7 +467,7 @@ export default function AdminEquipmentScreen({
         ].map(([value, label]) => (
           <button
             key={value}
-            onClick={() => setTab(value as Tab)}
+            onClick={() => onTabChange(value as AdminEquipmentTab)}
             className={`shrink-0 rounded-xl px-5 py-3 text-sm font-bold ${
               tab === value ? "bg-sky-500 text-white" : "text-slate-500"
             }`}
@@ -626,7 +632,7 @@ export default function AdminEquipmentScreen({
 
           <select
             value={placementFilter}
-            onChange={(event) => setPlacementFilter(event.target.value as PlacementStatus | "")}
+            onChange={(event) => onPlacementFilterChange(event.target.value as PlacementStatus | "")}
             className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm sm:w-auto"
           >
             <option value="">Все статусы размещения</option>
@@ -640,7 +646,11 @@ export default function AdminEquipmentScreen({
           </select>
 
           <div className="grid gap-4 lg:grid-cols-2">
-            {listings.map((item) => (
+            {listings.length === 0 ? (
+              <p className="rounded-2xl bg-white p-10 text-center text-slate-500 shadow-sm lg:col-span-2">
+                Нет спецтехники
+              </p>
+            ) : listings.map((item) => (
               <div key={item.id} className="overflow-hidden rounded-3xl bg-white shadow-sm">
                 <div className="relative bg-slate-100">
                   {item.primary_image_url ? (

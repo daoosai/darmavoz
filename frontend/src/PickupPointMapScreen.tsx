@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import ClientAddressBottomSheet from "./ClientAddressBottomSheet";
-import MapWebGLFallback, { tryCreate2GisMap } from "./components/MapWebGLFallback";
+import MapWebGLFallback, { load2GisMapSdk, tryCreate2GisMap } from "./components/MapWebGLFallback";
 import { baseURL, formatPhoneNumber } from "./utils";
 import { MaterialProps } from "./MaterialDetailScreen";
 import { useAddressStore } from "./store";
@@ -335,26 +335,34 @@ export default function PickupPointMapScreen({
   }, [material.id]);
 
   useEffect(() => {
-    const mapgl = (window as any).mapgl;
+    let disposed = false;
     const key = import.meta.env.VITE_2GIS_KEY;
-    if (!mapContainerRef.current || !mapgl || !key || mapRef.current) {
+    if (!mapContainerRef.current || !key || mapRef.current) {
       if (!key) setError("Ключ карты 2ГИС не настроен");
       return;
     }
-    const mapInstance = tryCreate2GisMap(
-      () =>
-        new mapgl.Map(mapContainerRef.current, {
-          center: [65.527202, 57.152223],
-          zoom: 10,
-          key,
-        }),
-      () => setIsMapUnavailable(true),
-    );
-    if (!mapInstance) return;
-
-    mapRef.current = mapInstance;
-    setIsMapReady(true);
+    void load2GisMapSdk()
+      .then((mapgl) => {
+        if (disposed || !mapContainerRef.current || mapRef.current) return;
+        const mapInstance = tryCreate2GisMap(
+          () => new mapgl.Map(mapContainerRef.current, {
+            center: [65.527202, 57.152223],
+            zoom: 10,
+            key,
+          }),
+          () => setIsMapUnavailable(true),
+        );
+        if (!mapInstance) return;
+        if (disposed) {
+          mapInstance.destroy();
+          return;
+        }
+        mapRef.current = mapInstance;
+        setIsMapReady(true);
+      })
+      .catch(() => !disposed && setIsMapUnavailable(true));
     return () => {
+      disposed = true;
       markerRefs.current.forEach((marker) => marker.destroy());
       markerRefs.current = [];
       userMarkerRef.current?.destroy?.();

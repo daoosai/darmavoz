@@ -8,7 +8,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.db.database import AsyncSessionLocal
-from app.models.models import Order, Quarry, SpecialEquipmentApplication
+from app.models.models import (
+    Order,
+    Quarry,
+    SpecialEquipmentApplication,
+    SpecialEquipmentListing,
+)
 from app.services.push_service import (
     schedule_push_to_client,
     schedule_push_to_driver,
@@ -263,12 +268,27 @@ def schedule_logist_no_driver_found_notification(order: Order) -> None:
     )
 
 
-def schedule_pickup_point_moderation_notification(point: Quarry) -> None:
+def schedule_pickup_point_moderation_notification(
+    point: Quarry,
+    *,
+    is_resubmission: bool = False,
+) -> None:
     point_type_ru = "Точка забора"
     if point.point_type == "quarry":
         point_type_ru = "Карьер"
     elif point.point_type in {"accumulator", "warehouse", "supplier"}:
         point_type_ru = "Накопитель"
+
+    title = "Новая заявка на модерацию"
+    body = (
+        f'Поставщик добавил новый {point_type_ru} "{point.name}" и ожидает проверки.'
+    )
+    if is_resubmission:
+        title = "Изменения точки ожидают модерации"
+        body = (
+            f'Поставщик отправил изменения по точке "{point.name}" на повторную '
+            "модерацию."
+        )
 
     logger.info(
         "pickup_point_moderation_push_scheduled",
@@ -280,11 +300,53 @@ def schedule_pickup_point_moderation_notification(point: Quarry) -> None:
     )
     _safe_schedule(
         schedule_push_to_logists,
-        "Новая заявка на модерацию",
-        f'Поставщик добавил новый {point_type_ru} "{point.name}" и ожидает проверки.',
+        title,
+        body,
         {
             "event": "pickup_point_pending_moderation",
             "pickup_point_id": str(point.id),
+            "is_resubmission": "true" if is_resubmission else "false",
+            "moderation_scope": "pickup_point",
+        },
+    )
+
+
+def schedule_equipment_listing_moderation_notification(
+    listing: SpecialEquipmentListing,
+    *,
+    is_resubmission: bool = False,
+) -> None:
+    equipment_type = (listing.equipment_type or "спецтехника").strip() or "спецтехника"
+    listing_title = (listing.title or "Без названия").strip() or "Без названия"
+    title = "Новое объявление ожидает модерации"
+    body = (
+        f'Поставщик добавил объявление "{listing_title}" '
+        f"({equipment_type}) и ожидает проверки."
+    )
+    if is_resubmission:
+        title = "Изменения объявления ожидают модерации"
+        body = (
+            f'Поставщик отправил изменения объявления "{listing_title}" '
+            "на повторную модерацию."
+        )
+
+    logger.info(
+        "equipment_listing_moderation_push_scheduled",
+        extra={
+            "event": "equipment_listing_pending_moderation",
+            "listing_id": str(listing.id),
+            "owner_user_id": str(listing.owner_user_id) if listing.owner_user_id else None,
+        },
+    )
+    _safe_schedule(
+        schedule_push_to_logists,
+        title,
+        body,
+        {
+            "event": "equipment_listing_pending_moderation",
+            "listing_id": str(listing.id),
+            "is_resubmission": "true" if is_resubmission else "false",
+            "moderation_scope": "equipment_listing",
         },
     )
 

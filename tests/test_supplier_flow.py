@@ -39,12 +39,22 @@ async def test_supplier_auth_creates_only_user_and_allows_multiple_points(
     monkeypatch,
 ):
     fake_redis = FakeRedis()
+    point_notifications: list[dict[str, object]] = []
 
     async def fake_send_sms(**_kwargs) -> str:
         return "0000"
 
     monkeypatch.setattr("app.api.supplier_auth.get_redis", lambda: fake_redis)
     monkeypatch.setattr("app.api.supplier_auth.send_auth_sms_code", fake_send_sms)
+    monkeypatch.setattr(
+        "app.api.supplier_points.schedule_pickup_point_moderation_notification",
+        lambda point, is_resubmission=False: point_notifications.append(
+            {
+                "point_id": point.id,
+                "is_resubmission": is_resubmission,
+            }
+        ),
+    )
 
     async with session_factory() as session:
         points_before_registration = await session.scalar(select(func.count()).select_from(Quarry))
@@ -189,6 +199,10 @@ async def test_supplier_auth_creates_only_user_and_allows_multiple_points(
     assert edited_point.json()["name"] == "Test point"
     assert edited_point.json()["moderation_status"] == ModerationStatus.has_pending_changes.value
     assert edited_point.json()["pending_changes"]["name"] == "Updated test point"
+    assert point_notifications[-1] == {
+        "point_id": UUID(first_point.json()["id"]),
+        "is_resubmission": True,
+    }
 
     points = await client.get("/api/v1/supplier/points", headers=headers)
     assert points.status_code == 200

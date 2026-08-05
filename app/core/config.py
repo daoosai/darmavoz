@@ -112,3 +112,4 @@ class Settings(BaseSettings):
         return candidates
 
 settings = Settings()
+

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent 
 import { ImagePlus, Loader2, MapPin, Search, X } from "lucide-react";
 import toast from "react-hot-toast";
 import type { PlacementFields } from "./placement";
-import MapWebGLFallback, { tryCreate2GisMap } from "./components/MapWebGLFallback";
+import MapWebGLFallback, { load2GisMapSdk, tryCreate2GisMap } from "./components/MapWebGLFallback";
 
 import {
   fetch2gisAddressSuggestions,
@@ -220,6 +220,8 @@ export default function SupplierCreatePointModal({
     if (lat === null || lon === null) return null;
     return { lat, lon };
   }, [form.lat, form.lon]);
+  const parsedCoordinatesRef = useRef(parsedCoordinates);
+  parsedCoordinatesRef.current = parsedCoordinates;
 
   const createDraggableMarker = (mapInstance: any, coordinates: [number, number]) => {
     const mapgl = (window as any).mapgl;
@@ -239,34 +241,41 @@ export default function SupplierCreatePointModal({
   };
 
   useEffect(() => {
-    const mapgl = (window as any).mapgl;
+    let disposed = false;
     const key = import.meta.env.VITE_2GIS_KEY;
-    if (!mapgl || !key || !mapContainerRef.current || mapRef.current) return;
+    if (!key || !mapContainerRef.current || mapRef.current) return;
 
-    const initialCoordinates = parsedCoordinates;
-    const mapInstance = tryCreate2GisMap(
-      () =>
-        new mapgl.Map(mapContainerRef.current, {
-          center: initialCoordinates
-            ? [initialCoordinates.lon, initialCoordinates.lat]
-            : DEFAULT_MAP_CENTER,
-          zoom: 12,
-          key,
-        }),
-      () => setIsMapUnavailable(true),
-    );
-    if (!mapInstance) return;
-
-    mapRef.current = mapInstance;
-
-    if (initialCoordinates) {
-      markerRef.current = createDraggableMarker(mapInstance, [
-        initialCoordinates.lon,
-        initialCoordinates.lat,
-      ]);
-    }
+    void load2GisMapSdk()
+      .then((mapgl) => {
+        if (disposed || !mapContainerRef.current || mapRef.current) return;
+        const initialCoordinates = parsedCoordinatesRef.current;
+        const mapInstance = tryCreate2GisMap(
+          () => new mapgl.Map(mapContainerRef.current, {
+            center: initialCoordinates
+              ? [initialCoordinates.lon, initialCoordinates.lat]
+              : DEFAULT_MAP_CENTER,
+            zoom: 12,
+            key,
+          }),
+          () => setIsMapUnavailable(true),
+        );
+        if (!mapInstance) return;
+        if (disposed) {
+          mapInstance.destroy();
+          return;
+        }
+        mapRef.current = mapInstance;
+        if (initialCoordinates) {
+          markerRef.current = createDraggableMarker(mapInstance, [
+            initialCoordinates.lon,
+            initialCoordinates.lat,
+          ]);
+        }
+      })
+      .catch(() => !disposed && setIsMapUnavailable(true));
 
     return () => {
+      disposed = true;
       if (markerRef.current) {
         markerRef.current.destroy();
         markerRef.current = null;
@@ -276,7 +285,7 @@ export default function SupplierCreatePointModal({
         mapRef.current = null;
       }
     };
-  }, [parsedCoordinates]);
+  }, []);
 
   useEffect(() => {
     const mapgl = (window as any).mapgl;

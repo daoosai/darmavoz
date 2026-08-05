@@ -48,6 +48,7 @@ from app.services.notifications import (
     schedule_equipment_application_cancelled_notification,
     schedule_equipment_application_notification,
     schedule_equipment_application_rejected_notification,
+    schedule_equipment_listing_moderation_notification,
 )
 from app.services.email_service import send_email
 from app.services.moderation import (
@@ -680,8 +681,9 @@ async def list_admin_equipment(
             selectinload(SpecialEquipmentListing.equipment_type_ref),
             selectinload(SpecialEquipmentListing.owner),
         )
-        .where(SpecialEquipmentListing.is_deleted.is_(False))
     )
+    if placement_status != PlacementStatus.archived:
+        stmt = stmt.where(SpecialEquipmentListing.is_deleted.is_(False))
     if equipment_type_id:
         stmt = stmt.where(SpecialEquipmentListing.equipment_type_id == equipment_type_id)
     if equipment_type:
@@ -962,6 +964,7 @@ async def _update_owner_equipment(
 ) -> dict:
     listing = await _get_listing(db, listing_id)
     if listing.owner_user_id == current_owner.id:
+        previous_status = listing.moderation_status
         payload_data = await _normalize_listing_update_data(db, payload)
         use_pending_changes = listing.moderation_status in OWNER_PENDING_EDIT_STATUSES
         pending_changes: dict = {}
@@ -997,6 +1000,14 @@ async def _update_owner_equipment(
             action="изменил",
             fields_summary=summarize_pending_changes(pending_changes),
         )
+        if (
+            previous_status in {ModerationStatus.approved.value, ModerationStatus.rejected.value}
+            or listing.moderation_status == ModerationStatus.has_pending_changes.value
+        ):
+            schedule_equipment_listing_moderation_notification(
+                listing,
+                is_resubmission=True,
+            )
         return await _listing_payload(
             db,
             await _get_listing(db, listing.id),

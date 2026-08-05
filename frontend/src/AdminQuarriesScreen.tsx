@@ -194,50 +194,119 @@ const buildQuarryFormData = (quarry: Quarry): QuarryFormData => ({
 interface AdminQuarriesScreenProps {
   materials: any[];
   onPointsChanged?: () => void | Promise<void>;
+  statusFilter: string;
+  onStatusFilterChange: (value: string) => void;
+  placementFilter: PlacementStatus | "";
+  onPlacementFilterChange: (value: PlacementStatus | "") => void;
+  typeFilter: string;
+  onTypeFilterChange: (value: string) => void;
 }
+
+const ALLOWED_POINT_TYPES = new Set(["quarry", "accumulator", "warehouse", "supplier"]);
+const ALLOWED_MODERATION_FILTERS = new Set([
+  "",
+  "pending_moderation",
+  "approved",
+  "rejected",
+  "suspended",
+  "has_pending_changes",
+]);
+const ALLOWED_PLACEMENT_FILTERS = new Set<PlacementStatus | "">([
+  "",
+  "active",
+  "trial",
+  "confirmation_required",
+  "hidden",
+  "expired",
+  "archived",
+  "pending_moderation",
+]);
 
 export default function AdminQuarriesScreen({
   materials,
   onPointsChanged,
+  statusFilter,
+  onStatusFilterChange,
+  placementFilter,
+  onPlacementFilterChange,
+  typeFilter,
+  onTypeFilterChange,
 }: AdminQuarriesScreenProps) {
   const { token } = useAuthStore();
   const [quarries, setQuarries] = useState<Quarry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingQuarry, setEditingQuarry] = useState<Quarry | null>(null);
-  const [statusFilter, setStatusFilter] = useState("");
-  const [placementFilter, setPlacementFilter] = useState<PlacementStatus | "">("");
-  const [typeFilter, setTypeFilter] = useState("");
   const [isModerating, setIsModerating] = useState(false);
   const [deletingPointId, setDeletingPointId] = useState<string | null>(null);
   const [rejectPointId, setRejectPointId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const { policy, loadPolicy, loadSummary } = usePlacementStore();
+  const normalizedStatusFilter = ALLOWED_MODERATION_FILTERS.has(statusFilter)
+    ? statusFilter
+    : "";
+  const normalizedPlacementFilter = ALLOWED_PLACEMENT_FILTERS.has(placementFilter)
+    ? placementFilter
+    : "";
+  const normalizedTypeFilter = ALLOWED_POINT_TYPES.has(typeFilter)
+    ? typeFilter
+    : "";
 
   const fetchQuarries = async () => {
+    if (!token) {
+      return;
+    }
     try {
       setIsLoading(true);
       const params = new URLSearchParams();
-      if (statusFilter) params.set("moderation_status", statusFilter);
-      if (placementFilter) params.set("placement_status", placementFilter);
-      if (typeFilter) params.set("point_type", typeFilter);
-      const res = await fetch(`${baseURL}/admin/pickup-points?${params}`, {
+      if (normalizedStatusFilter) {
+        params.set("moderation_status", normalizedStatusFilter);
+      }
+      if (normalizedPlacementFilter) {
+        params.set("placement_status", normalizedPlacementFilter);
+      }
+      if (normalizedTypeFilter) {
+        params.set("point_type", normalizedTypeFilter);
+      }
+      const query = params.toString();
+      const requestUrl = query
+        ? `${baseURL}/admin/pickup-points?${query}`
+        : `${baseURL}/admin/pickup-points`;
+      const res = await fetch(requestUrl, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.ok) {
-        const data = await res.json();
-        setQuarries(data);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(
+          extractApiErrorMessage(data, "Не удалось загрузить список точек"),
+        );
       }
+      const data = await res.json().catch(() => []);
+      const loadedPoints = Array.isArray(data)
+        ? data
+        : Array.isArray((data as { items?: unknown[] }).items)
+          ? (data as { items: Quarry[] }).items
+          : Array.isArray((data as { results?: unknown[] }).results)
+            ? (data as { results: Quarry[] }).results
+            : [];
+      setQuarries(loadedPoints);
     } catch (e) {
       console.error("Error fetching quarries", e);
+      setQuarries([]);
+      toast.error(
+        e instanceof Error ? e.message : "Не удалось загрузить список точек",
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
+    if (!token) {
+      return;
+    }
     fetchQuarries();
-  }, [statusFilter, placementFilter, typeFilter]);
+  }, [token, normalizedStatusFilter, normalizedPlacementFilter, normalizedTypeFilter]);
 
   useEffect(() => {
     if (!policy) void loadPolicy();
@@ -393,7 +462,7 @@ export default function AdminQuarriesScreen({
       </div>
 
       <div className="grid grid-cols-2 gap-3 bg-white p-3 rounded-2xl border border-slate-100">
-        <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
+        <select value={normalizedStatusFilter} onChange={(event) => onStatusFilterChange(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
           <option value="">Все статусы</option>
           <option value="pending_moderation">На модерации</option>
           <option value="approved">Одобрено</option>
@@ -401,7 +470,7 @@ export default function AdminQuarriesScreen({
           <option value="suspended">Приостановлено</option>
           <option value="has_pending_changes">Есть правки</option>
         </select>
-        <select value={placementFilter} onChange={(event) => setPlacementFilter(event.target.value as PlacementStatus | "")} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
+        <select value={normalizedPlacementFilter} onChange={(event) => onPlacementFilterChange(event.target.value as PlacementStatus | "")} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
           <option value="">Все размещения</option>
           <option value="active">Активные</option>
           <option value="trial">Тестовый период</option>
@@ -410,7 +479,7 @@ export default function AdminQuarriesScreen({
           <option value="expired">Завершённые</option>
           <option value="archived">Архив</option>
         </select>
-        <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
+        <select value={normalizedTypeFilter} onChange={(event) => onTypeFilterChange(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
           <option value="">Все типы</option>
           <option value="quarry">Карьеры</option>
           <option value="accumulator">Накопители</option>
@@ -420,24 +489,23 @@ export default function AdminQuarriesScreen({
       </div>
 
       {/* Desktop View */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden hidden md:block">
-        <div className="overflow-x-auto w-full">
-          <table className="w-full text-left border-collapse min-w-[720px]">
+      <div className="hidden overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm md:block">
+        <div className="w-full">
+          <table className="w-full border-collapse text-left">
             <thead>
               <tr className="bg-slate-50/80 text-slate-500 text-xs uppercase tracking-wider font-bold">
-                <th className="p-4 border-b border-slate-100">ID</th>
                 <th className="p-4 border-b border-slate-100">Тип</th>
                 <th className="p-4 border-b border-slate-100">Название</th>
                 <th className="p-4 border-b border-slate-100">Адрес</th>
                 <th className="p-4 border-b border-slate-100">Статус</th>
                 <th className="p-4 border-b border-slate-100">Модерация</th>
-                <th className="min-w-[280px] p-4 border-b border-slate-100">Действия</th>
+                <th className="w-[340px] min-w-[340px] whitespace-nowrap p-4 border-b border-slate-100">Действия</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {quarries.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-500">
+                  <td colSpan={6} className="p-8 text-center text-slate-500">
                     Нет точек
                   </td>
                 </tr>
@@ -447,9 +515,6 @@ export default function AdminQuarriesScreen({
                     key={quarry.id}
                     className="hover:bg-slate-50/50 transition-colors"
                   >
-                    <td className="p-4 text-sm font-medium text-slate-600">
-                      #{quarry.id}
-                    </td>
                     <td className="p-4">
                       <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
                         {POINT_TYPE_LABELS[quarry.point_type] || quarry.point_type}
@@ -495,8 +560,8 @@ export default function AdminQuarriesScreen({
                         {moderationBadge(quarry.moderation_status).label}
                       </span>
                     </td>
-                    <td className="min-w-[280px] align-top p-4">
-                      <div className="flex flex-wrap gap-2">
+                    <td className="w-[340px] min-w-[340px] align-top p-4">
+                      <div className="flex flex-wrap gap-2 md:flex-nowrap md:whitespace-nowrap">
                         <button
                           onClick={() => handleOpenModal(quarry)}
                           className="p-2 text-slate-400 hover:text-[#2DB0E6] hover:bg-[#2DB0E6]/10 rounded-xl transition-all"

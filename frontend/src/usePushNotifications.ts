@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { PushNotifications } from '@capacitor/push-notifications';
-import { useAuthStore } from './store';
+import {
+  isAdminModerationEvent,
+  useAdminModerationStore,
+  useAuthStore,
+} from './store';
 import { baseURL } from './utils';
 import toast from 'react-hot-toast';
 import { Capacitor } from '@capacitor/core';
@@ -32,6 +36,9 @@ const saveFcmToken = async (endpoint: string, authToken: string, fcmToken: strin
 
 export const usePushNotifications = () => {
   const { token, role } = useAuthStore();
+  const registerModerationNotification = useAdminModerationStore(
+    (state) => state.registerNotification,
+  );
   const [isPushEnabled, setIsPushEnabled] = useState<boolean>(() =>
     isPushEnabledForRole(useAuthStore.getState().role),
   );
@@ -136,9 +143,24 @@ export const usePushNotifications = () => {
       });
   };
 
-  const handleForegroundPush = (title?: string, body?: string) => {
+  const handleForegroundPush = (
+    title?: string,
+    body?: string,
+    data?: Record<string, unknown> | null,
+  ) => {
     const safeTitle = title?.trim() || '';
     const safeBody = body?.trim() || '';
+    const rawEvent = typeof data?.event === 'string' ? data.event : '';
+    if (
+      (role === 'admin' || role === 'logist') &&
+      isAdminModerationEvent(rawEvent)
+    ) {
+      registerModerationNotification({
+        event: rawEvent,
+        title: safeTitle,
+        body: safeBody,
+      });
+    }
     playNotificationSound();
 
     const toastMessage = [safeTitle, safeBody].filter(Boolean).join('\n');
@@ -224,7 +246,11 @@ export const usePushNotifications = () => {
         PushNotifications.addListener('pushNotificationReceived', (notification) => {
           if (!isMounted) return;
           console.log('Foreground push received:', notification);
-          handleForegroundPush(notification.title, notification.body);
+          handleForegroundPush(
+            notification.title,
+            notification.body,
+            (notification.data as Record<string, unknown> | undefined) || null,
+          );
         });
 
         PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
@@ -275,7 +301,11 @@ export const usePushNotifications = () => {
               // ignore system notification errors in foreground
             }
           }
-          handleForegroundPush(notificationTitle, notificationBody);
+          handleForegroundPush(
+            notificationTitle,
+            notificationBody,
+            (payload.data as Record<string, unknown> | undefined) || null,
+          );
         });
       } catch (err) {
         console.error('Web push notification setup failed', err);
@@ -303,5 +333,5 @@ export const usePushNotifications = () => {
         webUnsubscribe();
       }
     };
-  }, [token, role, isPushEnabled]);
+  }, [token, role, isPushEnabled, registerModerationNotification]);
 };

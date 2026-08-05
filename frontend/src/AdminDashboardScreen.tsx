@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { useAuthStore } from "./store";
+import { useAdminModerationStore, useAuthStore } from "./store";
 import { baseURL, extractApiErrorMessage, handleApiError } from "./utils";
 import {
   LogOut,
@@ -37,8 +37,9 @@ import PlacementSummaryPanel from "./components/admin/PlacementSummaryPanel";
 import { DriverHistoryModal } from "./components/admin/DriverHistoryModal";
 import toast from "react-hot-toast";
 import { logoutCurrentSession } from "./pushAuth";
-import AdminEquipmentScreen from "./AdminEquipmentScreen";
+import AdminEquipmentScreen, { type AdminEquipmentTab } from "./AdminEquipmentScreen";
 import SupportScreen from "./SupportScreen";
+import { type PlacementStatus } from "./placement";
 
 interface AdminCategory {
   id: string;
@@ -153,10 +154,19 @@ interface AdminDashboardScreenProps {
   onLogout: () => void;
 }
 
+interface QuarrySummaryFilters {
+  statusFilter: string;
+  placementFilter: PlacementStatus | "";
+  typeFilter: string;
+}
+
 export default function AdminDashboardScreen({
   onLogout,
 }: AdminDashboardScreenProps) {
   const { token } = useAuthStore();
+  const moderationRefreshNonce = useAdminModerationStore(
+    (state) => state.refreshNonce,
+  );
   const [activeTab, setActiveTab] = useState<
     "materials" | "quarries" | "delivery" | "drivers" | "moderation" | "suppliers" | "equipment" | "support" | "profile"
   >("materials");
@@ -212,12 +222,78 @@ export default function AdminDashboardScreen({
     useState(0);
   const [pendingEquipmentModerationCount, setPendingEquipmentModerationCount] =
     useState(0);
+  const [quarryStatusFilter, setQuarryStatusFilter] = useState("");
+  const [quarryPlacementFilter, setQuarryPlacementFilter] = useState<PlacementStatus | "">("");
+  const [quarryTypeFilter, setQuarryTypeFilter] = useState("");
+  const [quarrySummaryFilters, setQuarrySummaryFilters] =
+    useState<QuarrySummaryFilters | null>(null);
+  const [equipmentPlacementFilter, setEquipmentPlacementFilter] = useState<PlacementStatus | "">("");
+  const [equipmentTab, setEquipmentTab] = useState<AdminEquipmentTab>("listings");
   const [driverActiveOverrides, setDriverActiveOverrides] = useState<
     Record<string, boolean>
   >({});
   const [categories, setCategories] = useState<AdminCategory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingModeration, setIsLoadingModeration] = useState(false);
+  const summaryManagedSection =
+    activeTab === "quarries" ? "quarries" : activeTab === "equipment" ? "equipment" : null;
+  const effectiveQuarryStatusFilter =
+    quarrySummaryFilters?.statusFilter ?? quarryStatusFilter;
+  const effectiveQuarryPlacementFilter =
+    quarrySummaryFilters?.placementFilter ?? quarryPlacementFilter;
+  const effectiveQuarryTypeFilter =
+    quarrySummaryFilters?.typeFilter ?? quarryTypeFilter;
+
+  const openSummaryPoints = ({
+    statusFilter = "",
+    placementFilter = "",
+    typeFilter = "",
+  }: {
+    statusFilter?: string;
+    placementFilter?: PlacementStatus | "";
+    typeFilter?: string;
+  }) => {
+    setActiveTab("quarries");
+    if (!statusFilter && !placementFilter && !typeFilter) {
+      setQuarrySummaryFilters(null);
+    } else {
+      setQuarrySummaryFilters({
+        statusFilter,
+        placementFilter,
+        typeFilter,
+      });
+    }
+    setQuarryStatusFilter(statusFilter);
+    setQuarryPlacementFilter(placementFilter);
+    setQuarryTypeFilter(typeFilter);
+  };
+
+  const handleQuarryStatusFilterChange = (value: string) => {
+    setQuarrySummaryFilters(null);
+    setQuarryStatusFilter(value);
+  };
+
+  const handleQuarryPlacementFilterChange = (value: PlacementStatus | "") => {
+    setQuarrySummaryFilters(null);
+    setQuarryPlacementFilter(value);
+  };
+
+  const handleQuarryTypeFilterChange = (value: string) => {
+    setQuarrySummaryFilters(null);
+    setQuarryTypeFilter(value);
+  };
+
+  const openSummaryEquipment = ({
+    placementFilter = "",
+    tab = "listings",
+  }: {
+    placementFilter?: PlacementStatus | "";
+    tab?: AdminEquipmentTab;
+  }) => {
+    setActiveTab("equipment");
+    setEquipmentTab(tab);
+    setEquipmentPlacementFilter(placementFilter);
+  };
 
   const normalizeDriverModerationStatus = (value?: string | null) => {
     const normalized = value?.trim().toLowerCase();
@@ -339,9 +415,11 @@ export default function AdminDashboardScreen({
   const [previewLeft, setPreviewLeft] = useState<string | null>(null);
   const [previewPlate, setPreviewPlate] = useState<string | null>(null);
 
-  const pendingDriversCount =
-    pendingDriverModerationCount ||
-    drivers.filter((driver) => driver.moderation_status === "pending_moderation").length;
+  const pendingDriversCount = pendingDriverModerationCount;
+  const pendingModerationTotal =
+    pendingDriverModerationCount +
+    pendingPointModerationCount +
+    pendingEquipmentModerationCount;
   const sortedDeliveryOptions = useMemo(() => {
     return [...deliveryOptions].sort(
       (a, b) => (a.capacity_m3 || 0) - (b.capacity_m3 || 0),
@@ -658,9 +736,6 @@ export default function AdminDashboardScreen({
       if (!res.ok) throw new Error("Ошибка загрузки водителей");
       const data = await res.json();
       const items = Array.isArray(data) ? data : data.results || [];
-      setPendingDriverModerationCount(
-        items.filter((driver: AdminDriver) => driver.moderation_status === "pending_moderation").length,
-      );
       setDrivers(applyDriverActiveOverrides(items));
     } catch (err) {
       if (!silent) toast.error("Не удалось загрузить водителей");
@@ -687,69 +762,22 @@ export default function AdminDashboardScreen({
     }
   };
 
-  const fetchEquipmentModerationCount = async (silent = true) => {
+  const fetchModerationCounts = async (silent = true) => {
     if (!token) return;
     try {
-      const res = await fetch(
-        `${baseURL}/admin/equipment?moderation_status=pending_moderation`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-      if (!res.ok) {
-        throw new Error("Не удалось загрузить объявления на модерации");
-      }
-      const data = await res.json();
-      const items = Array.isArray(data) ? data : data.results || [];
-      setPendingEquipmentModerationCount(items.length);
-    } catch (error) {
-      if (!silent) {
-        toast.error("Не удалось загрузить объявления на модерации");
-      }
-    }
-  };
-
-  const fetchPendingPointModerationCount = async (silent = true) => {
-    if (!token) return;
-    try {
-      const res = await fetch(
-        `${baseURL}/admin/pickup-points?moderation_status=pending_moderation`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-      if (!res.ok) {
-        throw new Error("Не удалось загрузить точки на модерации");
-      }
-      const data = await res.json().catch(() => []);
-      const count = Array.isArray(data)
-        ? data.length
-        : Array.isArray(data?.results)
-          ? data.results.length
-          : Number(data?.count) || 0;
-      setPendingPointModerationCount(count);
-    } catch (error) {
-      setPendingPointModerationCount(0);
-      if (!silent) {
-        toast.error("Не удалось загрузить точки на модерации");
-      }
-    }
-  };
-
-  const fetchPendingDriverModerationCount = async (silent = true) => {
-    if (!token) return;
-    try {
-      const res = await fetch(`${baseURL}/admin/drivers/pending-moderation/count`, {
+      const res = await fetch(`${baseURL}/admin/moderation/count`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) {
-        throw new Error("Не удалось загрузить количество водителей на модерации");
+        throw new Error("Не удалось загрузить счетчики модерации");
       }
       const data = await res.json().catch(() => ({}));
-      setPendingDriverModerationCount(Number(data.count) || 0);
+      setPendingDriverModerationCount(Number(data.drivers) || 0);
+      setPendingPointModerationCount(Number(data.points) || 0);
+      setPendingEquipmentModerationCount(Number(data.equipment) || 0);
     } catch (error) {
       if (!silent) {
-        toast.error("Не удалось загрузить количество водителей на модерации");
+        toast.error("Не удалось загрузить счетчики модерации");
       }
     }
   };
@@ -806,17 +834,22 @@ export default function AdminDashboardScreen({
   useEffect(() => {
     if (!token) return;
 
-    void fetchPendingPointModerationCount(true);
-    void fetchPendingDriverModerationCount(true);
-    void fetchEquipmentModerationCount(true);
+    void fetchModerationCounts(true);
     const intervalId = window.setInterval(() => {
-      void fetchPendingPointModerationCount(true);
-      void fetchPendingDriverModerationCount(true);
-      void fetchEquipmentModerationCount(true);
+      void fetchModerationCounts(true);
     }, 30000);
 
     return () => window.clearInterval(intervalId);
   }, [token]);
+
+  useEffect(() => {
+    if (!token || moderationRefreshNonce === 0) return;
+
+    void fetchModerationCounts(true);
+    if (activeTab === "moderation") {
+      void fetchPendingRequests(true);
+    }
+  }, [activeTab, moderationRefreshNonce, token]);
 
   useEffect(() => {
     fetchCategories();
@@ -1626,9 +1659,9 @@ export default function AdminDashboardScreen({
             >
               <div className="relative flex items-center justify-center">
                 <ClipboardCheck className="w-4 h-4" />
-                {pendingDriversCount > 0 && (
+                {pendingModerationTotal > 0 && (
                   <div className="absolute -top-1.5 -right-2 bg-rose-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center shadow-sm">
-                    {pendingDriversCount}
+                    {pendingModerationTotal}
                   </div>
                 )}
               </div>
@@ -1726,7 +1759,13 @@ export default function AdminDashboardScreen({
               </div>
               <button
                 type="button"
-                onClick={() => setActiveTab("quarries")}
+                onClick={() =>
+                  openSummaryPoints({
+                    statusFilter: "pending_moderation",
+                    placementFilter: "",
+                    typeFilter: "",
+                  })
+                }
                 className="inline-flex items-center justify-center rounded-xl bg-cyan-500 px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-cyan-600"
               >
                 Перейти
@@ -1741,8 +1780,18 @@ export default function AdminDashboardScreen({
         <div className="max-w-6xl mx-auto flex flex-col gap-6">
           <PlacementSummaryPanel
             token={token || ""}
-            onOpenPoints={() => setActiveTab("quarries")}
-            onOpenEquipment={() => setActiveTab("equipment")}
+            activeSection={summaryManagedSection}
+            pointFilters={{
+              statusFilter: effectiveQuarryStatusFilter,
+              placementFilter: effectiveQuarryPlacementFilter,
+              typeFilter: effectiveQuarryTypeFilter,
+            }}
+            equipmentFilters={{
+              placementFilter: equipmentPlacementFilter,
+              tab: equipmentTab,
+            }}
+            onOpenPoints={openSummaryPoints}
+            onOpenEquipment={openSummaryEquipment}
           />
           {activeTab === "materials" ? (
             <>
@@ -3120,13 +3169,25 @@ export default function AdminDashboardScreen({
           ) : activeTab === "quarries" ? (
             <AdminQuarriesScreen
               materials={materials}
-              onPointsChanged={() => fetchPendingPointModerationCount(true)}
+              onPointsChanged={() => fetchModerationCounts(true)}
+              statusFilter={effectiveQuarryStatusFilter}
+              onStatusFilterChange={handleQuarryStatusFilterChange}
+              placementFilter={effectiveQuarryPlacementFilter}
+              onPlacementFilterChange={handleQuarryPlacementFilterChange}
+              typeFilter={effectiveQuarryTypeFilter}
+              onTypeFilterChange={handleQuarryTypeFilterChange}
             />
           ) : activeTab === "suppliers" ? (
             <AdminSuppliersScreen />
           ) : activeTab === "equipment" ? (
             <AdminEquipmentScreen
-              onPendingModerationChanged={setPendingEquipmentModerationCount}
+              onPendingModerationChanged={(count) => {
+                setPendingEquipmentModerationCount(count);
+              }}
+              tab={equipmentTab}
+              onTabChange={setEquipmentTab}
+              placementFilter={equipmentPlacementFilter}
+              onPlacementFilterChange={setEquipmentPlacementFilter}
             />
           ) : activeTab === "support" ? (
             <SupportScreen operatorMode />
@@ -3229,9 +3290,9 @@ export default function AdminDashboardScreen({
             className={`relative p-1.5 rounded-xl transition-colors ${activeTab === "moderation" ? "bg-[#2DB0E6]/10" : ""}`}
           >
             <ClipboardCheck className="w-6 h-6" />
-            {pendingDriversCount > 0 && (
+            {pendingModerationTotal > 0 && (
               <div className="absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] font-bold w-3.5 h-3.5 rounded-full flex items-center justify-center shadow-sm">
-                {pendingDriversCount}
+                {pendingModerationTotal}
               </div>
             )}
           </div>

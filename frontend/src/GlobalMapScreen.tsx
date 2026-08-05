@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Loader2, LocateFixed, MapPin, Mountain, Phone, Route, Warehouse, X } from "lucide-react";
 import toast from "react-hot-toast";
 
-import MapWebGLFallback, { tryCreate2GisMap } from "./components/MapWebGLFallback";
+import MapWebGLFallback, { load2GisMapSdk, tryCreate2GisMap } from "./components/MapWebGLFallback";
 import { handleOpenNavigator } from "./openNavigator";
 import { baseURL, formatPhoneNumber, resolveMediaUrl } from "./utils";
 
@@ -347,28 +347,36 @@ export default function GlobalMapScreen() {
   }, [selectedPoint, visiblePoints]);
 
   useEffect(() => {
-    const mapgl = (window as any).mapgl;
+    let disposed = false;
     const key = import.meta.env.VITE_2GIS_KEY;
 
-    if (!mapContainerRef.current || !mapgl || !key || mapRef.current) {
+    if (!mapContainerRef.current || !key || mapRef.current) {
       return;
     }
 
-    const mapInstance = tryCreate2GisMap(
-      () =>
-        new mapgl.Map(mapContainerRef.current, {
-          center: DEFAULT_MAP_CENTER,
-          zoom: 10,
-          key,
-        }),
-      () => setIsMapUnavailable(true),
-    );
-    if (!mapInstance) return;
-
-    mapRef.current = mapInstance;
-    setIsMapReady(true);
+    void load2GisMapSdk()
+      .then((mapgl) => {
+        if (disposed || !mapContainerRef.current || mapRef.current) return;
+        const mapInstance = tryCreate2GisMap(
+          () => new mapgl.Map(mapContainerRef.current, {
+            center: DEFAULT_MAP_CENTER,
+            zoom: 10,
+            key,
+          }),
+          () => setIsMapUnavailable(true),
+        );
+        if (!mapInstance) return;
+        if (disposed) {
+          mapInstance.destroy();
+          return;
+        }
+        mapRef.current = mapInstance;
+        setIsMapReady(true);
+      })
+      .catch(() => !disposed && setIsMapUnavailable(true));
 
     return () => {
+      disposed = true;
       pointMarkerRefs.current.forEach((marker) => marker.destroy());
       pointMarkerRefs.current = [];
       userMarkerRef.current?.destroy?.();
@@ -509,7 +517,7 @@ export default function GlobalMapScreen() {
         }
       `}</style>
 
-      <div className="relative flex-1 w-full overflow-hidden rounded-t-[28px] bg-slate-100 sm:rounded-[28px]">
+      <div className="relative min-h-[480px] flex-1 w-full overflow-hidden rounded-t-[28px] bg-slate-100 sm:rounded-[28px]">
         {isMapUnavailable ? (
           <MapWebGLFallback className="absolute inset-0 h-full w-full" />
         ) : (
@@ -599,8 +607,8 @@ export default function GlobalMapScreen() {
                     <X className="h-5 w-5" />
                   </button>
                   <div className="min-w-0">
-                    <h3 className="text-xl font-black text-slate-900">{selectedPoint.name}</h3>
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-xl font-black text-slate-900">{selectedPoint.name}</h3>
                       <span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-bold text-sky-700">
                         {TYPE_LABELS[selectedPoint.point_type]}
                       </span>
@@ -631,7 +639,7 @@ export default function GlobalMapScreen() {
 
                     <div className="min-w-0">
                       {selectedPoint.description ? (
-                        <p className="text-sm leading-6 text-slate-600">{selectedPoint.description}</p>
+                        <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-700">{selectedPoint.description}</p>
                       ) : null}
 
                       <div className="mt-4 grid gap-3 sm:grid-cols-2">

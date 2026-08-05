@@ -1,11 +1,7 @@
 name: Build Test Android APK
 
 on:
-  push:
-    branches:
-      - develop
-    paths-ignore:
-      - '.github/workflows/**'
+  workflow_dispatch:
 
 jobs:
   build-test-apk:

@@ -1,11 +1,6 @@
 name: Deploy Test Environment
 
 on:
-  push:
-    branches:
-      - develop
-    paths-ignore:
-      - '.github/workflows/**'
   workflow_dispatch:
 
 jobs:

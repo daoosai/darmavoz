@@ -1776,7 +1776,7 @@ export default function AdminDashboardScreen({
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-y-auto p-6 lg:p-8 sm:pb-8 pb-24 relative">
+      <div className="flex-1 overflow-y-auto p-6 lg:p-8 sm:pb-8 pb-28 relative">
         <div className="max-w-6xl mx-auto flex flex-col gap-6">
           <PlacementSummaryPanel
             token={token || ""}
@@ -3203,7 +3203,7 @@ export default function AdminDashboardScreen({
       </div>
 
       {/* Mobile Bottom Navigation Menu */}
-      <div className="sm:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex z-50 h-[68px] justify-start items-center px-2 pb-safe overflow-x-auto">
+      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-50 flex min-h-[68px] items-center justify-start overflow-x-auto border-t border-gray-200 bg-white px-2 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)]">
         <button
           onClick={() => setActiveTab("materials")}
           className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${
@@ -3218,7 +3218,7 @@ export default function AdminDashboardScreen({
             <Layers className="w-6 h-6" />
           </div>
           <div className="flex items-center gap-1">
-            <span className="text-[10px] font-bold">Точки</span>
+            <span className="text-[10px] font-bold">Каталог</span>
             {pendingPointModerationCount > 0 && (
               <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
                 {pendingPointModerationCount}

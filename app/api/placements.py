@@ -46,14 +46,14 @@ def _action_result(entity: Quarry | SpecialEquipmentListing) -> PlacementActionR
 async def _point_or_404(db: AsyncSession, point_id: UUID) -> Quarry:
     point = await db.get(Quarry, point_id)
     if point is None:
-        raise HTTPException(status_code=404, detail="????? ?? ???????")
+        raise HTTPException(status_code=404, detail="Точка не найдена")
     return point
 
 
 async def _equipment_or_404(db: AsyncSession, listing_id: UUID) -> SpecialEquipmentListing:
     listing = await db.get(SpecialEquipmentListing, listing_id)
     if listing is None or listing.is_deleted:
-        raise HTTPException(status_code=404, detail="?????????? ??????????? ?? ???????")
+        raise HTTPException(status_code=404, detail="Объявление спецтехники не найдено")
     return listing
 
 
@@ -98,15 +98,19 @@ async def placement_summary(
         placement_status: sum(group[placement_status] for group in by_entity.values())
         for placement_status in statuses
     }
-    active_status = PlacementStatus.active.value
+    visible_statuses = (
+        PlacementStatus.active.value,
+        PlacementStatus.trial.value,
+        PlacementStatus.confirmation_required.value,
+    )
     return PlacementSummaryOut(
         generated_at=datetime.now(UTC),
         policy=_policy(),
         totals=totals,
         by_entity=by_entity,
-        active_quarries=by_entity["quarry"][active_status],
-        active_accumulators=by_entity["accumulator"][active_status],
-        active_equipment=by_entity["equipment"][active_status],
+        active_quarries=sum(by_entity["quarry"][item] for item in visible_statuses),
+        active_accumulators=sum(by_entity["accumulator"][item] for item in visible_statuses),
+        active_equipment=sum(by_entity["equipment"][item] for item in visible_statuses),
     )
 
 
@@ -164,7 +168,7 @@ async def archive_equipment(listing_id: UUID, db: AsyncSession = Depends(get_db)
 
 async def _confirm_owned(db, entity, current_user) -> PlacementActionResult:
     if entity.owner_user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="?????????? ?? ???????")
+        raise HTTPException(status_code=404, detail="Размещение не найдено")
     await confirm_relevance(db, entity, actor_user_id=current_user.id)
     return await _commit_action(db, entity)
 
@@ -182,6 +186,3 @@ async def confirm_supplier_equipment(listing_id: UUID, db: AsyncSession = Depend
 @router.post("/equipment-owner/equipment/{listing_id}/confirm-relevance", response_model=PlacementActionResult)
 async def confirm_owner_equipment(listing_id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_equipment_owner_user)):
     return await _confirm_owned(db, await _equipment_or_404(db, listing_id), current_user)
-
-
-

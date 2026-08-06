@@ -256,24 +256,6 @@ async def confirm_relevance(
     )
 
 
-async def spoil_confirmation_timer(
-    db: AsyncSession,
-    entity: PlacementEntity,
-    *,
-    actor_user_id: UUID,
-    now: datetime | None = None,
-) -> None:
-    current_time = now or utcnow()
-    entity.next_confirmation_at = current_time + timedelta(hours=1)
-    await recalculate_status(
-        db,
-        entity,
-        actor_user_id=actor_user_id,
-        action="debug_confirmation_timer_spoiled",
-        now=current_time,
-    )
-
-
 async def extend_placement(
     db: AsyncSession,
     entity: PlacementEntity,

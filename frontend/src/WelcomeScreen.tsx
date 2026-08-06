@@ -1,6 +1,44 @@
 import React, { useState } from "react";
 import PrivacyPolicyModal from "./PrivacyPolicyModal";
 
+function RequisitesModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[120] flex items-end justify-center bg-slate-950/45 p-4 sm:items-center"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="requisites-title"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md rounded-3xl bg-white p-6 text-center shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <h2 id="requisites-title" className="text-xl font-black text-slate-900">
+          Реквизиты
+        </h2>
+
+        <div className="mt-6 space-y-2 text-sm leading-relaxed text-slate-600">
+          <p>© 2026 Дармавоз</p>
+          <p>ИП Масловский Сергей Николаевич</p>
+          <p>ИНН 720414310753</p>
+          <p>ОГРНИП 324723200032630</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-6 w-full rounded-2xl bg-[#2DB0E6] py-3.5 font-bold text-white transition-colors hover:bg-[#209ccf]"
+        >
+          Закрыть
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function WelcomeScreen({
   onSelectClient,
   onSelectEmployee,
@@ -9,6 +47,7 @@ export default function WelcomeScreen({
   onSelectEmployee: () => void;
 }) {
   const [isPrivacyPolicyOpen, setIsPrivacyPolicyOpen] = useState(false);
+  const [isRequisitesOpen, setIsRequisitesOpen] = useState(false);
 
   return (
     <div className="relative flex min-h-screen flex-col items-center overflow-y-auto bg-slate-50 px-6 text-center">
@@ -34,22 +73,33 @@ export default function WelcomeScreen({
         </div>
       </div>
 
-      <footer className="mb-4 mt-6 flex flex-col space-y-2 text-center text-xs text-gray-400">
-        <p className="text-sm text-gray-500">
+      <footer className="mb-4 mt-4 flex flex-col items-center gap-3 text-gray-400">
+        <p className="text-base text-gray-500">
           Служба поддержки{" "}
           <a href="tel:+73452900900" className="font-bold text-gray-700">
             8 (3452) 900 900
           </a>
         </p>
-        <button
-          type="button"
-          onClick={() => setIsPrivacyPolicyOpen(true)}
-          className="mt-2 text-[10px] text-gray-300/70 hover:text-gray-400"
-        >
-          Политика конфиденциальности
-        </button>
+        <div className="flex justify-center gap-2 text-sm">
+          <button
+            type="button"
+            onClick={() => setIsRequisitesOpen(true)}
+            className="transition-colors hover:text-gray-600"
+          >
+            Реквизиты
+          </button>
+          <span aria-hidden="true">·</span>
+          <button
+            type="button"
+            onClick={() => setIsPrivacyPolicyOpen(true)}
+            className="transition-colors hover:text-gray-600"
+          >
+            Политика конфиденциальности
+          </button>
+        </div>
       </footer>
 
+      <RequisitesModal isOpen={isRequisitesOpen} onClose={() => setIsRequisitesOpen(false)} />
       <PrivacyPolicyModal
         isOpen={isPrivacyPolicyOpen}
         onClose={() => setIsPrivacyPolicyOpen(false)}

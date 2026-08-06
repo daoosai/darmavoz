@@ -5,7 +5,7 @@ import UpdateBanner from './UpdateBanner';
 
 export default function ProfileScreen({ onOpenAuth }: { onOpenAuth?: () => void }) {
   return (
-    <div className="flex flex-col h-full bg-slate-50 p-4 pb-[84px]">
+    <div className="flex flex-col h-full bg-slate-50 px-4 pt-[calc(env(safe-area-inset-top)+1rem)] pb-[84px]">
       <UpdateBanner />
       
       {/* Auth Card */}

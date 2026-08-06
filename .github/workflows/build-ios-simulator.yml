@@ -1,0 +1,96 @@
+name: Build iOS Simulator App
+
+on:
+  # Automatic iOS simulator builds are disabled. Run this workflow manually when needed.
+  workflow_dispatch: # Запуск вручную из вкладки Actions
+
+jobs:
+  build-ios:
+    # IONGeolocationLib is distributed as a Swift 6.2 binary framework.
+    # macos-14 supplies Xcode 15.4 / Swift 5.10, which cannot import it.
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 26.2
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.2.app/Contents/Developer
+          xcodebuild -version
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Web Assets
+        run: npm run build
+        env:
+          VITE_API_BASE_URL: https://test.darmavoz.ru/api/v1
+
+      - name: Capacitor Sync iOS & Reset SPM
+        run: |
+          rm -f ios/App/CapApp-SPM/Package.resolved
+          rm -f ios/App/Package.resolved
+          npx cap sync ios
+          if [ -f "ios/App/Podfile" ]; then
+            cd ios/App && pod install && cd ../..
+          fi
+
+      - name: Build for iOS Simulator
+        run: |
+          if [ -d "ios/App/App.xcworkspace" ]; then
+            xcodebuild -workspace ios/App/App.xcworkspace \
+                       -scheme App \
+                       -sdk iphonesimulator \
+                       -destination 'generic/platform=iOS Simulator' \
+                       -configuration Debug \
+                       -derivedDataPath ios/build \
+                       ONLY_ACTIVE_ARCH=YES \
+                       CODE_SIGN_IDENTITY="" \
+                       CODE_SIGNING_REQUIRED=NO \
+                       CODE_SIGNING_ALLOWED=NO
+          elif [ -d "ios/App/App.xcodeproj" ]; then
+            xcodebuild -project ios/App/App.xcodeproj \
+                       -scheme App \
+                       -sdk iphonesimulator \
+                       -destination 'generic/platform=iOS Simulator' \
+                       -configuration Debug \
+                       -derivedDataPath ios/build \
+                       ONLY_ACTIVE_ARCH=YES \
+                       CODE_SIGN_IDENTITY="" \
+                       CODE_SIGNING_REQUIRED=NO \
+                       CODE_SIGNING_ALLOWED=NO
+          else
+            echo "Error: Neither App.xcworkspace nor App.xcodeproj found!"
+            ls -la ios/App || true
+            exit 1
+          fi
+
+      - name: Zip Simulator App
+        run: |
+          APP_PATH=$(find ios/build -name "*.app" -type d | head -n 1)
+          echo "Found compiled app at: $APP_PATH"
+          if [ -z "$APP_PATH" ]; then
+            echo "Error: No .app directory found in ios/build!"
+            exit 1
+          fi
+          APP_DIR=$(dirname "$APP_PATH")
+          APP_NAME=$(basename "$APP_PATH")
+          cd "$APP_DIR"
+          zip -r App.app.zip "$APP_NAME"
+          echo "Successfully created App.app.zip in $APP_DIR"
+
+      - name: Upload Artifact for Appetize
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-simulator-app
+          path: frontend/ios/build/**/*.app

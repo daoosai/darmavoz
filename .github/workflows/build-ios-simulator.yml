@@ -1,15 +1,7 @@
 name: Build iOS Simulator App
 
 on:
-  push:
-    branches:
-      - develop
-    paths:
-      - '.github/workflows/build-ios-simulator.yml'
-      - 'frontend/package.json'
-      - 'frontend/package-lock.json'
-      - 'frontend/scripts/**'
-      - 'frontend/ios/**'
+  # Automatic iOS simulator builds are disabled. Run this workflow manually when needed.
   workflow_dispatch: # Запуск вручную из вкладки Actions
 
 jobs:

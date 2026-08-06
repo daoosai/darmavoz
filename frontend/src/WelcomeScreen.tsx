@@ -73,22 +73,30 @@ export default function WelcomeScreen({
         </div>
       </div>
 
-      <footer className="mb-4 mt-4 flex justify-center gap-2 text-xs text-gray-400">
-        <button
-          type="button"
-          onClick={() => setIsRequisitesOpen(true)}
-          className="transition-colors hover:text-gray-600"
-        >
-          Реквизиты
-        </button>
-        <span aria-hidden="true">·</span>
-        <button
-          type="button"
-          onClick={() => setIsPrivacyPolicyOpen(true)}
-          className="transition-colors hover:text-gray-600"
-        >
-          Политика конфиденциальности
-        </button>
+      <footer className="mb-4 mt-4 flex flex-col items-center gap-3 text-gray-400">
+        <p className="text-base text-gray-500">
+          Служба поддержки{" "}
+          <a href="tel:+73452900900" className="font-bold text-gray-700">
+            8 (3452) 900 900
+          </a>
+        </p>
+        <div className="flex justify-center gap-2 text-sm">
+          <button
+            type="button"
+            onClick={() => setIsRequisitesOpen(true)}
+            className="transition-colors hover:text-gray-600"
+          >
+            Реквизиты
+          </button>
+          <span aria-hidden="true">·</span>
+          <button
+            type="button"
+            onClick={() => setIsPrivacyPolicyOpen(true)}
+            className="transition-colors hover:text-gray-600"
+          >
+            Политика конфиденциальности
+          </button>
+        </div>
       </footer>
 
       <RequisitesModal isOpen={isRequisitesOpen} onClose={() => setIsRequisitesOpen(false)} />

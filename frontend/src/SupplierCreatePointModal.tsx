@@ -679,7 +679,7 @@ export default function SupplierCreatePointModal({
           </button>
         </header>
 
-        <form onSubmit={submit} className="space-y-5 p-5 pb-20">
+        <form onSubmit={submit} className="space-y-5 p-5 pb-36">
           <section className="rounded-2xl bg-white p-5 shadow-sm">
             <label className="text-sm font-bold text-slate-900">Тип точки</label>
             <select
@@ -934,7 +934,7 @@ export default function SupplierCreatePointModal({
             ) : null}
           </section>
 
-          <div className="sticky bottom-0 z-10 -mx-5 mt-4 flex gap-3 border-t bg-white px-4 pt-3 pb-4">
+          <div className="mt-4 flex gap-3">
             <button
               type="button"
               onClick={onClose}

@@ -1339,7 +1339,7 @@ function EditQuarryModal({
 
         <form
           onSubmit={handleSave}
-          className="flex flex-col gap-5 overflow-y-auto p-6 pb-20"
+          className="flex flex-col gap-5 overflow-y-auto p-6 pb-36"
         >
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
@@ -1611,7 +1611,7 @@ function EditQuarryModal({
             </label>
           </div>
 
-          <div className="sticky bottom-0 z-10 -mx-6 mt-4 flex gap-3 border-t bg-white px-4 pt-3 pb-4">
+          <div className="mt-4 flex gap-3">
             <button
               type="button"
               onClick={onClose}
@@ -2175,7 +2175,7 @@ function EnhancedEditQuarryModal({
 
         <form
           onSubmit={handleSave}
-          className="flex flex-col gap-5 overflow-y-auto p-6 pb-20"
+          className="flex flex-col gap-5 overflow-y-auto p-6 pb-36"
         >
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Название</label>
@@ -2498,7 +2498,7 @@ function EnhancedEditQuarryModal({
             </label>
           </div>
 
-          <div className="sticky bottom-0 z-10 -mx-6 mt-4 flex gap-3 border-t bg-white px-4 pt-3 pb-4">
+          <div className="mt-4 flex gap-3">
             <button
               type="button"
               onClick={onClose}

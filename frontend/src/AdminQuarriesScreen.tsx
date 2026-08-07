@@ -1323,8 +1323,8 @@ function EditQuarryModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-3xl w-full max-w-xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+      <div className="mb-16 flex max-h-[calc(100vh-6rem)] w-full max-w-xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl md:mb-0 md:max-h-[90vh]">
         <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
           <h3 className="text-xl font-bold text-slate-800">
             {formData.id ? `Редактировать ${pointTitle}` : `Добавить ${pointTitle}`}
@@ -1339,7 +1339,7 @@ function EditQuarryModal({
 
         <form
           onSubmit={handleSave}
-          className="flex flex-col gap-5 overflow-y-auto p-6 pb-[max(env(safe-area-inset-bottom,16px),2rem)]"
+          className="flex flex-col gap-5 overflow-y-auto p-6 pb-20"
         >
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
@@ -1611,7 +1611,7 @@ function EditQuarryModal({
             </label>
           </div>
 
-          <div className="mt-4 flex gap-3">
+          <div className="sticky bottom-0 z-10 -mx-6 mt-4 flex gap-3 border-t bg-white px-4 pt-3 pb-4">
             <button
               type="button"
               onClick={onClose}
@@ -2159,8 +2159,8 @@ function EnhancedEditQuarryModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-3xl w-full max-w-xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+      <div className="mb-16 flex max-h-[calc(100vh-6rem)] w-full max-w-xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl md:mb-0 md:max-h-[90vh]">
         <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
           <h3 className="text-xl font-bold text-slate-800">
             {formData.id ? `Редактировать ${pointTitle}` : `Добавить ${pointTitle}`}
@@ -2175,7 +2175,7 @@ function EnhancedEditQuarryModal({
 
         <form
           onSubmit={handleSave}
-          className="flex flex-col gap-5 overflow-y-auto p-6 pb-[max(env(safe-area-inset-bottom,16px),2rem)]"
+          className="flex flex-col gap-5 overflow-y-auto p-6 pb-20"
         >
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Название</label>
@@ -2498,7 +2498,7 @@ function EnhancedEditQuarryModal({
             </label>
           </div>
 
-          <div className="mt-4 flex gap-3">
+          <div className="sticky bottom-0 z-10 -mx-6 mt-4 flex gap-3 border-t bg-white px-4 pt-3 pb-4">
             <button
               type="button"
               onClick={onClose}

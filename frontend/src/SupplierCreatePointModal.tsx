@@ -658,8 +658,8 @@ export default function SupplierCreatePointModal({
   const existingMedia = point?.media_files || [];
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 backdrop-blur-sm">
-      <div className="min-h-screen bg-slate-50 sm:mx-auto sm:my-6 sm:min-h-0 sm:max-w-xl sm:rounded-3xl">
+    <div className="fixed inset-0 z-[60] overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-sm md:p-0">
+      <div className="mb-16 max-h-[calc(100vh-6rem)] w-full overflow-y-auto bg-slate-50 sm:mx-auto sm:my-6 sm:max-w-xl sm:rounded-3xl md:mb-0 md:max-h-[calc(100vh-3rem)]">
         <header className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:rounded-t-3xl">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-500">
@@ -679,7 +679,7 @@ export default function SupplierCreatePointModal({
           </button>
         </header>
 
-        <form onSubmit={submit} className="space-y-5 p-5 pb-12">
+        <form onSubmit={submit} className="space-y-5 p-5 pb-36">
           <section className="rounded-2xl bg-white p-5 shadow-sm">
             <label className="text-sm font-bold text-slate-900">Тип точки</label>
             <select
@@ -934,13 +934,22 @@ export default function SupplierCreatePointModal({
             ) : null}
           </section>
 
-          <button
-            disabled={isBusy}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-sky-500 py-4 text-lg font-black text-white hover:bg-sky-600 disabled:opacity-50"
-          >
-            {isBusy ? <Loader2 className="h-5 w-5 animate-spin" /> : null}
-            {isEditing ? "Сохранить и отправить на модерацию" : "Отправить на модерацию"}
-          </button>
+          <div className="mt-4 flex gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 rounded-2xl bg-slate-100 py-4 text-lg font-black text-slate-700 hover:bg-slate-200"
+            >
+              Отмена
+            </button>
+            <button
+              disabled={isBusy}
+              className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-sky-500 py-4 text-lg font-black text-white hover:bg-sky-600 disabled:opacity-50"
+            >
+              {isBusy ? <Loader2 className="h-5 w-5 animate-spin" /> : null}
+              {isEditing ? "Сохранить и отправить на модерацию" : "Отправить на модерацию"}
+            </button>
+          </div>
         </form>
       </div>
     </div>

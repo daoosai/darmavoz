@@ -16,7 +16,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    water_type = postgresql.ENUM("free", "paid", name="water_point_type")
+    water_type = postgresql.ENUM("free", "paid", name="water_point_type", create_type=False)
     water_type.create(op.get_bind(), checkfirst=True)
     op.add_column("users", sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True))
     op.add_column("users", sa.Column("deletion_source", sa.String(20), nullable=True))

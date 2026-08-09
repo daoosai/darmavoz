@@ -104,7 +104,7 @@ async def request_password_reset(payload: PasswordResetRequest, background_tasks
     if user and user.is_active and not user.is_deleted and user.role and user.role.name in {"admin", "logist"}:
         code = generate_otp_code()
         await get_redis().setex(_password_reset_code_key(email), 300, code)
-        logger.info("Password reset OTP for %s: %s", email, code)
+        logger.warning("Password reset OTP for %s: %s", email, code)
         background_tasks.add_task(send_auth_email_code, to_email=email, code=code)
     return {"ok": True, "status": "email_sent"}
 

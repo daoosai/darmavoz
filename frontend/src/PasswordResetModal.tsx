@@ -14,8 +14,8 @@ export default function PasswordResetModal({ onClose }: { onClose: () => void })
   const [resetToken, setResetToken] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showPasswordConfirmation, setShowPasswordConfirmation] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showRepeatPassword, setShowRepeatPassword] = useState(false);
   const [resetAccount, setResetAccount] = useState<ResetAccount | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [resendSeconds, setResendSeconds] = useState(0);
@@ -156,6 +156,7 @@ export default function PasswordResetModal({ onClose }: { onClose: () => void })
     : resetAccount?.role === "logist"
       ? "Логист"
       : resetAccount?.role;
+  const resetAccountEmail = resetAccount?.email || email;
 
   return (
     <div className="fixed inset-0 z-[70] flex items-end justify-center bg-slate-900/40 p-4 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="password-reset-title">
@@ -164,7 +165,7 @@ export default function PasswordResetModal({ onClose }: { onClose: () => void })
           <div>
             <h2 id="password-reset-title" className="text-xl font-black text-slate-900">{currentMeta.title}</h2>
             <p className="mt-1 text-sm text-slate-500">{currentMeta.description}</p>
-            {step === "password" && resetRoleLabel ? <p className="mt-2 inline-flex rounded-full bg-sky-50 px-3 py-1 text-sm font-semibold text-sky-700">Учётная запись: {resetRoleLabel}</p> : null}
+            {step === "password" && resetAccountEmail && resetRoleLabel ? <p className="mt-2 text-sm text-slate-500">Аккаунт: {resetAccountEmail} <span aria-hidden="true">|</span> Роль: {resetRoleLabel}</p> : null}
           </div>
           <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100" aria-label="Закрыть"><X className="h-5 w-5" /></button>
         </div>
@@ -194,8 +195,8 @@ export default function PasswordResetModal({ onClose }: { onClose: () => void })
 
         {step === "password" ? (
           <form onSubmit={completeReset} className="mt-6 space-y-4">
-            <label className="block text-sm font-bold text-slate-700">Новый пароль<span className="mt-1 flex items-center gap-2 rounded-xl border border-slate-200 px-3"><LockKeyhole className="h-4 w-4 text-slate-400" /><input autoFocus required minLength={8} type={showNewPassword ? "text" : "password"} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} className="w-full py-3 outline-none" placeholder="Не менее 8 символов" /><button type="button" onClick={() => setShowNewPassword((visible) => !visible)} className="shrink-0 rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600" aria-label={showNewPassword ? "Скрыть пароль" : "Показать пароль"}>{showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button></span></label>
-            <label className="block text-sm font-bold text-slate-700">Повторите пароль<span className="mt-1 flex items-center gap-2 rounded-xl border border-slate-200 px-3"><LockKeyhole className="h-4 w-4 text-slate-400" /><input required minLength={8} type={showPasswordConfirmation ? "text" : "password"} value={passwordConfirmation} onChange={(event) => setPasswordConfirmation(event.target.value)} className="w-full py-3 outline-none" /><button type="button" onClick={() => setShowPasswordConfirmation((visible) => !visible)} className="shrink-0 rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600" aria-label={showPasswordConfirmation ? "Скрыть пароль" : "Показать пароль"}>{showPasswordConfirmation ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button></span></label>
+            <label className="block text-sm font-bold text-slate-700">Новый пароль<span className="mt-1 flex items-center gap-2 rounded-xl border border-slate-200 px-3"><LockKeyhole className="h-4 w-4 text-slate-400" /><input autoFocus required minLength={8} type={showPassword ? "text" : "password"} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} className="w-full py-3 outline-none" placeholder="Не менее 8 символов" /><button type="button" onClick={() => setShowPassword((visible) => !visible)} className="shrink-0 rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600" aria-label={showPassword ? "Скрыть пароль" : "Показать пароль"}>{showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button></span></label>
+            <label className="block text-sm font-bold text-slate-700">Повторите пароль<span className="mt-1 flex items-center gap-2 rounded-xl border border-slate-200 px-3"><LockKeyhole className="h-4 w-4 text-slate-400" /><input required minLength={8} type={showRepeatPassword ? "text" : "password"} value={passwordConfirmation} onChange={(event) => setPasswordConfirmation(event.target.value)} className="w-full py-3 outline-none" /><button type="button" onClick={() => setShowRepeatPassword((visible) => !visible)} className="shrink-0 rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600" aria-label={showRepeatPassword ? "Скрыть пароль" : "Показать пароль"}>{showRepeatPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button></span></label>
             <div className="grid grid-cols-2 gap-3"><button type="button" onClick={() => setStep("otp")} className="flex items-center justify-center gap-2 rounded-xl bg-slate-100 py-3 font-bold text-slate-700"><ArrowLeft className="h-4 w-4" />Назад</button><button disabled={isSubmitting} className="flex items-center justify-center gap-2 rounded-xl bg-sky-500 py-3 font-bold text-white hover:bg-sky-600 disabled:opacity-50">{isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Сохранить пароль"}</button></div>
           </form>
         ) : null}

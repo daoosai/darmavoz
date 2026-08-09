@@ -1,6 +1,7 @@
 import json
 import logging
 import secrets
+from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -129,13 +130,32 @@ async def verify_password_reset(payload: PasswordResetVerify, db: AsyncSession =
 
 @router.post("/password-reset/complete")
 async def complete_password_reset(payload: PasswordResetComplete, db: AsyncSession = Depends(get_db)):
-    redis = get_redis(); user_id = await redis.get(f"{PASSWORD_RESET_TOKEN_PREFIX}:{payload.reset_token}")
+    redis = get_redis()
+    user_id = await redis.get(f"{PASSWORD_RESET_TOKEN_PREFIX}:{payload.reset_token}")
     if user_id is None: raise HTTPException(status_code=400, detail="Ссылка сброса истекла")
-    user = await db.get(User, user_id)
+
+    try:
+        reset_user_id = UUID(user_id)
+    except (TypeError, ValueError):
+        await redis.delete(f"{PASSWORD_RESET_TOKEN_PREFIX}:{payload.reset_token}")
+        raise HTTPException(status_code=400, detail="Ссылка сброса недействительна")
+
+    user = await db.get(User, reset_user_id)
     if user is None or not user.is_active or user.is_deleted: raise HTTPException(status_code=400, detail="Аккаунт недоступен")
-    user.hashed_password = get_password_hash(payload.new_password); user.auth_version += 1
+
+    user.hashed_password = get_password_hash(payload.new_password)
+    user.auth_version = (user.auth_version or 0) + 1
+    try:
+        await db.flush()
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        logger.exception("password_reset_commit_failed user_id=%s", user.id)
+        raise
+
     await redis.delete(f"{PASSWORD_RESET_TOKEN_PREFIX}:{payload.reset_token}")
-    await db.commit(); return {"ok": True}
+    logger.warning("password_reset_completed user_id=%s", user.id)
+    return {"ok": True}
 
 
 def _default_client_name_from_email(email: str) -> str:

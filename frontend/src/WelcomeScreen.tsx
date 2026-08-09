@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import PrivacyPolicyModal from "./PrivacyPolicyModal";
 
 function RequisitesModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   if (!isOpen) return null;
@@ -46,7 +45,6 @@ export default function WelcomeScreen({
   onSelectClient: () => void;
   onSelectEmployee: () => void;
 }) {
-  const [isPrivacyPolicyOpen, setIsPrivacyPolicyOpen] = useState(false);
   const [isRequisitesOpen, setIsRequisitesOpen] = useState(false);
 
   return (
@@ -80,6 +78,9 @@ export default function WelcomeScreen({
             8 (3452) 900 900
           </a>
         </p>
+        <div className="text-xs text-gray-500 mt-2 text-center">
+          ИП Масловский Сергей Николаевич | ИНН 720414310753 | ОГРНИП 324723200032630
+        </div>
         <div className="flex justify-center gap-2 text-sm">
           <button
             type="button"
@@ -88,22 +89,10 @@ export default function WelcomeScreen({
           >
             Реквизиты
           </button>
-          <span aria-hidden="true">·</span>
-          <button
-            type="button"
-            onClick={() => setIsPrivacyPolicyOpen(true)}
-            className="transition-colors hover:text-gray-600"
-          >
-            Политика конфиденциальности
-          </button>
         </div>
       </footer>
 
       <RequisitesModal isOpen={isRequisitesOpen} onClose={() => setIsRequisitesOpen(false)} />
-      <PrivacyPolicyModal
-        isOpen={isPrivacyPolicyOpen}
-        onClose={() => setIsPrivacyPolicyOpen(false)}
-      />
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { ArrowLeft, Eye, EyeOff, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
 
 import OtpVerificationStep from "./OtpVerificationStep";
+import PasswordResetModal from "./PasswordResetModal";
 import { switchAuthenticatedSession } from "./pushAuth";
 import { UserRole } from "./store";
 import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
@@ -31,6 +32,7 @@ export default function LoginScreen({
   const [otpStep, setOtpStep] = useState(false);
   const [otpRecipient, setOtpRecipient] = useState("");
   const [otpError, setOtpError] = useState("");
+  const [isPasswordResetOpen, setIsPasswordResetOpen] = useState(false);
 
   const handleLoginChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
@@ -193,6 +195,13 @@ export default function LoginScreen({
                     {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setIsPasswordResetOpen(true)}
+                  className="self-end text-sm font-medium text-blue-500 transition-colors hover:text-blue-700"
+                >
+                  Забыли пароль?
+                </button>
               </div>
 
               <button
@@ -232,12 +241,10 @@ export default function LoginScreen({
                 Регистрация самосвалов
               </button>
             </div>
-            <a href="tel:900900" className="mt-5 block text-center text-sm font-medium text-slate-500">
-              Служба поддержки: <span className="font-bold text-[#2DB0E6]">900-900</span>
-            </a>
           </>
         )}
       </div>
+      {isPasswordResetOpen ? <PasswordResetModal onClose={() => setIsPasswordResetOpen(false)} /> : null}
     </div>
   );
 }

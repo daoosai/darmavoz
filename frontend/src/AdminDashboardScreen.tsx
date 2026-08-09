@@ -35,6 +35,7 @@ import AdminSuppliersScreen from "./AdminSuppliersScreen";
 import AdminCategoriesPanel from "./AdminCategoriesPanel";
 import PlacementSummaryPanel from "./components/admin/PlacementSummaryPanel";
 import { DriverHistoryModal } from "./components/admin/DriverHistoryModal";
+import WaterSepticModerationPanel from "./components/admin/WaterSepticModerationPanel";
 import toast from "react-hot-toast";
 import { logoutCurrentSession } from "./pushAuth";
 import AdminEquipmentScreen, { type AdminEquipmentTab } from "./AdminEquipmentScreen";
@@ -3165,6 +3166,7 @@ export default function AdminDashboardScreen({
                   )}
                 </div>
               )}
+              <WaterSepticModerationPanel token={token} />
             </>
           ) : activeTab === "quarries" ? (
             <AdminQuarriesScreen

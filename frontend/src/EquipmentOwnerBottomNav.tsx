@@ -1,6 +1,6 @@
-import { ClipboardList, Headphones, UserRound } from "lucide-react";
+import { ClipboardList, Droplets, Headphones, UserRound } from "lucide-react";
 
-export type EquipmentOwnerTab = "equipment" | "support" | "profile";
+export type EquipmentOwnerTab = "equipment" | "septic" | "support" | "profile";
 
 interface Props {
   activeTab: EquipmentOwnerTab;
@@ -8,6 +8,7 @@ interface Props {
 }
 
 const ITEMS = [
+  { id: "septic" as const, label: "Септики", icon: Droplets },
   { id: "equipment" as const, label: "Мои объявления", icon: ClipboardList },
   { id: "support" as const, label: "Поддержка", icon: Headphones },
   { id: "profile" as const, label: "Профиль", icon: UserRound },

@@ -3,6 +3,7 @@ import { useState } from "react";
 import EquipmentOwnerBottomNav, { type EquipmentOwnerTab } from "./EquipmentOwnerBottomNav";
 import EquipmentOwnerProfileScreen from "./EquipmentOwnerProfileScreen";
 import EquipmentOwnerRegisterScreen from "./EquipmentOwnerRegisterScreen";
+import SepticProviderProfileScreen from "./SepticProviderProfileScreen";
 import { logoutCurrentSession } from "./pushAuth";
 import SupplierEquipmentScreen from "./SupplierEquipmentScreen";
 import SupportScreen from "./SupportScreen";
@@ -24,6 +25,8 @@ export default function EquipmentOwnerPortalScreen({ onBack }: { onBack: () => v
           <SupportScreen onBack={() => setActiveView("profile")} />
         ) : activeView === "equipment" ? (
           <SupplierEquipmentScreen token={token} apiPrefix="/equipment-owner" />
+        ) : activeView === "septic" ? (
+          <SepticProviderProfileScreen token={token} />
         ) : (
           <EquipmentOwnerProfileScreen token={token} onLogout={handleLogout} />
         )}

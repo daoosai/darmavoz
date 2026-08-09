@@ -16,6 +16,7 @@ type ClientOrder = ClientOrderSummary;
 
 const activeStatuses = new Set([
   "created",
+  "requires_clarification",
   "searching_driver",
   "offered_to_driver",
   "no_driver_found",

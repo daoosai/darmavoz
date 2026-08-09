@@ -282,6 +282,24 @@ def schedule_logist_no_driver_found_notification(order: Order) -> None:
     )
 
 
+def schedule_logist_order_created_notification(order: Order) -> None:
+    _safe_schedule(
+        schedule_push_to_logists,
+        "Новый заказ",
+        f"Поступил новый заказ #{order.id}.",
+        {**_order_push_data(order), "event": "order_created"},
+    )
+
+
+def schedule_logist_requires_clarification_notification(order: Order) -> None:
+    _safe_schedule(
+        schedule_push_to_logists,
+        "Заказ требует уточнения",
+        f"Заказ #{order.id} ожидает ручной проверки оператором.",
+        {**_order_push_data(order), "event": "requires_clarification"},
+    )
+
+
 def schedule_pickup_point_moderation_notification(
     point: Quarry,
     *,

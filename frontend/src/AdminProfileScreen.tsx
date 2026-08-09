@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { BarChart3, Building2, ClipboardList, Headphones, LogOut, Wrench } from "lucide-react";
 import { NotificationToggle } from "./components/shared/NotificationToggle";
+import NotificationCenter from "./components/shared/NotificationCenter";
 import { baseURL, handleApiError } from "./utils";
 import { useAuthStore } from "./store";
 
@@ -183,6 +184,10 @@ export default function AdminProfileScreen({
         </div>
       </div>
 
+      <div className="flex items-center justify-between rounded-2xl bg-white p-3 shadow-sm">
+        <span className="text-sm font-bold text-slate-700">Центр уведомлений</span>
+        <NotificationCenter token={token} />
+      </div>
       <NotificationToggle role={effectiveNotificationRole} />
       <button
         onClick={onLogout}

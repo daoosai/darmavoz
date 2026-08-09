@@ -20,6 +20,19 @@ async def list_septic_providers(db: AsyncSession = Depends(get_db)):
     return (await db.execute(stmt.order_by(SepticProviderProfile.created_at.desc()))).scalars().all()
 
 
+@router.get("/admin/septic-providers", response_model=list[SepticProfileOut])
+async def list_septic_providers_for_moderation(
+    moderation_status: str | None = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_logist_user),
+):
+    del current_user
+    stmt = select(SepticProviderProfile).where(SepticProviderProfile.is_deleted.is_(False))
+    if moderation_status:
+        stmt = stmt.where(SepticProviderProfile.moderation_status == moderation_status)
+    return (await db.execute(stmt.order_by(SepticProviderProfile.created_at.desc()))).scalars().all()
+
+
 @equipment_owner_router.get("/septic-profile", response_model=SepticProfileOut)
 async def get_septic_profile(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_equipment_owner_user)):
     profile = await db.scalar(select(SepticProviderProfile).where(SepticProviderProfile.owner_user_id == current_user.id, SepticProviderProfile.is_deleted.is_(False)))

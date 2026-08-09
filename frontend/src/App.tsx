@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Truck,
   Wrench,
+  Droplets,
   X,
 } from "lucide-react";
 import { MaterialProps } from "./MaterialDetailScreen";
@@ -344,6 +345,7 @@ function MainContent({
       badge: cartItemsCount > 0 ? cartItemsCount : undefined,
     },
     { id: "map", label: "Карта", icon: Map },
+    { id: "water", label: "Вода", icon: Droplets },
     { id: "profile", label: "Профиль", icon: User },
   ];
 
@@ -426,7 +428,7 @@ function MainContent({
       return;
     }
     if (currentPath === "/water" && activeTab !== "water") { setActiveTab("water"); return; }
-    if (currentPath !== "/map" && activeTab === "map") {
+    if (currentPath !== "/map" && currentPath !== "/water" && (activeTab === "map" || activeTab === "water")) {
       setActiveTab("home");
     }
   }, [activeTab, currentPath, setActiveTab]);
@@ -627,7 +629,7 @@ function MainContent({
                   key={tab.id}
                   onClick={() => {
                     onClearFocusedOrder();
-                    const nextPath = tab.id === "map" ? "/map" : "/";
+                    const nextPath = tab.id === "map" ? "/map" : tab.id === "water" ? "/water" : "/";
                     if (typeof window !== "undefined" && window.location.pathname !== nextPath) {
                       window.history.pushState({}, "", nextPath);
                     }

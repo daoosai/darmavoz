@@ -45,6 +45,7 @@ import { OrdersFilterBar } from "./components/admin/OrdersFilterBar";
 import { logoutCurrentSession } from "./pushAuth";
 import AdminEquipmentScreen, { type AdminEquipmentTab } from "./AdminEquipmentScreen";
 import SupportScreen from "./SupportScreen";
+import WaterSepticModerationPanel from "./components/admin/WaterSepticModerationPanel";
 
 interface AdminOrder {
   id: string;
@@ -68,6 +69,7 @@ interface AdminOrder {
     };
   };
   notes?: string;
+  clarification_reasons?: string[];
 }
 
 const mergeOrderIntoList = (orders: AdminOrder[], nextOrder: AdminOrder) => [
@@ -161,7 +163,7 @@ export default function LogistDashboardScreen({
   onLogout,
 }: LogistDashboardScreenProps) {
   const { token } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<"orders" | "drivers" | "equipment" | "support" | "profile">(
+  const [activeTab, setActiveTab] = useState<"orders" | "drivers" | "equipment" | "moderation" | "support" | "profile">(
     "orders",
   );
   const [equipmentTab, setEquipmentTab] = useState<AdminEquipmentTab>("listings");
@@ -172,6 +174,7 @@ export default function LogistDashboardScreen({
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingDrivers, setIsLoadingDrivers] = useState(true);
   const [assigningOrderId, setAssigningOrderId] = useState<string | null>(null);
+  const [resolvingClarificationId, setResolvingClarificationId] = useState<string | null>(null);
   const [orderDateFilter, setOrderDateFilter] = useState<string>("");
   const [manualAssignOrder, setManualAssignOrder] = useState<AdminOrder | null>(
     null,
@@ -369,6 +372,31 @@ export default function LogistDashboardScreen({
     }
   };
 
+  const handleResolveClarification = async (orderId: string) => {
+    try {
+      setResolvingClarificationId(orderId);
+      const res = await fetch(`${baseURL}/logist/orders/${orderId}/clarification-resolve`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(typeof data.detail === "string" ? data.detail : "Не удалось возобновить поиск");
+      }
+      toast.success("Уточнение получено, поиск водителя возобновлён");
+      setOrders((current) => mergeOrderIntoList(current, data));
+      await fetchOrders(true);
+    } catch (error) {
+      toast.error(handleApiError(error, "Не удалось возобновить поиск"));
+    } finally {
+      setResolvingClarificationId(null);
+    }
+  };
+
   const getVehicleString = (driver: AdminDriver) => {
     if (!driver.vehicle) return "Транспорт не указан";
     const brand =
@@ -551,6 +579,16 @@ export default function LogistDashboardScreen({
               }`}
             >
               <Wrench className="h-4 w-4" /> Спецтехника
+            </button>
+            <button
+              onClick={() => setActiveTab("moderation")}
+              className={`flex-1 sm:w-32 py-2 text-sm font-bold rounded-lg transition-colors flex justify-center items-center gap-2 ${
+                activeTab === "moderation"
+                  ? "bg-white text-slate-800 shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              <CheckCircle2 className="h-4 w-4" /> Модерация
             </button>
             <button
               onClick={() => setActiveTab("support")}
@@ -817,6 +855,22 @@ export default function LogistDashboardScreen({
                                 </>
                               )}
                             </button>
+                          )}
+
+                          {order.status === "requires_clarification" && (
+                            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                              <p className="text-sm font-bold text-amber-800">Требует уточнения</p>
+                              {order.clarification_reasons?.length ? <p className="mt-1 text-xs text-amber-700">Причины: {order.clarification_reasons.join(", ")}</p> : null}
+                              <button
+                                type="button"
+                                disabled={resolvingClarificationId === order.id}
+                                onClick={() => void handleResolveClarification(order.id)}
+                                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 py-3 text-sm font-bold text-white hover:bg-amber-600 disabled:opacity-50"
+                              >
+                                {resolvingClarificationId === order.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                                Уточнение получено / Возобновить поиск
+                              </button>
+                            </div>
                           )}
 
                           {(order.status === "searching_driver" ||
@@ -1132,6 +1186,8 @@ export default function LogistDashboardScreen({
               placementFilter={equipmentPlacementFilter}
               onPlacementFilterChange={setEquipmentPlacementFilter}
             />
+          ) : activeTab === "moderation" ? (
+            <WaterSepticModerationPanel token={token} />
           ) : activeTab === "support" ? (
             <SupportScreen operatorMode />
           ) : activeTab === "profile" ? (
@@ -1178,6 +1234,13 @@ export default function LogistDashboardScreen({
         >
           <div className={`p-1.5 rounded-xl ${activeTab === "equipment" ? "bg-[#2DB0E6]/10" : ""}`}><Wrench className="w-6 h-6" /></div>
           <span className="text-[10px] font-bold">Техника</span>
+        </button>
+        <button
+          onClick={() => setActiveTab("moderation")}
+          className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${activeTab === "moderation" ? "text-[#2DB0E6]" : "text-gray-400"}`}
+        >
+          <div className={`p-1.5 rounded-xl ${activeTab === "moderation" ? "bg-[#2DB0E6]/10" : ""}`}><CheckCircle2 className="w-6 h-6" /></div>
+          <span className="text-[10px] font-bold">Модерация</span>
         </button>
         <button
           onClick={() => setActiveTab("support")}

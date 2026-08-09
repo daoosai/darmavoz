@@ -412,6 +412,12 @@ class OrderUpdate(BaseModel):
         return self
 
 
+class ClarificationResolveRequest(BaseModel):
+    comment: str | None = Field(default=None, max_length=2000)
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+
 class ManualAssignRequest(BaseModel):
     driver_id: UUID
 
@@ -484,6 +490,10 @@ class OrderOut(BaseModel):
     created_by_source: str | None = None
     notes: str | None = None
     quantity: int = 0
+    clarification_reasons: list[str] = Field(default_factory=list)
+    clarification_comment: str | None = None
+    clarification_requested_at: datetime | None = None
+    clarification_resolved_at: datetime | None = None
     dispatch_started_at: datetime | None = None
     assigned_at: datetime | None = None
     created_at: datetime

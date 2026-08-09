@@ -49,6 +49,7 @@ async def get_current_user(
             username=username,
             role=payload.get("role"),
             client_id=payload.get("client_id"),
+            auth_version=payload.get("auth_version"),
         )
     except JWTError:
         raise credentials_exception
@@ -64,7 +65,7 @@ async def get_current_user(
     result = await db.execute(query)
     user = result.scalar_one_or_none()
 
-    if user is None or not user.is_active or user.is_deleted:
+    if user is None or not user.is_active or user.is_deleted or token_data.auth_version != user.auth_version:
         raise credentials_exception
     return user
 
@@ -84,6 +85,7 @@ async def get_current_client(
             username=payload.get("sub"),
             role=payload.get("role"),
             client_id=payload.get("client_id"),
+            auth_version=payload.get("auth_version"),
         )
     except JWTError:
         raise credentials_exception
@@ -92,7 +94,7 @@ async def get_current_client(
         raise credentials_exception
 
     client = await db.get(Client, token_data.client_id)
-    if client is None or client.is_deleted:
+    if client is None or client.is_deleted or token_data.auth_version != client.auth_version:
         raise credentials_exception
     return client
 

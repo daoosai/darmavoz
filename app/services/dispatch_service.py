@@ -393,6 +393,11 @@ async def build_order(
     if total_amount is not None and volume > 0:
         resolved_item_price = round(resolved_total_amount / volume, 2)
     now = utcnow()
+    clarification_reasons: list[str] = []
+    if not (client.phone or "").strip(): clarification_reasons.append("client_phone_missing")
+    if not (address or "").strip() or delivery_lat is None or delivery_lon is None: clarification_reasons.append("delivery_address_or_coordinates_missing")
+    if auto_dispatch and (pickup_lat is None or pickup_lon is None): clarification_reasons.append("pickup_coordinates_missing")
+    should_dispatch = auto_dispatch and not clarification_reasons
     delivery_address_value = delivery_address or address
     order = Order(
         client_id=client.id,
@@ -413,9 +418,12 @@ async def build_order(
         notes=notes,
         source=source,
         created_by_source=created_by_source,
-        status=OrderStatus.searching_driver.value if auto_dispatch else OrderStatus.created.value,
+        status=OrderStatus.requires_clarification.value if clarification_reasons else (OrderStatus.searching_driver.value if should_dispatch else OrderStatus.created.value),
         total_amount=resolved_total_amount,
-        dispatch_started_at=now if auto_dispatch else None,
+        dispatch_started_at=now if should_dispatch else None,
+        clarification_reasons=clarification_reasons,
+        clarification_requested_at=now if clarification_reasons else None,
+        clarification_resume_status=OrderStatus.searching_driver.value if auto_dispatch else OrderStatus.created.value,
     )
     session.add(order)
     await session.flush()
@@ -440,7 +448,10 @@ async def build_order(
         body=f"Поступил новый заказ #{order.id}",
         payload={"order_id": str(order.id), "event": "order_created"},
     )
-    if auto_dispatch:
+    if clarification_reasons:
+        await add_event(session, order.id, "requires_clarification", ", ".join(clarification_reasons), order_status=order.status)
+        await create_operator_notifications(session, event_type="order_requires_clarification", title="Заказ требует уточнения", body=f"Заказ #{order.id}: {', '.join(clarification_reasons)}", payload={"order_id": str(order.id), "event": "requires_clarification"})
+    if should_dispatch:
         await add_event(session, order.id, "dispatch_started", "Automatic dispatch started")
     return order
 
@@ -635,8 +646,9 @@ async def create_checkout_order(
     )
 
     await session.commit()
-    schedule_client_searching_driver_status_notification(order)
-    await enqueue_order_for_dispatch_safe(order.id)
+    if order.status == OrderStatus.searching_driver.value:
+        schedule_client_searching_driver_status_notification(order)
+        await enqueue_order_for_dispatch_safe(order.id)
     return await get_order_by_id(session, order.id)
 
 
@@ -776,7 +788,7 @@ async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate)
             order_id=order.id,
             driver_id=payload.driver_id,
         )
-    if should_auto_dispatch:
+    if should_auto_dispatch and order.status == OrderStatus.searching_driver.value:
         await enqueue_order_for_dispatch_safe(order.id)
     return await get_order_by_id(session, order.id)
 

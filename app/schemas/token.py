@@ -14,3 +14,4 @@ class TokenData(BaseModel):
     username: Optional[str] = None
     role: Optional[str] = None
     client_id: UUID | None = None
+    auth_version: int | None = None

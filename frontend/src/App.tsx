@@ -49,6 +49,7 @@ import SupplierPortalScreen from "./SupplierPortalScreen";
 import FloatingOrderTracker from "./FloatingOrderTracker";
 import EquipmentCatalogScreen from "./EquipmentCatalogScreen";
 import GlobalMapScreen from "./GlobalMapScreen";
+import WaterMapScreen from "./WaterMapScreen";
 import SupportScreen from "./SupportScreen";
 import PickupPointMapScreen, { PickupPointSelection } from "./PickupPointMapScreen";
 import EquipmentOwnerPortalScreen from "./EquipmentOwnerPortalScreen";
@@ -424,6 +425,7 @@ function MainContent({
       setActiveTab("map");
       return;
     }
+    if (currentPath === "/water" && activeTab !== "water") { setActiveTab("water"); return; }
     if (currentPath !== "/map" && activeTab === "map") {
       setActiveTab("home");
     }
@@ -592,6 +594,7 @@ function MainContent({
           )}
 
           {activeTab === "map" && <GlobalMapScreen />}
+          {activeTab === "water" && <WaterMapScreen />}
 
           {activeTab === "profile" &&
             (role === "client" ? (

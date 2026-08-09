@@ -143,6 +143,7 @@ def _build_email_auth_response(*, user: User) -> EmailAuthResponse:
             data={
                 "sub": user.username,
                 "role": role_name,
+                "auth_version": user.auth_version,
             }
         ),
         role=role_name,
@@ -252,7 +253,7 @@ async def _create_driver_from_payload(
 
 
 def _build_driver_registration_response(*, role: Role, user: User, driver: Driver) -> DriverRegistrationResponse:
-    access_token = create_access_token(data={"sub": user.username, "role": role.name})
+    access_token = create_access_token(data={"sub": user.username, "role": role.name, "auth_version": user.auth_version})
     return DriverRegistrationResponse(
         access_token=access_token,
         token_type="bearer",
@@ -343,6 +344,7 @@ async def verify_email_code(
                     "sub": normalized_email,
                     "role": "client",
                     "client_id": str(client.id),
+                    "auth_version": client.auth_version,
                 }
             ),
             role="client",
@@ -441,8 +443,9 @@ async def login(
 
     access_token = create_access_token(
         data={
-            "sub": user.username,
-            "role": role_name,
+                "sub": user.username,
+                "role": role_name,
+                "auth_version": user.auth_version,
         }
     )
     return Token(
@@ -485,6 +488,7 @@ async def verify_driver_login(
         data={
             "sub": user.username,
             "role": user.role.name if user.role else None,
+            "auth_version": user.auth_version,
         }
     )
     await redis.delete(_driver_login_code_key(normalized_phone))

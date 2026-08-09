@@ -65,7 +65,7 @@ const getOrderMaterialTitle = (order: ClientOrder) =>
 
 const getOrderQuantity = (order: ClientOrder) => order.items?.[0]?.quantity || 1;
 
-function OrderCard({ order, compact = false }: { order: ClientOrder; compact?: boolean }) {
+function OrderCard({ order, compact = false, onCancel }: { order: ClientOrder; compact?: boolean; onCancel?: (order: ClientOrder) => void }) {
   return (
     <motion.article
       layout
@@ -119,6 +119,7 @@ function OrderCard({ order, compact = false }: { order: ClientOrder; compact?: b
           </p>
         </div>
       ) : null}
+      {onCancel && new Set(["draft", "created", "requires_clarification", "searching_driver", "offered_to_driver", "driver_assigned", "no_driver_found", "timeout"]).has(order.status) ? <button type="button" onClick={() => onCancel(order)} className="mt-4 w-full rounded-xl border border-red-200 py-3 text-sm font-bold text-red-600">Отменить заказ</button> : null}
     </motion.article>
   );
 }
@@ -135,6 +136,7 @@ export default function OrdersScreen({
   const { role, token } = useAuthStore();
   const { orders, isLoading, setOrders, setIsLoading, clearOrders } = useClientOrdersStore();
   const [activeTab, setActiveTab] = useState<"current" | "history">("current");
+  const [cancelling, setCancelling] = useState<ClientOrder | null>(null);
 
   const fetchOrders = async () => {
     if (role !== "client") {
@@ -180,6 +182,12 @@ export default function OrdersScreen({
 
   const handleRefresh = async () => {
     await fetchOrders();
+  };
+  const cancelOrder = async () => {
+    if (!cancelling) return;
+    const response = await fetch(`${baseURL}/clients/me/orders/${cancelling.id}/cancel`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({}) });
+    setCancelling(null);
+    if (response.ok) await fetchOrders();
   };
 
   const currentOrders = focusedOrderId
@@ -284,7 +292,7 @@ export default function OrdersScreen({
                   <div className="flex flex-col gap-4">
                     {currentOrders.map((order) => (
                       <div key={order.id}>
-                        <OrderCard order={order} />
+                        <OrderCard order={order} onCancel={setCancelling} />
                       </div>
                     ))}
                   </div>
@@ -322,6 +330,7 @@ export default function OrdersScreen({
           </AnimatePresence>
         </div>
       </PullToRefresh>
+      {cancelling ? <div className="fixed inset-0 z-50 flex items-end bg-slate-900/40 p-4"><div className="w-full rounded-3xl bg-white p-5"><h3 className="text-lg font-black">Отменить заказ?</h3><p className="mt-2 text-sm text-slate-500">Поиск водителя будет остановлен.</p><div className="mt-5 flex gap-3"><button onClick={() => setCancelling(null)} className="flex-1 rounded-xl bg-slate-100 py-3 font-bold">Назад</button><button onClick={cancelOrder} className="flex-1 rounded-xl bg-red-500 py-3 font-bold text-white">Отменить</button></div></div></div> : null}
     </div>
   );
 }

@@ -13,6 +13,7 @@ export const ORDER_STATUSES_RU: Record<string, string> = {
   canceled: "Отменён",
   timeout: "Таймаут (нет ответа)",
   no_driver_found: "Нет исполнителя",
+  requires_clarification: "Требует уточнения",
   driver_cancel: "Отказ водителя",
 };
 

@@ -66,3 +66,19 @@ async def approve_water_point(point_id: UUID, db: AsyncSession = Depends(get_db)
     if point is None or point.is_deleted: raise HTTPException(status_code=404, detail="Точка воды не найдена")
     point.moderation_status = "approved"; point.moderated_at = datetime.now(UTC); point.moderated_by_user_id = current_user.id
     await db.commit(); await db.refresh(point); return point
+
+
+@router.post("/admin/water-points/{point_id}/reject", response_model=WaterPointOut)
+async def reject_water_point(point_id: UUID, reason: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_logist_user)):
+    point = await db.get(WaterPoint, point_id)
+    if point is None or point.is_deleted: raise HTTPException(status_code=404, detail="Точка воды не найдена")
+    point.moderation_status = "rejected"; point.moderation_comment = reason; point.moderated_at = datetime.now(UTC); point.moderated_by_user_id = current_user.id
+    await db.commit(); await db.refresh(point); return point
+
+
+@router.post("/admin/water-points/{point_id}/suspend", response_model=WaterPointOut)
+async def suspend_water_point(point_id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_logist_user)):
+    point = await db.get(WaterPoint, point_id)
+    if point is None or point.is_deleted: raise HTTPException(status_code=404, detail="Точка воды не найдена")
+    point.moderation_status = "suspended"; point.is_active = False; point.moderated_at = datetime.now(UTC); point.moderated_by_user_id = current_user.id
+    await db.commit(); await db.refresh(point); return point

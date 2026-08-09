@@ -1,0 +1,13 @@
+import { useEffect, useState } from "react";
+import { Droplets, MapPin, Phone } from "lucide-react";
+import { baseURL } from "./utils";
+
+type WaterPoint = { id: string; water_type: "free" | "paid"; name?: string | null; source: string; address: string; phone?: string | null; price?: number | null; price_unit?: string | null; description?: string | null };
+
+export default function WaterMapScreen() {
+  const [points, setPoints] = useState<WaterPoint[]>([]);
+  const [filter, setFilter] = useState<"" | "free" | "paid">("");
+  const [loading, setLoading] = useState(true);
+  useEffect(() => { void (async () => { try { const r = await fetch(`${baseURL}/water-points${filter ? `?water_type=${filter}` : ""}`); if (r.ok) setPoints(await r.json()); } finally { setLoading(false); } })(); }, [filter]);
+  return <section className="min-h-full bg-slate-50 p-4 pb-24"><div className="mb-4 flex items-center gap-3"><span className="rounded-2xl bg-sky-100 p-3 text-sky-600"><Droplets /></span><div><h1 className="text-xl font-black">Карта воды</h1><p className="text-sm text-slate-500">Точки без корзины и расчёта доставки</p></div></div><div className="mb-4 flex gap-2"><button onClick={() => setFilter("")} className="rounded-full bg-white px-3 py-2 text-sm font-bold">Все</button><button onClick={() => setFilter("free")} className="rounded-full bg-emerald-100 px-3 py-2 text-sm font-bold text-emerald-700">Бесплатная</button><button onClick={() => setFilter("paid")} className="rounded-full bg-sky-100 px-3 py-2 text-sm font-bold text-sky-700">Платная</button></div>{loading ? <p className="text-slate-500">Загрузка точек…</p> : <div className="space-y-3">{points.map((point) => <article key={point.id} className="rounded-3xl bg-white p-4 shadow-sm"><div className="flex items-start justify-between gap-3"><div><h2 className="font-black text-slate-900">{point.name || point.source}</h2><p className="text-sm text-slate-500">Источник: {point.source}</p></div><span className={`rounded-full px-3 py-1 text-xs font-bold ${point.water_type === "free" ? "bg-emerald-100 text-emerald-700" : "bg-sky-100 text-sky-700"}`}>{point.water_type === "free" ? "Бесплатно" : `${point.price} ₽/${point.price_unit}`}</span></div><p className="mt-3 flex gap-2 text-sm text-slate-600"><MapPin className="h-4 w-4 shrink-0" />{point.address}</p>{point.description && <p className="mt-2 text-sm text-slate-600">{point.description}</p>}{point.phone && <a className="mt-3 flex items-center gap-2 text-sm font-bold text-sky-600" href={`tel:${point.phone}`}><Phone className="h-4 w-4" />{point.phone}</a>}</article>)}</div>}</section>;
+}

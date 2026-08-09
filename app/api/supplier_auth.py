@@ -88,7 +88,7 @@ async def verify_supplier_registration(
         raise HTTPException(status_code=403, detail="SUPPLIER_ACCOUNT_DISABLED")
 
     await redis.delete(f"{CODE_PREFIX}:{phone}")
-    token = create_access_token(data={"sub": user.username, "role": "supplier"})
+    token = create_access_token(data={"sub": user.username, "role": "supplier", "auth_version": user.auth_version})
     return {
         "access_token": token,
         "role": "supplier",

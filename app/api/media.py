@@ -118,7 +118,7 @@ async def _resolve_media_entity_context(
         return "equipment_listing", entity_id, None
 
     if role_name == "supplier":
-        if entity_id is None or entity_type not in {"quarry", "equipment_listing"}:
+        if entity_id is None or entity_type not in {"quarry", "equipment_listing", "water_point"}:
             raise HTTPException(
                 status_code=403,
                 detail="Suppliers can upload media only for their own entities",
@@ -128,6 +128,11 @@ async def _resolve_media_entity_context(
             if listing is None or listing.owner_user_id != current_user.id:
                 raise HTTPException(status_code=404, detail="Equipment listing not found")
             return "equipment_listing", entity_id, None
+        if entity_type == "water_point":
+            point = await db.get(WaterPoint, entity_id)
+            if point is None or point.owner_user_id != current_user.id:
+                raise HTTPException(status_code=404, detail="Water point not found")
+            return "water_point", entity_id, None
         point = await db.get(Quarry, entity_id)
         if point is None or point.owner_user_id != current_user.id:
             raise HTTPException(status_code=404, detail="Pickup point not found")

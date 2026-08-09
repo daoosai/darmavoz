@@ -25,7 +25,7 @@ from app.schemas.driver import (
     DriverVerifyCodeRequest,
 )
 from app.schemas.token import Token
-from app.schemas.sprint19 import PasswordResetComplete, PasswordResetRequest, PasswordResetVerify
+from app.schemas.sprint19 import PasswordResetComplete, PasswordResetRequest, PasswordResetVerify, PasswordResetVerifyResponse
 from app.security.auth import get_password_hash, verify_password
 from app.security.jwt import create_access_token
 from app.services.auth_email_service import send_auth_email_code
@@ -109,8 +109,8 @@ async def request_password_reset(payload: PasswordResetRequest, background_tasks
     return {"ok": True, "status": "email_sent"}
 
 
-@router.post("/password-reset/verify")
-async def verify_password_reset(payload: PasswordResetVerify, db: AsyncSession = Depends(get_db)):
+@router.post("/password-reset/verify", response_model=PasswordResetVerifyResponse)
+async def verify_password_reset(payload: PasswordResetVerify, db: AsyncSession = Depends(get_db)) -> PasswordResetVerifyResponse:
     email = payload.email.strip().lower(); redis = get_redis()
     code = await redis.get(_password_reset_code_key(email))
     user = await _get_user_by_email(db, email)
@@ -119,7 +119,12 @@ async def verify_password_reset(payload: PasswordResetVerify, db: AsyncSession =
     token = secrets.token_urlsafe(32)
     await redis.delete(_password_reset_code_key(email))
     await redis.setex(f"{PASSWORD_RESET_TOKEN_PREFIX}:{token}", 600, str(user.id))
-    return {"reset_token": token}
+    return PasswordResetVerifyResponse(
+        reset_token=token,
+        role=user.role.name,
+        name=user.display_name,
+        email=user.email,
+    )
 
 
 @router.post("/password-reset/complete")

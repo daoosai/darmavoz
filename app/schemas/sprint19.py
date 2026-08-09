@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Literal
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
@@ -11,6 +12,13 @@ class PasswordResetRequest(BaseModel):
 
 class PasswordResetVerify(PasswordResetRequest):
     code: str = Field(min_length=4, max_length=8)
+
+
+class PasswordResetVerifyResponse(BaseModel):
+    reset_token: str
+    role: Literal["admin", "logist"]
+    name: str | None
+    email: str | None
 
 
 class PasswordResetComplete(BaseModel):

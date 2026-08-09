@@ -23,21 +23,37 @@ async def main() -> None:
         qa_user: User | None = None
         qa_role: str | None = None
 
-        for role_name in QA_ROLE_PRIORITY:
-            result = await session.execute(
-                select(User)
+        configured_admin = (
+            await session.execute(
+                select(User, Role)
                 .join(Role, User.role_id == Role.id)
                 .where(
-                    Role.name == role_name,
+                    User.username == settings.ADMIN_USERNAME,
+                    Role.name.in_(QA_ROLE_PRIORITY),
                     User.is_active.is_(True),
                     User.is_deleted.is_(False),
                 )
-                .order_by(User.id)
             )
-            qa_user = result.scalars().first()
-            if qa_user is not None:
-                qa_role = role_name
-                break
+        ).first()
+        if configured_admin is not None:
+            qa_user, role = configured_admin
+            qa_role = role.name
+        else:
+            for role_name in QA_ROLE_PRIORITY:
+                result = await session.execute(
+                    select(User)
+                    .join(Role, User.role_id == Role.id)
+                    .where(
+                        Role.name == role_name,
+                        User.is_active.is_(True),
+                        User.is_deleted.is_(False),
+                    )
+                    .order_by(User.id)
+                )
+                qa_user = result.scalars().first()
+                if qa_user is not None:
+                    qa_role = role_name
+                    break
 
         if qa_user is None or qa_role is None:
             raise RuntimeError("No active admin or logist user was found in the test database.")
@@ -49,19 +65,21 @@ async def main() -> None:
                 .order_by(User.id)
             )
         ).scalars().first()
-        if email_owner is not None and email_owner.id != qa_user.id:
-            raise RuntimeError(
-                "The QA email is already assigned to another user; no changes were made."
-            )
+        transferred = email_owner is not None and email_owner.id != qa_user.id
+        if transferred:
+            email_owner.email = None
+            await session.flush()
 
         changed = qa_user.email != QA_EMAIL
         if changed:
             qa_user.email = QA_EMAIL
+
+        if changed or transferred:
             await session.commit()
 
         print(
             "QA password reset account is ready "
-            f"(role={qa_role}, email={QA_EMAIL}, changed={changed})."
+            f"(role={qa_role}, email={QA_EMAIL}, changed={changed}, transferred={transferred})."
         )
 
 

@@ -229,9 +229,12 @@ export default function LoginScreen({
                 onClick={onSelectDriverRegister}
                 className="text-sm font-semibold text-[#2DB0E6]"
               >
-                Регистрация водителей
+                Регистрация самосвалов
               </button>
             </div>
+            <a href="tel:900900" className="mt-5 block text-center text-sm font-medium text-slate-500">
+              Служба поддержки: <span className="font-bold text-[#2DB0E6]">900-900</span>
+            </a>
           </>
         )}
       </div>

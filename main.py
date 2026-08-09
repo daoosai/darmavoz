@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api import admin, admin_moderation, admin_quarries, auth, catalog, client_addresses, client_auth, client_orders, clients, driver_dispatch, drivers, equipment, equipment_owner_auth, equipment_owner_profile, geo, logist_orders, media, orders, pickup_points, placements, supplier_auth, supplier_points, support, system, telemetry, webhooks
+from app.api import admin, admin_moderation, admin_quarries, auth, catalog, client_addresses, client_auth, client_orders, clients, driver_dispatch, drivers, equipment, equipment_owner_auth, equipment_owner_profile, geo, logist_orders, media, orders, pickup_points, placements, sprint19, supplier_auth, supplier_points, support, system, telemetry, water, webhooks
 from app.core.config import settings
 from app.core.error_handling import register_exception_handlers
 from app.db.seed import seed_data
@@ -144,6 +144,10 @@ app.include_router(support.router, prefix="/api/v1", tags=["support"])
 app.include_router(support.message_router, prefix="/api/v1")
 app.include_router(supplier_points.router, prefix="/api/v1/supplier", tags=["supplier-points"])
 app.include_router(equipment_owner_profile.router, prefix="/api/v1/equipment-owner", tags=["equipment-owner-profile"])
+app.include_router(water.router, prefix="/api/v1", tags=["water"])
+app.include_router(water.supplier_router, prefix="/api/v1/supplier", tags=["supplier-water"])
+app.include_router(sprint19.router, prefix="/api/v1", tags=["sprint19"])
+app.include_router(sprint19.equipment_owner_router, prefix="/api/v1/equipment-owner", tags=["septic-profile"])
 app.include_router(clients.router, prefix="/api/v1/clients", tags=["clients"])
 app.include_router(drivers.router, prefix="/api/v1/drivers", tags=["drivers"])
 app.include_router(logist_orders.router, prefix="/api/v1/logist", tags=["logist"])

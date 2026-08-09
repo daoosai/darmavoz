@@ -85,6 +85,9 @@ class User(Base):
         server_default=text("false"),
     )
     fcm_token: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    deletion_source: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    auth_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
 
     role: Mapped["Role"] = relationship("Role", back_populates="users")
     driver_profile: Mapped[Optional["Driver"]] = relationship(
@@ -111,6 +114,10 @@ class Client(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     external_source: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     external_user_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"), index=True)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    deletion_source: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    auth_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
 
     __table_args__ = (
         UniqueConstraint("external_source", "external_user_id", name="uq_client_ext_source_id"),
@@ -499,6 +506,89 @@ class MediaFile(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class WaterPointType(str, Enum):
+    free = "free"
+    paid = "paid"
+
+
+class WaterPoint(Base):
+    __tablename__ = "water_points"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    water_type: Mapped[str] = mapped_column(SQLEnum("free", "paid", name="water_point_type"), nullable=False)
+    name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    source: Mapped[str] = mapped_column(String(255), nullable=False)
+    address: Mapped[str] = mapped_column(Text, nullable=False)
+    lat: Mapped[float] = mapped_column(Float, nullable=False)
+    lon: Mapped[float] = mapped_column(Float, nullable=False)
+    phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
+    price_unit: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    moderation_status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending_moderation", index=True)
+    moderation_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    pending_changes: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    moderated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    moderated_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("true"))
+    is_deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        CheckConstraint("lat >= -90 AND lat <= 90 AND lon >= -180 AND lon <= 180", name="ck_water_point_coordinates"),
+        CheckConstraint("water_type <> 'paid' OR (name IS NOT NULL AND btrim(name) <> '' AND phone IS NOT NULL AND btrim(phone) <> '' AND price > 0 AND price_unit IS NOT NULL AND btrim(price_unit) <> '' AND description IS NOT NULL AND btrim(description) <> '')", name="ck_paid_water_required"),
+        CheckConstraint("water_type <> 'free' OR (price IS NULL AND price_unit IS NULL)", name="ck_free_water_no_price"),
+        Index("ix_water_points_public", "moderation_status", "is_active", "is_deleted"),
+    )
+
+
+class SepticProviderProfile(Base):
+    __tablename__ = "septic_provider_profiles"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False, unique=True, index=True)
+    phone: Mapped[str] = mapped_column(String(20), nullable=False)
+    address: Mapped[str] = mapped_column(Text, nullable=False)
+    lat: Mapped[float] = mapped_column(Float, nullable=False)
+    lon: Mapped[float] = mapped_column(Float, nullable=False)
+    tank_volume_m3: Mapped[float] = mapped_column(Numeric(8, 2), nullable=False)
+    service_price: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    moderation_status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending_moderation", index=True)
+    moderation_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    pending_changes: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    moderated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    moderated_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("true"))
+    is_deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        CheckConstraint("lat >= -90 AND lat <= 90 AND lon >= -180 AND lon <= 180", name="ck_septic_coordinates"),
+        CheckConstraint("tank_volume_m3 > 0", name="ck_septic_tank_volume"),
+        CheckConstraint("service_price > 0", name="ck_septic_service_price"),
+        Index("ix_septic_profiles_public", "moderation_status", "is_active", "is_deleted"),
+    )
+
+
+class UserNotification(Base):
+    __tablename__ = "user_notifications"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
+    is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
+    read_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (Index("ix_user_notifications_unread_created", "user_id", "is_read", "created_at"),)
+
+
 class SpecialEquipmentType(Base):
     __tablename__ = "special_equipment_types"
 
@@ -826,6 +916,7 @@ class OrderStatus(str, Enum):
     completed = "completed"
     cancelled = "cancelled"
     no_driver_found = "no_driver_found"
+    requires_clarification = "requires_clarification"
 
 
 class DriverStatus(str, Enum):
@@ -901,6 +992,15 @@ class Order(Base):
     dispatch_started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     assigned_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    clarification_reasons: Mapped[list] = mapped_column(JSONB, nullable=False, default=list, server_default="[]")
+    clarification_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    clarification_requested_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    clarification_resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    clarification_resolved_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    clarification_resume_status: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    cancelled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancelled_by_type: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    cancel_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     client: Mapped["Client"] = relationship("Client", back_populates="orders")
     driver: Mapped[Optional["Driver"]] = relationship("Driver", back_populates="orders")

@@ -29,6 +29,7 @@ ALLOWED_ENTITY_TYPES = {
     "vehicle",
     "quarry",
     "equipment_listing",
+    "water_point",
 }
 UPLOAD_CORS_CONFIGURATION = {
     "CORSRules": [

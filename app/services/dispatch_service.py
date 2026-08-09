@@ -50,6 +50,7 @@ from app.services.notifications import (
     schedule_logist_driver_rejected_notification,
     schedule_logist_no_driver_found_notification,
     schedule_logist_timeout_notification,
+    create_operator_notifications,
 )
 from app.services.relevance import public_placement_filters
 from app.services.order_pricing import calculate_client_order_pricing, resolve_min_delivery_price
@@ -432,6 +433,13 @@ async def build_order(
     await session.flush()
 
     await add_event(session, order.id, "order_created", f"Source: {created_by_source}")
+    await create_operator_notifications(
+        session,
+        event_type="order_created",
+        title="Новый заказ",
+        body=f"Поступил новый заказ #{order.id}",
+        payload={"order_id": str(order.id), "event": "order_created"},
+    )
     if auto_dispatch:
         await add_event(session, order.id, "dispatch_started", "Automatic dispatch started")
     return order

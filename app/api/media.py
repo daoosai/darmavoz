@@ -8,7 +8,7 @@ from sqlalchemy import and_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
-from app.models.models import DeliveryOption, Driver, Material, MediaFile, ModerationStatus, Order, Quarry, SpecialEquipmentListing, User, Vehicle
+from app.models.models import DeliveryOption, Driver, Material, MediaFile, ModerationStatus, Order, Quarry, SpecialEquipmentListing, User, Vehicle, WaterPoint
 from app.schemas.media import (
     ConfirmUploadRequest,
     ConfirmUploadResponse,
@@ -46,6 +46,7 @@ def _get_entity_model(entity_type: str):
         "vehicle": Vehicle,
         "quarry": Quarry,
         "equipment_listing": SpecialEquipmentListing,
+        "water_point": WaterPoint,
     }
     return model_map[entity_type]
 

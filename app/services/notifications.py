@@ -13,6 +13,9 @@ from app.models.models import (
     Quarry,
     SpecialEquipmentApplication,
     SpecialEquipmentListing,
+    Role,
+    User,
+    UserNotification,
 )
 from app.services.push_service import (
     schedule_push_to_client,
@@ -22,6 +25,17 @@ from app.services.push_service import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+async def create_operator_notifications(session, *, event_type: str, title: str, body: str, payload: dict[str, str]) -> None:
+    """Persist operator inbox records in the same transaction as the business event."""
+    result = await session.execute(
+        select(User.id).join(Role, User.role_id == Role.id).where(
+            Role.name.in_(("admin", "logist")), User.is_active.is_(True), User.is_deleted.is_(False)
+        )
+    )
+    for user_id in result.scalars():
+        session.add(UserNotification(user_id=user_id, event_type=event_type, title=title, body=body, payload=payload))
 
 
 def _safe_schedule(schedule_func, *args, **kwargs) -> None:

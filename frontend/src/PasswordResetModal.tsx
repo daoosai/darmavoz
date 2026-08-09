@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { ArrowLeft, Loader2, LockKeyhole, Mail, ShieldCheck, X } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -14,15 +14,10 @@ export default function PasswordResetModal({ onClose }: { onClose: () => void })
   const [newPassword, setNewPassword] = useState("");
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [resendSeconds, setResendSeconds] = useState(0);
 
-  const requestResetCode = async (event: FormEvent) => {
-    event.preventDefault();
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!normalizedEmail) {
-      toast.error("Введите email");
-      return;
-    }
-
+  const sendResetCode = async (targetEmail: string) => {
+    const normalizedEmail = targetEmail.trim().toLowerCase();
     setIsSubmitting(true);
     try {
       const response = await fetch(`${baseURL}/auth/password-reset/request`, {
@@ -35,14 +30,49 @@ export default function PasswordResetModal({ onClose }: { onClose: () => void })
         throw new Error(extractApiErrorMessage(data, "Не удалось отправить код"));
       }
       setEmail(normalizedEmail);
-      setStep("otp");
+      setCode("");
+      setResendSeconds(30);
       toast.success("Код отправлен на email");
+      return true;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Не удалось отправить код");
+      return false;
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  const requestResetCode = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!email.trim()) {
+      toast.error("Введите email");
+      return;
+    }
+
+    if (await sendResetCode(email)) {
+      setStep("otp");
+    }
+  };
+
+  const resendResetCode = async () => {
+    if (resendSeconds > 0 || isSubmitting) {
+      return;
+    }
+
+    await sendResetCode(email);
+  };
+
+  useEffect(() => {
+    if (step !== "otp" || resendSeconds <= 0) {
+      return;
+    }
+
+    const timerId = window.setInterval(() => {
+      setResendSeconds((seconds) => Math.max(seconds - 1, 0));
+    }, 1000);
+
+    return () => window.clearInterval(timerId);
+  }, [resendSeconds, step]);
 
   const verifyCode = async (event: FormEvent) => {
     event.preventDefault();
@@ -134,6 +164,11 @@ export default function PasswordResetModal({ onClose }: { onClose: () => void })
         {step === "otp" ? (
           <form onSubmit={verifyCode} className="mt-6 space-y-4">
             <label className="block text-sm font-bold text-slate-700">Код из письма<span className="mt-1 flex items-center gap-2 rounded-xl border border-slate-200 px-3"><ShieldCheck className="h-4 w-4 text-slate-400" /><input autoFocus required inputMode="numeric" value={code} onChange={(event) => setCode(event.target.value)} className="w-full py-3 tracking-[0.3em] outline-none" placeholder="000000" /></span></label>
+            {resendSeconds > 0 ? (
+              <p className="text-center text-sm text-slate-400">Отправить код повторно через {resendSeconds} сек</p>
+            ) : (
+              <button type="button" onClick={resendResetCode} disabled={isSubmitting} className="mx-auto block text-sm font-medium text-sky-600 transition-colors hover:text-sky-700 disabled:cursor-not-allowed disabled:text-slate-400">Отправить код повторно</button>
+            )}
             <div className="grid grid-cols-2 gap-3"><button type="button" onClick={() => setStep("email")} className="flex items-center justify-center gap-2 rounded-xl bg-slate-100 py-3 font-bold text-slate-700"><ArrowLeft className="h-4 w-4" />Назад</button><button disabled={isSubmitting} className="flex items-center justify-center gap-2 rounded-xl bg-sky-500 py-3 font-bold text-white hover:bg-sky-600 disabled:opacity-50">{isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Проверить"}</button></div>
           </form>
         ) : null}

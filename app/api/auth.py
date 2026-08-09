@@ -1,4 +1,5 @@
 import json
+import logging
 import secrets
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
@@ -33,6 +34,7 @@ from app.services.sms_service import generate_otp_code, normalize_sms_phone, sen
 from app.utils.phones import normalize_phone, normalize_phone_like_username
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 driver_auth_router = APIRouter()
 
 DRIVER_AUTH_CODE_TTL_SECONDS = 300
@@ -102,6 +104,7 @@ async def request_password_reset(payload: PasswordResetRequest, background_tasks
     if user and user.is_active and not user.is_deleted and user.role and user.role.name in {"admin", "logist"}:
         code = generate_otp_code()
         await get_redis().setex(_password_reset_code_key(email), 300, code)
+        logger.info("Password reset OTP for %s: %s", email, code)
         background_tasks.add_task(send_auth_email_code, to_email=email, code=code)
     return {"ok": True, "status": "email_sent"}
 

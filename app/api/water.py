@@ -1,6 +1,8 @@
 from datetime import UTC, datetime
+import logging
 from uuid import UUID
 
+from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,9 +11,11 @@ from app.db.database import get_db
 from app.models.models import MediaFile, User, WaterPoint
 from app.schemas.sprint19 import WaterPointIn, WaterPointOut
 from app.security.auth import get_current_logist_user, get_current_supplier_user
+from app.services.storage import StorageNotConfiguredError, get_storage_service
 
 router = APIRouter()
 supplier_router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _public_stmt():
@@ -40,6 +44,41 @@ async def _serialize_point(point: WaterPoint, db: AsyncSession) -> WaterPointOut
 
 async def _serialize_points(points: list[WaterPoint], db: AsyncSession) -> list[WaterPointOut]:
     return [await _serialize_point(point, db) for point in points]
+
+
+async def _hard_delete_water_point(point: WaterPoint, db: AsyncSession) -> None:
+    """Physically remove a water point and all media records attached to it."""
+    media_files = list(
+        (
+            await db.execute(
+                select(MediaFile).where(
+                    MediaFile.entity_type == "water_point",
+                    MediaFile.entity_id == point.id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    try:
+        storage = get_storage_service()
+    except StorageNotConfiguredError:
+        storage = None
+
+    for media_file in media_files:
+        if storage is not None:
+            try:
+                storage.delete_object(media_file.object_key)
+            except ClientError as exc:
+                error_code = exc.response.get("Error", {}).get("Code")
+                if error_code not in {"NoSuchKey", "404"}:
+                    logger.warning("Could not remove water point media object %s", media_file.object_key)
+            except Exception:
+                logger.exception("Could not remove water point media object %s", media_file.object_key)
+        await db.delete(media_file)
+
+    await db.delete(point)
 
 
 @router.get("/water-points", response_model=list[WaterPointOut])
@@ -97,6 +136,41 @@ async def delete_water_point(point_id: UUID, db: AsyncSession = Depends(get_db),
     point = await db.scalar(select(WaterPoint).where(WaterPoint.id == point_id, WaterPoint.owner_user_id == current_user.id))
     if point is None: raise HTTPException(status_code=404, detail="Точка воды не найдена")
     point.is_deleted = True; point.is_active = False; await db.commit(); return {"ok": True}
+
+
+@supplier_router.delete("/water-points/{point_id}/hard")
+async def hard_delete_water_point(
+    point_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_supplier_user),
+):
+    point = await db.scalar(
+        select(WaterPoint).where(
+            WaterPoint.id == point_id,
+            WaterPoint.owner_user_id == current_user.id,
+        )
+    )
+    if point is None:
+        raise HTTPException(status_code=404, detail="Точка воды не найдена")
+
+    await _hard_delete_water_point(point, db)
+    await db.commit()
+    return {"ok": True}
+
+
+@router.delete("/admin/water-points/{point_id}/hard")
+async def hard_delete_water_point_by_admin(
+    point_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_logist_user),
+):
+    point = await db.get(WaterPoint, point_id)
+    if point is None:
+        raise HTTPException(status_code=404, detail="Точка воды не найдена")
+
+    await _hard_delete_water_point(point, db)
+    await db.commit()
+    return {"ok": True}
 
 
 @router.post("/admin/water-points/{point_id}/approve", response_model=WaterPointOut)

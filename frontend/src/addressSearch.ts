@@ -1,5 +1,5 @@
 const DGIS_KEY = import.meta.env.VITE_2GIS_KEY;
-const TYUMEN_CITY = "\u0422\u044e\u043c\u0435\u043d\u044c";
+const TYUMEN_CITY = "Тюмень";
 const TYUMEN_LOCATION = "65.534328,57.152286";
 
 export const get2gisSuggestionLabel = (item: any): string =>
@@ -18,6 +18,13 @@ export const get2gisSuggestionAddress = (item: any): string =>
 export const get2gisSuggestionCoordinates = (
   item: any,
 ): { lat?: number; lon?: number } => {
+  if (typeof item?.point === "string") {
+    const [pointLon, pointLat] = item.point.split(",").map(Number);
+    if (Number.isFinite(pointLat) && Number.isFinite(pointLon)) {
+      return { lat: pointLat, lon: pointLon };
+    }
+  }
+
   const pointLat = Number(item?.point?.lat);
   const pointLon = Number(item?.point?.lon);
   if (Number.isFinite(pointLat) && Number.isFinite(pointLon)) {
@@ -59,6 +66,8 @@ export const fetch2gisAddressSuggestions = async (
       key: DGIS_KEY,
       location: TYUMEN_LOCATION,
       radius: "40000",
+      fields: "items.point",
+      locale: "ru_RU",
     });
     const response = await fetch(
       `https://catalog.api.2gis.com/3.0/suggests?${params.toString()}`,

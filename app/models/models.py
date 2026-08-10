@@ -538,7 +538,7 @@ class WaterPoint(Base):
 
     __table_args__ = (
         CheckConstraint("lat >= -90 AND lat <= 90 AND lon >= -180 AND lon <= 180", name="ck_water_point_coordinates"),
-        CheckConstraint("water_type <> 'paid' OR (name IS NOT NULL AND btrim(name) <> '' AND phone IS NOT NULL AND btrim(phone) <> '' AND price > 0 AND price_unit IS NOT NULL AND btrim(price_unit) <> '' AND description IS NOT NULL AND btrim(description) <> '')", name="ck_paid_water_required"),
+        CheckConstraint("water_type <> 'paid' OR (name IS NOT NULL AND btrim(name) <> '' AND phone IS NOT NULL AND btrim(phone) <> '' AND price > 0 AND price_unit IS NOT NULL AND btrim(price_unit) <> '')", name="ck_paid_water_required"),
         CheckConstraint("water_type <> 'free' OR (price IS NULL AND price_unit IS NULL)", name="ck_free_water_no_price"),
         Index("ix_water_points_public", "moderation_status", "is_active", "is_deleted"),
     )

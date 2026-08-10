@@ -660,7 +660,7 @@ export default function SupplierCreatePointModal({
   return (
     <div className="fixed inset-0 z-[60] overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-sm md:p-0">
       <div className="mb-16 max-h-[calc(100vh-6rem)] w-full overflow-y-auto bg-slate-50 sm:mx-auto sm:my-6 sm:max-w-xl sm:rounded-3xl md:mb-0 md:max-h-[calc(100vh-3rem)]">
-        <header className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:rounded-t-3xl">
+        <header className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white/95 px-5 pb-4 pt-[max(env(safe-area-inset-top),2.5rem)] backdrop-blur sm:rounded-t-3xl">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-500">
               {isEditing ? "Редактирование" : "Новая анкета"}

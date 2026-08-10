@@ -10,23 +10,33 @@
 }
 
 .water-map-marker__label {
+  position: relative;
   max-width: 180px;
   overflow: hidden;
   border-radius: 9999px;
-  background: rgba(15, 23, 42, 0.9);
+  background: #0ea5e9;
   padding: 3px 8px;
-  color: #fff;
+  color: #ffffff;
   font-size: 12px;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.water-map-marker__label-tail {
+  width: 0;
+  height: 0;
+  border-top: 6px solid #0ea5e9;
+  border-right: 6px solid transparent;
+  border-left: 6px solid transparent;
+  margin-top: -1px;
+}
+
 .water-map-marker__pin {
   display: grid;
   width: 34px;
   height: 34px;
-  margin-top: 3px;
+  margin-top: 2px;
   place-items: center;
   border: 2px solid #fff;
   border-radius: 9999px;

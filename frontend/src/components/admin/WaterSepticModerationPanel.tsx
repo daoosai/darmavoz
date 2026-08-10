@@ -5,7 +5,6 @@ import {
   MapPin,
   Phone,
   RefreshCw,
-  Trash2,
   Truck,
   X,
   XCircle,
@@ -49,7 +48,6 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
   const [loading, setLoading] = useState(false);
   const [actionId, setActionId] = useState<string | null>(null);
   const [rejectTarget, setRejectTarget] = useState<RejectTarget | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<RejectTarget | null>(null);
   const [rejectReason, setRejectReason] = useState("");
 
   const basePath = tab === "water" ? "/admin/water-points" : "/admin/septic-providers";
@@ -110,28 +108,6 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
   const openReject = (id: string, label: string) => {
     setRejectReason("");
     setRejectTarget({ id, label });
-  };
-
-  const hardDeleteWaterPoint = async () => {
-    if (!token || !deleteTarget) return;
-    setActionId(deleteTarget.id);
-    try {
-      const response = await fetch(`${baseURL}/admin/water-points/${deleteTarget.id}/hard`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(extractApiErrorMessage(data, "Не удалось удалить заявку"));
-      }
-      setDeleteTarget(null);
-      await load();
-      toast.success("Заявка полностью удалена.");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось удалить заявку");
-    } finally {
-      setActionId(null);
-    }
   };
 
   return (
@@ -196,10 +172,9 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
                     <p className="flex gap-2 text-sm text-slate-600"><MapPin className="h-4 w-4 shrink-0" />{point.address}</p>
                     {point.phone ? <p className="flex gap-2 text-sm text-slate-600"><Phone className="h-4 w-4 shrink-0" />{point.phone}</p> : null}
                     {point.description ? <p className="text-sm text-slate-600">{point.description}</p> : null}
-                    <div className="grid grid-cols-3 gap-2 border-t border-slate-100 pt-3">
+                    <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-3">
                       <button type="button" disabled={actionId === point.id} onClick={() => openReject(point.id, point.name || point.source)} className="flex items-center justify-center gap-2 rounded-xl border border-rose-200 py-2.5 text-sm font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50"><XCircle className="h-4 w-4" />Отклонить</button>
                       <button type="button" disabled={actionId === point.id} onClick={() => void moderate(point.id, "approve")} className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 py-2.5 text-sm font-bold text-white hover:bg-emerald-600 disabled:opacity-50">{actionId === point.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}Одобрить</button>
-                      <button type="button" disabled={actionId === point.id} onClick={() => setDeleteTarget({ id: point.id, label: point.name || point.source })} className="flex items-center justify-center gap-2 rounded-xl border border-rose-200 py-2.5 text-sm font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50"><Trash2 className="h-4 w-4" />Удалить</button>
                     </div>
                   </div>
                 </article>
@@ -234,15 +209,6 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
         </div>
       ) : null}
 
-      {deleteTarget ? (
-        <div className="fixed inset-0 z-[70] flex items-end justify-center bg-slate-900/40 p-4 sm:items-center" role="dialog" aria-modal="true" aria-label="Удаление заявки на воду">
-          <div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl">
-            <div className="flex items-start justify-between gap-4"><div><h3 className="text-lg font-black text-slate-900">Удалить заявку?</h3><p className="mt-1 text-sm text-slate-500">{deleteTarget.label}</p></div><button type="button" onClick={() => setDeleteTarget(null)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100" aria-label="Закрыть"><X className="h-5 w-5" /></button></div>
-            <p className="mt-4 text-sm text-slate-600">Заявка и прикреплённые фотографии будут удалены без возможности восстановления.</p>
-            <div className="mt-5 grid grid-cols-2 gap-3"><button type="button" disabled={actionId === deleteTarget.id} onClick={() => setDeleteTarget(null)} className="rounded-xl bg-slate-100 py-3 font-bold text-slate-700 disabled:opacity-50">Отмена</button><button type="button" disabled={actionId === deleteTarget.id} onClick={() => void hardDeleteWaterPoint()} className="flex items-center justify-center gap-2 rounded-xl bg-rose-500 py-3 font-bold text-white disabled:opacity-50">{actionId === deleteTarget.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}Удалить</button></div>
-          </div>
-        </div>
-      ) : null}
     </section>
   );
 }

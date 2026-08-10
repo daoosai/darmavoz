@@ -11,6 +11,7 @@ from app.db.database import get_db
 from app.models.models import MediaFile, User, WaterPoint
 from app.schemas.sprint19 import WaterPointIn, WaterPointOut
 from app.security.auth import get_current_logist_user, get_current_supplier_user
+from app.services.notifications import create_operator_notifications
 from app.services.storage import StorageNotConfiguredError, get_storage_service
 
 router = APIRouter()
@@ -119,7 +120,18 @@ async def my_water_points(db: AsyncSession = Depends(get_db), current_user: User
 @supplier_router.post("/water-points", response_model=WaterPointOut, status_code=status.HTTP_201_CREATED)
 async def create_water_point(payload: WaterPointIn, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_supplier_user)):
     point = WaterPoint(**payload.model_dump(), owner_user_id=current_user.id, moderation_status="pending_moderation")
-    db.add(point); await db.commit(); await db.refresh(point); return await _serialize_point(point, db)
+    db.add(point)
+    await db.flush()
+    await create_operator_notifications(
+        db,
+        event_type="water_point_created",
+        title="Новая точка воды на модерации",
+        body=f'Поставщик отправил точку воды "{point.name or point.source}" на модерацию.',
+        payload={"water_point_id": str(point.id), "event": "water_point_created"},
+    )
+    await db.commit()
+    await db.refresh(point)
+    return await _serialize_point(point, db)
 
 
 @supplier_router.patch("/water-points/{point_id}", response_model=WaterPointOut)
@@ -128,7 +140,17 @@ async def update_water_point(point_id: UUID, payload: WaterPointIn, db: AsyncSes
     if point is None: raise HTTPException(status_code=404, detail="Точка воды не найдена")
     for field, value in payload.model_dump().items(): setattr(point, field, value)
     point.moderation_status = "pending_moderation"; point.moderation_comment = None
-    await db.commit(); await db.refresh(point); return await _serialize_point(point, db)
+    await db.flush()
+    await create_operator_notifications(
+        db,
+        event_type="water_point_updated",
+        title="Точка воды изменена",
+        body=f'Поставщик отправил правки точки воды "{point.name or point.source}" на модерацию.',
+        payload={"water_point_id": str(point.id), "event": "water_point_updated"},
+    )
+    await db.commit()
+    await db.refresh(point)
+    return await _serialize_point(point, db)
 
 
 @supplier_router.delete("/water-points/{point_id}")

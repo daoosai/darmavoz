@@ -54,6 +54,7 @@ import WaterMapScreen from "./WaterMapScreen";
 import SupportScreen from "./SupportScreen";
 import PickupPointMapScreen, { PickupPointSelection } from "./PickupPointMapScreen";
 import EquipmentOwnerPortalScreen from "./EquipmentOwnerPortalScreen";
+import AdminNotificationToastListener from "./components/shared/AdminNotificationToastListener";
 
 // Reuse Material type as MaterialProps by exporting it from MaterialDetailScreen or type matching
 export default function App() {
@@ -304,6 +305,7 @@ export default function App() {
         }}
       />
       <InstallPWA />
+      <AdminNotificationToastListener />
       {renderContent()}
     </>
   );

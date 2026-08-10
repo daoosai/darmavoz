@@ -40,8 +40,15 @@ class WaterPointIn(BaseModel):
 
     @model_validator(mode="after")
     def validate_type(self):
-        if self.water_type == "paid" and not all((self.name, self.phone, self.price, self.price_unit)):
-            raise ValueError("Для платной воды обязательны название, телефон, цена и единица")
+        if self.water_type == "paid":
+            if not self.name or not self.name.strip():
+                raise ValueError("Для платной воды обязательно название")
+            if not self.phone or not self.phone.strip():
+                raise ValueError("Для платной воды обязательно заполните телефон")
+            if self.price is None:
+                raise ValueError("Для платной воды обязательно укажите цену")
+            if not self.price_unit or not self.price_unit.strip():
+                raise ValueError("Для платной воды обязательно укажите единицу измерения")
         if self.water_type == "free" and (self.price is not None or self.price_unit is not None):
             raise ValueError("Для бесплатной воды цена не указывается")
         return self

@@ -129,6 +129,8 @@ export interface AdminModerationNotification {
 const ADMIN_MODERATION_EVENTS = new Set([
   "pickup_point_pending_moderation",
   "equipment_listing_pending_moderation",
+  "water_point_created",
+  "water_point_updated",
 ]);
 
 export const isAdminModerationEvent = (

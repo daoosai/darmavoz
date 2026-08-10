@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
-import { Droplets, ImagePlus, Loader2, MapPin, Phone, Plus, Star, Trash2 } from "lucide-react";
+import { Droplets, ImagePlus, Loader2, MapPin, Pencil, Phone, Plus, Search, Star, Trash2, X } from "lucide-react";
 import toast from "react-hot-toast";
 
 import {
@@ -11,7 +11,7 @@ import {
 } from "./addressSearch";
 import MapWebGLFallback, { load2GisMapSdk, tryCreate2GisMap } from "./components/MapWebGLFallback";
 import { useAuthStore } from "./store";
-import { baseURL, extractApiErrorMessage, resolveMediaUrl } from "./utils";
+import { baseURL, extractApiErrorMessage, formatPhoneNumber, resolveMediaUrl } from "./utils";
 
 type WaterType = "free" | "paid";
 
@@ -46,6 +46,7 @@ const EMPTY_FORM = {
   address: "",
   lat: "",
   lon: "",
+  phone: "",
   price: "",
   price_unit: "литр",
   description: "",
@@ -62,6 +63,21 @@ const statusText: Record<string, string> = {
   suspended: "Приостановлено",
 };
 
+const normalizeModerationStatus = (status?: string | null) => status?.toLowerCase() || "";
+
+const getModerationStatusClass = (status?: string | null) => {
+  switch (normalizeModerationStatus(status)) {
+    case "approved":
+      return "bg-green-100 text-green-800";
+    case "rejected":
+      return "bg-red-100 text-red-800";
+    case "suspended":
+      return "bg-amber-100 text-amber-800";
+    default:
+      return "bg-slate-100 text-slate-700";
+  }
+};
+
 const stringifyCoordinate = (value?: number | null) =>
   typeof value === "number" && Number.isFinite(value) ? String(value) : "";
 
@@ -74,6 +90,24 @@ const parseCoordinate = (value?: string | number | null) => {
 
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : null;
+};
+
+const formatWaterPointPhone = (value?: string | null) => {
+  if (!value?.trim()) return "";
+  return formatPhoneNumber(value);
+};
+
+const normalizePhoneForApi = (value: string) => {
+  let digits = value.replace(/\D/g, "");
+  if (!digits) return "";
+
+  if (digits.startsWith("8")) {
+    digits = `7${digits.slice(1)}`;
+  } else if (!digits.startsWith("7")) {
+    digits = `7${digits}`;
+  }
+
+  return `+${digits.slice(0, 11)}`;
 };
 
 const readWaterPointDraft = (): typeof EMPTY_FORM | null => {
@@ -91,6 +125,7 @@ const readWaterPointDraft = (): typeof EMPTY_FORM | null => {
       address: typeof draft.address === "string" ? draft.address : "",
       lat: typeof draft.lat === "string" ? draft.lat : "",
       lon: typeof draft.lon === "string" ? draft.lon : "",
+      phone: typeof draft.phone === "string" ? formatWaterPointPhone(draft.phone) : "",
       price: typeof draft.price === "string" ? draft.price : "",
       price_unit: typeof draft.price_unit === "string" ? draft.price_unit : EMPTY_FORM.price_unit,
       description: typeof draft.description === "string" ? draft.description : "",
@@ -107,6 +142,7 @@ const hasWaterPointDraftContent = (form: typeof EMPTY_FORM) =>
   form.address.trim() !== "" ||
   form.lat.trim() !== "" ||
   form.lon.trim() !== "" ||
+  form.phone.trim() !== "" ||
   form.price.trim() !== "" ||
   form.price_unit !== EMPTY_FORM.price_unit ||
   form.description.trim() !== "";
@@ -127,6 +163,7 @@ export default function SupplierWaterPointsScreen({ token }: { token: string }) 
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [pendingFilePreviews, setPendingFilePreviews] = useState<string[]>([]);
   const [primaryPhotoIndex, setPrimaryPhotoIndex] = useState(0);
+  const [editingPoint, setEditingPoint] = useState<WaterPoint | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<WaterPoint | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
@@ -139,10 +176,11 @@ export default function SupplierWaterPointsScreen({ token }: { token: string }) 
   const markerRef = useRef<any>(null);
   const lastGeocodedAddressRef = useRef("");
   const skipNextDraftSaveRef = useRef(false);
+  const hasSavedDraftRef = useRef(false);
+  const phoneWasEditedRef = useRef(false);
   const currentUser = useAuthStore((state) => state.currentUser);
   const setCurrentUser = useAuthStore((state) => state.setCurrentUser);
-  const [profilePhone, setProfilePhone] = useState(() => extractProfilePhone(currentUser));
-  const [hasLoadedSupplierProfile, setHasLoadedSupplierProfile] = useState(Boolean(profilePhone));
+  const [profilePhone, setProfilePhone] = useState(() => formatWaterPointPhone(extractProfilePhone(currentUser)));
 
   const loadPoints = async () => {
     const response = await fetch(`${baseURL}/supplier/water-points`, {
@@ -162,6 +200,7 @@ export default function SupplierWaterPointsScreen({ token }: { token: string }) 
   useEffect(() => {
     const savedDraft = readWaterPointDraft();
     if (savedDraft) {
+      hasSavedDraftRef.current = true;
       setForm(savedDraft);
       setShowForm(hasWaterPointDraftContent(savedDraft));
     }
@@ -169,7 +208,7 @@ export default function SupplierWaterPointsScreen({ token }: { token: string }) 
   }, []);
 
   useEffect(() => {
-    if (!isDraftLoaded) return;
+    if (!isDraftLoaded || editingPoint) return;
     if (skipNextDraftSaveRef.current) {
       skipNextDraftSaveRef.current = false;
       return;
@@ -180,7 +219,7 @@ export default function SupplierWaterPointsScreen({ token }: { token: string }) 
     } catch {
       // localStorage может быть недоступен в приватном режиме браузера.
     }
-  }, [form, isDraftLoaded]);
+  }, [editingPoint, form, isDraftLoaded]);
 
   useEffect(() => {
     const nextPreviews = pendingFiles.map((file) => URL.createObjectURL(file));
@@ -203,15 +242,18 @@ export default function SupplierWaterPointsScreen({ token }: { token: string }) 
         if (!response.ok || cancelled) return;
 
         const phone = extractProfilePhone(data);
-        setProfilePhone(phone);
+        const formattedPhone = formatWaterPointPhone(phone);
+        setProfilePhone(formattedPhone);
+        if (formattedPhone && !hasSavedDraftRef.current && !phoneWasEditedRef.current) {
+          setForm((current) => (current.phone.trim() ? current : { ...current, phone: formattedPhone }));
+        }
         setCurrentUser({
           id: currentUser?.id || "supplier",
           name: typeof data.display_name === "string" ? data.display_name : currentUser?.name || "",
           phone: phone || null,
         });
-        setHasLoadedSupplierProfile(true);
       } catch {
-        // Не показываем предупреждение о пустом телефоне, пока профиль не удалось проверить.
+        // Если профиль недоступен, пользователь всё равно может заполнить телефон вручную.
       }
     };
 
@@ -327,7 +369,54 @@ export default function SupplierWaterPointsScreen({ token }: { token: string }) 
   }, [parsedCoordinates]);
 
   const update = (field: keyof typeof EMPTY_FORM, value: string) => {
+    if (field === "phone") {
+      phoneWasEditedRef.current = true;
+      setForm((current) => ({ ...current, phone: formatWaterPointPhone(value) }));
+      return;
+    }
     setForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const openCreateForm = () => {
+    if (editingPoint || !showForm) {
+      const savedDraft = readWaterPointDraft();
+      skipNextDraftSaveRef.current = true;
+      setForm(savedDraft || (editingPoint ? { ...EMPTY_FORM, phone: profilePhone } : form));
+    }
+    setEditingPoint(null);
+    setShowForm(true);
+  };
+
+  const openEditForm = (point: WaterPoint) => {
+    setEditingPoint(point);
+    setForm({
+      water_type: point.water_type === "paid" ? "paid" : "free",
+      name: point.name || "",
+      source: point.source,
+      address: point.address,
+      lat: stringifyCoordinate(point.lat),
+      lon: stringifyCoordinate(point.lon),
+      phone: formatWaterPointPhone(point.phone),
+      price: point.price === null || point.price === undefined ? "" : String(point.price),
+      price_unit: point.price_unit || EMPTY_FORM.price_unit,
+      description: point.description || "",
+    });
+    lastGeocodedAddressRef.current = point.address.trim().toLowerCase();
+    setPendingFiles([]);
+    setPrimaryPhotoIndex(0);
+    setShowForm(true);
+  };
+
+  const closeForm = () => {
+    if (editingPoint) {
+      const savedDraft = readWaterPointDraft();
+      skipNextDraftSaveRef.current = true;
+      setEditingPoint(null);
+      setForm(savedDraft || { ...EMPTY_FORM, phone: profilePhone });
+      setPendingFiles([]);
+      setPrimaryPhotoIndex(0);
+    }
+    setShowForm(false);
   };
 
   const getCoordsFromBackend = async (address: string) => {
@@ -476,8 +565,10 @@ export default function SupplierWaterPointsScreen({ token }: { token: string }) 
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    const pointBeingEdited = editingPoint;
     const isPaid = form.water_type === "paid";
     const address = form.address.trim();
+    const phone = normalizePhoneForApi(form.phone);
     let lat = parseCoordinate(form.lat);
     let lon = parseCoordinate(form.lon);
 
@@ -505,12 +596,8 @@ export default function SupplierWaterPointsScreen({ token }: { token: string }) 
       toast.error("Выберите адрес из подсказок или укажите точку на карте.");
       return;
     }
-    if (isPaid && !hasLoadedSupplierProfile) {
-      toast.error("Не удалось проверить номер телефона в профиле. Попробуйте ещё раз.");
-      return;
-    }
-    if (isPaid && (!profilePhone || !form.price || !form.price_unit.trim())) {
-      toast.error("Для платной воды заполните телефон в профиле, цену и единицу измерения.");
+    if (isPaid && (!phone || !form.price || !form.price_unit.trim())) {
+      toast.error("Для платной воды заполните телефон, цену и единицу измерения.");
       return;
     }
 
@@ -524,16 +611,21 @@ export default function SupplierWaterPointsScreen({ token }: { token: string }) 
         address,
         lat,
         lon,
-        phone: profilePhone || null,
+        phone: phone || null,
         price: isPaid ? Number(form.price) : null,
         price_unit: isPaid ? form.price_unit.trim() : null,
         description: isPaid ? form.description.trim() || null : null,
       };
-      const response = await fetch(`${baseURL}/supplier/water-points`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify(payload),
-      });
+      const response = await fetch(
+        pointBeingEdited
+          ? `${baseURL}/supplier/water-points/${pointBeingEdited.id}`
+          : `${baseURL}/supplier/water-points`,
+        {
+          method: pointBeingEdited ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify(payload),
+        },
+      );
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось сохранить точку воды"));
       createdPoint = data as WaterPoint;
@@ -544,18 +636,27 @@ export default function SupplierWaterPointsScreen({ token }: { token: string }) 
 
       toast.success(
         pendingFiles.length > 0
-          ? "Точка воды и фотографии отправлены на модерацию."
-          : "Точка воды отправлена на модерацию.",
+          ? pointBeingEdited
+            ? "Изменения точки и фотографии отправлены на модерацию."
+            : "Точка воды и фотографии отправлены на модерацию."
+          : pointBeingEdited
+            ? "Изменения точки отправлены на модерацию."
+            : "Точка воды отправлена на модерацию.",
       );
-      skipNextDraftSaveRef.current = true;
-      localStorage.removeItem(WATER_POINT_DRAFT_STORAGE_KEY);
-      setForm(EMPTY_FORM);
+      if (!pointBeingEdited) {
+        skipNextDraftSaveRef.current = true;
+        localStorage.removeItem(WATER_POINT_DRAFT_STORAGE_KEY);
+      } else {
+        skipNextDraftSaveRef.current = true;
+      }
+      setEditingPoint(null);
+      setForm({ ...EMPTY_FORM, phone: profilePhone });
       setPendingFiles([]);
       setPrimaryPhotoIndex(0);
       setShowForm(false);
       await loadPoints();
     } catch (error) {
-      if (createdPoint) {
+      if (createdPoint && !pointBeingEdited) {
         const rollbackResponse = await fetch(`${baseURL}/supplier/water-points/${createdPoint.id}/hard`, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
@@ -566,6 +667,11 @@ export default function SupplierWaterPointsScreen({ token }: { token: string }) 
           await loadPoints();
           toast.error("Точка воды создана, но часть фото не удалось загрузить. Удалите заявку и отправьте её снова.");
         }
+        return;
+      }
+      if (createdPoint) {
+        await loadPoints();
+        toast.error("Данные точки сохранены, но часть фото не удалось загрузить.");
         return;
       }
       toast.error(error instanceof Error ? error.message : "Не удалось сохранить точку воды");
@@ -595,6 +701,7 @@ export default function SupplierWaterPointsScreen({ token }: { token: string }) 
   };
 
   const isPaid = form.water_type === "paid";
+  const isEditing = Boolean(editingPoint);
   return (
     <div className="space-y-4 px-4 pb-24 pt-[max(env(safe-area-inset-top),2.5rem)]">
       <div className="flex items-center justify-between gap-3">
@@ -602,14 +709,20 @@ export default function SupplierWaterPointsScreen({ token }: { token: string }) 
           <span className="rounded-2xl bg-sky-100 p-3 text-sky-600"><Droplets /></span>
           <div><h1 className="text-xl font-black">Точки воды</h1><p className="text-sm text-slate-500">Бесплатная и платная вода</p></div>
         </div>
-        <button type="button" onClick={() => setShowForm((value) => !value)} className="rounded-xl bg-sky-500 p-3 text-white" aria-label="Добавить точку воды"><Plus /></button>
+        <button type="button" onClick={openCreateForm} className="rounded-xl bg-sky-500 p-3 text-white" aria-label="Добавить точку воды"><Plus /></button>
       </div>
 
       {showForm ? <form onSubmit={submit} className="space-y-4 rounded-3xl bg-white p-4 shadow-sm">
-        <h2 className="font-black">Новая точка воды</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="font-black">{isEditing ? "Редактирование точки воды" : "Новая точка воды"}</h2>
+          <button type="button" onClick={closeForm} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800" aria-label="Закрыть форму точки воды" title="Закрыть">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
         <label className="block text-sm font-bold">Тип воды<select value={form.water_type} onChange={(event) => update("water_type", event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 p-3"><option value="free">Бесплатная вода</option><option value="paid">Платная вода</option></select></label>
         <label className="block text-sm font-bold">Название {isPaid ? <span className="text-red-500">*</span> : <span className="font-normal text-slate-400">(необязательно)</span>}<input required={isPaid} value={form.name} onChange={(event) => update("name", event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 p-3" /></label>
         <label className="block text-sm font-bold">Источник <span className="text-red-500">*</span><input required value={form.source} onChange={(event) => update("source", event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 p-3" /></label>
+        <label className="block text-sm font-bold">Телефон {isPaid ? <span className="text-red-500">*</span> : <span className="font-normal text-slate-400">(необязательно)</span>}<input required={isPaid} type="tel" inputMode="tel" autoComplete="tel" maxLength={18} value={form.phone} onChange={(event) => update("phone", event.target.value)} placeholder="+7 (999) 999-99-99" className="mt-1 w-full rounded-xl border border-slate-200 p-3" /></label>
 
         <div className="space-y-2">
           <label className="block text-sm font-bold" htmlFor="water-point-address">Адрес <span className="text-red-500">*</span></label>
@@ -624,7 +737,6 @@ export default function SupplierWaterPointsScreen({ token }: { token: string }) 
           <p className="text-xs text-slate-500">{isGeocoding ? "Определяем координаты…" : parsedCoordinates ? `Координаты выбраны: ${parsedCoordinates.lat.toFixed(6)}, ${parsedCoordinates.lon.toFixed(6)}` : "Выберите адрес из подсказок или укажите точку на карте."}</p>
         </div>
 
-        {isPaid && hasLoadedSupplierProfile && !profilePhone ? <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">Для платной точки добавьте номер телефона в профиль.</p> : null}
         {isPaid ? <><div className="grid grid-cols-2 gap-3"><label className="text-sm font-bold">Цена <span className="text-red-500">*</span><input required type="number" min="0.01" step="0.01" value={form.price} onChange={(event) => update("price", event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 p-3" /></label><label className="text-sm font-bold">Единица <span className="text-red-500">*</span><input required value={form.price_unit} onChange={(event) => update("price_unit", event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 p-3" /></label></div><label className="block text-sm font-bold">Описание<textarea value={form.description} onChange={(event) => update("description", event.target.value)} className="mt-1 min-h-20 w-full rounded-xl border border-slate-200 p-3" /></label></> : null}
         <section className="rounded-2xl border border-slate-200 p-4">
           <div className="flex items-start justify-between gap-3">
@@ -654,12 +766,43 @@ export default function SupplierWaterPointsScreen({ token }: { token: string }) 
             </div>
           ) : <div className="mt-4 rounded-xl border border-dashed border-slate-300 px-3 py-5 text-center text-sm text-slate-500">Фото пока не добавлены</div>}
         </section>
-        <button disabled={saving} className="flex w-full items-center justify-center rounded-xl bg-sky-500 py-3 font-bold text-white disabled:opacity-50">{saving ? <Loader2 className="animate-spin" /> : "Отправить на модерацию"}</button>
+        <button disabled={saving} className="flex w-full items-center justify-center rounded-xl bg-sky-500 py-3 font-bold text-white disabled:opacity-50">{saving ? <Loader2 className="animate-spin" /> : isEditing ? "Сохранить и отправить на модерацию" : "Отправить на модерацию"}</button>
       </form> : null}
 
-      {points.map((point) => <article key={point.id} className="overflow-hidden rounded-3xl bg-white shadow-sm">{point.primary_image_url ? <img className="h-32 w-full object-cover" src={resolveMediaUrl(point.primary_image_url)} alt={point.name || point.source} /> : null}<div className="space-y-2 p-4"><div className="flex items-start justify-between gap-2"><div><h2 className="font-black">{point.name || point.source}</h2><p className="text-sm text-slate-500">{point.source}</p></div><span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold">{statusText[point.moderation_status] || point.moderation_status}</span></div><p className="flex gap-2 text-sm text-slate-600"><MapPin className="h-4 w-4 shrink-0" />{point.address}</p>{point.phone ? <p className="flex gap-2 text-sm text-slate-600"><Phone className="h-4 w-4" />{point.phone}</p> : null}{point.moderation_comment ? <p className="rounded-xl bg-red-50 p-2 text-sm text-red-700">{point.moderation_comment}</p> : null}<button type="button" onClick={() => setDeleteTarget(point)} className="flex w-full items-center justify-center gap-2 rounded-xl border border-rose-200 py-2 text-sm font-bold text-rose-600 hover:bg-rose-50"><Trash2 className="h-4 w-4" />Отменить заявку</button></div></article>)}
+      {points.map((point) => {
+        const moderationStatus = normalizeModerationStatus(point.moderation_status);
+        const waterType = point.water_type.toLowerCase();
+        const isApproved = moderationStatus === "approved";
+        const isPaidPoint = waterType === "paid";
 
-      {deleteTarget ? <div className="fixed inset-0 z-[70] flex items-end justify-center bg-slate-900/40 p-4 sm:items-center" role="dialog" aria-modal="true" aria-label="Отмена заявки на воду"><div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl"><h2 className="text-lg font-black text-slate-900">Отменить заявку?</h2><p className="mt-2 text-sm text-slate-600">«{deleteTarget.name || deleteTarget.source}» будет полностью удалена вместе с фотографиями. Это действие нельзя отменить.</p><div className="mt-5 grid grid-cols-2 gap-3"><button type="button" disabled={deletingId === deleteTarget.id} onClick={() => setDeleteTarget(null)} className="rounded-xl bg-slate-100 py-3 font-bold text-slate-700 disabled:opacity-50">Назад</button><button type="button" disabled={deletingId === deleteTarget.id} onClick={() => void hardDeletePoint()} className="flex items-center justify-center gap-2 rounded-xl bg-rose-500 py-3 font-bold text-white disabled:opacity-50">{deletingId === deleteTarget.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}Удалить</button></div></div></div> : null}
+        return (
+          <article key={point.id} className="overflow-hidden rounded-3xl bg-white shadow-sm">
+            {point.primary_image_url ? <img className="h-32 w-full object-cover" src={resolveMediaUrl(point.primary_image_url)} alt={point.name || point.source} /> : null}
+            <div className="space-y-3 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="truncate font-black">{point.name || point.source}</h2>
+                  <p className="text-sm text-slate-500">{point.source}</p>
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-1.5">
+                  <span className={`rounded-full px-2 py-1 text-xs font-bold ${getModerationStatusClass(moderationStatus)}`}>{statusText[moderationStatus] || point.moderation_status}</span>
+                  <span className={`rounded-full px-2 py-1 text-xs font-bold ${waterType === "free" ? "bg-blue-100 text-blue-800" : "bg-green-100 text-green-800"}`}>{waterType === "free" ? "Бесплатная вода" : "Платная вода"}</span>
+                </div>
+              </div>
+              <p className="flex gap-2 text-sm text-slate-600"><MapPin className="h-4 w-4 shrink-0" />{point.address}</p>
+              {point.phone ? <p className="flex gap-2 text-sm text-slate-600"><Phone className="h-4 w-4" />{point.phone}</p> : null}
+              {point.moderation_comment ? <p className="rounded-xl bg-red-50 p-2 text-sm text-red-700">{point.moderation_comment}</p> : null}
+              {isPaidPoint && point.price !== null && point.price !== undefined && point.price_unit ? <p className="text-right text-lg font-black text-slate-900">{Number(point.price).toLocaleString("ru-RU")} ₽/{point.price_unit}</p> : null}
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => openEditForm(point)} className="flex items-center justify-center gap-2 rounded-xl bg-slate-100 py-2 text-sm font-bold text-slate-700 hover:bg-slate-200"><Pencil className="h-4 w-4" />Редактировать</button>
+                <button type="button" onClick={() => setDeleteTarget(point)} className="flex items-center justify-center gap-2 rounded-xl border border-rose-200 py-2 text-sm font-bold text-rose-600 hover:bg-rose-50"><Trash2 className="h-4 w-4" />{isApproved ? "Удалить точку" : "Отменить заявку"}</button>
+              </div>
+            </div>
+          </article>
+        );
+      })}
+
+      {deleteTarget ? <div className="fixed inset-0 z-[70] flex items-end justify-center bg-slate-900/40 p-4 sm:items-center" role="dialog" aria-modal="true" aria-label="Удаление точки воды"><div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl"><h2 className="text-lg font-black text-slate-900">{normalizeModerationStatus(deleteTarget.moderation_status) === "approved" ? "Удалить точку?" : "Отменить заявку?"}</h2><p className="mt-2 text-sm text-slate-600">«{deleteTarget.name || deleteTarget.source}» будет полностью удалена вместе с фотографиями. Это действие нельзя отменить.</p><div className="mt-5 grid grid-cols-2 gap-3"><button type="button" disabled={deletingId === deleteTarget.id} onClick={() => setDeleteTarget(null)} className="rounded-xl bg-slate-100 py-3 font-bold text-slate-700 disabled:opacity-50">Назад</button><button type="button" disabled={deletingId === deleteTarget.id} onClick={() => void hardDeletePoint()} className="flex items-center justify-center gap-2 rounded-xl bg-rose-500 py-3 font-bold text-white disabled:opacity-50">{deletingId === deleteTarget.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}Удалить</button></div></div></div> : null}
     </div>
   );
 }

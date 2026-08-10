@@ -13,7 +13,12 @@ import {
 import toast from "react-hot-toast";
 
 import AddressMapPicker from "../AddressMapPicker";
-import { baseURL, extractApiErrorMessage, resolveMediaUrl } from "../../utils";
+import {
+  baseURL,
+  extractApiErrorMessage,
+  formatPhoneNumber,
+  resolveMediaUrl,
+} from "../../utils";
 
 type ManagementTab = "water" | "septic";
 type StatusFilter = "all" | "pending_moderation" | "approved" | "suspended";
@@ -66,6 +71,7 @@ const statusLabel: Record<string, string> = {
   approved: "Одобрено",
   rejected: "Отклонено",
   suspended: "В архиве",
+  archived: "В архиве",
 };
 
 const normalizeStatus = (status?: string | null) => status?.toLowerCase() || "";
@@ -77,6 +83,7 @@ const statusClass = (status?: string | null) => {
     case "rejected":
       return "bg-red-100 text-red-800";
     case "suspended":
+    case "archived":
       return "bg-amber-100 text-amber-800";
     default:
       return "bg-slate-100 text-slate-700";
@@ -90,20 +97,22 @@ const createWaterEditForm = (point: WaterPoint) => ({
   address: point.address || "",
   lat: String(point.lat ?? ""),
   lon: String(point.lon ?? ""),
-  phone: point.phone || "",
+  phone: formatPhoneNumber(point.phone || ""),
   price: point.price == null ? "" : String(point.price),
   price_unit: point.price_unit || "литр",
   description: point.description || "",
 });
 
 const createSepticEditForm = (profile: SepticProfile) => ({
-  phone: profile.phone || "",
+  phone: formatPhoneNumber(profile.phone || ""),
   address: profile.address || "",
   lat: String(profile.lat ?? ""),
   lon: String(profile.lon ?? ""),
   tank_volume_m3: String(profile.tank_volume_m3 ?? ""),
   service_price: String(profile.service_price ?? ""),
 });
+
+const normalizePhoneForApi = (value: string) => value.replace(/[^\d+]/g, "").trim();
 
 export default function WaterSepticModerationPanel({ token }: { token: string | null }) {
   const [tab, setTab] = useState<ManagementTab>("water");
@@ -185,7 +194,7 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
   const requestAction = async (
     kind: ManagementTab,
     id: string,
-    action: "approve" | "reject" | "suspend",
+    action: "approve" | "reject" | "suspend" | "restore",
     reason?: string,
   ) => {
     if (!token) return;
@@ -208,7 +217,9 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
           ? "Заявка одобрена"
           : action === "reject"
             ? "Заявка отклонена"
-            : "Запись перенесена в архив",
+            : action === "restore"
+              ? "Запись восстановлена из архива"
+              : "Запись перенесена в архив",
       );
       await load();
     } catch (error) {
@@ -248,13 +259,13 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
             address: waterEditForm.address.trim(),
             lat: Number(waterEditForm.lat),
             lon: Number(waterEditForm.lon),
-            phone: waterEditForm.phone.trim() || null,
+            phone: normalizePhoneForApi(waterEditForm.phone) || null,
             price: waterEditForm.water_type === "paid" ? Number(waterEditForm.price) : null,
             price_unit: waterEditForm.water_type === "paid" ? waterEditForm.price_unit.trim() : null,
             description: waterEditForm.description.trim() || null,
           }
         : {
-            phone: septicEditForm.phone.trim(),
+            phone: normalizePhoneForApi(septicEditForm.phone),
             address: septicEditForm.address.trim(),
             lat: Number(septicEditForm.lat),
             lon: Number(septicEditForm.lon),
@@ -314,17 +325,19 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
           const status = normalizeStatus(point.moderation_status);
           const isPending = status === "pending_moderation";
           const isApproved = status === "approved";
+          const isArchived = status === "suspended" || status === "archived";
           return <article key={point.id} className="overflow-hidden rounded-2xl border border-slate-100 bg-white">
             {point.primary_image_url ? <img src={resolveMediaUrl(point.primary_image_url)} alt={point.name || point.source} className="h-40 w-full object-cover" /> : null}
-            <div className="space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div><h3 className="font-bold text-slate-900">{point.name || point.source}</h3><p className="text-sm text-slate-500">Источник: {point.source}</p></div><div className="flex flex-col items-end gap-1"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${statusClass(status)}`}>{statusLabel[status] || point.moderation_status}</span><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${point.water_type === "free" ? "bg-blue-100 text-blue-800" : "bg-green-100 text-green-800"}`}>{point.water_type === "free" ? "Бесплатная" : "Платная"}</span></div></div><p className="flex gap-2 text-sm text-slate-600"><MapPin className="h-4 w-4 shrink-0" />{point.address}</p>{point.phone ? <p className="flex gap-2 text-sm text-slate-600"><Phone className="h-4 w-4 shrink-0" />{point.phone}</p> : null}{point.description ? <p className="text-sm text-slate-600">{point.description}</p> : null}{point.water_type === "paid" && point.price != null && point.price_unit ? <p className="text-right text-lg font-black text-slate-900">{Number(point.price).toLocaleString("ru-RU")} ₽/{point.price_unit}</p> : null}{point.moderation_comment ? <p className="rounded-xl bg-red-50 p-2 text-sm text-red-700">{point.moderation_comment}</p> : null}{isPending ? <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-3"><button type="button" disabled={actionId === point.id} onClick={() => openReject("water", point.id, point.name || point.source)} className="flex items-center justify-center gap-2 rounded-xl border border-rose-200 py-2.5 text-sm font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50"><XCircle className="h-4 w-4" />Отклонить</button><button type="button" disabled={actionId === point.id} onClick={() => void requestAction("water", point.id, "approve")} className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 py-2.5 text-sm font-bold text-white hover:bg-emerald-600 disabled:opacity-50">{actionId === point.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}Одобрить</button></div> : isApproved ? <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-3"><button type="button" onClick={() => openWaterEdit(point)} className="flex items-center justify-center rounded-xl bg-slate-100 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-200">Редактировать</button><button type="button" disabled={actionId === point.id} onClick={() => void requestAction("water", point.id, "suspend")} className="flex items-center justify-center gap-2 rounded-xl border border-amber-200 py-2.5 text-sm font-bold text-amber-700 hover:bg-amber-50 disabled:opacity-50"><Archive className="h-4 w-4" />В архив</button></div> : null}</div>
+            <div className="space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div><h3 className="font-bold text-slate-900">{point.name || point.source}</h3><p className="text-sm text-slate-500">Источник: {point.source}</p></div><div className="flex flex-col items-end gap-1"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${statusClass(status)}`}>{statusLabel[status] || point.moderation_status}</span><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${point.water_type === "free" ? "bg-blue-100 text-blue-800" : "bg-green-100 text-green-800"}`}>{point.water_type === "free" ? "Бесплатная" : "Платная"}</span></div></div><p className="flex gap-2 text-sm text-slate-600"><MapPin className="h-4 w-4 shrink-0" />{point.address}</p>{point.phone ? <p className="flex gap-2 text-sm text-slate-600"><Phone className="h-4 w-4 shrink-0" />{point.phone}</p> : null}{point.description ? <p className="text-sm text-slate-600">{point.description}</p> : null}{point.water_type === "paid" && point.price != null && point.price_unit ? <p className="text-right text-lg font-black text-slate-900">{Number(point.price).toLocaleString("ru-RU")} ₽/{point.price_unit}</p> : null}{point.moderation_comment ? <p className="rounded-xl bg-red-50 p-2 text-sm text-red-700">{point.moderation_comment}</p> : null}{isPending ? <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-3"><button type="button" disabled={actionId === point.id} onClick={() => openReject("water", point.id, point.name || point.source)} className="flex items-center justify-center gap-2 rounded-xl border border-rose-200 py-2.5 text-sm font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50"><XCircle className="h-4 w-4" />Отклонить</button><button type="button" disabled={actionId === point.id} onClick={() => void requestAction("water", point.id, "approve")} className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 py-2.5 text-sm font-bold text-white hover:bg-emerald-600 disabled:opacity-50">{actionId === point.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}Одобрить</button></div> : (isApproved || isArchived) ? <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-3"><button type="button" onClick={() => openWaterEdit(point)} className="flex items-center justify-center rounded-xl bg-slate-100 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-200">Редактировать</button><button type="button" disabled={actionId === point.id} onClick={() => void requestAction("water", point.id, isArchived ? "restore" : "suspend")} className={`flex items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-bold disabled:opacity-50 ${isArchived ? "border-emerald-200 text-emerald-700 hover:bg-emerald-50" : "border-amber-200 text-amber-700 hover:bg-amber-50"}`}>{actionId === point.id ? <Loader2 className="h-4 w-4 animate-spin" /> : isArchived ? <RefreshCw className="h-4 w-4" /> : <Archive className="h-4 w-4" />}{isArchived ? "Восстановить" : "В архив"}</button></div> : null}</div>
           </article>;
         }) : septicProfiles.map((profile) => {
           const status = normalizeStatus(profile.moderation_status);
           const isPending = status === "pending_moderation";
           const isApproved = status === "approved";
+          const isArchived = status === "suspended" || status === "archived";
           return <article key={profile.id} className="overflow-hidden rounded-2xl border border-slate-100 bg-white">
             {profile.primary_image_url ? <img src={resolveMediaUrl(profile.primary_image_url)} alt={profile.address} className="h-40 w-full object-cover" /> : null}
-            <div className="space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div className="flex items-start gap-3"><span className="rounded-xl bg-cyan-100 p-2.5 text-cyan-600"><Truck className="h-5 w-5" /></span><div><h3 className="font-bold text-slate-900">Откачка септика</h3><p className="mt-1 flex gap-2 text-sm text-slate-600"><Phone className="h-4 w-4 shrink-0" />{profile.phone}</p></div></div><span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${statusClass(status)}`}>{statusLabel[status] || profile.moderation_status}</span></div><p className="flex gap-2 text-sm text-slate-600"><MapPin className="h-4 w-4 shrink-0" />{profile.address}</p><div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-3 text-sm"><p><span className="block text-xs text-slate-400">Цистерна</span><strong>{profile.tank_volume_m3} м³</strong></p><p><span className="block text-xs text-slate-400">Цена услуги</span><strong>{Number(profile.service_price).toLocaleString("ru-RU")} ₽</strong></p></div>{profile.moderation_comment ? <p className="rounded-xl bg-red-50 p-2 text-sm text-red-700">{profile.moderation_comment}</p> : null}{isPending ? <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-3"><button type="button" disabled={actionId === profile.id} onClick={() => openReject("septic", profile.id, "Профиль септика")} className="flex items-center justify-center gap-2 rounded-xl border border-rose-200 py-2.5 text-sm font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50"><XCircle className="h-4 w-4" />Отклонить</button><button type="button" disabled={actionId === profile.id} onClick={() => void requestAction("septic", profile.id, "approve")} className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 py-2.5 text-sm font-bold text-white hover:bg-emerald-600 disabled:opacity-50">{actionId === profile.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}Одобрить</button></div> : isApproved ? <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-3"><button type="button" onClick={() => openSepticEdit(profile)} className="flex items-center justify-center rounded-xl bg-slate-100 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-200">Редактировать</button><button type="button" disabled={actionId === profile.id} onClick={() => void requestAction("septic", profile.id, "suspend")} className="flex items-center justify-center gap-2 rounded-xl border border-amber-200 py-2.5 text-sm font-bold text-amber-700 hover:bg-amber-50 disabled:opacity-50"><Archive className="h-4 w-4" />В архив</button></div> : null}</div>
+            <div className="space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div className="flex items-start gap-3"><span className="rounded-xl bg-cyan-100 p-2.5 text-cyan-600"><Truck className="h-5 w-5" /></span><div><h3 className="font-bold text-slate-900">Откачка септика</h3><p className="mt-1 flex gap-2 text-sm text-slate-600"><Phone className="h-4 w-4 shrink-0" />{profile.phone}</p></div></div><span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${statusClass(status)}`}>{statusLabel[status] || profile.moderation_status}</span></div><p className="flex gap-2 text-sm text-slate-600"><MapPin className="h-4 w-4 shrink-0" />{profile.address}</p><div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-3 text-sm"><p><span className="block text-xs text-slate-400">Цистерна</span><strong>{profile.tank_volume_m3} м³</strong></p><p><span className="block text-xs text-slate-400">Цена услуги</span><strong>{Number(profile.service_price).toLocaleString("ru-RU")} ₽</strong></p></div>{profile.moderation_comment ? <p className="rounded-xl bg-red-50 p-2 text-sm text-red-700">{profile.moderation_comment}</p> : null}{isPending ? <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-3"><button type="button" disabled={actionId === profile.id} onClick={() => openReject("septic", profile.id, "Профиль септика")} className="flex items-center justify-center gap-2 rounded-xl border border-rose-200 py-2.5 text-sm font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50"><XCircle className="h-4 w-4" />Отклонить</button><button type="button" disabled={actionId === profile.id} onClick={() => void requestAction("septic", profile.id, "approve")} className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 py-2.5 text-sm font-bold text-white hover:bg-emerald-600 disabled:opacity-50">{actionId === profile.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}Одобрить</button></div> : (isApproved || isArchived) ? <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-3"><button type="button" onClick={() => openSepticEdit(profile)} className="flex items-center justify-center rounded-xl bg-slate-100 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-200">Редактировать</button><button type="button" disabled={actionId === profile.id} onClick={() => void requestAction("septic", profile.id, isArchived ? "restore" : "suspend")} className={`flex items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-bold disabled:opacity-50 ${isArchived ? "border-emerald-200 text-emerald-700 hover:bg-emerald-50" : "border-amber-200 text-amber-700 hover:bg-amber-50"}`}>{actionId === profile.id ? <Loader2 className="h-4 w-4 animate-spin" /> : isArchived ? <RefreshCw className="h-4 w-4" /> : <Archive className="h-4 w-4" />}{isArchived ? "Восстановить" : "В архив"}</button></div> : null}</div>
           </article>;
         })}
       </div>}
@@ -366,7 +379,7 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
                   onChange={(location) => setWaterEditForm((current) => ({ ...current, ...location }))}
                 />
                 <label className="block text-sm font-bold">Телефон
-                  <input value={waterEditForm.phone} onChange={(event) => setWaterEditForm((current) => ({ ...current, phone: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal" />
+                  <input type="tel" inputMode="tel" autoComplete="tel" maxLength={18} value={waterEditForm.phone} onChange={(event) => setWaterEditForm((current) => ({ ...current, phone: formatPhoneNumber(event.target.value) }))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal" placeholder="+7 (999) 999-99-99" />
                 </label>
                 {waterEditForm.water_type === "paid" ? (
                   <div className="grid grid-cols-2 gap-3">
@@ -385,7 +398,7 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
             ) : (
               <div className="mt-4 space-y-3">
                 <label className="block text-sm font-bold">Телефон
-                  <input required value={septicEditForm.phone} onChange={(event) => setSepticEditForm((current) => ({ ...current, phone: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal" />
+                  <input required type="tel" inputMode="tel" autoComplete="tel" maxLength={18} value={septicEditForm.phone} onChange={(event) => setSepticEditForm((current) => ({ ...current, phone: formatPhoneNumber(event.target.value) }))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal" placeholder="+7 (999) 999-99-99" />
                 </label>
                 <AddressMapPicker
                   token={token}

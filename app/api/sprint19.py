@@ -293,6 +293,27 @@ async def suspend_septic_provider(
     return await _serialize_septic_profile(profile, db)
 
 
+@router.post("/admin/septic-providers/{profile_id}/restore", response_model=SepticProfileOut)
+async def restore_septic_provider(
+    profile_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_logist_user),
+):
+    profile = await db.get(SepticProviderProfile, profile_id)
+    if profile is None or profile.is_deleted:
+        raise HTTPException(status_code=404, detail="Профиль септика не найден")
+    if profile.moderation_status not in {"suspended", "archived"}:
+        raise HTTPException(status_code=409, detail="Профиль септика не находится в архиве")
+
+    profile.moderation_status = "approved"
+    profile.is_active = True
+    profile.moderated_by_user_id = current_user.id
+    profile.moderated_at = datetime.now(UTC)
+    await db.commit()
+    await db.refresh(profile)
+    return await _serialize_septic_profile(profile, db)
+
+
 @router.get("/notifications", response_model=list[NotificationOut])
 async def list_notifications(unread_only: bool = False, limit: int = 50, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_logist_user)):
     stmt = select(UserNotification).where(UserNotification.user_id == current_user.id)

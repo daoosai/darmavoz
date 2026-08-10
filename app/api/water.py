@@ -237,3 +237,20 @@ async def suspend_water_point(point_id: UUID, db: AsyncSession = Depends(get_db)
     if point is None or point.is_deleted: raise HTTPException(status_code=404, detail="Точка воды не найдена")
     point.moderation_status = "suspended"; point.is_active = False; point.moderated_at = datetime.now(UTC); point.moderated_by_user_id = current_user.id
     await db.commit(); await db.refresh(point); return await _serialize_point(point, db)
+
+
+@router.post("/admin/water-points/{point_id}/restore", response_model=WaterPointOut)
+async def restore_water_point(point_id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_logist_user)):
+    point = await db.get(WaterPoint, point_id)
+    if point is None or point.is_deleted:
+        raise HTTPException(status_code=404, detail="Точка воды не найдена")
+    if point.moderation_status not in {"suspended", "archived"}:
+        raise HTTPException(status_code=409, detail="Точка воды не находится в архиве")
+
+    point.moderation_status = "approved"
+    point.is_active = True
+    point.moderated_at = datetime.now(UTC)
+    point.moderated_by_user_id = current_user.id
+    await db.commit()
+    await db.refresh(point)
+    return await _serialize_point(point, db)

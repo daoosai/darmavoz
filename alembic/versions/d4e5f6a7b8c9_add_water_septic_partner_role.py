@@ -1,6 +1,6 @@
 """add water and septic partner role
 
-Revision ID: d4e5f6a7b8c9
+Revision ID: a0f6e2c4b8d1
 Revises: c0a1b2c3d4e5
 Create Date: 2026-08-10 18:30:00.000000
 
@@ -11,7 +11,7 @@ from typing import Sequence, Union
 from alembic import op
 
 
-revision: str = "d4e5f6a7b8c9"
+revision: str = "a0f6e2c4b8d1"
 down_revision: Union[str, None] = "c0a1b2c3d4e5"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

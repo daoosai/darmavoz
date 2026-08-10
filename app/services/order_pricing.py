@@ -46,6 +46,15 @@ def has_valid_coordinates(lat: float | None, lon: float | None) -> bool:
     )
 
 
+def build_2gis_route_stop(lat: float, lon: float) -> dict[str, float | str]:
+    """Build a 2GIS route point in the API-required longitude/latitude order."""
+    return {
+        "type": "stop",
+        "lon": float(lon),
+        "lat": float(lat),
+    }
+
+
 @dataclass(slots=True)
 class ClientOrderPricing:
     material: Material
@@ -107,21 +116,14 @@ async def get_2gis_route_distance(
     }
     payload = {
         "points": [
-            {
-                "type": "stop",
-                "lon": lon_a,
-                "lat": lat_a,
-            },
-            {
-                "type": "stop",
-                "lon": lon_b,
-                "lat": lat_b,
-            },
+            build_2gis_route_stop(lat_a, lon_a),
+            build_2gis_route_stop(lat_b, lon_b),
         ],
-        # Truck routing is not available for every 2GIS key. Use the broadly
-        # supported driving profile for the financial calculation.
+        # Keep routing compatible with base 2GIS Navigation API keys: no truck
+        # parameters, only the documented passenger-car profile.
         "transport": "driving",
         "route_mode": "fastest",
+        "traffic_mode": "jam",
         "output": "summary",
         "locale": "ru",
     }
@@ -148,7 +150,7 @@ async def get_2gis_route_distance(
     response_text = response.text
     if response.status_code != status.HTTP_200_OK:
         logger.error(
-            "2GIS Routing Error: %s - %s",
+            "2GIS routing failed. Status: %s, Body: %s",
             response.status_code,
             response_text,
             extra=log_context,
@@ -162,7 +164,7 @@ async def get_2gis_route_distance(
         api_status = response_data.get("status")
         if api_status and api_status != "OK":
             logger.error(
-                "2GIS Routing Status Error: %s - %s",
+                "2GIS routing failed. Status: %s, Body: %s",
                 api_status,
                 response_text,
                 extra=log_context,

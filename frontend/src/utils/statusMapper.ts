@@ -26,6 +26,7 @@ export const ORDER_TRACKER_PROGRESS: Record<string, { percentage: number; text: 
   searching_driver: { percentage: 20, text: "Ищем водителя..." },
   offered_to_driver: { percentage: 20, text: "Ищем водителя..." },
   no_driver_found: { percentage: 20, text: "Ищем водителя..." },
+  timeout: { percentage: 20, text: "Ищем водителя..." },
   driver_assigned: { percentage: 40, text: "Водитель назначен" },
   driver_accepted: { percentage: 40, text: "Водитель назначен" },
   heading_to_pickup: { percentage: 60, text: "Машина едет на погрузку" },
@@ -41,6 +42,7 @@ const STEP_INDEX_BY_STATUS: Record<string, number> = {
   searching_driver: 1,
   offered_to_driver: 1,
   no_driver_found: 1,
+  timeout: 1,
   driver_assigned: 2,
   driver_accepted: 2,
   heading_to_pickup: 3,
@@ -56,9 +58,17 @@ export const getOrderStatusText = (status: string | undefined | null) => {
   return ORDER_STATUSES_RU[status.toLowerCase()] || "Статус обновляется";
 };
 
+export const getClientOrderStatusText = (status: string | undefined | null) => {
+  const normalizedStatus = status?.toLowerCase();
+  if (normalizedStatus === "no_driver_found" || normalizedStatus === "timeout") {
+    return ORDER_STATUSES_RU.searching_driver;
+  }
+  return getOrderStatusText(normalizedStatus);
+};
+
 export const getOrderTrackerProgress = (status: string | undefined | null) => {
   if (!status) return null;
-  return ORDER_TRACKER_PROGRESS[status] ?? null;
+  return ORDER_TRACKER_PROGRESS[status.toLowerCase()] ?? null;
 };
 
 export const getOrderStepIndex = (status: string | undefined | null) => {

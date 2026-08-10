@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, Info, List, MapPin, Package, Truck, X } from "lucide-react";
 
 import { baseURL, clientOrderStatusColors, resolveMediaUrl } from "./utils";
-import { getOrderStatusText } from "./utils/statusMapper";
+import { getClientOrderStatusText } from "./utils/statusMapper";
 import {
   ClientOrderSummary,
   normalizeClientOrderSummary,
@@ -20,6 +20,7 @@ const activeStatuses = new Set([
   "searching_driver",
   "offered_to_driver",
   "no_driver_found",
+  "timeout",
   "driver_assigned",
   "driver_accepted",
   "heading_to_pickup",
@@ -36,6 +37,8 @@ const cancellableClientOrderStatuses = new Set([
   "requires_clarification",
   "offered_to_driver",
   "driver_assigned",
+  "no_driver_found",
+  "timeout",
 ]);
 
 const clientCancellationReasons = [
@@ -125,7 +128,7 @@ function OrderCard({
             clientOrderStatusColors[status] || "border border-slate-200 bg-slate-100 text-slate-600"
           }`}
         >
-          {getOrderStatusText(status)}
+          {getClientOrderStatusText(status)}
         </span>
       </div>
 

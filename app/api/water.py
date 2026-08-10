@@ -94,12 +94,14 @@ async def list_water_points(water_type: str | None = None, db: AsyncSession = De
 @router.get("/admin/water-points", response_model=list[WaterPointOut])
 async def list_water_points_for_moderation(
     moderation_status: str | None = None,
+    status: str | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_logist_user),
 ):
     stmt = select(WaterPoint).where(WaterPoint.is_deleted.is_(False))
-    if moderation_status:
-        stmt = stmt.where(WaterPoint.moderation_status == moderation_status)
+    selected_status = moderation_status or status
+    if selected_status and selected_status.lower() not in {"all", "все"}:
+        stmt = stmt.where(WaterPoint.moderation_status == selected_status)
     points = (await db.execute(stmt.order_by(WaterPoint.created_at.desc()))).scalars().all()
     return await _serialize_points(list(points), db)
 
@@ -158,6 +160,24 @@ async def delete_water_point(point_id: UUID, db: AsyncSession = Depends(get_db),
     point = await db.scalar(select(WaterPoint).where(WaterPoint.id == point_id, WaterPoint.owner_user_id == current_user.id))
     if point is None: raise HTTPException(status_code=404, detail="Точка воды не найдена")
     point.is_deleted = True; point.is_active = False; await db.commit(); return {"ok": True}
+
+
+@router.patch("/admin/water-points/{point_id}", response_model=WaterPointOut)
+async def update_water_point_by_admin(
+    point_id: UUID,
+    payload: WaterPointIn,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_logist_user),
+):
+    point = await db.get(WaterPoint, point_id)
+    if point is None or point.is_deleted:
+        raise HTTPException(status_code=404, detail="Точка воды не найдена")
+
+    for field, value in payload.model_dump().items():
+        setattr(point, field, value)
+    await db.commit()
+    await db.refresh(point)
+    return await _serialize_point(point, db)
 
 
 @supplier_router.delete("/water-points/{point_id}/hard")

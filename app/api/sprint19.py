@@ -99,13 +99,15 @@ async def list_septic_providers(db: AsyncSession = Depends(get_db)):
 @router.get("/admin/septic-providers", response_model=list[SepticProfileOut])
 async def list_septic_providers_for_moderation(
     moderation_status: str | None = None,
+    status: str | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_logist_user),
 ):
     del current_user
     stmt = select(SepticProviderProfile).where(SepticProviderProfile.is_deleted.is_(False))
-    if moderation_status:
-        stmt = stmt.where(SepticProviderProfile.moderation_status == moderation_status)
+    selected_status = moderation_status or status
+    if selected_status and selected_status.lower() not in {"all", "все"}:
+        stmt = stmt.where(SepticProviderProfile.moderation_status == selected_status)
     profiles = (await db.execute(stmt.order_by(SepticProviderProfile.created_at.desc()))).scalars().all()
     return await _serialize_septic_profiles(list(profiles), db)
 
@@ -252,6 +254,43 @@ async def reject_septic_provider(profile_id: UUID, reason: str, db: AsyncSession
     if profile is None or profile.is_deleted: raise HTTPException(status_code=404, detail="Профиль не найден")
     profile.moderation_status = "rejected"; profile.moderation_comment = reason; profile.moderated_by_user_id = current_user.id; profile.moderated_at = datetime.now(UTC)
     await db.commit(); await db.refresh(profile); return await _serialize_septic_profile(profile, db)
+
+
+@router.patch("/admin/septic-providers/{profile_id}", response_model=SepticProfileOut)
+async def update_septic_provider_by_admin(
+    profile_id: UUID,
+    payload: SepticProfileIn,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_logist_user),
+):
+    profile = await db.get(SepticProviderProfile, profile_id)
+    if profile is None or profile.is_deleted:
+        raise HTTPException(status_code=404, detail="Профиль септика не найден")
+
+    for field, value in payload.model_dump().items():
+        setattr(profile, field, value)
+    await db.commit()
+    await db.refresh(profile)
+    return await _serialize_septic_profile(profile, db)
+
+
+@router.post("/admin/septic-providers/{profile_id}/suspend", response_model=SepticProfileOut)
+async def suspend_septic_provider(
+    profile_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_logist_user),
+):
+    profile = await db.get(SepticProviderProfile, profile_id)
+    if profile is None or profile.is_deleted:
+        raise HTTPException(status_code=404, detail="Профиль септика не найден")
+
+    profile.moderation_status = "suspended"
+    profile.is_active = False
+    profile.moderated_by_user_id = current_user.id
+    profile.moderated_at = datetime.now(UTC)
+    await db.commit()
+    await db.refresh(profile)
+    return await _serialize_septic_profile(profile, db)
 
 
 @router.get("/notifications", response_model=list[NotificationOut])

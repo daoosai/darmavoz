@@ -711,9 +711,15 @@ export default function SepticProviderProfileScreen({ token }: { token: string }
             </p>
           </section>
 
-          <div className="grid grid-cols-2 gap-3">
-            <label className="text-sm font-bold text-slate-800">Объём цистерны, м³ <span className="text-red-500">*</span><input required type="number" min="0.1" step="0.1" value={form.tank_volume_m3} onChange={(event) => update("tank_volume_m3", event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 p-3 outline-none focus:border-sky-500" /></label>
-            <label className="text-sm font-bold text-slate-800">Стоимость, ₽ <span className="text-red-500">*</span><span className="mt-1 flex items-center gap-1 rounded-xl border border-slate-200 px-3 focus-within:border-sky-500"><Wallet className="h-4 w-4 text-slate-400" /><input required type="number" min="1" step="1" value={form.service_price} onChange={(event) => update("service_price", event.target.value)} className="min-w-0 w-full py-3 outline-none" /></span></label>
+          <div className="grid grid-cols-2 gap-4">
+            <label className="text-sm font-bold text-slate-800">
+              <span className="flex items-center gap-1 whitespace-nowrap">Объём цистерны, м³ <span className="text-red-500">*</span></span>
+              <input required type="number" min="0.1" step="0.1" value={form.tank_volume_m3} onChange={(event) => update("tank_volume_m3", event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 p-3 outline-none focus:border-sky-500" />
+            </label>
+            <label className="text-sm font-bold text-slate-800">
+              <span className="flex items-center gap-1 whitespace-nowrap">Стоимость, ₽ <span className="text-red-500">*</span></span>
+              <span className="mt-1 flex items-center gap-1 rounded-xl border border-slate-200 px-3 focus-within:border-sky-500"><Wallet className="h-4 w-4 text-slate-400" /><input required type="number" min="1" step="1" value={form.service_price} onChange={(event) => update("service_price", event.target.value)} className="min-w-0 w-full py-3 outline-none" /></span>
+            </label>
           </div>
 
           <section className="rounded-2xl border border-slate-200 p-4">

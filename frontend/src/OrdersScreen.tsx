@@ -99,6 +99,7 @@ function OrderCard({
     order.clarification_comment?.trim() ||
     order.clarification_reasons?.filter(Boolean).join(", ") ||
     "Логист ожидает уточнения по заказу.";
+  const clientClarificationReply = order.client_clarification_reply?.trim();
   return (
     <motion.article
       layout
@@ -144,12 +145,12 @@ function OrderCard({
         <section className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
           <p className="text-sm font-bold text-amber-900">Вопрос от логиста</p>
           <p className="mt-1 text-sm leading-relaxed text-amber-800">{clarificationQuestion}</p>
-          {order.client_clarification_reply ? (
+          {clientClarificationReply ? (
             <p className="mt-3 rounded-xl bg-white/70 p-3 text-sm text-amber-900">
-              <span className="font-bold">Ваш ответ:</span> {order.client_clarification_reply}
+              <span className="font-bold">Ваш ответ:</span> {clientClarificationReply}
             </p>
           ) : null}
-          {onReply ? (
+          {onReply && !clientClarificationReply ? (
             <button
               type="button"
               onClick={() => onReply(order)}
@@ -266,6 +267,7 @@ export default function OrdersScreen({
   };
 
   const openClarificationReplyModal = (order: ClientOrder) => {
+    if (order.client_clarification_reply?.trim()) return;
     setReplyingOrder(order);
     setClarificationReply(order.client_clarification_reply || "");
     setClarificationReplyError("");

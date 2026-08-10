@@ -448,13 +448,13 @@ async def build_order(
         session,
         event_type="order_created",
         title="Новый заказ",
-        body=f"Поступил новый заказ #{order.id}",
+        body=f"Новый заказ: {material.name}",
         payload={"order_id": str(order.id), "event": "order_created"},
     )
-    schedule_logist_order_created_notification(order)
+    schedule_logist_order_created_notification(order, material_name=material.name)
     if clarification_reasons:
         await add_event(session, order.id, "requires_clarification", ", ".join(clarification_reasons), order_status=order.status)
-        await create_operator_notifications(session, event_type="order_requires_clarification", title="Заказ требует уточнения", body=f"Заказ #{order.id}: {', '.join(clarification_reasons)}", payload={"order_id": str(order.id), "event": "requires_clarification"})
+        await create_operator_notifications(session, event_type="order_requires_clarification", title="Заказ требует уточнения", body=f"{material.name}: {', '.join(clarification_reasons)}", payload={"order_id": str(order.id), "event": "requires_clarification"})
         schedule_logist_requires_clarification_notification(order)
     if should_dispatch:
         await add_event(session, order.id, "dispatch_started", "Automatic dispatch started")

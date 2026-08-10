@@ -6,9 +6,10 @@ from datetime import UTC, datetime
 from uuid import UUID
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.db.database import get_db
-from app.models.models import Client, ClientAddress, Order, OrderEvent, OrderOffer, OrderOfferStatus, OrderStatus, User
+from app.models.models import Client, ClientAddress, Order, OrderEvent, OrderItem, OrderOffer, OrderOfferStatus, OrderStatus, User
 from app.schemas.client import (
     ClientCreate,
     ClientFcmTokenIn,
@@ -19,7 +20,7 @@ from app.schemas.client import (
 )
 from app.schemas.order import OrderOut
 from app.security.auth import get_current_client, get_current_logist_user
-from app.services.dispatch_service import get_order_by_id, list_orders_for_client
+from app.services.dispatch_service import get_order_by_id, get_order_material_name, list_orders_for_client
 from app.services.fcm_tokens import detach_fcm_token_from_other_entities
 from app.services.notifications import create_operator_notifications
 from app.schemas.sprint19 import ClientCancelOrderRequest, ClientClarificationReplyRequest, ConfirmationRequest
@@ -172,6 +173,7 @@ async def reply_to_order_clarification(
     try:
         order = await db.scalar(
             select(Order)
+            .options(selectinload(Order.items).selectinload(OrderItem.material))
             .where(
                 Order.id == order_id,
                 Order.client_id == current_client.id,
@@ -205,7 +207,7 @@ async def reply_to_order_clarification(
         await create_operator_notifications(
             db,
             event_type="client_clarification_reply",
-            title=f"Получен ответ от клиента по заказу #{order.id}",
+            title=f"Получен ответ от клиента по заказу {get_order_material_name(order)}",
             body=reply,
             payload={"order_id": str(order.id), "event": "client_clarification_reply"},
         )

@@ -292,11 +292,15 @@ def schedule_logist_no_driver_found_notification(order: Order) -> None:
     )
 
 
-def schedule_logist_order_created_notification(order: Order) -> None:
+def schedule_logist_order_created_notification(
+    order: Order,
+    *,
+    material_name: str = "Груз",
+) -> None:
     _safe_schedule(
         schedule_push_to_logists,
         "Новый заказ",
-        f"Поступил новый заказ #{order.id}.",
+        f"Новый заказ: {material_name}.",
         {**_order_push_data(order), "event": "order_created"},
     )
 

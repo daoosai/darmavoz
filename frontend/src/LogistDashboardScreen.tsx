@@ -587,7 +587,8 @@ export default function LogistDashboardScreen({
   return (
     <div className="flex flex-col h-screen bg-slate-50 relative overflow-hidden">
       {/* Header */}
-      <div className="bg-white px-6 pb-4 pt-[max(env(safe-area-inset-top),2.5rem)] shadow-sm z-10 sticky top-0 border-b border-slate-100 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+      <header className="sticky top-0 z-10 bg-white border-b border-slate-100 pb-4 pt-[max(env(safe-area-inset-top),2.5rem)] shadow-sm">
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
         <div className="flex items-center justify-between sm:justify-start gap-6">
           <div>
             <h1 className="text-2xl font-black text-[#2DB0E6] tracking-tight">
@@ -681,7 +682,8 @@ export default function LogistDashboardScreen({
             <span>Выйти</span>
           </button>
         </div>
-      </div>
+        </div>
+      </header>
 
       {/* Main Content */}
       <div className="flex-1 overflow-y-auto p-6 lg:p-8 sm:pb-8 pb-24 relative">
@@ -981,10 +983,10 @@ export default function LogistDashboardScreen({
                               type="button"
                               disabled={resolvingClarificationId === order.id || !order.client_clarification_reply?.trim()}
                               onClick={() => void handleResolveClarification(order.id)}
-                              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-green-500 py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-green-600 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
+                              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-[#0ea5e9] py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-sky-600 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
                             >
-                              {resolvingClarificationId === order.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                               Уточнение получено / Возобновить поиск
+                              {resolvingClarificationId === order.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                             </button>
                           )}
                         </div>

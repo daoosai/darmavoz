@@ -1636,8 +1636,8 @@ export default function AdminDashboardScreen({
   return (
     <div className="flex flex-col h-screen bg-slate-50 relative overflow-hidden text-slate-800">
       {/* Header */}
-      <div className="bg-white px-4 pb-4 pt-[max(env(safe-area-inset-top),2.5rem)] shadow-sm z-10 sticky top-0 border-b border-slate-100 flex flex-col gap-4">
-        <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3">
+      <header className="sticky top-0 z-10 bg-white border-b border-slate-100 pb-4 pt-[max(env(safe-area-inset-top),2.5rem)] shadow-sm">
+        <div className="mx-auto grid w-full max-w-7xl grid-cols-[auto_1fr_auto] items-center gap-3 px-4 sm:px-6 lg:px-8">
           <button
             type="button"
             onClick={() => setIsSidebarOpen((current) => !current)}
@@ -1777,7 +1777,7 @@ export default function AdminDashboardScreen({
           <span>Выйти</span>
         </button>
         </div>
-      </div>
+      </header>
 
       {pendingSepticProfileCount > 0 && !hideSepticBanner ? (
         <div className="mx-auto mt-4 flex w-full max-w-6xl flex-col gap-3 rounded-2xl border border-sky-200 bg-[linear-gradient(135deg,rgba(240,249,255,1)_0%,rgba(224,242,254,1)_100%)] px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">

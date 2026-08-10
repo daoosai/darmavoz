@@ -1,8 +1,12 @@
 export const ORDER_STATUSES_RU: Record<string, string> = {
-  created: "Создан",
+  draft: "Черновик",
+  created: "Заказ создан",
   searching_driver: "Поиск водителя",
-  driver_assigned: "Назначен",
-  driver_accepted: "Принят",
+  offered_to_driver: "Поиск водителя",
+  no_driver_found: "Водитель не найден",
+  requires_clarification: "Требует уточнения",
+  driver_assigned: "Водитель назначен",
+  driver_accepted: "Водитель подтвердил заказ",
   heading_to_pickup: "Выехал на загрузку",
   arrived_at_pickup: "Прибыл на загрузку",
   loading: "Загрузка",
@@ -10,10 +14,10 @@ export const ORDER_STATUSES_RU: Record<string, string> = {
   delivered: "Доставил",
   completed: "Завершён",
   cancelled: "Отменён",
+  cancelled_by_client: "Отменён",
+  cancelled_by_operator: "Отменён",
   canceled: "Отменён",
   timeout: "Таймаут (нет ответа)",
-  no_driver_found: "Нет исполнителя",
-  requires_clarification: "Требует уточнения",
   driver_cancel: "Отказ водителя",
 };
 
@@ -49,7 +53,7 @@ const STEP_INDEX_BY_STATUS: Record<string, number> = {
 
 export const getOrderStatusText = (status: string | undefined | null) => {
   if (!status) return "Неизвестно";
-  return ORDER_STATUSES_RU[status.toLowerCase()] || status;
+  return ORDER_STATUSES_RU[status.toLowerCase()] || "Статус обновляется";
 };
 
 export const getOrderTrackerProgress = (status: string | undefined | null) => {

@@ -41,6 +41,7 @@ from app.services.notifications import (
     schedule_client_driver_assigned_status_notification,
     schedule_client_heading_to_client_status_notification,
     schedule_client_heading_to_pickup_status_notification,
+    schedule_client_requires_clarification_notification,
     schedule_client_searching_driver_status_notification,
     schedule_driver_manual_assignment_notification,
     schedule_driver_new_order_notification,
@@ -1796,6 +1797,77 @@ async def resolve_order_clarification(
     if resume_status == OrderStatus.searching_driver.value:
         schedule_client_searching_driver_status_notification(order)
         await enqueue_order_for_dispatch_safe(order.id)
+    return await get_order_by_id(session, order.id)
+
+
+async def request_order_clarification(
+    session: AsyncSession,
+    *,
+    order_id: UUID,
+    requested_by_user_id: UUID,
+    comment: str,
+) -> Order:
+    order = await get_order_by_id(session, order_id)
+    allowed_statuses = {
+        OrderStatus.created.value,
+        OrderStatus.searching_driver.value,
+        OrderStatus.offered_to_driver.value,
+        OrderStatus.no_driver_found.value,
+    }
+    if order.status not in allowed_statuses:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Заказ нельзя перевести в статус уточнения на текущем этапе",
+        )
+
+    now = utcnow()
+    normalized_comment = comment.strip()
+    if not normalized_comment:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Укажите причину уточнения")
+
+    await session.execute(
+        update(OrderOffer)
+        .where(
+            OrderOffer.order_id == order.id,
+            OrderOffer.status == OrderOfferStatus.pending.value,
+        )
+        .values(
+            status=OrderOfferStatus.cancelled.value,
+            responded_at=now,
+            decision_reason="Clarification requested by logist",
+        )
+    )
+
+    order.clarification_resume_status = (
+        OrderStatus.searching_driver.value
+        if order.status in {
+            OrderStatus.searching_driver.value,
+            OrderStatus.offered_to_driver.value,
+            OrderStatus.no_driver_found.value,
+        }
+        else OrderStatus.created.value
+    )
+    order.status = OrderStatus.requires_clarification.value
+    order.clarification_reasons = [normalized_comment]
+    order.clarification_comment = normalized_comment
+    order.clarification_requested_at = now
+    order.clarification_resolved_at = None
+    order.clarification_resolved_by_user_id = None
+    order.current_offer_id = None
+    order.driver_id = None
+    order.assigned_at = None
+    order.dispatch_started_at = None
+
+    await add_event(
+        session,
+        order.id,
+        "requires_clarification",
+        normalized_comment,
+        order_status=order.status,
+    )
+    await session.commit()
+
+    schedule_client_requires_clarification_notification(order, normalized_comment)
     return await get_order_by_id(session, order.id)
 
 

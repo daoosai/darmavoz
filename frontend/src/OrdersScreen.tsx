@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import PullToRefresh from "react-simple-pull-to-refresh";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowLeft, Info, List, MapPin, Package, Truck } from "lucide-react";
+import { ArrowLeft, Info, List, MapPin, Package, Truck, X } from "lucide-react";
 
-import { baseURL, clientOrderStatusColors } from "./utils";
+import { baseURL, clientOrderStatusColors, resolveMediaUrl } from "./utils";
 import { getOrderStatusText } from "./utils/statusMapper";
 import {
   ClientOrderSummary,
@@ -28,6 +28,13 @@ const activeStatuses = new Set([
   "heading_to_client",
   "delivered",
 ]);
+
+const clientCancellationReasons = [
+  "Изменились планы",
+  "Нашёл дешевле",
+  "Долгая доставка",
+  "Другое",
+] as const;
 
 const formatDateTime = (value?: string | null) => {
   if (!value) {
@@ -66,7 +73,20 @@ const getOrderMaterialTitle = (order: ClientOrder) =>
 
 const getOrderQuantity = (order: ClientOrder) => order.items?.[0]?.quantity || 1;
 
-function OrderCard({ order, compact = false, onCancel }: { order: ClientOrder; compact?: boolean; onCancel?: (order: ClientOrder) => void }) {
+const getOrderMaterialImage = (order: ClientOrder) => {
+  const material = order.items?.[0]?.material;
+  const imageUrl =
+    material?.primary_image_url ||
+    material?.media_files?.find((file) => file.is_primary)?.public_url ||
+    material?.media_files?.[0]?.public_url ||
+    material?.image_url;
+
+  return resolveMediaUrl(imageUrl);
+};
+
+function OrderCard({ order, onCancel }: { order: ClientOrder; onCancel?: (order: ClientOrder) => void }) {
+  const status = order.status.toLowerCase();
+  const materialImage = getOrderMaterialImage(order);
   return (
     <motion.article
       layout
@@ -75,41 +95,38 @@ function OrderCard({ order, compact = false, onCancel }: { order: ClientOrder; c
       className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm"
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
-            Заказ #{order.id.slice(-6).toUpperCase()}
-          </p>
-          <h3 className="mt-1 text-lg font-black text-slate-900">{getOrderMaterialTitle(order)}</h3>
-          <p className="mt-1 text-sm text-slate-500">
-            {getOrderQuantity(order)} шт. · {order.delivery_option?.title || "Доставка"}
-          </p>
-        </div>
+        <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+          Заказ #{order.id.slice(-6).toUpperCase()}
+        </p>
         <span
           className={`shrink-0 rounded-full px-3 py-1 text-[10px] font-bold ${
-            clientOrderStatusColors[order.status] || "border border-slate-200 bg-slate-100 text-slate-600"
+            clientOrderStatusColors[status] || "border border-slate-200 bg-slate-100 text-slate-600"
           }`}
         >
-          {getOrderStatusText(order.status) || order.status}
+          {getOrderStatusText(status)}
         </span>
       </div>
 
-      <div className={`mt-4 grid gap-3 ${compact ? "grid-cols-1" : "grid-cols-2"}`}>
-        <div className="rounded-2xl bg-slate-50 p-3">
-          <p className="text-xs text-slate-400">Сумма</p>
-          <p className="mt-1 font-black text-slate-900">{formatAmount(order)}</p>
-        </div>
-        <div className="rounded-2xl bg-slate-50 p-3">
-          <p className="text-xs text-slate-400">Создан</p>
-          <p className="mt-1 font-bold text-slate-700">{formatDateTime(order.created_at)}</p>
-        </div>
+      <h3 className="mt-3 text-xl font-bold leading-snug text-slate-900">{getOrderMaterialTitle(order)}</h3>
+      <p className="mt-2 flex items-center gap-1.5 text-sm text-slate-500">
+        <Truck className="h-4 w-4 shrink-0 text-sky-500" />
+        {getOrderQuantity(order)} шт. · {order.delivery_option?.title || "Самосвал"}
+      </p>
+
+      <div className="mt-4 overflow-hidden rounded-xl bg-sky-50">
+        {materialImage ? (
+          <img src={materialImage} alt={getOrderMaterialTitle(order)} className="h-48 w-full object-cover" />
+        ) : (
+          <div className="flex h-48 w-full items-center justify-center text-sky-300">
+            <Package className="h-12 w-12" />
+          </div>
+        )}
       </div>
 
-      {order.address ? (
-        <p className="mt-4 flex items-start gap-2 text-sm text-slate-600">
-          <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-          {order.address}
-        </p>
-      ) : null}
+      <div className="mt-4">
+        <p className="text-xs text-slate-400">Сумма</p>
+        <p className="mt-1 text-xl font-bold text-slate-900">{formatAmount(order)}</p>
+      </div>
 
       {order.driver ? (
         <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50 p-4">
@@ -120,6 +137,14 @@ function OrderCard({ order, compact = false, onCancel }: { order: ClientOrder; c
           </p>
         </div>
       ) : null}
+
+      {order.address ? (
+        <p className="mt-4 flex items-start gap-2 text-sm text-slate-600">
+          <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+          {order.address}
+        </p>
+      ) : null}
+      <p className="mt-4 text-xs text-slate-400">Создан: {formatDateTime(order.created_at)}</p>
       {onCancel && new Set(["draft", "created", "requires_clarification", "searching_driver", "offered_to_driver", "driver_assigned", "no_driver_found", "timeout"]).has(order.status) ? <button type="button" onClick={() => onCancel(order)} className="mt-4 w-full rounded-xl border border-red-200 py-3 text-sm font-bold text-red-600">Отменить заказ</button> : null}
     </motion.article>
   );
@@ -138,6 +163,9 @@ export default function OrdersScreen({
   const { orders, isLoading, setOrders, setIsLoading, clearOrders } = useClientOrdersStore();
   const [activeTab, setActiveTab] = useState<"current" | "history">("current");
   const [cancelling, setCancelling] = useState<ClientOrder | null>(null);
+  const [cancelReason, setCancelReason] = useState<string>("");
+  const [cancelComment, setCancelComment] = useState("");
+  const [cancelError, setCancelError] = useState("");
 
   const fetchOrders = async () => {
     if (role !== "client") {
@@ -184,11 +212,44 @@ export default function OrdersScreen({
   const handleRefresh = async () => {
     await fetchOrders();
   };
+  const openCancelModal = (order: ClientOrder) => {
+    setCancelling(order);
+    setCancelReason("");
+    setCancelComment("");
+    setCancelError("");
+  };
+
+  const closeCancelModal = () => {
+    setCancelling(null);
+    setCancelReason("");
+    setCancelComment("");
+    setCancelError("");
+  };
+
   const cancelOrder = async () => {
     if (!cancelling) return;
-    const response = await fetch(`${baseURL}/clients/me/orders/${cancelling.id}/cancel`, { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({}) });
-    setCancelling(null);
-    if (response.ok) await fetchOrders();
+    const comment = cancelComment.trim();
+    const reason = cancelReason === "Другое" ? comment : comment ? `${cancelReason}: ${comment}` : cancelReason;
+    if (!reason) {
+      setCancelError("Выберите или укажите причину отмены.");
+      return;
+    }
+
+    try {
+      const response = await fetch(`${baseURL}/clients/me/orders/${cancelling.id}/cancel`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ reason }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(typeof data.detail === "string" ? data.detail : "Не удалось отменить заказ");
+      }
+      closeCancelModal();
+      await fetchOrders();
+    } catch (error) {
+      setCancelError(error instanceof Error ? error.message : "Не удалось отменить заказ");
+    }
   };
 
   const currentOrders = focusedOrderId
@@ -293,7 +354,7 @@ export default function OrdersScreen({
                   <div className="flex flex-col gap-4">
                     {currentOrders.map((order) => (
                       <div key={order.id}>
-                        <OrderCard order={order} onCancel={setCancelling} />
+                        <OrderCard order={order} onCancel={openCancelModal} />
                       </div>
                     ))}
                   </div>
@@ -316,7 +377,7 @@ export default function OrdersScreen({
                   <div className="flex flex-col gap-3">
                     {historyOrders.map((order) => (
                       <div key={order.id}>
-                        <OrderCard order={order} compact />
+                        <OrderCard order={order} />
                       </div>
                     ))}
                   </div>
@@ -331,7 +392,39 @@ export default function OrdersScreen({
           </AnimatePresence>
         </div>
       </PullToRefresh>
-      {cancelling ? <div className="fixed inset-0 z-50 flex items-end bg-slate-900/40 p-4"><div className="w-full rounded-3xl bg-white p-5"><h3 className="text-lg font-black">Отменить заказ?</h3><p className="mt-2 text-sm text-slate-500">Поиск водителя будет остановлен.</p><div className="mt-5 flex gap-3"><button onClick={() => setCancelling(null)} className="flex-1 rounded-xl bg-slate-100 py-3 font-bold">Назад</button><button onClick={cancelOrder} className="flex-1 rounded-xl bg-red-500 py-3 font-bold text-white">Отменить</button></div></div></div> : null}
+      {cancelling ? (
+        <div className="fixed inset-0 z-[60] flex items-end bg-slate-900/40 p-4 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="cancel-order-title">
+          <div className="w-full rounded-3xl bg-white p-5 shadow-2xl sm:max-w-md">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 id="cancel-order-title" className="text-lg font-black text-slate-900">Отменить заказ?</h3>
+                <p className="mt-1 text-sm text-slate-500">Поиск водителя будет остановлен.</p>
+              </div>
+              <button type="button" onClick={closeCancelModal} className="rounded-full bg-slate-100 p-2 text-slate-500 hover:bg-slate-200" aria-label="Закрыть">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <fieldset className="mt-5 space-y-2">
+              <legend className="text-sm font-bold text-slate-800">Причина отмены</legend>
+              {clientCancellationReasons.map((item) => (
+                <label key={item} className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 text-sm font-semibold transition ${cancelReason === item ? "border-sky-400 bg-sky-50 text-sky-800" : "border-slate-200 text-slate-700 hover:bg-slate-50"}`}>
+                  <input type="radio" name="cancel-reason" value={item} checked={cancelReason === item} onChange={() => { setCancelReason(item); setCancelError(""); }} className="accent-sky-500" />
+                  {item}
+                </label>
+              ))}
+            </fieldset>
+            <label className="mt-4 block text-sm font-bold text-slate-800">
+              {cancelReason === "Другое" ? "Укажите причину" : "Комментарий к отмене (необязательно)"}
+              <textarea value={cancelComment} maxLength={cancelReason === "Другое" ? 500 : 470} onChange={(event) => { setCancelComment(event.target.value); setCancelError(""); }} placeholder={cancelReason === "Другое" ? "Расскажите, почему отменяете заказ" : "При необходимости добавьте детали"} className="mt-2 min-h-24 w-full resize-none rounded-xl border border-slate-200 p-3 text-sm font-normal outline-none focus:border-sky-400" />
+            </label>
+            {cancelError ? <p className="mt-2 text-sm font-medium text-red-600">{cancelError}</p> : null}
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <button type="button" onClick={closeCancelModal} className="rounded-xl bg-slate-100 py-3 font-bold text-slate-700">Назад</button>
+              <button type="button" onClick={() => void cancelOrder()} className="rounded-xl bg-red-500 py-3 font-bold text-white hover:bg-red-600">Отменить</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

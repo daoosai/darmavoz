@@ -10,6 +10,7 @@ from app.db.database import get_db
 from app.models.models import Order, User
 from app.schemas.client import ClientFcmTokenIn, ClientFcmTokenOut
 from app.schemas.order import (
+    ClarificationRequest,
     ClarificationResolveRequest,
     DispatchHistoryOut,
     LogistOrderCreate,
@@ -27,6 +28,7 @@ from app.services.dispatch_service import (
     delete_order_by_id,
     get_order_by_id,
     list_recent_orders,
+    request_order_clarification,
     resolve_order_clarification,
     restart_dispatch_for_order,
     update_order_by_logist,
@@ -172,4 +174,19 @@ async def resolve_clarification(
         order_id=order_id,
         resolved_by_user_id=current_user.id,
         comment=payload.comment if payload is not None else None,
+    )
+
+
+@router.patch("/orders/{order_id}/clarification", response_model=OrderOut)
+async def request_clarification(
+    order_id: UUID,
+    payload: ClarificationRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_logist_user),
+) -> Order:
+    return await request_order_clarification(
+        db,
+        order_id=order_id,
+        requested_by_user_id=current_user.id,
+        comment=payload.comment,
     )

@@ -41,7 +41,12 @@ export interface ClientOrderSummary {
   total_price?: number | null;
   created_at: string;
   items?: {
-    material?: { name?: string | null } | null;
+    material?: {
+      name?: string | null;
+      image_url?: string | null;
+      primary_image_url?: string | null;
+      media_files?: { public_url?: string | null; is_primary?: boolean }[];
+    } | null;
     quantity?: number;
   }[];
   driver?: {

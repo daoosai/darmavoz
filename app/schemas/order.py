@@ -418,6 +418,13 @@ class ClarificationResolveRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
 
+class ClarificationRequest(BaseModel):
+    requires_clarification: Literal[True] = True
+    comment: str = Field(min_length=1, max_length=2000)
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+
 class ManualAssignRequest(BaseModel):
     driver_id: UUID
 

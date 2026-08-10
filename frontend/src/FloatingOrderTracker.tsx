@@ -135,7 +135,7 @@ export default function FloatingOrderTracker({ onOpenOrder }: Props) {
     <button
       type="button"
       onClick={() => onOpenOrder(displayedOrder.id)}
-      className={`fixed bottom-20 left-4 right-4 z-50 mx-auto max-w-[416px] cursor-pointer rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-xl transition-all duration-300 active:scale-[0.98] ${
+      className={`fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] left-4 right-4 z-30 mx-auto max-w-[416px] cursor-pointer rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-xl transition-all duration-300 active:scale-[0.98] ${
         isVisible ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0 pointer-events-none"
       }`}
       aria-label={`Открыть активный заказ: ${materialName}`}

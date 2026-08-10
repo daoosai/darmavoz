@@ -148,6 +148,16 @@ def schedule_client_searching_driver_status_notification(order: Order) -> None:
     )
 
 
+def schedule_client_requires_clarification_notification(order: Order, comment: str) -> None:
+    _safe_schedule(
+        schedule_push_to_client,
+        order.client_id,
+        "Требуется уточнение по заказу",
+        f"Пожалуйста, уточните детали заказа. Причина: {comment}",
+        {**_order_push_data(order), "event": "requires_clarification"},
+    )
+
+
 def schedule_client_driver_assigned_status_notification(order: Order) -> None:
     _safe_schedule(
         schedule_push_to_client,

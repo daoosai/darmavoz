@@ -250,7 +250,9 @@ export const translateReason = (reason: string | undefined | null) => {
 };
 
 export const clientOrderStatusColors: Record<string, string> = {
+  draft: "bg-slate-100 text-slate-600 border border-slate-200",
   created: "bg-gray-100 text-gray-700 border border-gray-200",
+  requires_clarification: "bg-amber-100 text-amber-700 border border-amber-200",
   searching_driver: "bg-gray-100 text-gray-600 border border-gray-200",
   offered_to_driver: "bg-gray-100 text-gray-600 border border-gray-200",
   no_driver_found: "bg-gray-100 text-gray-600 border border-gray-200",
@@ -263,7 +265,10 @@ export const clientOrderStatusColors: Record<string, string> = {
   delivered: "bg-green-100 text-green-700 border border-green-200",
   completed: "bg-green-100 text-green-700 border border-green-200",
   cancelled: "bg-red-100 text-red-600 border border-red-200",
+  cancelled_by_client: "bg-red-100 text-red-600 border border-red-200",
+  cancelled_by_operator: "bg-red-100 text-red-600 border border-red-200",
   canceled: "bg-red-100 text-red-600 border border-red-200",
+  timeout: "bg-amber-100 text-amber-700 border border-amber-200",
 };
 
 export const getImageUrl = (item: MaterialProps | DeliveryOption) => {

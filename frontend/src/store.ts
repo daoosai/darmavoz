@@ -40,6 +40,9 @@ export interface ClientOrderSummary {
   estimated_total_amount?: number | null;
   total_price?: number | null;
   created_at: string;
+  clarification_reasons?: string[];
+  clarification_comment?: string | null;
+  client_clarification_reply?: string | null;
   items?: {
     material?: {
       name?: string | null;

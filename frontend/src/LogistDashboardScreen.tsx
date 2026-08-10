@@ -70,6 +70,8 @@ interface AdminOrder {
   };
   notes?: string;
   clarification_reasons?: string[];
+  clarification_comment?: string | null;
+  client_clarification_reply?: string | null;
 }
 
 const mergeOrderIntoList = (orders: AdminOrder[], nextOrder: AdminOrder) => [
@@ -683,7 +685,7 @@ export default function LogistDashboardScreen({
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-2 gap-4">
                 <div className="flex flex-col gap-2">
                   <h2 className="text-xl font-bold text-slate-800">Все заказы</h2>
-                  <div className="flex w-full max-w-md gap-1 overflow-x-auto rounded-lg bg-slate-100 p-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                  <div className="flex w-full max-w-md flex-nowrap gap-1 overflow-x-auto hide-scrollbar rounded-lg bg-slate-100 p-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                     <button
                       onClick={() => setOrderStatusTab("active")}
                       className={`min-h-[44px] shrink-0 whitespace-nowrap px-4 py-1.5 text-center text-sm font-bold rounded-md transition-colors flex items-center justify-center leading-tight ${
@@ -912,16 +914,15 @@ export default function LogistDashboardScreen({
                           {order.status === "requires_clarification" && (
                             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
                               <p className="text-sm font-bold text-amber-800">Требует уточнения</p>
-                              {order.clarification_reasons?.length ? <p className="mt-1 text-xs text-amber-700">Причины: {order.clarification_reasons.join(", ")}</p> : null}
-                              <button
-                                type="button"
-                                disabled={resolvingClarificationId === order.id}
-                                onClick={() => void handleResolveClarification(order.id)}
-                                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 py-3 text-sm font-bold text-white hover:bg-amber-600 disabled:opacity-50"
-                              >
-                                {resolvingClarificationId === order.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                                Уточнение получено / Возобновить поиск
-                              </button>
+                              <p className="mt-1 text-xs text-amber-700">Вопрос: {order.clarification_comment || order.clarification_reasons?.join(", ") || "Логист ожидает уточнения"}</p>
+                              {order.client_clarification_reply ? (
+                                <div className="mt-3 rounded-lg border border-sky-100 bg-white/80 p-3">
+                                  <p className="text-xs font-bold text-sky-700">Ответ клиента</p>
+                                  <p className="mt-1 text-sm text-slate-700">{order.client_clarification_reply}</p>
+                                </div>
+                              ) : (
+                                <p className="mt-3 text-xs text-amber-700">Ответ клиента пока не получен.</p>
+                              )}
                             </div>
                           )}
 
@@ -965,6 +966,18 @@ export default function LogistDashboardScreen({
                             >
                               <Clock className="w-4 h-4" />
                               История распределения
+                            </button>
+                          )}
+
+                          {order.status === "requires_clarification" && (
+                            <button
+                              type="button"
+                              disabled={resolvingClarificationId === order.id || !order.client_clarification_reply?.trim()}
+                              onClick={() => void handleResolveClarification(order.id)}
+                              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-green-500 py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-green-600 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
+                            >
+                              {resolvingClarificationId === order.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                              Уточнение получено / Возобновить поиск
                             </button>
                           )}
                         </div>
@@ -1290,27 +1303,6 @@ export default function LogistDashboardScreen({
             <Truck className="w-6 h-6" />
           </div>
           <span className="text-[10px] font-bold">Водители</span>
-        </button>
-        <button
-          onClick={() => setActiveTab("equipment")}
-          className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${activeTab === "equipment" ? "text-[#2DB0E6]" : "text-gray-400"}`}
-        >
-          <div className={`p-1.5 rounded-xl ${activeTab === "equipment" ? "bg-[#2DB0E6]/10" : ""}`}><Wrench className="w-6 h-6" /></div>
-          <span className="text-[10px] font-bold">Техника</span>
-        </button>
-        <button
-          onClick={() => setActiveTab("moderation")}
-          className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${activeTab === "moderation" ? "text-[#2DB0E6]" : "text-gray-400"}`}
-        >
-          <div className={`p-1.5 rounded-xl ${activeTab === "moderation" ? "bg-[#2DB0E6]/10" : ""}`}><CheckCircle2 className="w-6 h-6" /></div>
-          <span className="text-[10px] font-bold">Модерация</span>
-        </button>
-        <button
-          onClick={() => setActiveTab("support")}
-          className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${activeTab === "support" ? "text-[#2DB0E6]" : "text-gray-400"}`}
-        >
-          <div className={`p-1.5 rounded-xl ${activeTab === "support" ? "bg-[#2DB0E6]/10" : ""}`}><Headphones className="w-6 h-6" /></div>
-          <span className="text-[10px] font-bold">Поддержка</span>
         </button>
         <button
           onClick={() => setActiveTab("profile")}

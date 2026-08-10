@@ -499,6 +499,7 @@ class OrderOut(BaseModel):
     quantity: int = 0
     clarification_reasons: list[str] = Field(default_factory=list)
     clarification_comment: str | None = None
+    client_clarification_reply: str | None = None
     clarification_requested_at: datetime | None = None
     clarification_resolved_at: datetime | None = None
     dispatch_started_at: datetime | None = None

@@ -994,6 +994,7 @@ class Order(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     clarification_reasons: Mapped[list] = mapped_column(JSONB, nullable=False, default=list, server_default="[]")
     clarification_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    client_clarification_reply: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     clarification_requested_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     clarification_resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     clarification_resolved_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"), nullable=True)

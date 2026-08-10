@@ -114,5 +114,9 @@ class ClientCancelOrderRequest(BaseModel):
     reason: str | None = Field(default=None, max_length=500)
 
 
+class ClientClarificationReplyRequest(BaseModel):
+    reply: str = Field(min_length=1, max_length=2000)
+
+
 class ConfirmationRequest(BaseModel):
     confirm: bool

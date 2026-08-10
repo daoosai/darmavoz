@@ -1777,6 +1777,7 @@ async def resolve_order_clarification(
     order.status = resume_status
     order.clarification_reasons = []
     order.clarification_comment = comment.strip() if comment and comment.strip() else None
+    order.client_clarification_reply = None
     order.clarification_resolved_at = now
     order.clarification_resolved_by_user_id = resolved_by_user_id
     order.clarification_resume_status = None
@@ -1850,6 +1851,7 @@ async def request_order_clarification(
     order.status = OrderStatus.requires_clarification.value
     order.clarification_reasons = [normalized_comment]
     order.clarification_comment = normalized_comment
+    order.client_clarification_reply = None
     order.clarification_requested_at = now
     order.clarification_resolved_at = None
     order.clarification_resolved_by_user_id = None

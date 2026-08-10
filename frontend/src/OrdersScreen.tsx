@@ -84,9 +84,21 @@ const getOrderMaterialImage = (order: ClientOrder) => {
   return resolveMediaUrl(imageUrl);
 };
 
-function OrderCard({ order, onCancel }: { order: ClientOrder; onCancel?: (order: ClientOrder) => void }) {
+function OrderCard({
+  order,
+  onCancel,
+  onReply,
+}: {
+  order: ClientOrder;
+  onCancel?: (order: ClientOrder) => void;
+  onReply?: (order: ClientOrder) => void;
+}) {
   const status = order.status.toLowerCase();
   const materialImage = getOrderMaterialImage(order);
+  const clarificationQuestion =
+    order.clarification_comment?.trim() ||
+    order.clarification_reasons?.filter(Boolean).join(", ") ||
+    "Логист ожидает уточнения по заказу.";
   return (
     <motion.article
       layout
@@ -128,6 +140,27 @@ function OrderCard({ order, onCancel }: { order: ClientOrder; onCancel?: (order:
         <p className="mt-1 text-xl font-bold text-slate-900">{formatAmount(order)}</p>
       </div>
 
+      {status === "requires_clarification" ? (
+        <section className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+          <p className="text-sm font-bold text-amber-900">Вопрос от логиста</p>
+          <p className="mt-1 text-sm leading-relaxed text-amber-800">{clarificationQuestion}</p>
+          {order.client_clarification_reply ? (
+            <p className="mt-3 rounded-xl bg-white/70 p-3 text-sm text-amber-900">
+              <span className="font-bold">Ваш ответ:</span> {order.client_clarification_reply}
+            </p>
+          ) : null}
+          {onReply ? (
+            <button
+              type="button"
+              onClick={() => onReply(order)}
+              className="mt-3 w-full rounded-xl bg-sky-500 py-3 text-sm font-bold text-white transition hover:bg-sky-600"
+            >
+              Ответить на уточнение
+            </button>
+          ) : null}
+        </section>
+      ) : null}
+
       {order.driver ? (
         <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50 p-4">
           <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Водитель</p>
@@ -166,6 +199,11 @@ export default function OrdersScreen({
   const [cancelReason, setCancelReason] = useState<string>("");
   const [cancelComment, setCancelComment] = useState("");
   const [cancelError, setCancelError] = useState("");
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [replyingOrder, setReplyingOrder] = useState<ClientOrder | null>(null);
+  const [clarificationReply, setClarificationReply] = useState("");
+  const [clarificationReplyError, setClarificationReplyError] = useState("");
+  const [isClarificationReplySaving, setIsClarificationReplySaving] = useState(false);
 
   const fetchOrders = async () => {
     if (role !== "client") {
@@ -219,11 +257,25 @@ export default function OrdersScreen({
     setCancelError("");
   };
 
-  const closeCancelModal = () => {
+  const closeCancelModal = (force = false) => {
+    if (isCancelling && !force) return;
     setCancelling(null);
     setCancelReason("");
     setCancelComment("");
     setCancelError("");
+  };
+
+  const openClarificationReplyModal = (order: ClientOrder) => {
+    setReplyingOrder(order);
+    setClarificationReply(order.client_clarification_reply || "");
+    setClarificationReplyError("");
+  };
+
+  const closeClarificationReplyModal = (force = false) => {
+    if (isClarificationReplySaving && !force) return;
+    setReplyingOrder(null);
+    setClarificationReply("");
+    setClarificationReplyError("");
   };
 
   const cancelOrder = async () => {
@@ -236,19 +288,62 @@ export default function OrdersScreen({
     }
 
     try {
+      setIsCancelling(true);
       const response = await fetch(`${baseURL}/clients/me/orders/${cancelling.id}/cancel`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ reason }),
       });
-      const data = await response.json().catch(() => ({}));
+      const data = response.status === 204 ? {} : await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(typeof data.detail === "string" ? data.detail : "Не удалось отменить заказ");
       }
-      closeCancelModal();
+      setOrders(orders.filter((order) => order.id !== cancelling.id));
+      closeCancelModal(true);
       await fetchOrders();
     } catch (error) {
       setCancelError(error instanceof Error ? error.message : "Не удалось отменить заказ");
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
+  const replyToClarification = async () => {
+    if (!replyingOrder) return;
+    const reply = clarificationReply.trim();
+    if (!reply) {
+      setClarificationReplyError("Введите ответ для логиста.");
+      return;
+    }
+
+    try {
+      setIsClarificationReplySaving(true);
+      setClarificationReplyError("");
+      const response = await fetch(`${baseURL}/clients/me/orders/${replyingOrder.id}/clarify-reply`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ reply }),
+      });
+      const data = response.status === 204 ? null : await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(
+          typeof data?.detail === "string" ? data.detail : "Не удалось отправить ответ.",
+        );
+      }
+      const updatedOrder = data
+        ? normalizeClientOrderSummary(data as ClientOrder)
+        : { ...replyingOrder, client_clarification_reply: reply };
+      setOrders(
+        orders.map((order) => (order.id === replyingOrder.id ? updatedOrder : order)),
+      );
+      closeClarificationReplyModal(true);
+      await fetchOrders();
+    } catch (error) {
+      setClarificationReplyError(
+        error instanceof Error ? error.message : "Не удалось отправить ответ.",
+      );
+    } finally {
+      setIsClarificationReplySaving(false);
     }
   };
 
@@ -354,7 +449,7 @@ export default function OrdersScreen({
                   <div className="flex flex-col gap-4">
                     {currentOrders.map((order) => (
                       <div key={order.id}>
-                        <OrderCard order={order} onCancel={openCancelModal} />
+                        <OrderCard order={order} onCancel={openCancelModal} onReply={openClarificationReplyModal} />
                       </div>
                     ))}
                   </div>
@@ -400,7 +495,7 @@ export default function OrdersScreen({
                 <h3 id="cancel-order-title" className="text-lg font-black text-slate-900">Отменить заказ?</h3>
                 <p className="mt-1 text-sm text-slate-500">Поиск водителя будет остановлен.</p>
               </div>
-              <button type="button" onClick={closeCancelModal} className="rounded-full bg-slate-100 p-2 text-slate-500 hover:bg-slate-200" aria-label="Закрыть">
+              <button type="button" onClick={closeCancelModal} disabled={isCancelling} className="rounded-full bg-slate-100 p-2 text-slate-500 hover:bg-slate-200 disabled:opacity-50" aria-label="Закрыть">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -419,10 +514,41 @@ export default function OrdersScreen({
             </label>
             {cancelError ? <p className="mt-2 text-sm font-medium text-red-600">{cancelError}</p> : null}
             <div className="mt-5 grid grid-cols-2 gap-3">
-              <button type="button" onClick={closeCancelModal} className="rounded-xl bg-slate-100 py-3 font-bold text-slate-700">Назад</button>
-              <button type="button" onClick={() => void cancelOrder()} className="rounded-xl bg-red-500 py-3 font-bold text-white hover:bg-red-600">Отменить</button>
+              <button type="button" onClick={closeCancelModal} disabled={isCancelling} className="rounded-xl bg-slate-100 py-3 font-bold text-slate-700 disabled:opacity-50">Назад</button>
+              <button type="button" onClick={() => void cancelOrder()} disabled={isCancelling} className="rounded-xl bg-red-500 py-3 font-bold text-white hover:bg-red-600 disabled:opacity-50">{isCancelling ? "Отменяем..." : "Отменить"}</button>
             </div>
           </div>
+        </div>
+      ) : null}
+      {replyingOrder ? (
+        <div className="fixed inset-0 z-[60] flex items-end bg-slate-900/40 p-4 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="clarification-reply-title">
+          <form onSubmit={(event) => { event.preventDefault(); void replyToClarification(); }} className="w-full rounded-3xl bg-white p-5 shadow-2xl sm:max-w-md">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 id="clarification-reply-title" className="text-lg font-black text-slate-900">Ответить на уточнение</h3>
+                <p className="mt-1 text-sm text-slate-500">Логист увидит ваш ответ и сможет продолжить работу с заказом.</p>
+              </div>
+              <button type="button" onClick={closeClarificationReplyModal} disabled={isClarificationReplySaving} className="rounded-full bg-slate-100 p-2 text-slate-500 hover:bg-slate-200 disabled:opacity-50" aria-label="Закрыть">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <label className="mt-5 block text-sm font-bold text-slate-800">
+              Ваш ответ
+              <textarea
+                required
+                value={clarificationReply}
+                maxLength={2000}
+                onChange={(event) => { setClarificationReply(event.target.value); setClarificationReplyError(""); }}
+                placeholder="Напишите уточнение для логиста"
+                className="mt-2 min-h-28 w-full resize-none rounded-xl border border-slate-200 p-3 text-sm font-normal outline-none focus:border-sky-400"
+              />
+            </label>
+            {clarificationReplyError ? <p className="mt-2 text-sm font-medium text-red-600">{clarificationReplyError}</p> : null}
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <button type="button" onClick={closeClarificationReplyModal} disabled={isClarificationReplySaving} className="rounded-xl bg-slate-100 py-3 font-bold text-slate-700 disabled:opacity-50">Назад</button>
+              <button disabled={isClarificationReplySaving} className="rounded-xl bg-sky-500 py-3 font-bold text-white hover:bg-sky-600 disabled:opacity-50">{isClarificationReplySaving ? "Отправляем..." : "Отправить"}</button>
+            </div>
+          </form>
         </div>
       ) : null}
     </div>

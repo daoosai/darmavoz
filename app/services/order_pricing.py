@@ -67,7 +67,14 @@ def build_2gis_route_cache_key(
     client_lat: float,
     client_lon: float,
 ) -> str:
-    return f"route:{pickup_lat},{pickup_lon}_{client_lat},{client_lon}"
+    # A route is directional: cache it by both the selected pickup point and the
+    # delivery point.  Canonical precision prevents equivalent Decimal/float
+    # values from creating duplicate keys while keeping different quarries apart.
+    return (
+        "route:"
+        f"pickup:{float(pickup_lat):.6f},{float(pickup_lon):.6f}:"
+        f"delivery:{float(client_lat):.6f},{float(client_lon):.6f}"
+    )
 
 
 async def get_cached_2gis_route_distance(
@@ -459,14 +466,17 @@ async def calculate_client_order_options(
             )
         )
 
-    options.sort(
-        key=lambda option: (
-            -int(bool(option.quarry.is_vip)),
-            0 if (option.quarry.manual_priority or 0) > 0 else 1,
-            option.quarry.manual_priority or 0,
-            option.total_amount,
-            option.mileage_km,
-            option.quarry.name.casefold(),
+    # A manually selected point is the only item in `options`; never apply
+    # marketplace auto-selection to it.  Ranking is only for the automatic flow.
+    if quarry_id is None:
+        options.sort(
+            key=lambda option: (
+                -int(bool(option.quarry.is_vip)),
+                0 if (option.quarry.manual_priority or 0) > 0 else 1,
+                option.quarry.manual_priority or 0,
+                option.total_amount,
+                option.mileage_km,
+                option.quarry.name.casefold(),
+            )
         )
-    )
     return options

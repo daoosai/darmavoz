@@ -14,7 +14,10 @@ from app.models.models import (
     quarry_delivery_options,
     quarry_materials,
 )
-from app.services.order_pricing import calculate_client_order_pricing
+from app.services.order_pricing import (
+    build_2gis_route_cache_key,
+    calculate_client_order_pricing,
+)
 
 
 async def _catalog_entities(
@@ -328,9 +331,21 @@ async def test_auto_calculate_uses_only_quarries_and_explicit_point_keeps_manual
     selected_payload = selected_response.json()
     assert selected_payload["best_option"]["quarry_id"] == str(accumulator_id)
     assert selected_payload["best_option"]["point_type"] == "accumulator"
+    assert selected_payload["best_option"]["distance"] == 2.0
     assert selected_payload["best_option"]["total_amount"] == 6500.0
     assert selected_payload["best_option"]["primary_image_url"] == "https://cdn.example/quarry.jpg"
     assert selected_payload["best_option"]["media_files"][0]["public_url"] == (
         "https://cdn.example/quarry.jpg"
     )
     assert selected_payload["alternatives"] == []
+
+
+def test_route_cache_key_keeps_manual_pickup_coordinates():
+    delivery_lat, delivery_lon = 57.2, 65.6
+
+    first_key = build_2gis_route_cache_key(57.15, 65.5, delivery_lat, delivery_lon)
+    second_key = build_2gis_route_cache_key(57.16, 65.5, delivery_lat, delivery_lon)
+
+    assert first_key != second_key
+    assert "pickup:57.150000,65.500000" in first_key
+    assert "delivery:57.200000,65.600000" in first_key

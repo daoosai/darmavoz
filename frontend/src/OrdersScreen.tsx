@@ -35,6 +35,7 @@ const cancellableClientOrderStatuses = new Set([
   "searching_driver",
   "requires_clarification",
   "offered_to_driver",
+  "driver_assigned",
 ]);
 
 const clientCancellationReasons = [
@@ -503,8 +504,8 @@ export default function OrdersScreen({
         </div>
       </PullToRefresh>
       {cancelling ? (
-        <div className="fixed inset-0 z-[60] flex items-end bg-slate-900/40 p-4 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="cancel-order-title">
-          <div className="w-full rounded-3xl bg-white p-5 shadow-2xl sm:max-w-md">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="cancel-order-title">
+          <div className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 id="cancel-order-title" className="text-lg font-black text-slate-900">Отменить заказ?</h3>

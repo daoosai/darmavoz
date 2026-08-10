@@ -6,6 +6,7 @@ from uuid import UUID
 
 import httpx
 from fastapi import HTTPException, status
+from redis.exceptions import RedisError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,11 +20,16 @@ from app.models.models import (
     quarry_materials,
 )
 from app.services.pickup_points import public_pickup_point_filters
+from app.services.redis_client import get_redis
 
 logger = logging.getLogger(__name__)
 MARKETPLACE_POINT_TYPES = ("quarry", "accumulator", "warehouse", "supplier")
 ROUTE_BUILD_ERROR_MESSAGE = "Не удалось построить маршрут до вашего адреса."
 CALCULATION_DATA_ERROR_MESSAGE = "Не удалось рассчитать маршрут. Проверьте адрес доставки."
+ROUTE_CACHE_TTL_SECONDS = 86_400
+ROUTE_REQUEST_ATTEMPTS = 3
+ROUTE_RETRY_DELAY_SECONDS = 0.5
+ROUTE_REQUEST_INTERVAL_SECONDS = 0.3
 
 
 def resolve_min_delivery_price(
@@ -53,6 +59,57 @@ def build_2gis_route_stop(lat: float, lon: float) -> dict[str, float | str]:
         "lon": float(lon),
         "lat": float(lat),
     }
+
+
+def build_2gis_route_cache_key(
+    pickup_lat: float,
+    pickup_lon: float,
+    client_lat: float,
+    client_lon: float,
+) -> str:
+    return f"route:{pickup_lat},{pickup_lon}_{client_lat},{client_lon}"
+
+
+async def get_cached_2gis_route_distance(
+    cache_key: str,
+    *,
+    log_context: dict[str, object],
+) -> float | None:
+    try:
+        cached_value = await get_redis().get(cache_key)
+    except RedisError:
+        logger.warning("2gis_route_cache_read_failed", exc_info=True, extra=log_context)
+        return None
+
+    if cached_value is None:
+        return None
+
+    try:
+        distance_km = float(cached_value)
+        if not isfinite(distance_km) or distance_km <= 0:
+            raise ValueError("Cached 2GIS distance must be positive")
+    except (TypeError, ValueError):
+        logger.warning("2gis_route_cache_value_invalid", extra=log_context)
+        try:
+            await get_redis().delete(cache_key)
+        except RedisError:
+            logger.warning("2gis_route_cache_delete_failed", exc_info=True, extra=log_context)
+        return None
+
+    logger.info("2gis_route_cache_hit", extra=log_context)
+    return distance_km
+
+
+async def cache_2gis_route_distance(
+    cache_key: str,
+    distance_km: float,
+    *,
+    log_context: dict[str, object],
+) -> None:
+    try:
+        await get_redis().set(cache_key, str(distance_km), ex=ROUTE_CACHE_TTL_SECONDS)
+    except RedisError:
+        logger.warning("2gis_route_cache_write_failed", exc_info=True, extra=log_context)
 
 
 @dataclass(slots=True)
@@ -107,13 +164,22 @@ async def get_2gis_route_distance(
     *,
     strict: bool = False,
 ) -> float:
+    cache_key = build_2gis_route_cache_key(lat_a, lon_a, lat_b, lon_b)
     log_context = {
         "lat_a": lat_a,
         "lon_a": lon_a,
         "lat_b": lat_b,
         "lon_b": lon_b,
         "strict": strict,
+        "cache_key": cache_key,
     }
+    cached_distance = await get_cached_2gis_route_distance(
+        cache_key,
+        log_context=log_context,
+    )
+    if cached_distance is not None:
+        return cached_distance
+
     payload = {
         "points": [
             build_2gis_route_stop(lat_a, lon_a),
@@ -132,19 +198,44 @@ async def get_2gis_route_distance(
         logger.error("2gis_route_unavailable: TWOGIS_API_KEY is not configured", extra=log_context)
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=ROUTE_BUILD_ERROR_MESSAGE)
 
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.post(
-                "https://routing.api.2gis.com/routing/7.0.0/global",
-                params={"key": settings.TWOGIS_API_KEY},
-                json=payload,
-                headers={
-                    "Accept": "application/json",
-                    "Content-Type": "application/json",
-                },
+    response: httpx.Response | None = None
+    for attempt in range(1, ROUTE_REQUEST_ATTEMPTS + 1):
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.post(
+                    "https://routing.api.2gis.com/routing/7.0.0/global",
+                    params={"key": settings.TWOGIS_API_KEY},
+                    json=payload,
+                    headers={
+                        "Accept": "application/json",
+                        "Content-Type": "application/json",
+                    },
+                )
+        except httpx.HTTPError:
+            if attempt < ROUTE_REQUEST_ATTEMPTS:
+                logger.warning(
+                    "2gis_route_request_retry",
+                    extra={**log_context, "attempt": attempt},
+                    exc_info=True,
+                )
+                await asyncio.sleep(ROUTE_RETRY_DELAY_SECONDS * attempt)
+                continue
+            logger.exception("2gis_route_request_error", extra=log_context)
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=ROUTE_BUILD_ERROR_MESSAGE)
+
+        if response.status_code != status.HTTP_429_TOO_MANY_REQUESTS:
+            break
+        if attempt < ROUTE_REQUEST_ATTEMPTS:
+            logger.warning(
+                "2gis_route_rate_limited_retry",
+                extra={**log_context, "attempt": attempt, "response_body": response.text},
             )
-    except httpx.HTTPError:
-        logger.exception("2gis_route_request_error", extra=log_context)
+            await asyncio.sleep(ROUTE_RETRY_DELAY_SECONDS * attempt)
+            continue
+        break
+
+    if response is None:
+        logger.error("2gis_route_response_missing", extra=log_context)
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=ROUTE_BUILD_ERROR_MESSAGE)
 
     response_text = response.text
@@ -187,7 +278,13 @@ async def get_2gis_route_distance(
         if meters <= 0:
             raise ValueError("2GIS distance must be positive")
 
-        return round(meters / 1000.0, 2)
+        distance_km = round(meters / 1000.0, 2)
+        await cache_2gis_route_distance(
+            cache_key,
+            distance_km,
+            log_context=log_context,
+        )
+        return distance_km
     except (AttributeError, KeyError, TypeError, ValueError):
         logger.exception(
             "2gis_route_parse_error",
@@ -316,18 +413,19 @@ async def calculate_client_order_options(
             ),
         )
 
-    distances = await asyncio.gather(
-        *(
-                    get_2gis_route_distance(
-                        quarry.lat,
-                        quarry.lon,
-                        delivery_lat,
-                        delivery_lon,
-                        strict=quarry_id is not None,
-                    )
-            for quarry, _price, _media_files in priced_rows
+    distances: list[float] = []
+    for index, (quarry, _price, _media_files) in enumerate(priced_rows):
+        distances.append(
+            await get_2gis_route_distance(
+                quarry.lat,
+                quarry.lon,
+                delivery_lat,
+                delivery_lon,
+                strict=quarry_id is not None,
+            )
         )
-    )
+        if index < len(priced_rows) - 1:
+            await asyncio.sleep(ROUTE_REQUEST_INTERVAL_SECONDS)
     rate = round(float(delivery_option.delivery_rate_per_km), 2)
     options: list[ClientOrderPricing] = []
     for (quarry, material_unit_price, media_files), mileage_km in zip(

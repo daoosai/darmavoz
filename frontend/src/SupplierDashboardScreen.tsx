@@ -75,15 +75,6 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
   const [editingPoint, setEditingPoint] = useState<SupplierPoint | null>(null);
   const [displayName, setDisplayName] = useState("");
 
-  const getPendingChangesSummary = (point: SupplierPoint) => {
-    const pendingChanges = point.pending_changes;
-    if (!pendingChanges || typeof pendingChanges !== "object") {
-      return null;
-    }
-    const keys = Object.keys(pendingChanges);
-    return keys.length ? keys.join(", ") : null;
-  };
-
   const fetchPoints = async () => {
     try {
       const response = await fetch(`${baseURL}/supplier/points`, {
@@ -370,12 +361,6 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
                   {point.moderation_comment ? (
                     <p className="mt-4 rounded-2xl bg-rose-50 p-3 text-sm text-rose-700">
                       {point.moderation_comment}
-                    </p>
-                  ) : null}
-
-                  {point.moderation_status === "has_pending_changes" ? (
-                    <p className="mt-4 rounded-2xl bg-sky-50 p-3 text-sm text-sky-700">
-                      На модерации правки: {getPendingChangesSummary(point) || "есть обновления"}
                     </p>
                   ) : null}
 

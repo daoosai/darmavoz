@@ -68,14 +68,6 @@ MODERATION_BADGES.has_pending_changes = {
 const moderationBadge = (status?: string) =>
   MODERATION_BADGES[status || "incomplete"] || MODERATION_BADGES.incomplete;
 
-const getPendingChangesSummary = (pendingChanges?: Record<string, unknown> | null) => {
-  if (!pendingChanges || typeof pendingChanges !== "object") {
-    return null;
-  }
-  const keys = Object.keys(pendingChanges);
-  return keys.length ? keys.join(", ") : null;
-};
-
 const normalizeManualPriority = (value?: number | null) => {
   const parsed = Number(value ?? 0);
   if (!Number.isFinite(parsed)) return 0;
@@ -531,11 +523,6 @@ export default function AdminQuarriesScreen({
                     </td>
                     <td className="p-4 text-sm text-slate-600 max-w-[250px] truncate">
                       {getQuarryAddress(quarry)}
-                      {getPendingChangesSummary(quarry.pending_changes) ? (
-                        <div className="mt-1 text-xs text-sky-700">
-                          Правки: {getPendingChangesSummary(quarry.pending_changes)}
-                        </div>
-                      ) : null}
                     </td>
                     <td className="p-4">
                       <div className="mb-2 flex flex-wrap gap-1">
@@ -617,11 +604,6 @@ export default function AdminQuarriesScreen({
               </div>
               <div className="text-sm text-gray-600">
                 {getQuarryAddress(quarry)}
-                {getPendingChangesSummary(quarry.pending_changes) ? (
-                  <div className="mt-1 text-xs text-sky-700">
-                    Правки: {getPendingChangesSummary(quarry.pending_changes)}
-                  </div>
-                ) : null}
               </div>
               {(quarry.owner_name || quarry.owner_phone) && (
                 <div className="text-xs font-medium text-slate-500">

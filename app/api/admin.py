@@ -184,6 +184,8 @@ class ModerationCountsOut(BaseModel):
 
 class SidebarCountsOut(BaseModel):
     water_septic: int
+    water_points: int
+    septic_profiles: int
     orders_requires_clarification: int
 
 
@@ -1295,6 +1297,8 @@ async def get_admin_sidebar_counts(
 
     return SidebarCountsOut(
         water_septic=int(water_points or 0) + int(septic_profiles or 0),
+        water_points=int(water_points or 0),
+        septic_profiles=int(septic_profiles or 0),
         orders_requires_clarification=int(orders_requires_clarification or 0),
     )
 

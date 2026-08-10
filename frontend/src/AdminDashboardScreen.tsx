@@ -34,6 +34,7 @@ import {
   Headphones,
   Menu,
   X,
+  Droplets,
 } from "lucide-react";
 import AdminProfileScreen from "./AdminProfileScreen";
 import AdminQuarriesScreen from "./AdminQuarriesScreen";
@@ -253,6 +254,7 @@ export default function AdminDashboardScreen({
   const [pendingEquipmentModerationCount, setPendingEquipmentModerationCount] =
     useState(0);
   const [pendingWaterSepticCount, setPendingWaterSepticCount] = useState(0);
+  const [pendingWaterPointCount, setPendingWaterPointCount] = useState(0);
   const [ordersRequiresClarificationCount, setOrdersRequiresClarificationCount] =
     useState(0);
   const [quarryStatusFilter, setQuarryStatusFilter] = useState("");
@@ -824,6 +826,7 @@ export default function AdminDashboardScreen({
       if (!res.ok) return;
       const data = await res.json().catch(() => ({}));
       setPendingWaterSepticCount(Number(data.water_septic) || 0);
+      setPendingWaterPointCount(Number(data.water_points) || 0);
       setOrdersRequiresClarificationCount(Number(data.orders_requires_clarification) || 0);
     } catch {
       // Счётчики не должны мешать работе панели, если фоновый запрос недоступен.
@@ -1848,6 +1851,32 @@ export default function AdminDashboardScreen({
                 className="inline-flex items-center justify-center rounded-xl bg-cyan-500 px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-cyan-600"
               >
                 Перейти
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {pendingWaterPointCount > 0 ? (
+          <div className="w-full rounded-2xl border border-sky-200 bg-[linear-gradient(135deg,rgba(240,249,255,1)_0%,rgba(224,242,254,1)_100%)] px-4 py-3 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 rounded-2xl bg-sky-500/10 p-2 text-sky-600">
+                  <Droplets className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-black text-slate-900">
+                    Есть новые точки воды, ожидающие модерации
+                  </p>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Сейчас на проверке: {pendingWaterPointCount}.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => openSidebarSection("water_septic")}
+                className="inline-flex items-center justify-center rounded-xl bg-sky-500 px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-sky-600"
+              >
+                Проверить
               </button>
             </div>
           </div>
@@ -3328,19 +3357,10 @@ export default function AdminDashboardScreen({
               : "text-slate-400 hover:text-slate-600"
           }`}
         >
-          <div
-            className={`p-1.5 rounded-xl transition-colors ${activeTab === "materials" ? "bg-[#2DB0E6]/10" : ""}`}
-          >
+          <div className={`p-1.5 rounded-xl transition-colors ${activeTab === "materials" ? "bg-[#2DB0E6]/10" : ""}`}>
             <Layers className="w-6 h-6" />
           </div>
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] font-bold">Каталог</span>
-            {pendingPointModerationCount > 0 && (
-              <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
-                {pendingPointModerationCount}
-              </span>
-            )}
-          </div>
+          <span className="text-[10px] font-bold">Каталог</span>
         </button>
         <button
           onClick={() => setActiveTab("quarries")}
@@ -3350,19 +3370,15 @@ export default function AdminDashboardScreen({
               : "text-slate-400 hover:text-slate-600"
           }`}
         >
-          <div
-            className={`p-1.5 rounded-xl transition-colors ${activeTab === "quarries" ? "bg-[#2DB0E6]/10" : ""}`}
-          >
+          <div className={`relative p-1.5 rounded-xl transition-colors ${activeTab === "quarries" ? "bg-[#2DB0E6]/10" : ""}`}>
             <Map className="w-6 h-6" />
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] font-bold">Точки</span>
             {pendingPointModerationCount > 0 && (
-              <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+              <span className="absolute -top-1 -right-2 min-w-[16px] rounded-full bg-red-500 px-1.5 text-center text-[10px] font-bold leading-4 text-white">
                 {pendingPointModerationCount}
               </span>
             )}
           </div>
+          <span className="text-[10px] font-bold">Точки</span>
         </button>
         <button
           onClick={() => setActiveTab("delivery")}
@@ -3396,7 +3412,7 @@ export default function AdminDashboardScreen({
         </button>
         <button
           onClick={() => setActiveTab("moderation")}
-          className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all relative ${
+          className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${
             activeTab === "moderation"
               ? "text-[#2DB0E6]"
               : "text-slate-400 hover:text-slate-600"
@@ -3406,10 +3422,10 @@ export default function AdminDashboardScreen({
             className={`relative p-1.5 rounded-xl transition-colors ${activeTab === "moderation" ? "bg-[#2DB0E6]/10" : ""}`}
           >
             <ClipboardCheck className="w-6 h-6" />
-            {pendingModerationTotal > 0 && (
-              <div className="absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] font-bold w-3.5 h-3.5 rounded-full flex items-center justify-center shadow-sm">
-                {pendingModerationTotal}
-              </div>
+            {pendingDriverModerationCount > 0 && (
+              <span className="absolute -top-1 -right-2 min-w-[16px] rounded-full bg-red-500 px-1.5 text-center text-[10px] font-bold leading-4 text-white">
+                {pendingDriverModerationCount}
+              </span>
             )}
           </div>
           <span className="text-[10px] font-bold">Модерация</span>

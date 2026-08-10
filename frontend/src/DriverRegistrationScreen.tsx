@@ -187,7 +187,7 @@ export default function DriverRegistrationScreen({
 
       <div className="flex flex-col flex-1 overflow-y-auto px-6 pt-6 pb-24">
         <h1 className="text-3xl font-black text-[#2DB0E6] mb-2 tracking-tight">
-          Регистрация
+          Регистрация водителя
         </h1>
         <h2 className="text-sm font-medium text-slate-500 mb-8 leading-relaxed">
           Создание аккаунта водителя

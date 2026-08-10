@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 
 import { useAuthStore } from "./store";
 import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
+import DeleteAccountButton from "./components/shared/DeleteAccountButton";
 
 interface Props {
   token: string;
@@ -148,6 +149,7 @@ export default function EquipmentOwnerProfileScreen({ token, onLogout }: Props) 
         {isLoggingOut ? <Loader2 className="h-5 w-5 animate-spin" /> : <LogOut className="h-5 w-5" />}
         Выйти из аккаунта
       </button>
+      <DeleteAccountButton token={token} onDeleted={onLogout} />
     </div>
   );
 }

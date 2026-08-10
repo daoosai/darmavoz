@@ -48,6 +48,7 @@ import { logoutCurrentSession } from "./pushAuth";
 import AdminEquipmentScreen, { type AdminEquipmentTab } from "./AdminEquipmentScreen";
 import SupportScreen from "./SupportScreen";
 import { type PlacementStatus } from "./placement";
+import NotificationCenter from "./components/shared/NotificationCenter";
 
 interface AdminCategory {
   id: string;
@@ -1653,15 +1654,18 @@ export default function AdminDashboardScreen({
             <span className="text-lg font-bold text-[#0ea5e9]">Дармавоз</span>
             <span className="text-xs font-normal text-gray-500">Панель администратора</span>
           </h1>
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="rounded-xl p-2 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
-            aria-label="Выйти из аккаунта"
-            title="Выйти"
-          >
-            <LogOut className="h-5 w-5" />
-          </button>
+          <div className="flex items-center justify-end gap-1">
+            <NotificationCenter token={token} />
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="rounded-xl p-2 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
+              aria-label="Выйти из аккаунта"
+              title="Выйти"
+            >
+              <LogOut className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         <div className="hidden">

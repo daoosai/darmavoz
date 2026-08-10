@@ -3,6 +3,7 @@ import toast from "react-hot-toast";
 import { LogOut } from "lucide-react";
 import { baseURL, handleApiError } from "./utils";
 import { useAuthStore } from "./store";
+import DeleteAccountButton from "./components/shared/DeleteAccountButton";
 
 interface AdminProfileScreenProps {
   onLogout: () => void;
@@ -111,6 +112,7 @@ export default function AdminProfileScreen({
         <LogOut className="w-5 h-5" />
         Выйти из аккаунта
       </button>
+      <DeleteAccountButton token={token} onDeleted={onLogout} />
     </div>
   );
 }

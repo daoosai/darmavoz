@@ -46,6 +46,7 @@ import { logoutCurrentSession } from "./pushAuth";
 import AdminEquipmentScreen, { type AdminEquipmentTab } from "./AdminEquipmentScreen";
 import SupportScreen from "./SupportScreen";
 import WaterSepticModerationPanel from "./components/admin/WaterSepticModerationPanel";
+import NotificationCenter from "./components/shared/NotificationCenter";
 
 interface AdminOrder {
   id: string;
@@ -594,12 +595,15 @@ export default function LogistDashboardScreen({
             </h1>
             <p className="text-sm font-medium text-slate-500">Панель логиста</p>
           </div>
-          <button
-            onClick={handleLogout}
-            className="flex sm:hidden items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-lg hover:bg-slate-100 text-slate-600 transition-colors font-medium text-sm"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1 sm:hidden">
+            <NotificationCenter token={token} />
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-lg hover:bg-slate-100 text-slate-600 transition-colors font-medium text-sm"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         <div className="hidden sm:flex flex-1 sm:justify-center">
@@ -667,13 +671,16 @@ export default function LogistDashboardScreen({
           </div>
         </div>
 
-        <button
-          onClick={handleLogout}
-          className="hidden sm:flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-xl hover:bg-slate-100 text-slate-600 transition-colors font-medium text-sm"
-        >
-          <LogOut className="w-4 h-4" />
-          <span>Выйти</span>
-        </button>
+        <div className="hidden items-center gap-2 sm:flex">
+          <NotificationCenter token={token} />
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-xl hover:bg-slate-100 text-slate-600 transition-colors font-medium text-sm"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Выйти</span>
+          </button>
+        </div>
       </div>
 
       {/* Main Content */}

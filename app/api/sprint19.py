@@ -7,9 +7,9 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
-from app.models.models import MediaFile, Quarry, Role, SepticProviderProfile, SpecialEquipmentListing, User, UserNotification, WaterPoint
+from app.models.models import Client, MediaFile, Quarry, Role, SepticProviderProfile, SpecialEquipmentListing, User, UserNotification, WaterPoint
 from app.schemas.sprint19 import ConfirmationRequest, NotificationOut, SepticMediaOut, SepticProfileIn, SepticProfileOut
-from app.security.auth import get_current_equipment_owner_user, get_current_logist_user, get_current_user
+from app.security.auth import get_current_client, get_current_equipment_owner_user, get_current_logist_user, get_current_user, oauth2_scheme
 from app.services.notifications import create_operator_notifications
 from app.services.storage import StorageNotConfiguredError, get_storage_service
 
@@ -322,8 +322,31 @@ async def read_all_notifications(db: AsyncSession = Depends(get_db), current_use
 
 
 @router.delete("/account/me")
-async def delete_user_account(payload: ConfirmationRequest, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    if not payload.confirm: raise HTTPException(status_code=422, detail="Подтвердите удаление аккаунта")
+async def delete_user_account(
+    payload: ConfirmationRequest,
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+):
+    if not payload.confirm:
+        raise HTTPException(status_code=422, detail="Подтвердите удаление аккаунта")
+
+    try:
+        current_user = await get_current_user(token=token, db=db)
+    except HTTPException:
+        current_client: Client = await get_current_client(token=token, db=db)
+        current_client.is_deleted = True
+        current_client.deleted_at = datetime.now(UTC)
+        current_client.deletion_source = "self"
+        current_client.auth_version += 1
+        current_client.name = "Удалённый пользователь"
+        current_client.email = None
+        current_client.phone = None
+        current_client.external_source = None
+        current_client.external_user_id = None
+        current_client.fcm_token = None
+        await db.commit()
+        return {"ok": True}
+
     role_name = current_user.role.name if current_user.role else ""
     if role_name == "admin":
         active_admins = await db.scalar(select(func.count(User.id)).join(Role).where(Role.name == "admin", User.is_active.is_(True), User.is_deleted.is_(False)))

@@ -31,7 +31,6 @@ import {
   ChevronDown,
   ClipboardList,
   Layers,
-  Wrench,
   Headphones,
 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -630,26 +629,6 @@ export default function LogistDashboardScreen({
               Водители
             </button>
             <button
-              onClick={() => setActiveTab("equipment")}
-              className={`flex-1 sm:w-32 py-2 text-sm font-bold rounded-lg transition-colors flex justify-center items-center gap-2 ${
-                activeTab === "equipment"
-                  ? "bg-white text-slate-800 shadow-sm"
-                  : "text-slate-500 hover:text-slate-700"
-              }`}
-            >
-              <Wrench className="h-4 w-4" /> Спецтехника
-            </button>
-            <button
-              onClick={() => setActiveTab("moderation")}
-              className={`flex-1 sm:w-32 py-2 text-sm font-bold rounded-lg transition-colors flex justify-center items-center gap-2 ${
-                activeTab === "moderation"
-                  ? "bg-white text-slate-800 shadow-sm"
-                  : "text-slate-500 hover:text-slate-700"
-              }`}
-            >
-              <CheckCircle2 className="h-4 w-4" /> Модерация
-            </button>
-            <button
               onClick={() => setActiveTab("support")}
               className={`flex-1 sm:w-32 py-2 text-sm font-bold rounded-lg transition-colors flex justify-center items-center gap-2 ${
                 activeTab === "support"
@@ -694,7 +673,7 @@ export default function LogistDashboardScreen({
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-2 gap-4">
                 <div className="flex flex-col gap-2">
                   <h2 className="text-xl font-bold text-slate-800">Все заказы</h2>
-                  <div className="flex w-full max-w-md flex-nowrap gap-1 overflow-x-auto hide-scrollbar rounded-lg bg-slate-100 p-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                  <div className="flex w-full max-w-md flex-nowrap gap-2 overflow-x-auto whitespace-nowrap hide-scrollbar rounded-lg bg-slate-100 p-1 pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                     <button
                       onClick={() => setOrderStatusTab("active")}
                       className={`min-h-[44px] shrink-0 whitespace-nowrap px-4 py-1.5 text-center text-sm font-bold rounded-md transition-colors flex items-center justify-center leading-tight ${
@@ -1312,6 +1291,21 @@ export default function LogistDashboardScreen({
             <Truck className="w-6 h-6" />
           </div>
           <span className="text-[10px] font-bold">Водители</span>
+        </button>
+        <button
+          onClick={() => setActiveTab("support")}
+          className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${
+            activeTab === "support"
+              ? "text-[#2DB0E6]"
+              : "text-gray-400 hover:text-gray-600"
+          }`}
+        >
+          <div
+            className={`p-1.5 rounded-xl transition-colors ${activeTab === "support" ? "bg-[#2DB0E6]/10" : ""}`}
+          >
+            <Headphones className="w-6 h-6" />
+          </div>
+          <span className="text-[10px] font-bold">Поддержка</span>
         </button>
         <button
           onClick={() => setActiveTab("profile")}

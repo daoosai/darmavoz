@@ -29,6 +29,14 @@ const activeStatuses = new Set([
   "delivered",
 ]);
 
+const cancellableClientOrderStatuses = new Set([
+  "draft",
+  "created",
+  "searching_driver",
+  "requires_clarification",
+  "offered_to_driver",
+]);
+
 const clientCancellationReasons = [
   "Изменились планы",
   "Нашёл дешевле",
@@ -179,7 +187,7 @@ function OrderCard({
         </p>
       ) : null}
       <p className="mt-4 text-xs text-slate-400">Создан: {formatDateTime(order.created_at)}</p>
-      {onCancel && new Set(["draft", "created", "requires_clarification", "searching_driver", "offered_to_driver", "driver_assigned", "no_driver_found", "timeout"]).has(order.status) ? <button type="button" onClick={() => onCancel(order)} className="mt-4 w-full rounded-xl border border-red-200 py-3 text-sm font-bold text-red-600">Отменить заказ</button> : null}
+      {onCancel && cancellableClientOrderStatuses.has(status) ? <button type="button" onClick={() => onCancel(order)} className="mt-4 w-full rounded-xl border border-red-200 py-3 text-sm font-bold text-red-600">Отменить заказ</button> : null}
     </motion.article>
   );
 }

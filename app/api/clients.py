@@ -19,7 +19,7 @@ from app.schemas.client import (
 )
 from app.schemas.order import OrderOut
 from app.security.auth import get_current_client, get_current_logist_user
-from app.services.dispatch_service import list_orders_for_client
+from app.services.dispatch_service import get_order_by_id, list_orders_for_client
 from app.services.fcm_tokens import detach_fcm_token_from_other_entities
 from app.services.notifications import create_operator_notifications
 from app.schemas.sprint19 import ClientCancelOrderRequest, ClientClarificationReplyRequest, ConfirmationRequest
@@ -169,48 +169,62 @@ async def reply_to_order_clarification(
     current_client: Client = Depends(get_current_client),
     db: AsyncSession = Depends(get_db),
 ):
-    order = await db.scalar(
-        select(Order)
-        .where(
-            Order.id == order_id,
-            Order.client_id == current_client.id,
-            Order.is_deleted.is_(False),
+    try:
+        order = await db.scalar(
+            select(Order)
+            .where(
+                Order.id == order_id,
+                Order.client_id == current_client.id,
+                Order.is_deleted.is_(False),
+            )
+            .with_for_update()
         )
-        .with_for_update()
-    )
-    if order is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заказ не найден")
-    if order.status != OrderStatus.requires_clarification.value:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="По этому заказу сейчас не требуется уточнение",
-        )
+        if order is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заказ не найден")
+        if order.status != OrderStatus.requires_clarification.value:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="По этому заказу сейчас не требуется уточнение",
+            )
 
-    reply = payload.reply.strip()
-    if not reply:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Введите ответ для логиста",
+        reply = payload.reply.strip()
+        if not reply:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Введите ответ для логиста",
+            )
+        order.client_clarification_reply = reply
+        db.add(
+            OrderEvent(
+                order_id=order.id,
+                status=order.status,
+                event_type="client_clarification_reply",
+                description=reply,
+            )
         )
-    order.client_clarification_reply = reply
-    db.add(
-        OrderEvent(
-            order_id=order.id,
-            status=order.status,
+        await create_operator_notifications(
+            db,
             event_type="client_clarification_reply",
-            description=reply,
+            title=f"Получен ответ от клиента по заказу #{order.id}",
+            body=reply,
+            payload={"order_id": str(order.id), "event": "client_clarification_reply"},
         )
-    )
-    await create_operator_notifications(
-        db,
-        event_type="client_clarification_reply",
-        title=f"Получен ответ от клиента по заказу #{order.id}",
-        body=reply,
-        payload={"order_id": str(order.id), "event": "client_clarification_reply"},
-    )
-    await db.commit()
-    await db.refresh(order)
-    return order
+        await db.commit()
+        return await get_order_by_id(db, order.id)
+    except HTTPException:
+        raise
+    except Exception:
+        await db.rollback()
+        logger.error(
+            "client_clarification_reply_failed order_id=%s client_id=%s",
+            order_id,
+            current_client.id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Не удалось сохранить ответ. Попробуйте ещё раз.",
+        )
 
 
 @router.delete("/me/account")

@@ -324,7 +324,10 @@ export default function OrdersScreen({
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ reply }),
       });
-      const data = response.status === 204 ? null : await response.json().catch(() => null);
+      const data =
+        response.status === 204 || response.status === 205
+          ? null
+          : await response.json().catch(() => null);
       if (!response.ok) {
         throw new Error(
           typeof data?.detail === "string" ? data.detail : "Не удалось отправить ответ.",
@@ -334,7 +337,9 @@ export default function OrdersScreen({
         ? normalizeClientOrderSummary(data as ClientOrder)
         : { ...replyingOrder, client_clarification_reply: reply };
       setOrders(
-        orders.map((order) => (order.id === replyingOrder.id ? updatedOrder : order)),
+        orders.map((order) =>
+          order.id === replyingOrder.id ? updatedOrder : order,
+        ),
       );
       closeClarificationReplyModal(true);
       await fetchOrders();

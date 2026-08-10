@@ -9,12 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_db
 from app.models.models import Client, MediaFile, Quarry, Role, SepticProviderProfile, SpecialEquipmentListing, User, UserNotification, WaterPoint
 from app.schemas.sprint19 import ConfirmationRequest, NotificationOut, SepticMediaOut, SepticProfileIn, SepticProfileOut
-from app.security.auth import get_current_client, get_current_equipment_owner_user, get_current_logist_user, get_current_user, oauth2_scheme
+from app.security.auth import get_current_client, get_current_logist_user, get_current_user, get_current_water_septic_partner_user, oauth2_scheme
 from app.services.notifications import create_operator_notifications
 from app.services.storage import StorageNotConfiguredError, get_storage_service
 
 router = APIRouter()
-equipment_owner_router = APIRouter()
+water_septic_partner_router = APIRouter()
 
 
 async def _serialize_septic_profile(
@@ -112,10 +112,10 @@ async def list_septic_providers_for_moderation(
     return await _serialize_septic_profiles(list(profiles), db)
 
 
-@equipment_owner_router.get("/septic-profiles", response_model=list[SepticProfileOut])
+@water_septic_partner_router.get("/septic-profiles", response_model=list[SepticProfileOut])
 async def list_my_septic_profiles(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_equipment_owner_user),
+    current_user: User = Depends(get_current_water_septic_partner_user),
 ):
     profiles = (
         await db.execute(
@@ -130,11 +130,11 @@ async def list_my_septic_profiles(
     return await _serialize_septic_profiles(list(profiles), db)
 
 
-@equipment_owner_router.post("/septic-profiles", response_model=SepticProfileOut, status_code=201)
+@water_septic_partner_router.post("/septic-profiles", response_model=SepticProfileOut, status_code=201)
 async def create_septic_profile(
     payload: SepticProfileIn,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_equipment_owner_user),
+    current_user: User = Depends(get_current_water_septic_partner_user),
 ):
     profile = SepticProviderProfile(
         **payload.model_dump(),
@@ -155,12 +155,12 @@ async def create_septic_profile(
     return await _serialize_septic_profile(profile, db)
 
 
-@equipment_owner_router.patch("/septic-profiles/{profile_id}", response_model=SepticProfileOut)
+@water_septic_partner_router.patch("/septic-profiles/{profile_id}", response_model=SepticProfileOut)
 async def update_septic_profile(
     profile_id: UUID,
     payload: SepticProfileIn,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_equipment_owner_user),
+    current_user: User = Depends(get_current_water_septic_partner_user),
 ):
     profile = await db.scalar(
         select(SepticProviderProfile).where(
@@ -190,11 +190,11 @@ async def update_septic_profile(
     return await _serialize_septic_profile(profile, db)
 
 
-@equipment_owner_router.delete("/septic-profile/{profile_id}/hard")
+@water_septic_partner_router.delete("/septic-profile/{profile_id}/hard")
 async def hard_delete_septic_profile(
     profile_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_equipment_owner_user),
+    current_user: User = Depends(get_current_water_septic_partner_user),
 ):
     profile = await db.scalar(
         select(SepticProviderProfile).where(
@@ -210,8 +210,8 @@ async def hard_delete_septic_profile(
     return {"ok": True}
 
 
-@equipment_owner_router.get("/septic-profile", response_model=SepticProfileOut)
-async def get_septic_profile(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_equipment_owner_user)):
+@water_septic_partner_router.get("/septic-profile", response_model=SepticProfileOut)
+async def get_septic_profile(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_water_septic_partner_user)):
     profile = await db.scalar(
         select(SepticProviderProfile)
         .where(SepticProviderProfile.owner_user_id == current_user.id, SepticProviderProfile.is_deleted.is_(False))
@@ -221,8 +221,8 @@ async def get_septic_profile(db: AsyncSession = Depends(get_db), current_user: U
     return await _serialize_septic_profile(profile, db)
 
 
-@equipment_owner_router.put("/septic-profile", response_model=SepticProfileOut)
-async def upsert_septic_profile(payload: SepticProfileIn, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_equipment_owner_user)):
+@water_septic_partner_router.put("/septic-profile", response_model=SepticProfileOut)
+async def upsert_septic_profile(payload: SepticProfileIn, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_water_septic_partner_user)):
     profile = await db.scalar(select(SepticProviderProfile).where(SepticProviderProfile.owner_user_id == current_user.id))
     if profile is None:
         profile = SepticProviderProfile(**payload.model_dump(), owner_user_id=current_user.id, moderation_status="pending_moderation")
@@ -233,8 +233,8 @@ async def upsert_septic_profile(payload: SepticProfileIn, db: AsyncSession = Dep
     await db.commit(); await db.refresh(profile); return await _serialize_septic_profile(profile, db)
 
 
-@equipment_owner_router.delete("/septic-profile")
-async def delete_septic_profile(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_equipment_owner_user)):
+@water_septic_partner_router.delete("/septic-profile")
+async def delete_septic_profile(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_water_septic_partner_user)):
     profile = await db.scalar(select(SepticProviderProfile).where(SepticProviderProfile.owner_user_id == current_user.id, SepticProviderProfile.is_deleted.is_(False)))
     if profile is None: raise HTTPException(status_code=404, detail="Профиль септика не найден")
     profile.is_deleted = True; profile.is_active = False; await db.commit(); return {"ok": True}

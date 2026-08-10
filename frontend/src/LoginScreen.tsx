@@ -13,6 +13,7 @@ interface LoginScreenProps {
   onBack: () => void;
   onSelectSupplierRegister: () => void;
   onSelectEquipmentOwnerRegister: () => void;
+  onSelectWaterSepticPartnerRegister: () => void;
   onSelectDriverRegister: () => void;
 }
 
@@ -23,6 +24,7 @@ export default function LoginScreen({
   onBack,
   onSelectSupplierRegister,
   onSelectEquipmentOwnerRegister,
+  onSelectWaterSepticPartnerRegister,
   onSelectDriverRegister,
 }: LoginScreenProps) {
   const [username, setUsername] = useState("");
@@ -239,6 +241,13 @@ export default function LoginScreen({
                 className="text-sm font-semibold text-[#2DB0E6]"
               >
                 Регистрация самосвалов
+              </button>
+              <button
+                type="button"
+                onClick={onSelectWaterSepticPartnerRegister}
+                className="text-sm font-semibold text-[#2DB0E6]"
+              >
+                Регистрация предложений по воде
               </button>
             </div>
           </>

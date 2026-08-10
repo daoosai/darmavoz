@@ -7,7 +7,6 @@ import SupplierBottomNav, { type SupplierTab } from "./SupplierBottomNav";
 import SupplierDashboardScreen from "./SupplierDashboardScreen";
 import SupplierProfileScreen from "./SupplierProfileScreen";
 import SupplierRegisterScreen from "./SupplierRegisterScreen";
-import SupplierWaterPointsScreen from "./SupplierWaterPointsScreen";
 
 export default function SupplierPortalScreen({ onBack }: { onBack: () => void }) {
   const { token, role } = useAuthStore();
@@ -28,8 +27,6 @@ export default function SupplierPortalScreen({ onBack }: { onBack: () => void })
             token={token}
             onRequireProfile={() => setActiveView("profile")}
           />
-        ) : activeView === "water" ? (
-          <SupplierWaterPointsScreen token={token} />
         ) : (
           <SupplierProfileScreen
             token={token}

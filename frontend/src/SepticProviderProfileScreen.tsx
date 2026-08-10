@@ -135,7 +135,16 @@ const extractProfilePhone = (profile?: { phone?: unknown; phone_number?: unknown
   return "";
 };
 
-export default function SepticProviderProfileScreen({ token }: { token: string }) {
+interface SepticProviderProfileScreenProps {
+  token: string;
+  apiPrefix?: string;
+}
+
+export default function SepticProviderProfileScreen({
+  token,
+  apiPrefix = "/equipment-owner",
+}: SepticProviderProfileScreenProps) {
+  const apiBase = `${baseURL}${apiPrefix}`;
   const currentUser = useAuthStore((state) => state.currentUser);
   const setCurrentUser = useAuthStore((state) => state.setCurrentUser);
   const [profiles, setProfiles] = useState<SepticProfile[]>([]);
@@ -165,7 +174,7 @@ export default function SepticProviderProfileScreen({ token }: { token: string }
   const lastGeocodedAddressRef = useRef("");
 
   const loadProfiles = async () => {
-    const response = await fetch(`${baseURL}/equipment-owner/septic-profiles`, {
+    const response = await fetch(`${apiBase}/septic-profiles`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const data = await response.json().catch(() => []);
@@ -181,11 +190,11 @@ export default function SepticProviderProfileScreen({ token }: { token: string }
         toast.error(error instanceof Error ? error.message : "Не удалось загрузить объявления септиков"),
       )
       .finally(() => setLoading(false));
-  }, [token]);
+  }, [apiBase, token]);
 
   useEffect(() => {
     let cancelled = false;
-    void fetch(`${baseURL}/equipment-owner/me`, {
+    void fetch(`${apiBase}/me`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(async (response) => {
@@ -195,7 +204,7 @@ export default function SepticProviderProfileScreen({ token }: { token: string }
         const formattedPhone = formatPhoneNumber(phone);
         setProfilePhone(formattedPhone);
         setCurrentUser({
-          id: typeof data.id === "string" ? data.id : currentUser?.id || "equipment-owner",
+          id: typeof data.id === "string" ? data.id : currentUser?.id || apiPrefix,
           name:
             typeof data.display_name === "string"
               ? data.display_name
@@ -207,7 +216,7 @@ export default function SepticProviderProfileScreen({ token }: { token: string }
     return () => {
       cancelled = true;
     };
-  }, [currentUser?.id, currentUser?.name, setCurrentUser, token]);
+  }, [apiBase, apiPrefix, currentUser?.id, currentUser?.name, setCurrentUser, token]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -574,8 +583,8 @@ export default function SepticProviderProfileScreen({ token }: { token: string }
     try {
       const response = await fetch(
         profileBeingEdited
-          ? `${baseURL}/equipment-owner/septic-profiles/${profileBeingEdited.id}`
-          : `${baseURL}/equipment-owner/septic-profiles`,
+          ? `${apiBase}/septic-profiles/${profileBeingEdited.id}`
+          : `${apiBase}/septic-profiles`,
         {
           method: profileBeingEdited ? "PATCH" : "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -614,7 +623,7 @@ export default function SepticProviderProfileScreen({ token }: { token: string }
       await loadProfiles();
     } catch (error) {
       if (savedProfile && !profileBeingEdited && pendingFiles.length > 0) {
-        await fetch(`${baseURL}/equipment-owner/septic-profile/${savedProfile.id}/hard`, {
+        await fetch(`${apiBase}/septic-profile/${savedProfile.id}/hard`, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
         }).catch(() => undefined);
@@ -630,7 +639,7 @@ export default function SepticProviderProfileScreen({ token }: { token: string }
     setDeletingId(deleteTarget.id);
     try {
       const response = await fetch(
-        `${baseURL}/equipment-owner/septic-profile/${deleteTarget.id}/hard`,
+        `${apiBase}/septic-profile/${deleteTarget.id}/hard`,
         { method: "DELETE", headers: { Authorization: `Bearer ${token}` } },
       );
       const data = await response.json().catch(() => ({}));

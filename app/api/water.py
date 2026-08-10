@@ -10,12 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_db
 from app.models.models import MediaFile, User, WaterPoint
 from app.schemas.sprint19 import WaterPointIn, WaterPointOut
-from app.security.auth import get_current_logist_user, get_current_supplier_user
+from app.security.auth import get_current_logist_user, get_current_water_septic_partner_user
 from app.services.notifications import create_operator_notifications
 from app.services.storage import StorageNotConfiguredError, get_storage_service
 
 router = APIRouter()
-supplier_router = APIRouter()
+water_septic_partner_router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
@@ -113,14 +113,14 @@ async def get_water_point(point_id: UUID, db: AsyncSession = Depends(get_db)):
     return await _serialize_point(point, db)
 
 
-@supplier_router.get("/water-points", response_model=list[WaterPointOut])
-async def my_water_points(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_supplier_user)):
+@water_septic_partner_router.get("/water-points", response_model=list[WaterPointOut])
+async def my_water_points(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_water_septic_partner_user)):
     points = (await db.execute(select(WaterPoint).where(WaterPoint.owner_user_id == current_user.id, WaterPoint.is_deleted.is_(False)).order_by(WaterPoint.created_at.desc()))).scalars().all()
     return await _serialize_points(list(points), db)
 
 
-@supplier_router.post("/water-points", response_model=WaterPointOut, status_code=status.HTTP_201_CREATED)
-async def create_water_point(payload: WaterPointIn, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_supplier_user)):
+@water_septic_partner_router.post("/water-points", response_model=WaterPointOut, status_code=status.HTTP_201_CREATED)
+async def create_water_point(payload: WaterPointIn, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_water_septic_partner_user)):
     point = WaterPoint(**payload.model_dump(), owner_user_id=current_user.id, moderation_status="pending_moderation")
     db.add(point)
     await db.flush()
@@ -136,8 +136,8 @@ async def create_water_point(payload: WaterPointIn, db: AsyncSession = Depends(g
     return await _serialize_point(point, db)
 
 
-@supplier_router.patch("/water-points/{point_id}", response_model=WaterPointOut)
-async def update_water_point(point_id: UUID, payload: WaterPointIn, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_supplier_user)):
+@water_septic_partner_router.patch("/water-points/{point_id}", response_model=WaterPointOut)
+async def update_water_point(point_id: UUID, payload: WaterPointIn, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_water_septic_partner_user)):
     point = await db.scalar(select(WaterPoint).where(WaterPoint.id == point_id, WaterPoint.owner_user_id == current_user.id, WaterPoint.is_deleted.is_(False)))
     if point is None: raise HTTPException(status_code=404, detail="Точка воды не найдена")
     for field, value in payload.model_dump().items(): setattr(point, field, value)
@@ -155,8 +155,8 @@ async def update_water_point(point_id: UUID, payload: WaterPointIn, db: AsyncSes
     return await _serialize_point(point, db)
 
 
-@supplier_router.delete("/water-points/{point_id}")
-async def delete_water_point(point_id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_supplier_user)):
+@water_septic_partner_router.delete("/water-points/{point_id}")
+async def delete_water_point(point_id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_water_septic_partner_user)):
     point = await db.scalar(select(WaterPoint).where(WaterPoint.id == point_id, WaterPoint.owner_user_id == current_user.id))
     if point is None: raise HTTPException(status_code=404, detail="Точка воды не найдена")
     point.is_deleted = True; point.is_active = False; await db.commit(); return {"ok": True}
@@ -180,11 +180,11 @@ async def update_water_point_by_admin(
     return await _serialize_point(point, db)
 
 
-@supplier_router.delete("/water-points/{point_id}/hard")
+@water_septic_partner_router.delete("/water-points/{point_id}/hard")
 async def hard_delete_water_point(
     point_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_supplier_user),
+    current_user: User = Depends(get_current_water_septic_partner_user),
 ):
     point = await db.scalar(
         select(WaterPoint).where(

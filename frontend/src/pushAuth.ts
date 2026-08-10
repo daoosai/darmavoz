@@ -16,6 +16,8 @@ export const getPushTokenEndpoint = (
       return "/supplier/me/fcm-token";
     case "equipment_owner":
       return "/equipment-owner/me/fcm-token";
+    case "water_septic_partner":
+      return "/water-septic-partner/me/fcm-token";
     case "logist":
     case "admin":
       return "/logist/me/fcm-token";

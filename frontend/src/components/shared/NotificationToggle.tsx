@@ -12,7 +12,7 @@ import { getWebPushTokenWithRetry } from '../../services/webPush';
 import { emitPushSettingsChanged, getPushTokenEndpoint } from '../../pushAuth';
 
 interface NotificationToggleProps {
-  role: 'client' | 'driver' | 'admin' | 'logist' | 'equipment_owner';
+  role: 'client' | 'driver' | 'admin' | 'logist' | 'equipment_owner' | 'water_septic_partner';
 }
 
 export const NotificationToggle: React.FC<NotificationToggleProps> = ({ role }) => {

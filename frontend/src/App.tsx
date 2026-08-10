@@ -55,6 +55,7 @@ import SepticCatalogScreen from "./SepticCatalogScreen";
 import SupportScreen from "./SupportScreen";
 import PickupPointMapScreen, { PickupPointSelection } from "./PickupPointMapScreen";
 import EquipmentOwnerPortalScreen from "./EquipmentOwnerPortalScreen";
+import WaterSepticPartnerPortalScreen from "./WaterSepticPartnerPortalScreen";
 import AdminNotificationToastListener from "./components/shared/AdminNotificationToastListener";
 
 // Reuse Material type as MaterialProps by exporting it from MaterialDetailScreen or type matching
@@ -70,6 +71,7 @@ export default function App() {
     if (nextRole === "admin") return "admin" as const;
     if (nextRole === "supplier") return "supplier" as const;
     if (nextRole === "equipment_owner") return "equipment_owner" as const;
+    if (nextRole === "water_septic_partner") return "water_septic_partner" as const;
     return "main" as const;
   };
   const [currentRoute, setCurrentRoute] = useState<
@@ -81,8 +83,10 @@ export default function App() {
     | "admin"
     | "supplier"
     | "equipment_owner"
+    | "water_septic_partner"
     | "supplier_register"
     | "equipment_owner_register"
+    | "water_septic_partner_register"
     | "driver_register"
   >(
     role === "client" && currentPath.startsWith("/client/orders/")
@@ -97,6 +101,8 @@ export default function App() {
             ? "supplier"
             : role === "equipment_owner"
               ? "equipment_owner"
+              : role === "water_septic_partner"
+                ? "water_septic_partner"
           : "welcome",
   );
 
@@ -186,6 +192,7 @@ export default function App() {
         onBack={() => setCurrentRoute("welcome")}
         onSelectSupplierRegister={() => setCurrentRoute("supplier_register")}
         onSelectEquipmentOwnerRegister={() => setCurrentRoute("equipment_owner_register")}
+        onSelectWaterSepticPartnerRegister={() => setCurrentRoute("water_septic_partner_register")}
         onSelectDriverRegister={() => setCurrentRoute("driver_register")}
       />
     );
@@ -240,6 +247,13 @@ export default function App() {
       currentRoute === "equipment_owner"
     ) {
       return <EquipmentOwnerPortalScreen onBack={() => setCurrentRoute("login")} />;
+    }
+
+    if (
+      currentRoute === "water_septic_partner_register" ||
+      currentRoute === "water_septic_partner"
+    ) {
+      return <WaterSepticPartnerPortalScreen onBack={() => setCurrentRoute("login")} />;
     }
 
     if (currentRoute === "login") {

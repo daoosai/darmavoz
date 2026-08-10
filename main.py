@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api import admin, admin_moderation, admin_quarries, auth, catalog, client_addresses, client_auth, client_orders, clients, driver_dispatch, drivers, equipment, equipment_owner_auth, equipment_owner_profile, geo, logist_orders, media, orders, pickup_points, placements, sprint19, supplier_auth, supplier_points, support, system, telemetry, water, webhooks
+from app.api import admin, admin_moderation, admin_quarries, auth, catalog, client_addresses, client_auth, client_orders, clients, driver_dispatch, drivers, equipment, equipment_owner_auth, equipment_owner_profile, geo, logist_orders, media, orders, pickup_points, placements, sprint19, supplier_auth, supplier_points, support, system, telemetry, water, water_septic_partner_auth, water_septic_partner_profile, webhooks
 from app.core.config import settings
 from app.core.error_handling import register_exception_handlers
 from app.db.seed import seed_data
@@ -130,6 +130,7 @@ app.include_router(auth.driver_auth_router, tags=["driver-auth"])
 app.include_router(client_auth.router, prefix="/api/v1/auth", tags=["client-auth"])
 app.include_router(supplier_auth.router, prefix="/api/v1/auth/supplier", tags=["supplier-auth"])
 app.include_router(equipment_owner_auth.router, prefix="/api/v1/auth/equipment-owner", tags=["equipment-owner-auth"])
+app.include_router(water_septic_partner_auth.router, prefix="/api/v1/auth/water-septic-partner", tags=["water-septic-partner-auth"])
 app.include_router(client_addresses.router, prefix="/api/v1")
 app.include_router(client_orders.router, prefix="/api/v1", tags=["client-orders"])
 app.include_router(admin.router, prefix="/api/v1/admin", tags=["admin"])
@@ -144,10 +145,17 @@ app.include_router(support.router, prefix="/api/v1", tags=["support"])
 app.include_router(support.message_router, prefix="/api/v1")
 app.include_router(supplier_points.router, prefix="/api/v1/supplier", tags=["supplier-points"])
 app.include_router(equipment_owner_profile.router, prefix="/api/v1/equipment-owner", tags=["equipment-owner-profile"])
+app.include_router(water_septic_partner_profile.router, prefix="/api/v1/water-septic-partner", tags=["water-septic-partner-profile"])
 app.include_router(water.router, prefix="/api/v1", tags=["water"])
-app.include_router(water.supplier_router, prefix="/api/v1/supplier", tags=["supplier-water"])
+app.include_router(water.water_septic_partner_router, prefix="/api/v1/water-septic-partner", tags=["water-septic-partner-water"])
+# Compatibility path: water resources were formerly under the supplier namespace.
+# Its RBAC dependency accepts only the dedicated water and septic partner role.
+app.include_router(water.water_septic_partner_router, prefix="/api/v1/supplier", tags=["water-septic-partner-water-legacy"])
 app.include_router(sprint19.router, prefix="/api/v1", tags=["sprint19"])
-app.include_router(sprint19.equipment_owner_router, prefix="/api/v1/equipment-owner", tags=["septic-profile"])
+app.include_router(sprint19.water_septic_partner_router, prefix="/api/v1/water-septic-partner", tags=["water-septic-partner-septic-profile"])
+# Compatibility path: septic resources were formerly under the equipment owner namespace.
+# Its RBAC dependency accepts only the dedicated water and septic partner role.
+app.include_router(sprint19.water_septic_partner_router, prefix="/api/v1/equipment-owner", tags=["water-septic-partner-septic-profile-legacy"])
 app.include_router(clients.router, prefix="/api/v1/clients", tags=["clients"])
 app.include_router(drivers.router, prefix="/api/v1/drivers", tags=["drivers"])
 app.include_router(logist_orders.router, prefix="/api/v1/logist", tags=["logist"])

@@ -110,9 +110,9 @@ const normalizePhoneForApi = (value: string) => {
   return `+${digits.slice(0, 11)}`;
 };
 
-const readWaterPointDraft = (): typeof EMPTY_FORM | null => {
+const readWaterPointDraft = (storageKey: string): typeof EMPTY_FORM | null => {
   try {
-    const savedDraft = localStorage.getItem(WATER_POINT_DRAFT_STORAGE_KEY);
+    const savedDraft = localStorage.getItem(storageKey);
     if (!savedDraft) return null;
 
     const draft = JSON.parse(savedDraft) as Partial<typeof EMPTY_FORM>;
@@ -154,7 +154,18 @@ const extractProfilePhone = (profile?: { phone?: unknown; phone_number?: unknown
   return "";
 };
 
-export default function SupplierWaterPointsScreen({ token }: { token: string }) {
+interface SupplierWaterPointsScreenProps {
+  token: string;
+  apiPrefix?: string;
+  draftStorageKey?: string;
+}
+
+export default function SupplierWaterPointsScreen({
+  token,
+  apiPrefix = "/supplier",
+  draftStorageKey = WATER_POINT_DRAFT_STORAGE_KEY,
+}: SupplierWaterPointsScreenProps) {
+  const apiBase = `${baseURL}${apiPrefix}`;
   const [points, setPoints] = useState<WaterPoint[]>([]);
   const [form, setForm] = useState(EMPTY_FORM);
   const [showForm, setShowForm] = useState(false);
@@ -183,7 +194,7 @@ export default function SupplierWaterPointsScreen({ token }: { token: string }) 
   const [profilePhone, setProfilePhone] = useState(() => formatWaterPointPhone(extractProfilePhone(currentUser)));
 
   const loadPoints = async () => {
-    const response = await fetch(`${baseURL}/supplier/water-points`, {
+    const response = await fetch(`${apiBase}/water-points`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const data = await response.json().catch(() => []);
@@ -195,17 +206,17 @@ export default function SupplierWaterPointsScreen({ token }: { token: string }) 
     void loadPoints().catch((error) =>
       toast.error(error instanceof Error ? error.message : "Не удалось загрузить точки воды"),
     );
-  }, [token]);
+  }, [apiBase, token]);
 
   useEffect(() => {
-    const savedDraft = readWaterPointDraft();
+    const savedDraft = readWaterPointDraft(draftStorageKey);
     if (savedDraft) {
       hasSavedDraftRef.current = true;
       setForm(savedDraft);
       setShowForm(hasWaterPointDraftContent(savedDraft));
     }
     setIsDraftLoaded(true);
-  }, []);
+  }, [draftStorageKey]);
 
   useEffect(() => {
     if (!isDraftLoaded || editingPoint) return;
@@ -215,11 +226,11 @@ export default function SupplierWaterPointsScreen({ token }: { token: string }) 
     }
 
     try {
-      localStorage.setItem(WATER_POINT_DRAFT_STORAGE_KEY, JSON.stringify(form));
+      localStorage.setItem(draftStorageKey, JSON.stringify(form));
     } catch {
       // localStorage может быть недоступен в приватном режиме браузера.
     }
-  }, [editingPoint, form, isDraftLoaded]);
+  }, [draftStorageKey, editingPoint, form, isDraftLoaded]);
 
   useEffect(() => {
     const nextPreviews = pendingFiles.map((file) => URL.createObjectURL(file));
@@ -235,7 +246,7 @@ export default function SupplierWaterPointsScreen({ token }: { token: string }) 
 
     const loadSupplierProfile = async () => {
       try {
-        const response = await fetch(`${baseURL}/supplier/me`, {
+        const response = await fetch(`${apiBase}/me`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await response.json().catch(() => ({}));
@@ -248,7 +259,7 @@ export default function SupplierWaterPointsScreen({ token }: { token: string }) 
           setForm((current) => (current.phone.trim() ? current : { ...current, phone: formattedPhone }));
         }
         setCurrentUser({
-          id: currentUser?.id || "supplier",
+          id: currentUser?.id || apiPrefix,
           name: typeof data.display_name === "string" ? data.display_name : currentUser?.name || "",
           phone: phone || null,
         });
@@ -261,7 +272,7 @@ export default function SupplierWaterPointsScreen({ token }: { token: string }) 
     return () => {
       cancelled = true;
     };
-  }, [token, setCurrentUser]);
+  }, [apiBase, apiPrefix, token, setCurrentUser]);
 
   useEffect(() => {
     const handleDocumentMouseDown = (event: MouseEvent) => {
@@ -379,7 +390,7 @@ export default function SupplierWaterPointsScreen({ token }: { token: string }) 
 
   const openCreateForm = () => {
     if (editingPoint || !showForm) {
-      const savedDraft = readWaterPointDraft();
+      const savedDraft = readWaterPointDraft(draftStorageKey);
       skipNextDraftSaveRef.current = true;
       setForm(savedDraft || (editingPoint ? { ...EMPTY_FORM, phone: profilePhone } : form));
     }
@@ -409,7 +420,7 @@ export default function SupplierWaterPointsScreen({ token }: { token: string }) 
 
   const closeForm = () => {
     if (editingPoint) {
-      const savedDraft = readWaterPointDraft();
+      const savedDraft = readWaterPointDraft(draftStorageKey);
       skipNextDraftSaveRef.current = true;
       setEditingPoint(null);
       setForm(savedDraft || { ...EMPTY_FORM, phone: profilePhone });
@@ -618,8 +629,8 @@ export default function SupplierWaterPointsScreen({ token }: { token: string }) 
       };
       const response = await fetch(
         pointBeingEdited
-          ? `${baseURL}/supplier/water-points/${pointBeingEdited.id}`
-          : `${baseURL}/supplier/water-points`,
+          ? `${apiBase}/water-points/${pointBeingEdited.id}`
+          : `${apiBase}/water-points`,
         {
           method: pointBeingEdited ? "PATCH" : "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -645,7 +656,7 @@ export default function SupplierWaterPointsScreen({ token }: { token: string }) 
       );
       if (!pointBeingEdited) {
         skipNextDraftSaveRef.current = true;
-        localStorage.removeItem(WATER_POINT_DRAFT_STORAGE_KEY);
+        localStorage.removeItem(draftStorageKey);
       } else {
         skipNextDraftSaveRef.current = true;
       }
@@ -657,7 +668,7 @@ export default function SupplierWaterPointsScreen({ token }: { token: string }) 
       await loadPoints();
     } catch (error) {
       if (createdPoint && !pointBeingEdited) {
-        const rollbackResponse = await fetch(`${baseURL}/supplier/water-points/${createdPoint.id}/hard`, {
+        const rollbackResponse = await fetch(`${apiBase}/water-points/${createdPoint.id}/hard`, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
         }).catch(() => null);
@@ -684,7 +695,7 @@ export default function SupplierWaterPointsScreen({ token }: { token: string }) 
     if (!deleteTarget) return;
     setDeletingId(deleteTarget.id);
     try {
-      const response = await fetch(`${baseURL}/supplier/water-points/${deleteTarget.id}/hard`, {
+      const response = await fetch(`${apiBase}/water-points/${deleteTarget.id}/hard`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });

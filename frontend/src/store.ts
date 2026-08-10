@@ -117,6 +117,7 @@ export type UserRole =
   | "client"
   | "supplier"
   | "equipment_owner"
+  | "water_septic_partner"
   | null;
 
 export interface CurrentUserProfile {

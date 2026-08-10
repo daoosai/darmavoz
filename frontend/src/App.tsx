@@ -51,6 +51,7 @@ import FloatingOrderTracker from "./FloatingOrderTracker";
 import EquipmentCatalogScreen from "./EquipmentCatalogScreen";
 import GlobalMapScreen from "./GlobalMapScreen";
 import WaterMapScreen from "./WaterMapScreen";
+import SepticCatalogScreen from "./SepticCatalogScreen";
 import SupportScreen from "./SupportScreen";
 import PickupPointMapScreen, { PickupPointSelection } from "./PickupPointMapScreen";
 import EquipmentOwnerPortalScreen from "./EquipmentOwnerPortalScreen";
@@ -430,7 +431,8 @@ function MainContent({
       return;
     }
     if (currentPath === "/water" && activeTab !== "water") { setActiveTab("water"); return; }
-    if (currentPath !== "/map" && currentPath !== "/water" && (activeTab === "map" || activeTab === "water")) {
+    if (currentPath === "/septic" && activeTab !== "septic") { setActiveTab("septic"); return; }
+    if (currentPath !== "/map" && currentPath !== "/water" && currentPath !== "/septic" && (activeTab === "map" || activeTab === "water" || activeTab === "septic")) {
       setActiveTab("home");
     }
   }, [activeTab, currentPath, setActiveTab]);
@@ -487,6 +489,29 @@ function MainContent({
                   className={`flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-bold transition ${serviceDirection === "equipment" ? "bg-white text-sky-600 shadow-sm" : "text-slate-500"}`}
                 >
                   <Wrench className="h-4 w-4" /> Спецтехника
+                </button>
+              </div>
+
+              <div className="mx-4 mb-5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextPath = "/septic";
+                    if (typeof window !== "undefined" && window.location.pathname !== nextPath) {
+                      window.history.pushState({}, "", nextPath);
+                    }
+                    setCurrentPath(nextPath);
+                    setMapMaterial(null);
+                    closeMaterialSheet();
+                    setActiveTab("septic");
+                  }}
+                  className="flex w-full items-center gap-4 rounded-2xl bg-sky-500 p-4 text-left text-white shadow-[0_10px_24px_rgba(14,165,233,0.22)] transition hover:bg-sky-600"
+                >
+                  <span className="rounded-2xl bg-white/20 p-3"><Droplets className="h-6 w-6" /></span>
+                  <span className="min-w-0">
+                    <span className="block text-base font-black">Откачка септиков</span>
+                    <span className="mt-0.5 block text-sm text-sky-50">Выбрать исполнителя и позвонить</span>
+                  </span>
                 </button>
               </div>
 
@@ -599,6 +624,13 @@ function MainContent({
 
           {activeTab === "map" && <GlobalMapScreen />}
           {activeTab === "water" && <WaterMapScreen />}
+          {activeTab === "septic" && <SepticCatalogScreen onBack={() => {
+            if (typeof window !== "undefined" && window.location.pathname !== "/") {
+              window.history.pushState({}, "", "/");
+            }
+            setCurrentPath("/");
+            setActiveTab("home");
+          }} />}
 
           {activeTab === "profile" &&
             (role === "client" ? (

@@ -1,23 +1,99 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
+from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
-from app.models.models import Quarry, Role, SepticProviderProfile, SpecialEquipmentListing, User, UserNotification, WaterPoint
-from app.schemas.sprint19 import ConfirmationRequest, NotificationOut, SepticProfileIn, SepticProfileOut
+from app.models.models import MediaFile, Quarry, Role, SepticProviderProfile, SpecialEquipmentListing, User, UserNotification, WaterPoint
+from app.schemas.sprint19 import ConfirmationRequest, NotificationOut, SepticMediaOut, SepticProfileIn, SepticProfileOut
 from app.security.auth import get_current_equipment_owner_user, get_current_logist_user, get_current_user
+from app.services.notifications import create_operator_notifications
+from app.services.storage import StorageNotConfiguredError, get_storage_service
 
 router = APIRouter()
 equipment_owner_router = APIRouter()
 
 
+async def _serialize_septic_profile(
+    profile: SepticProviderProfile,
+    db: AsyncSession,
+) -> SepticProfileOut:
+    media_files = list(
+        (
+            await db.execute(
+                select(MediaFile)
+                .where(
+                    MediaFile.entity_type == "septic_profile",
+                    MediaFile.entity_id == profile.id,
+                )
+                .order_by(
+                    MediaFile.is_primary.desc(),
+                    MediaFile.sort_order.asc(),
+                    MediaFile.created_at.asc(),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return SepticProfileOut.model_validate(profile).model_copy(
+        update={
+            "primary_image_url": media_files[0].public_url if media_files else None,
+            "media_files": [SepticMediaOut.model_validate(media_file) for media_file in media_files],
+        }
+    )
+
+
+async def _serialize_septic_profiles(
+    profiles: list[SepticProviderProfile],
+    db: AsyncSession,
+) -> list[SepticProfileOut]:
+    return [await _serialize_septic_profile(profile, db) for profile in profiles]
+
+
+async def _hard_delete_septic_profile(
+    profile: SepticProviderProfile,
+    db: AsyncSession,
+) -> None:
+    media_files = list(
+        (
+            await db.execute(
+                select(MediaFile).where(
+                    MediaFile.entity_type == "septic_profile",
+                    MediaFile.entity_id == profile.id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    try:
+        storage = get_storage_service()
+    except StorageNotConfiguredError:
+        storage = None
+
+    for media_file in media_files:
+        if storage is not None:
+            try:
+                storage.delete_object(media_file.object_key)
+            except ClientError as exc:
+                error_code = exc.response.get("Error", {}).get("Code")
+                if error_code not in {"NoSuchKey", "404"}:
+                    raise
+        await db.delete(media_file)
+
+    await db.delete(profile)
+
+
 @router.get("/septic-providers", response_model=list[SepticProfileOut])
 async def list_septic_providers(db: AsyncSession = Depends(get_db)):
     stmt = select(SepticProviderProfile).where(SepticProviderProfile.moderation_status == "approved", SepticProviderProfile.is_active.is_(True), SepticProviderProfile.is_deleted.is_(False))
-    return (await db.execute(stmt.order_by(SepticProviderProfile.created_at.desc()))).scalars().all()
+    profiles = (await db.execute(stmt.order_by(SepticProviderProfile.created_at.desc()))).scalars().all()
+    return await _serialize_septic_profiles(list(profiles), db)
 
 
 @router.get("/admin/septic-providers", response_model=list[SepticProfileOut])
@@ -30,14 +106,117 @@ async def list_septic_providers_for_moderation(
     stmt = select(SepticProviderProfile).where(SepticProviderProfile.is_deleted.is_(False))
     if moderation_status:
         stmt = stmt.where(SepticProviderProfile.moderation_status == moderation_status)
-    return (await db.execute(stmt.order_by(SepticProviderProfile.created_at.desc()))).scalars().all()
+    profiles = (await db.execute(stmt.order_by(SepticProviderProfile.created_at.desc()))).scalars().all()
+    return await _serialize_septic_profiles(list(profiles), db)
+
+
+@equipment_owner_router.get("/septic-profiles", response_model=list[SepticProfileOut])
+async def list_my_septic_profiles(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_equipment_owner_user),
+):
+    profiles = (
+        await db.execute(
+            select(SepticProviderProfile)
+            .where(
+                SepticProviderProfile.owner_user_id == current_user.id,
+                SepticProviderProfile.is_deleted.is_(False),
+            )
+            .order_by(SepticProviderProfile.created_at.desc())
+        )
+    ).scalars().all()
+    return await _serialize_septic_profiles(list(profiles), db)
+
+
+@equipment_owner_router.post("/septic-profiles", response_model=SepticProfileOut, status_code=201)
+async def create_septic_profile(
+    payload: SepticProfileIn,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_equipment_owner_user),
+):
+    profile = SepticProviderProfile(
+        **payload.model_dump(),
+        owner_user_id=current_user.id,
+        moderation_status="pending_moderation",
+    )
+    db.add(profile)
+    await db.flush()
+    await create_operator_notifications(
+        db,
+        event_type="septic_profile_created",
+        title="Новая заявка на откачку септика",
+        body=f'Поставщик отправил на модерацию септик по адресу «{profile.address}».',
+        payload={"septic_profile_id": str(profile.id), "event": "septic_profile_created"},
+    )
+    await db.commit()
+    await db.refresh(profile)
+    return await _serialize_septic_profile(profile, db)
+
+
+@equipment_owner_router.patch("/septic-profiles/{profile_id}", response_model=SepticProfileOut)
+async def update_septic_profile(
+    profile_id: UUID,
+    payload: SepticProfileIn,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_equipment_owner_user),
+):
+    profile = await db.scalar(
+        select(SepticProviderProfile).where(
+            SepticProviderProfile.id == profile_id,
+            SepticProviderProfile.owner_user_id == current_user.id,
+            SepticProviderProfile.is_deleted.is_(False),
+        )
+    )
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Профиль септика не найден")
+
+    for field, value in payload.model_dump().items():
+        setattr(profile, field, value)
+    profile.moderation_status = "pending_moderation"
+    profile.moderation_comment = None
+    profile.is_active = True
+    await db.flush()
+    await create_operator_notifications(
+        db,
+        event_type="septic_profile_updated",
+        title="Заявка на откачку септика изменена",
+        body=f'Поставщик отправил изменения септика по адресу «{profile.address}» на модерацию.',
+        payload={"septic_profile_id": str(profile.id), "event": "septic_profile_updated"},
+    )
+    await db.commit()
+    await db.refresh(profile)
+    return await _serialize_septic_profile(profile, db)
+
+
+@equipment_owner_router.delete("/septic-profile/{profile_id}/hard")
+async def hard_delete_septic_profile(
+    profile_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_equipment_owner_user),
+):
+    profile = await db.scalar(
+        select(SepticProviderProfile).where(
+            SepticProviderProfile.id == profile_id,
+            SepticProviderProfile.owner_user_id == current_user.id,
+        )
+    )
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Профиль септика не найден")
+
+    await _hard_delete_septic_profile(profile, db)
+    await db.commit()
+    return {"ok": True}
 
 
 @equipment_owner_router.get("/septic-profile", response_model=SepticProfileOut)
 async def get_septic_profile(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_equipment_owner_user)):
-    profile = await db.scalar(select(SepticProviderProfile).where(SepticProviderProfile.owner_user_id == current_user.id, SepticProviderProfile.is_deleted.is_(False)))
+    profile = await db.scalar(
+        select(SepticProviderProfile)
+        .where(SepticProviderProfile.owner_user_id == current_user.id, SepticProviderProfile.is_deleted.is_(False))
+        .order_by(SepticProviderProfile.created_at.desc())
+    )
     if profile is None: raise HTTPException(status_code=404, detail="Профиль септика не создан")
-    return profile
+    return await _serialize_septic_profile(profile, db)
 
 
 @equipment_owner_router.put("/septic-profile", response_model=SepticProfileOut)
@@ -49,7 +228,7 @@ async def upsert_septic_profile(payload: SepticProfileIn, db: AsyncSession = Dep
     else:
         for field, value in payload.model_dump().items(): setattr(profile, field, value)
         profile.is_deleted = False; profile.is_active = True; profile.moderation_status = "pending_moderation"; profile.moderation_comment = None
-    await db.commit(); await db.refresh(profile); return profile
+    await db.commit(); await db.refresh(profile); return await _serialize_septic_profile(profile, db)
 
 
 @equipment_owner_router.delete("/septic-profile")
@@ -64,7 +243,7 @@ async def approve_septic_provider(profile_id: UUID, db: AsyncSession = Depends(g
     profile = await db.get(SepticProviderProfile, profile_id)
     if profile is None or profile.is_deleted: raise HTTPException(status_code=404, detail="Профиль не найден")
     profile.moderation_status = "approved"; profile.moderated_by_user_id = current_user.id; profile.moderated_at = datetime.now(UTC)
-    await db.commit(); await db.refresh(profile); return profile
+    await db.commit(); await db.refresh(profile); return await _serialize_septic_profile(profile, db)
 
 
 @router.post("/admin/septic-providers/{profile_id}/reject", response_model=SepticProfileOut)
@@ -72,7 +251,7 @@ async def reject_septic_provider(profile_id: UUID, reason: str, db: AsyncSession
     profile = await db.get(SepticProviderProfile, profile_id)
     if profile is None or profile.is_deleted: raise HTTPException(status_code=404, detail="Профиль не найден")
     profile.moderation_status = "rejected"; profile.moderation_comment = reason; profile.moderated_by_user_id = current_user.id; profile.moderated_at = datetime.now(UTC)
-    await db.commit(); await db.refresh(profile); return profile
+    await db.commit(); await db.refresh(profile); return await _serialize_septic_profile(profile, db)
 
 
 @router.get("/notifications", response_model=list[NotificationOut])

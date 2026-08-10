@@ -34,6 +34,7 @@ interface SepticProfile {
   address: string;
   tank_volume_m3: number | string;
   service_price: number | string;
+  primary_image_url?: string | null;
 }
 
 interface RejectTarget {
@@ -180,7 +181,9 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
                 </article>
               ))
             : septicProfiles.map((profile) => (
-                <article key={profile.id} className="rounded-2xl border border-slate-100 bg-white p-4">
+                <article key={profile.id} className="overflow-hidden rounded-2xl border border-slate-100 bg-white">
+                  {profile.primary_image_url ? <img src={resolveMediaUrl(profile.primary_image_url)} alt={profile.address} className="h-40 w-full object-cover" /> : null}
+                  <div className="p-4">
                   <div className="flex items-start gap-3">
                     <span className="rounded-xl bg-cyan-100 p-2.5 text-cyan-600"><Truck className="h-5 w-5" /></span>
                     <div className="min-w-0 flex-1">
@@ -193,6 +196,7 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
                   <div className="mt-4 grid grid-cols-2 gap-2">
                     <button type="button" disabled={actionId === profile.id} onClick={() => openReject(profile.id, "анкета септика")} className="flex items-center justify-center gap-2 rounded-xl border border-rose-200 py-2.5 text-sm font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50"><XCircle className="h-4 w-4" />Отклонить</button>
                     <button type="button" disabled={actionId === profile.id} onClick={() => void moderate(profile.id, "approve")} className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 py-2.5 text-sm font-bold text-white hover:bg-emerald-600 disabled:opacity-50">{actionId === profile.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}Одобрить</button>
+                  </div>
                   </div>
                 </article>
               ))}

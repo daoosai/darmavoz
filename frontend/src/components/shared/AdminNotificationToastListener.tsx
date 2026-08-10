@@ -1,5 +1,4 @@
 import { useEffect, useRef } from "react";
-import toast from "react-hot-toast";
 
 import { useAdminModerationStore, useAuthStore } from "../../store";
 import { baseURL } from "../../utils";
@@ -14,6 +13,8 @@ interface InboxNotification {
 const MODERATION_EVENTS = new Set([
   "water_point_created",
   "water_point_updated",
+  "septic_profile_created",
+  "septic_profile_updated",
   "pickup_point_pending_moderation",
   "equipment_listing_pending_moderation",
 ]);
@@ -35,7 +36,7 @@ export default function AdminNotificationToastListener() {
 
     let isActive = true;
 
-    const showNotificationToast = (notifications: InboxNotification[]) => {
+    const registerUnreadModerationNotifications = (notifications: InboxNotification[]) => {
       if (notifications.length === 0) return;
 
       const newestModerationNotification = notifications.find((item) =>
@@ -49,19 +50,6 @@ export default function AdminNotificationToastListener() {
         });
       }
 
-      const newestNotification = notifications[0];
-      toast(
-        newestModerationNotification
-          ? "Есть новые заявки на модерацию"
-          : newestNotification.title || "Есть новые уведомления",
-        {
-          id: "admin-unread-notifications",
-          duration: 6000,
-          position: "top-center",
-          icon: "🔔",
-          style: { background: "#0f172a", color: "#ffffff", fontWeight: "700" },
-        },
-      );
     };
 
     const loadUnreadNotifications = async () => {
@@ -78,7 +66,7 @@ export default function AdminNotificationToastListener() {
         if (!isInitialLoadRef.current) {
           seenNotificationIdsRef.current = currentIds;
           isInitialLoadRef.current = true;
-          showNotificationToast(unreadNotifications);
+          registerUnreadModerationNotifications(unreadNotifications);
           return;
         }
 
@@ -89,7 +77,7 @@ export default function AdminNotificationToastListener() {
 
         if (newNotifications.length === 0) return;
 
-        showNotificationToast(newNotifications);
+        registerUnreadModerationNotifications(newNotifications);
       } catch {
         // Ошибки фонового polling не должны прерывать работу панели администратора.
       }

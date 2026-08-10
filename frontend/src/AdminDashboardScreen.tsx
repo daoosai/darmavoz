@@ -34,7 +34,6 @@ import {
   Headphones,
   Menu,
   X,
-  Droplets,
 } from "lucide-react";
 import AdminProfileScreen from "./AdminProfileScreen";
 import AdminQuarriesScreen from "./AdminQuarriesScreen";
@@ -254,7 +253,6 @@ export default function AdminDashboardScreen({
   const [pendingEquipmentModerationCount, setPendingEquipmentModerationCount] =
     useState(0);
   const [pendingWaterSepticCount, setPendingWaterSepticCount] = useState(0);
-  const [pendingWaterPointCount, setPendingWaterPointCount] = useState(0);
   const [ordersRequiresClarificationCount, setOrdersRequiresClarificationCount] =
     useState(0);
   const [quarryStatusFilter, setQuarryStatusFilter] = useState("");
@@ -272,6 +270,8 @@ export default function AdminDashboardScreen({
   const [isLoadingModeration, setIsLoadingModeration] = useState(false);
   const summaryManagedSection =
     activeTab === "quarries" ? "quarries" : activeTab === "equipment" ? "equipment" : null;
+  const shouldShowPlacementSummary =
+    activeTab === "materials" || activeTab === "quarries" || activeTab === "equipment";
   const effectiveQuarryStatusFilter =
     quarrySummaryFilters?.statusFilter ?? quarryStatusFilter;
   const effectiveQuarryPlacementFilter =
@@ -450,7 +450,6 @@ export default function AdminDashboardScreen({
   const [previewLeft, setPreviewLeft] = useState<string | null>(null);
   const [previewPlate, setPreviewPlate] = useState<string | null>(null);
 
-  const pendingDriversCount = pendingDriverModerationCount;
   const pendingModerationTotal =
     pendingDriverModerationCount +
     pendingPointModerationCount +
@@ -826,7 +825,6 @@ export default function AdminDashboardScreen({
       if (!res.ok) return;
       const data = await res.json().catch(() => ({}));
       setPendingWaterSepticCount(Number(data.water_septic) || 0);
-      setPendingWaterPointCount(Number(data.water_points) || 0);
       setOrdersRequiresClarificationCount(Number(data.orders_requires_clarification) || 0);
     } catch {
       // Счётчики не должны мешать работе панели, если фоновый запрос недоступен.
@@ -1771,116 +1769,6 @@ export default function AdminDashboardScreen({
           <span>Выйти</span>
         </button>
         </div>
-        {pendingDriversCount > 0 ? (
-          <div className="w-full rounded-2xl border border-emerald-200 bg-[linear-gradient(135deg,rgba(236,253,245,1)_0%,rgba(239,246,255,1)_100%)] px-4 py-3 shadow-sm">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 rounded-2xl bg-emerald-500/10 p-2 text-emerald-600">
-                  <Users className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-black text-slate-900">
-                    Новые водители ожидают проверки
-                  </p>
-                  <p className="mt-1 text-sm text-slate-600">
-                    Сейчас на модерации: {pendingDriversCount}.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveTab("drivers")}
-                className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-700"
-              >
-                Перейти
-              </button>
-            </div>
-          </div>
-        ) : null}
-        {pendingEquipmentModerationCount > 0 ? (
-          <div className="w-full rounded-2xl border border-amber-200 bg-[linear-gradient(135deg,rgba(255,251,235,1)_0%,rgba(255,237,213,1)_100%)] px-4 py-3 shadow-sm">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 rounded-2xl bg-amber-500/10 p-2 text-amber-700">
-                  <Wrench className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-black text-slate-900">
-                    Есть объявления, ожидающие модерации
-                  </p>
-                  <p className="mt-1 text-sm text-slate-600">
-                    Сейчас на проверке: {pendingEquipmentModerationCount}.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveTab("equipment")}
-                className="inline-flex items-center justify-center rounded-xl bg-amber-500 px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-amber-600"
-              >
-                Проверить
-              </button>
-            </div>
-          </div>
-        ) : null}
-        {pendingPointModerationCount > 0 ? (
-          <div className="w-full rounded-2xl border border-cyan-200 bg-[linear-gradient(135deg,rgba(236,254,255,1)_0%,rgba(240,249,255,1)_100%)] px-4 py-3 shadow-sm">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 rounded-2xl bg-cyan-500/10 p-2 text-cyan-700">
-                  <Map className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-black text-slate-900">
-                    Есть новые точки забора, ожидающие модерации
-                  </p>
-                  <p className="mt-1 text-sm text-slate-600">
-                    Сейчас на проверке: {pendingPointModerationCount}.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() =>
-                  openSummaryPoints({
-                    statusFilter: "pending_moderation",
-                    placementFilter: "",
-                    typeFilter: "",
-                  })
-                }
-                className="inline-flex items-center justify-center rounded-xl bg-cyan-500 px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-cyan-600"
-              >
-                Перейти
-              </button>
-            </div>
-          </div>
-        ) : null}
-        {pendingWaterPointCount > 0 ? (
-          <div className="w-full rounded-2xl border border-sky-200 bg-[linear-gradient(135deg,rgba(240,249,255,1)_0%,rgba(224,242,254,1)_100%)] px-4 py-3 shadow-sm">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 rounded-2xl bg-sky-500/10 p-2 text-sky-600">
-                  <Droplets className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-black text-slate-900">
-                    Есть новые точки воды, ожидающие модерации
-                  </p>
-                  <p className="mt-1 text-sm text-slate-600">
-                    Сейчас на проверке: {pendingWaterPointCount}.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => openSidebarSection("water_septic")}
-                className="inline-flex items-center justify-center rounded-xl bg-sky-500 px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-sky-600"
-              >
-                Проверить
-              </button>
-            </div>
-          </div>
-        ) : null}
       </div>
 
       <div className={`fixed inset-0 z-[60] ${isSidebarOpen ? "pointer-events-auto" : "pointer-events-none"}`} aria-hidden={!isSidebarOpen}>
@@ -1926,21 +1814,23 @@ export default function AdminDashboardScreen({
       {/* Main Content */}
       <div className="flex-1 overflow-y-auto p-6 pb-28 lg:p-8 sm:pb-8 relative">
         <div className="max-w-6xl mx-auto flex flex-col gap-6">
-          <PlacementSummaryPanel
-            token={token || ""}
-            activeSection={summaryManagedSection}
-            pointFilters={{
-              statusFilter: effectiveQuarryStatusFilter,
-              placementFilter: effectiveQuarryPlacementFilter,
-              typeFilter: effectiveQuarryTypeFilter,
-            }}
-            equipmentFilters={{
-              placementFilter: equipmentPlacementFilter,
-              tab: equipmentTab,
-            }}
-            onOpenPoints={openSummaryPoints}
-            onOpenEquipment={openSummaryEquipment}
-          />
+          {shouldShowPlacementSummary ? (
+            <PlacementSummaryPanel
+              token={token || ""}
+              activeSection={summaryManagedSection}
+              pointFilters={{
+                statusFilter: effectiveQuarryStatusFilter,
+                placementFilter: effectiveQuarryPlacementFilter,
+                typeFilter: effectiveQuarryTypeFilter,
+              }}
+              equipmentFilters={{
+                placementFilter: equipmentPlacementFilter,
+                tab: equipmentTab,
+              }}
+              onOpenPoints={openSummaryPoints}
+              onOpenEquipment={openSummaryEquipment}
+            />
+          ) : null}
           {activeTab === "materials" ? (
             <>
               <AdminCategoriesPanel

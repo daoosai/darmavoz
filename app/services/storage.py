@@ -30,6 +30,7 @@ ALLOWED_ENTITY_TYPES = {
     "quarry",
     "equipment_listing",
     "water_point",
+    "septic_profile",
 }
 UPLOAD_CORS_CONFIGURATION = {
     "CORSRules": [

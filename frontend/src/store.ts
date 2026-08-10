@@ -131,6 +131,8 @@ const ADMIN_MODERATION_EVENTS = new Set([
   "equipment_listing_pending_moderation",
   "water_point_created",
   "water_point_updated",
+  "septic_profile_created",
+  "septic_profile_updated",
 ]);
 
 export const isAdminModerationEvent = (

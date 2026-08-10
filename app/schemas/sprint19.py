@@ -75,12 +75,24 @@ class SepticProfileIn(BaseModel):
     service_price: float = Field(gt=0)
 
 
+class SepticMediaOut(BaseModel):
+    id: UUID
+    public_url: str
+    file_name: str
+    is_primary: bool
+    sort_order: int | None = None
+
+    model_config = {"from_attributes": True}
+
+
 class SepticProfileOut(SepticProfileIn):
     id: UUID
     owner_user_id: UUID | None = None
     moderation_status: str
     moderation_comment: str | None = None
     is_active: bool
+    primary_image_url: str | None = None
+    media_files: list[SepticMediaOut] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 

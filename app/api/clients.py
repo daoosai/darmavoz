@@ -162,6 +162,8 @@ async def cancel_my_order(
         OrderStatus.searching_driver.value,
         OrderStatus.requires_clarification.value,
         OrderStatus.offered_to_driver.value,
+        OrderStatus.no_driver_found.value,
+        OrderStatus.timeout.value,
         OrderStatus.driver_assigned.value,
     }
     driver_accepted_or_in_progress_statuses = {

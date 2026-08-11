@@ -146,7 +146,7 @@ async def test_admin_manual_quarry_date_reactivates_expired_point(client, sessio
     response = await client.patch(
         f"/api/v1/admin/quarries/{quarry_id}",
         headers=auth_headers("quarry_reactivate_logist"),
-        json={"subscription_end_date": subscription_end_date},
+        json={"subscription_end_date": subscription_end_date, "is_active": False},
     )
 
     assert response.status_code == 200

@@ -667,7 +667,10 @@ export default function AdminQuarriesScreen({
           quarry={editingQuarry}
           materials={materials}
           onClose={() => setIsModalOpen(false)}
-          onSave={() => {
+          onSave={(savedQuarry) => {
+            setQuarries((current) =>
+              current.map((item) => (item.id === savedQuarry.id ? savedQuarry : item)),
+            );
             setIsModalOpen(false);
             void fetchQuarries();
             void onPointsChanged?.();
@@ -727,7 +730,7 @@ function EditQuarryModal({
   quarry: Quarry;
   materials: any[];
   onClose: () => void;
-  onSave: () => void;
+  onSave: (savedQuarry: Quarry) => void;
 }) {
   const { token } = useAuthStore();
   const [formData, setFormData] = useState<QuarryFormData>(() => buildQuarryFormData(quarry));
@@ -1130,7 +1133,7 @@ function EditQuarryModal({
         }
       }
 
-      onSave();
+      onSave(savedPoint);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Ошибка при сохранении");
     } finally {
@@ -1624,7 +1627,7 @@ function EnhancedEditQuarryModal({
   quarry: Quarry;
   materials: any[];
   onClose: () => void;
-  onSave: () => void;
+  onSave: (savedQuarry: Quarry) => void;
 }) {
   const { token } = useAuthStore();
   const [formData, setFormData] = useState<QuarryFormData>(() => buildQuarryFormData(quarry));
@@ -2132,7 +2135,7 @@ function EnhancedEditQuarryModal({
       }
 
       toast.success("Карьер сохранен");
-      onSave();
+      onSave(savedPoint);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Не удалось сохранить точку");
     } finally {

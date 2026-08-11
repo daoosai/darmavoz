@@ -840,6 +840,12 @@ async def update_equipment_listing(
         )
     else:
         await initialize_trial(db, listing, actor_user_id=current_user.id)
+    await recalculate_status(
+        db,
+        listing,
+        actor_user_id=current_user.id,
+        action="admin_equipment_updated",
+    )
     await db.commit()
     return await _listing_payload(
         db,

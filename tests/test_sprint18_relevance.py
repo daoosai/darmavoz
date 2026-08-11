@@ -138,6 +138,8 @@ async def test_public_point_disappears_after_expiry_and_returns_after_extension(
                 is_active=True,
             )
         )
+        point.moderation_status = ModerationStatus.has_pending_changes.value
+        point.pending_changes = {"name": "Карьер после продления"}
         await session.commit()
         point_id = point.id
         material_id = material.id
@@ -154,6 +156,13 @@ async def test_public_point_disappears_after_expiry_and_returns_after_extension(
     )
     assert extended.status_code == 200
     assert extended.json()["placement_status"] == PlacementStatus.active.value
+
+    async with session_factory() as session:
+        updated_point = await session.get(Quarry, point_id)
+        assert updated_point is not None
+        assert updated_point.name == "Карьер после продления"
+        assert updated_point.moderation_status == ModerationStatus.approved.value
+        assert updated_point.pending_changes is None
 
     visible = await client.get(
         "/api/v1/catalog/pickup-points", params={"material_id": str(material_id)}

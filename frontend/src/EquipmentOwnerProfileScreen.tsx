@@ -4,13 +4,23 @@ import toast from "react-hot-toast";
 
 import { useAuthStore } from "./store";
 import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
+import DeleteAccountButton from "./components/shared/DeleteAccountButton";
 
 interface Props {
   token: string;
   onLogout: () => Promise<void>;
+  apiPrefix?: string;
+  profileId?: string;
+  cabinetLabel?: string;
 }
 
-export default function EquipmentOwnerProfileScreen({ token, onLogout }: Props) {
+export default function EquipmentOwnerProfileScreen({
+  token,
+  onLogout,
+  apiPrefix = "/equipment-owner",
+  profileId = "equipment_owner",
+  cabinetLabel = "Кабинет владельца спецтехники",
+}: Props) {
   const { setCurrentUser } = useAuthStore();
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -22,7 +32,7 @@ export default function EquipmentOwnerProfileScreen({ token, onLogout }: Props) 
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const response = await fetch(`${baseURL}/equipment-owner/me`, {
+        const response = await fetch(`${baseURL}${apiPrefix}/me`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await response.json().catch(() => ({}));
@@ -33,7 +43,7 @@ export default function EquipmentOwnerProfileScreen({ token, onLogout }: Props) 
         setEmail(data.email || "");
         setDisplayName(data.display_name || "");
         setCurrentUser({
-          id: "equipment_owner",
+          id: profileId,
           name: data.display_name || "",
           phone: data.phone || "",
         });
@@ -45,13 +55,13 @@ export default function EquipmentOwnerProfileScreen({ token, onLogout }: Props) 
     };
 
     void fetchProfile();
-  }, [token]);
+  }, [apiPrefix, profileId, token]);
 
   const saveProfile = async (event: FormEvent) => {
     event.preventDefault();
     setIsSaving(true);
     try {
-      const response = await fetch(`${baseURL}/equipment-owner/me`, {
+      const response = await fetch(`${baseURL}${apiPrefix}/me`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ display_name: displayName.trim() || null }),
@@ -64,7 +74,7 @@ export default function EquipmentOwnerProfileScreen({ token, onLogout }: Props) 
       setEmail(data.email || "");
       setDisplayName(data.display_name || "");
       setCurrentUser({
-        id: "equipment_owner",
+        id: profileId,
         name: data.display_name || "",
         phone: data.phone || "",
       });
@@ -83,7 +93,7 @@ export default function EquipmentOwnerProfileScreen({ token, onLogout }: Props) 
   return (
     <div className="px-5 pb-8 pt-[max(env(safe-area-inset-top),1rem)] text-gray-900">
       <p className="text-xs font-bold uppercase tracking-[0.2em] text-sky-500">
-        Кабинет владельца спецтехники
+        {cabinetLabel}
       </p>
       <h1 className="mt-1 text-3xl font-black">Профиль</h1>
 
@@ -148,6 +158,7 @@ export default function EquipmentOwnerProfileScreen({ token, onLogout }: Props) 
         {isLoggingOut ? <Loader2 className="h-5 w-5 animate-spin" /> : <LogOut className="h-5 w-5" />}
         Выйти из аккаунта
       </button>
+      <DeleteAccountButton token={token} onDeleted={onLogout} />
     </div>
   );
 }

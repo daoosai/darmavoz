@@ -2,11 +2,14 @@ import logging
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from datetime import UTC, datetime
+from uuid import UUID
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.db.database import get_db
-from app.models.models import Client, Order, User
+from app.models.models import Client, ClientAddress, Driver, DriverStatus, Order, OrderEvent, OrderItem, OrderOffer, OrderOfferStatus, OrderStatus, User
 from app.schemas.client import (
     ClientCreate,
     ClientFcmTokenIn,
@@ -17,8 +20,10 @@ from app.schemas.client import (
 )
 from app.schemas.order import OrderOut
 from app.security.auth import get_current_client, get_current_logist_user
-from app.services.dispatch_service import list_orders_for_client
+from app.services.dispatch_service import get_order_by_id, get_order_material_name, list_orders_for_client
 from app.services.fcm_tokens import detach_fcm_token_from_other_entities
+from app.services.notifications import create_operator_notifications, schedule_driver_order_cancelled_notification
+from app.schemas.sprint19 import ClientCancelOrderRequest, ClientClarificationReplyRequest, ConfirmationRequest
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -142,3 +147,198 @@ async def get_my_orders(
     db: AsyncSession = Depends(get_db),
 ) -> list[Order]:
     return await list_orders_for_client(db, current_client.id)
+
+
+@router.patch("/me/orders/{order_id}/cancel", response_model=OrderOut)
+async def cancel_my_order(
+    order_id: UUID,
+    payload: ClientCancelOrderRequest,
+    current_client: Client = Depends(get_current_client),
+    db: AsyncSession = Depends(get_db),
+):
+    client_cancellable_statuses = {
+        OrderStatus.draft.value,
+        OrderStatus.created.value,
+        OrderStatus.searching_driver.value,
+        OrderStatus.requires_clarification.value,
+        OrderStatus.offered_to_driver.value,
+        OrderStatus.no_driver_found.value,
+        OrderStatus.timeout.value,
+        OrderStatus.driver_assigned.value,
+    }
+    driver_accepted_or_in_progress_statuses = {
+        OrderStatus.driver_accepted.value,
+        OrderStatus.heading_to_pickup.value,
+        OrderStatus.arrived_at_pickup.value,
+        OrderStatus.loading.value,
+        OrderStatus.heading_to_client.value,
+        OrderStatus.delivered.value,
+        OrderStatus.completed.value,
+        "on_the_way",
+        "in_progress",
+    }
+
+    try:
+        order = await db.scalar(
+            select(Order)
+            .options(selectinload(Order.items).selectinload(OrderItem.material))
+            .where(
+                Order.id == order_id,
+                Order.client_id == current_client.id,
+                Order.is_deleted.is_(False),
+            )
+            .with_for_update()
+        )
+        if order is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заказ не найден")
+
+        if order.status not in client_cancellable_statuses:
+            if order.status in driver_accepted_or_in_progress_statuses:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={"code": "ORDER_ALREADY_ACCEPTED", "message": "Заказ уже принят водителем"},
+                )
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"code": "ORDER_CANNOT_BE_CANCELLED", "message": "Этот заказ нельзя отменить в текущем статусе"},
+            )
+
+        cancelled_driver_id = order.driver_id
+        cancel_reason = (payload.reason or "").strip() or "Отменено клиентом"
+
+        await db.execute(
+            update(OrderOffer)
+            .where(
+                OrderOffer.order_id == order.id,
+                OrderOffer.status.in_((OrderOfferStatus.pending.value, OrderOfferStatus.accepted.value)),
+            )
+            .values(status=OrderOfferStatus.cancelled.value)
+        )
+
+        if cancelled_driver_id is not None:
+            assigned_driver = await db.scalar(
+                select(Driver).where(Driver.id == cancelled_driver_id).with_for_update()
+            )
+            if assigned_driver is not None and assigned_driver.status == DriverStatus.busy.value:
+                assigned_driver.status = DriverStatus.available.value
+
+        order.status = OrderStatus.cancelled.value
+        order.cancelled_at = datetime.now(UTC)
+        order.cancelled_by_type = "client"
+        order.cancel_reason = cancel_reason
+        order.current_offer_id = None
+        order.driver_id = None
+        db.add(
+            OrderEvent(
+                order_id=order.id,
+                status=order.status,
+                event_type="cancelled_by_client",
+                description=cancel_reason,
+            )
+        )
+        await create_operator_notifications(
+            db,
+            event_type="order_cancelled_by_client",
+            title="Клиент отменил заказ",
+            body=f"{get_order_material_name(order)}. Причина: {cancel_reason}",
+            payload={"order_id": str(order.id), "event": "order_cancelled_by_client"},
+        )
+        await db.commit()
+
+        cancelled_order = await get_order_by_id(db, order.id)
+        if cancelled_driver_id is not None:
+            schedule_driver_order_cancelled_notification(cancelled_order, cancelled_driver_id)
+        return cancelled_order
+    except HTTPException:
+        await db.rollback()
+        raise
+    except Exception:
+        await db.rollback()
+        logger.error(
+            "Cancel order error: order_id=%s client_id=%s",
+            order_id,
+            current_client.id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Не удалось отменить заказ. Попробуйте ещё раз.",
+        )
+
+
+@router.patch("/me/orders/{order_id}/clarify-reply", response_model=OrderOut)
+async def reply_to_order_clarification(
+    order_id: UUID,
+    payload: ClientClarificationReplyRequest,
+    current_client: Client = Depends(get_current_client),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        order = await db.scalar(
+            select(Order)
+            .options(selectinload(Order.items).selectinload(OrderItem.material))
+            .where(
+                Order.id == order_id,
+                Order.client_id == current_client.id,
+                Order.is_deleted.is_(False),
+            )
+            .with_for_update()
+        )
+        if order is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заказ не найден")
+        if order.status != OrderStatus.requires_clarification.value:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="По этому заказу сейчас не требуется уточнение",
+            )
+
+        reply = payload.reply.strip()
+        if not reply:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Введите ответ для логиста",
+            )
+        order.client_clarification_reply = reply
+        db.add(
+            OrderEvent(
+                order_id=order.id,
+                status=order.status,
+                event_type="client_clarification_reply",
+                description=reply,
+            )
+        )
+        await create_operator_notifications(
+            db,
+            event_type="client_clarification_reply",
+            title=f"Получен ответ от клиента по заказу {get_order_material_name(order)}",
+            body=reply,
+            payload={"order_id": str(order.id), "event": "client_clarification_reply"},
+        )
+        await db.commit()
+        return await get_order_by_id(db, order.id)
+    except HTTPException:
+        raise
+    except Exception:
+        await db.rollback()
+        logger.error(
+            "client_clarification_reply_failed order_id=%s client_id=%s",
+            order_id,
+            current_client.id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Не удалось сохранить ответ. Попробуйте ещё раз.",
+        )
+
+
+@router.delete("/me/account")
+async def delete_my_account(payload: ConfirmationRequest, current_client: Client = Depends(get_current_client), db: AsyncSession = Depends(get_db)):
+    if not payload.confirm:
+        raise HTTPException(status_code=422, detail="Подтвердите удаление аккаунта")
+    current_client.is_deleted = True; current_client.deleted_at = datetime.now(UTC); current_client.deletion_source = "self"; current_client.auth_version += 1
+    current_client.name = "Удалённый пользователь"; current_client.email = None; current_client.phone = None; current_client.external_source = None; current_client.external_user_id = None; current_client.fcm_token = None
+    await db.execute(update(Order).where(Order.client_id == current_client.id).values(address=None, delivery_address=None, notes=None))
+    await db.execute(update(ClientAddress).where(ClientAddress.client_id == current_client.id).values(full_address="Удалённый адрес", comment=None, lat=None, lon=None, is_default=False))
+    await db.commit()
+    return {"ok": True}

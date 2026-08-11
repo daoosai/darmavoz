@@ -32,10 +32,12 @@ from app.models.models import (
     Role,
     Quarry,
     SpecialEquipmentListing,
+    SepticProviderProfile,
     SupportMessage,
     SupportTicket,
     User,
     Vehicle,
+    WaterPoint,
     quarry_materials,
 )
 from app.schemas.client import ClientFcmTokenIn, ClientFcmTokenOut
@@ -178,6 +180,13 @@ class ModerationCountsOut(BaseModel):
     points: int
     equipment: int
     total: int
+
+
+class SidebarCountsOut(BaseModel):
+    water_septic: int
+    water_points: int
+    septic_profiles: int
+    orders_requires_clarification: int
 
 
 
@@ -1258,6 +1267,39 @@ async def get_moderation_counts(
         points=points,
         equipment=equipment,
         total=drivers + points + equipment,
+    )
+
+
+@router.get("/sidebar/counts", response_model=SidebarCountsOut)
+async def get_admin_sidebar_counts(
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+) -> SidebarCountsOut:
+    del current_admin
+    water_points = await db.scalar(
+        select(func.count(WaterPoint.id)).where(
+            WaterPoint.is_deleted.is_(False),
+            WaterPoint.moderation_status.in_(MODERATION_PENDING_STATUSES),
+        )
+    )
+    septic_profiles = await db.scalar(
+        select(func.count(SepticProviderProfile.id)).where(
+            SepticProviderProfile.is_deleted.is_(False),
+            SepticProviderProfile.moderation_status.in_(MODERATION_PENDING_STATUSES),
+        )
+    )
+    orders_requires_clarification = await db.scalar(
+        select(func.count(Order.id)).where(
+            Order.is_deleted.is_(False),
+            Order.status == OrderStatus.requires_clarification.value,
+        )
+    )
+
+    return SidebarCountsOut(
+        water_septic=int(water_points or 0) + int(septic_profiles or 0),
+        water_points=int(water_points or 0),
+        septic_profiles=int(septic_profiles or 0),
+        orders_requires_clarification=int(orders_requires_clarification or 0),
     )
 
 

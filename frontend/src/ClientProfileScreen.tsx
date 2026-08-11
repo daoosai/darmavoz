@@ -16,6 +16,7 @@ import { baseURL, APP_VERSION, extractApiErrorMessage, handleApiError } from "./
 import { useAuthStore } from "./store";
 import UpdateBanner from "./UpdateBanner";
 import toast from "react-hot-toast";
+import DeleteAccountButton from "./components/shared/DeleteAccountButton";
 
 interface ClientData {
   id: string;
@@ -257,6 +258,7 @@ export default function ClientProfileScreen({
           <LogOut className="w-5 h-5" />
           Выйти
         </button>
+        <DeleteAccountButton token={token} onDeleted={logoutCurrentSession} />
         <div className="text-xs font-medium text-slate-400 mt-4 text-center pb-4">
           Дармавоз.рф • Версия {APP_VERSION}
         </div>

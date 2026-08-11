@@ -4,10 +4,15 @@ import toast from "react-hot-toast";
 
 import OtpVerificationStep from "./OtpVerificationStep";
 import { switchAuthenticatedSession } from "./pushAuth";
+import type { UserRole } from "./store";
 import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
 
-interface Props {
+export interface EquipmentOwnerRegisterScreenProps {
   onBack: () => void;
+  registrationApiPrefix?: string;
+  partnerRole?: Extract<UserRole, "equipment_owner" | "water_septic_partner">;
+  title?: string;
+  description?: string;
 }
 
 const normalizePhone = (value: string) => value.replace(/[\s()-]/g, "");
@@ -16,6 +21,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   PHONE_ALREADY_USED_BY_ANOTHER_ROLE: "Этот номер уже используется в другом аккаунте",
   EQUIPMENT_OWNER_PHONE_ALREADY_EXISTS: "Владелец спецтехники с таким номером уже существует",
   EQUIPMENT_OWNER_ACCOUNT_DISABLED: "Аккаунт владельца спецтехники отключен",
+  WATER_SEPTIC_PARTNER_PHONE_ALREADY_EXISTS: "Партнёр с таким номером уже существует",
+  WATER_SEPTIC_PARTNER_ACCOUNT_DISABLED: "Аккаунт партнёра воды и септиков отключен",
   OTP_EXPIRED: "Срок действия кода истек. Запросите новый код",
   INVALID_OTP: "Неверный код подтверждения",
 };
@@ -25,14 +32,20 @@ const getAuthErrorMessage = (source: unknown, fallbackMessage = "Ошибка а
   return ERROR_MESSAGES[message] || message || fallbackMessage;
 };
 
-export default function EquipmentOwnerRegisterScreen({ onBack }: Props) {
+export default function EquipmentOwnerRegisterScreen({
+  onBack,
+  registrationApiPrefix = "/auth/equipment-owner",
+  partnerRole = "equipment_owner",
+  title = "Кабинет владельца спецтехники",
+  description = "Войдите по номеру телефона. Объявления на спецтехнику ведутся в отдельном кабинете.",
+}: EquipmentOwnerRegisterScreenProps) {
   const [phone, setPhone] = useState("");
   const [challengeValue, setChallengeValue] = useState("");
   const [otpError, setOtpError] = useState("");
   const [isBusy, setIsBusy] = useState(false);
 
   const sendCode = async () => {
-    const response = await fetch(`${baseURL}/auth/equipment-owner/register`, {
+    const response = await fetch(`${baseURL}${registrationApiPrefix}/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ phone: normalizePhone(phone) }),
@@ -71,7 +84,7 @@ export default function EquipmentOwnerRegisterScreen({ onBack }: Props) {
     setIsBusy(true);
     setOtpError("");
     try {
-      const response = await fetch(`${baseURL}/auth/equipment-owner/register/verify`, {
+      const response = await fetch(`${baseURL}${registrationApiPrefix}/register/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone: challengeValue, code }),
@@ -81,7 +94,7 @@ export default function EquipmentOwnerRegisterScreen({ onBack }: Props) {
         setOtpError(getAuthErrorMessage(data));
         return;
       }
-      await switchAuthenticatedSession(data.access_token, "equipment_owner");
+      await switchAuthenticatedSession(data.access_token, partnerRole);
       toast.success("Вход выполнен");
     } catch (error) {
       setOtpError(error instanceof Error ? error.message : "Сетевая ошибка");
@@ -107,10 +120,10 @@ export default function EquipmentOwnerRegisterScreen({ onBack }: Props) {
           Партнёрам
         </p>
         <h1 className="mt-3 text-4xl font-black leading-tight">
-          Кабинет владельца спецтехники
+          {title}
         </h1>
         <p className="mt-4 max-w-sm text-gray-500">
-          Войдите по номеру телефона. Объявления на спецтехнику ведутся в отдельном кабинете.
+          {description}
         </p>
 
         <section className="mt-10 rounded-2xl bg-white p-6 shadow-sm">

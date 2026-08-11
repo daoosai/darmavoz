@@ -16,6 +16,7 @@ from app.models.models import (
     Quarry,
     SpecialEquipmentListing,
 )
+from app.services.moderation import clear_entity_pending_changes
 
 
 PlacementEntity: TypeAlias = Quarry | SpecialEquipmentListing
@@ -266,6 +267,11 @@ async def extend_placement(
     current_time = now or utcnow()
     base_time = max(current_time, entity.placement_ends_at or current_time)
     entity.placement_ends_at = base_time + timedelta(days=settings.PLACEMENT_EXTENSION_DAYS)
+    entity.moderation_status = ModerationStatus.approved.value
+    entity.moderation_comment = None
+    entity.moderated_at = current_time
+    entity.moderated_by_user_id = actor_user_id
+    clear_entity_pending_changes(entity)
     entity.last_confirmed_at = current_time
     entity.next_confirmation_at = current_time + timedelta(
         days=settings.PLACEMENT_CONFIRMATION_INTERVAL_DAYS
@@ -273,15 +279,10 @@ async def extend_placement(
     entity.placement_hidden_reason = None
     if entity.placement_started_at is None:
         entity.placement_started_at = current_time
-    target = (
-        PlacementStatus.active.value
-        if entity.moderation_status in PUBLIC_MODERATION_STATUSES
-        else PlacementStatus.pending_moderation.value
-    )
     await _transition(
         db,
         entity,
-        target,
+        PlacementStatus.active.value,
         action="placement_extended",
         actor_user_id=actor_user_id,
         now=current_time,

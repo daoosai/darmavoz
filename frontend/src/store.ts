@@ -40,8 +40,16 @@ export interface ClientOrderSummary {
   estimated_total_amount?: number | null;
   total_price?: number | null;
   created_at: string;
+  clarification_reasons?: string[];
+  clarification_comment?: string | null;
+  client_clarification_reply?: string | null;
   items?: {
-    material?: { name?: string | null } | null;
+    material?: {
+      name?: string | null;
+      image_url?: string | null;
+      primary_image_url?: string | null;
+      media_files?: { public_url?: string | null; is_primary?: boolean }[];
+    } | null;
     quantity?: number;
   }[];
   driver?: {
@@ -109,6 +117,7 @@ export type UserRole =
   | "client"
   | "supplier"
   | "equipment_owner"
+  | "water_septic_partner"
   | null;
 
 export interface CurrentUserProfile {
@@ -129,6 +138,10 @@ export interface AdminModerationNotification {
 const ADMIN_MODERATION_EVENTS = new Set([
   "pickup_point_pending_moderation",
   "equipment_listing_pending_moderation",
+  "water_point_created",
+  "water_point_updated",
+  "septic_profile_created",
+  "septic_profile_updated",
 ]);
 
 export const isAdminModerationEvent = (

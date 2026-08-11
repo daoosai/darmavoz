@@ -404,10 +404,19 @@ export default function GlobalMapScreen() {
       const element = document.createElement("button");
       element.type = "button";
       element.className = `global-pickup-marker${point.id === selectedPoint?.id ? " global-pickup-marker--active" : ""}`;
-      element.innerHTML =
+      const label = document.createElement("span");
+      label.className = "global-pickup-marker__label";
+      label.textContent = point.short_name || point.name;
+      element.appendChild(label);
+      const labelTail = document.createElement("span");
+      labelTail.className = "global-pickup-marker__label-tail";
+      element.appendChild(labelTail);
+      const icon = document.createElement("span");
+      icon.innerHTML =
         point.point_type === "quarry"
           ? '<span class="global-pickup-marker__icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 19 6.4-11 3.2 5.2L15.4 9 21 19H3Z"/><path d="m7.5 19 3.1-5.3 3.2 5.3H7.5Z" opacity=".45"/></svg></span>'
           : '<span class="global-pickup-marker__icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5 12 5l8 4.5V19h-3v-6H7v6H4V9.5Z"/><path d="M9 15h6v4H9v-4Z" opacity=".45"/></svg></span>';
+      element.appendChild(icon);
       element.addEventListener("click", () => setSelectedPoint(point));
 
       return new mapgl.HtmlMarker(mapRef.current, {
@@ -501,6 +510,18 @@ export default function GlobalMapScreen() {
           width: 20px;
           height: 20px;
           display: inline-flex;
+        }
+        .global-pickup-marker__label {
+          position: absolute; bottom: 48px; max-width: 160px; overflow: hidden;
+          white-space: nowrap; text-overflow: ellipsis; border-radius: 8px;
+          background: #0ea5e9; color: #fff; padding: 3px 7px;
+          font-size: 11px; font-weight: 700; pointer-events: none;
+        }
+        .global-pickup-marker__label-tail {
+          position: absolute; left: 50%; bottom: 42px;
+          width: 0; height: 0; transform: translateX(-50%);
+          border-left: 6px solid transparent; border-right: 6px solid transparent;
+          border-top: 6px solid #0ea5e9;
         }
         .global-pickup-marker__icon svg {
           width: 100%;

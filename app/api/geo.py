@@ -244,6 +244,7 @@ async def get_route_distance(
         ],
         "transport": "driving",
         "route_mode": "fastest",
+        "traffic_mode": "jam",
         "output": "detailed",
         "locale": "ru",
     }
@@ -261,7 +262,11 @@ async def get_route_distance(
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=GEOCODE_FALLBACK_ERROR_MESSAGE) from exc
 
     if response.status_code != status.HTTP_200_OK:
-        logger.error(f"2GIS Routing Error: {response.status_code} - {response.text}")
+        logger.error(
+            "2GIS routing failed. Status: %s, Body: %s",
+            response.status_code,
+            response.text,
+        )
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=GEOCODE_FALLBACK_ERROR_MESSAGE)
 
     try:
@@ -270,17 +275,19 @@ async def get_route_distance(
             raise ValueError("2GIS response must be an object")
         if data.get("status") and data["status"] != "OK":
             router_error = _extract_2gis_error(data) or data["status"]
-            logger.warning(
-                "2GIS router returned business error: %s",
+            logger.error(
+                "2GIS routing failed. Status: %s, Body: %s",
                 router_error,
+                response.text,
             )
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=GEOCODE_FALLBACK_ERROR_MESSAGE)
 
         router_error = _extract_2gis_error(data)
         if router_error:
-            logger.warning(
-                "2GIS router returned business message: %s",
+            logger.error(
+                "2GIS routing failed. Status: %s, Body: %s",
                 router_error,
+                response.text,
             )
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=GEOCODE_FALLBACK_ERROR_MESSAGE)
 
@@ -288,7 +295,10 @@ async def get_route_distance(
         if isinstance(routes, dict):
             routes = routes.get("routes") or routes.get("items")
         if not isinstance(routes, list) or not routes:
-            logger.warning("2GIS router returned no routes")
+            logger.error(
+                "2GIS routing failed. Status: no_routes, Body: %s",
+                response.text,
+            )
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=GEOCODE_FALLBACK_ERROR_MESSAGE)
 
         route = routes[0]
@@ -296,7 +306,10 @@ async def get_route_distance(
             raise ValueError("2GIS route must be an object")
         total_distance_m = float(route.get("total_distance"))
         if total_distance_m <= 0:
-            logger.warning("2GIS router returned non-positive distance")
+            logger.error(
+                "2GIS routing failed. Status: invalid_distance, Body: %s",
+                response.text,
+            )
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=GEOCODE_FALLBACK_ERROR_MESSAGE)
 
         return {
@@ -304,5 +317,9 @@ async def get_route_distance(
             "geometry": _collect_route_geometry(route),
         }
     except (KeyError, ValueError, TypeError, IndexError) as exc:
-        logger.warning("Invalid 2GIS router response: %s", exc)
+        logger.error(
+            "2GIS routing failed. Status: invalid_response, Body: %s",
+            response.text,
+            exc_info=True,
+        )
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=GEOCODE_FALLBACK_ERROR_MESSAGE) from exc

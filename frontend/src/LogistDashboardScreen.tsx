@@ -31,7 +31,6 @@ import {
   ChevronDown,
   ClipboardList,
   Layers,
-  Wrench,
   Headphones,
 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -45,6 +44,8 @@ import { OrdersFilterBar } from "./components/admin/OrdersFilterBar";
 import { logoutCurrentSession } from "./pushAuth";
 import AdminEquipmentScreen, { type AdminEquipmentTab } from "./AdminEquipmentScreen";
 import SupportScreen from "./SupportScreen";
+import WaterSepticModerationPanel from "./components/admin/WaterSepticModerationPanel";
+import NotificationCenter from "./components/shared/NotificationCenter";
 
 interface AdminOrder {
   id: string;
@@ -68,6 +69,9 @@ interface AdminOrder {
     };
   };
   notes?: string;
+  clarification_reasons?: string[];
+  clarification_comment?: string | null;
+  client_clarification_reply?: string | null;
 }
 
 const mergeOrderIntoList = (orders: AdminOrder[], nextOrder: AdminOrder) => [
@@ -161,7 +165,7 @@ export default function LogistDashboardScreen({
   onLogout,
 }: LogistDashboardScreenProps) {
   const { token } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<"orders" | "drivers" | "equipment" | "support" | "profile">(
+  const [activeTab, setActiveTab] = useState<"orders" | "drivers" | "equipment" | "moderation" | "support" | "profile">(
     "orders",
   );
   const [equipmentTab, setEquipmentTab] = useState<AdminEquipmentTab>("listings");
@@ -172,6 +176,11 @@ export default function LogistDashboardScreen({
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingDrivers, setIsLoadingDrivers] = useState(true);
   const [assigningOrderId, setAssigningOrderId] = useState<string | null>(null);
+  const [resolvingClarificationId, setResolvingClarificationId] = useState<string | null>(null);
+  const [clarificationOrder, setClarificationOrder] = useState<AdminOrder | null>(null);
+  const [clarificationComment, setClarificationComment] = useState("");
+  const [clarificationError, setClarificationError] = useState("");
+  const [isClarificationSaving, setIsClarificationSaving] = useState(false);
   const [orderDateFilter, setOrderDateFilter] = useState<string>("");
   const [manualAssignOrder, setManualAssignOrder] = useState<AdminOrder | null>(
     null,
@@ -369,6 +378,79 @@ export default function LogistDashboardScreen({
     }
   };
 
+  const handleResolveClarification = async (orderId: string) => {
+    try {
+      setResolvingClarificationId(orderId);
+      const res = await fetch(`${baseURL}/logist/orders/${orderId}/clarification-resolve`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(typeof data.detail === "string" ? data.detail : "Не удалось возобновить поиск");
+      }
+      toast.success("Уточнение получено, поиск водителя возобновлён");
+      setOrders((current) => mergeOrderIntoList(current, data));
+      await fetchOrders(true);
+    } catch (error) {
+      toast.error(handleApiError(error, "Не удалось возобновить поиск"));
+    } finally {
+      setResolvingClarificationId(null);
+    }
+  };
+
+  const openClarificationModal = (order: AdminOrder) => {
+    setClarificationOrder(order);
+    setClarificationComment("");
+    setClarificationError("");
+  };
+
+  const closeClarificationModal = () => {
+    if (isClarificationSaving) return;
+    setClarificationOrder(null);
+    setClarificationComment("");
+    setClarificationError("");
+  };
+
+  const handleRequestClarification = async () => {
+    if (!clarificationOrder) return;
+    const comment = clarificationComment.trim();
+    if (!comment) {
+      setClarificationError("Укажите, что нужно уточнить у клиента.");
+      return;
+    }
+
+    try {
+      setIsClarificationSaving(true);
+      setClarificationError("");
+      const response = await fetch(`${baseURL}/logist/orders/${clarificationOrder.id}/clarification`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ requires_clarification: true, comment }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(typeof data.detail === "string" ? data.detail : "Не удалось запросить уточнение");
+      }
+      setOrders((current) => mergeOrderIntoList(current, data));
+      setClarificationOrder(null);
+      setClarificationComment("");
+      toast.success("Запрос уточнения отправлен клиенту");
+      await fetchOrders(true);
+    } catch (error) {
+      setClarificationError(handleApiError(error, "Не удалось запросить уточнение"));
+    } finally {
+      setIsClarificationSaving(false);
+    }
+  };
+
   const getVehicleString = (driver: AdminDriver) => {
     if (!driver.vehicle) return "Транспорт не указан";
     const brand =
@@ -504,7 +586,8 @@ export default function LogistDashboardScreen({
   return (
     <div className="flex flex-col h-screen bg-slate-50 relative overflow-hidden">
       {/* Header */}
-      <div className="bg-white px-6 py-4 shadow-sm z-10 sticky top-0 border-b border-slate-100 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+      <header className="sticky top-0 z-10 bg-white border-b border-slate-100 pb-4 pt-[max(env(safe-area-inset-top),2.5rem)] shadow-sm">
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
         <div className="flex items-center justify-between sm:justify-start gap-6">
           <div>
             <h1 className="text-2xl font-black text-[#2DB0E6] tracking-tight">
@@ -512,12 +595,15 @@ export default function LogistDashboardScreen({
             </h1>
             <p className="text-sm font-medium text-slate-500">Панель логиста</p>
           </div>
-          <button
-            onClick={handleLogout}
-            className="flex sm:hidden items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-lg hover:bg-slate-100 text-slate-600 transition-colors font-medium text-sm"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1 sm:hidden">
+            <NotificationCenter token={token} />
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-lg hover:bg-slate-100 text-slate-600 transition-colors font-medium text-sm"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         <div className="hidden sm:flex flex-1 sm:justify-center">
@@ -543,16 +629,6 @@ export default function LogistDashboardScreen({
               Водители
             </button>
             <button
-              onClick={() => setActiveTab("equipment")}
-              className={`flex-1 sm:w-32 py-2 text-sm font-bold rounded-lg transition-colors flex justify-center items-center gap-2 ${
-                activeTab === "equipment"
-                  ? "bg-white text-slate-800 shadow-sm"
-                  : "text-slate-500 hover:text-slate-700"
-              }`}
-            >
-              <Wrench className="h-4 w-4" /> Спецтехника
-            </button>
-            <button
               onClick={() => setActiveTab("support")}
               className={`flex-1 sm:w-32 py-2 text-sm font-bold rounded-lg transition-colors flex justify-center items-center gap-2 ${
                 activeTab === "support"
@@ -575,14 +651,18 @@ export default function LogistDashboardScreen({
           </div>
         </div>
 
-        <button
-          onClick={handleLogout}
-          className="hidden sm:flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-xl hover:bg-slate-100 text-slate-600 transition-colors font-medium text-sm"
-        >
-          <LogOut className="w-4 h-4" />
-          <span>Выйти</span>
-        </button>
-      </div>
+        <div className="hidden items-center gap-2 sm:flex">
+          <NotificationCenter token={token} />
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-xl hover:bg-slate-100 text-slate-600 transition-colors font-medium text-sm"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Выйти</span>
+          </button>
+        </div>
+        </div>
+      </header>
 
       {/* Main Content */}
       <div className="flex-1 overflow-y-auto p-6 lg:p-8 sm:pb-8 pb-24 relative">
@@ -593,10 +673,10 @@ export default function LogistDashboardScreen({
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-2 gap-4">
                 <div className="flex flex-col gap-2">
                   <h2 className="text-xl font-bold text-slate-800">Все заказы</h2>
-                  <div className="flex bg-slate-100 p-1 rounded-lg self-start grid grid-cols-3 gap-1 w-full max-w-md">
+                  <div className="flex w-full max-w-md flex-nowrap gap-2 overflow-x-auto whitespace-nowrap hide-scrollbar rounded-lg bg-slate-100 p-1 pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                     <button
                       onClick={() => setOrderStatusTab("active")}
-                      className={`w-full min-h-[44px] px-3 py-1.5 text-center text-sm font-bold rounded-md transition-colors flex items-center justify-center leading-tight ${
+                      className={`min-h-[44px] shrink-0 whitespace-nowrap px-4 py-1.5 text-center text-sm font-bold rounded-md transition-colors flex items-center justify-center leading-tight ${
                         orderStatusTab === "active"
                           ? "bg-white text-slate-800 shadow-sm"
                           : "text-slate-500 hover:text-slate-700"
@@ -606,7 +686,7 @@ export default function LogistDashboardScreen({
                     </button>
                     <button
                       onClick={() => setOrderStatusTab("completed")}
-                      className={`w-full min-h-[44px] px-3 py-1.5 text-center text-sm font-bold rounded-md transition-colors flex items-center justify-center leading-tight ${
+                      className={`min-h-[44px] shrink-0 whitespace-nowrap px-4 py-1.5 text-center text-sm font-bold rounded-md transition-colors flex items-center justify-center leading-tight ${
                         orderStatusTab === "completed"
                           ? "bg-white text-slate-800 shadow-sm"
                           : "text-slate-500 hover:text-slate-700"
@@ -616,7 +696,7 @@ export default function LogistDashboardScreen({
                     </button>
                     <button
                       onClick={() => setOrderStatusTab("archived")}
-                      className={`w-full min-h-[44px] px-3 py-1.5 text-center text-sm font-bold rounded-md transition-colors flex items-center justify-center leading-tight ${
+                      className={`min-h-[44px] shrink-0 whitespace-nowrap px-4 py-1.5 text-center text-sm font-bold rounded-md transition-colors flex items-center justify-center leading-tight ${
                         orderStatusTab === "archived"
                           ? "bg-white text-slate-800 shadow-sm"
                           : "text-slate-500 hover:text-slate-700"
@@ -819,6 +899,21 @@ export default function LogistDashboardScreen({
                             </button>
                           )}
 
+                          {order.status === "requires_clarification" && (
+                            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                              <p className="text-sm font-bold text-amber-800">Требует уточнения</p>
+                              <p className="mt-1 text-xs text-amber-700">Вопрос: {order.clarification_comment || order.clarification_reasons?.join(", ") || "Логист ожидает уточнения"}</p>
+                              {order.client_clarification_reply ? (
+                                <div className="mt-3 rounded-lg border border-sky-100 bg-white/80 p-3">
+                                  <p className="text-xs font-bold text-sky-700">Ответ клиента</p>
+                                  <p className="mt-1 text-sm text-slate-700">{order.client_clarification_reply}</p>
+                                </div>
+                              ) : (
+                                <p className="mt-3 text-xs text-amber-700">Ответ клиента пока не получен.</p>
+                              )}
+                            </div>
+                          )}
+
                           {(order.status === "searching_driver" ||
                             order.status === "offered_to_driver") && (
                             <div className="w-full py-3.5 bg-[#2DB0E6]/10 text-[#2DB0E6] rounded-xl font-bold flex flex-row items-center justify-center gap-2 border border-[#2DB0E6]/20 shadow-sm">
@@ -828,17 +923,28 @@ export default function LogistDashboardScreen({
                           )}
 
                           {manualAssignableStatuses.has(order.status) && (
-                            <button
-                              disabled={
-                                isManualAssignSaving &&
-                                manualAssignOrder?.id === order.id
-                              }
-                              onClick={() => openManualAssignModal(order)}
-                              className="w-full py-3 rounded-xl font-bold flex flex-row items-center justify-center gap-2 transition-all border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 shadow-sm active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed"
-                            >
-                              <Users className="w-4 h-4" />
-                              Назначить вручную
-                            </button>
+                            <>
+                              <button
+                                disabled={
+                                  isManualAssignSaving &&
+                                  manualAssignOrder?.id === order.id
+                                }
+                                onClick={() => openManualAssignModal(order)}
+                                className="w-full py-3 rounded-xl font-bold flex flex-row items-center justify-center gap-2 transition-all border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 shadow-sm active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed"
+                              >
+                                <Users className="w-4 h-4" />
+                                Назначить вручную
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isClarificationSaving}
+                                onClick={() => openClarificationModal(order)}
+                                className="w-full py-3 rounded-xl font-bold flex flex-row items-center justify-center gap-2 transition-all border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 shadow-sm active:scale-[0.98] disabled:opacity-70"
+                              >
+                                <SearchX className="w-4 h-4" />
+                                Запросить уточнение
+                              </button>
+                            </>
                           )}
 
                           {order.status !== "created" && (
@@ -848,6 +954,18 @@ export default function LogistDashboardScreen({
                             >
                               <Clock className="w-4 h-4" />
                               История распределения
+                            </button>
+                          )}
+
+                          {order.status === "requires_clarification" && (
+                            <button
+                              type="button"
+                              disabled={resolvingClarificationId === order.id || !order.client_clarification_reply?.trim()}
+                              onClick={() => void handleResolveClarification(order.id)}
+                              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-[#0ea5e9] py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-sky-600 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
+                            >
+                              Уточнение получено / Возобновить поиск
+                              {resolvingClarificationId === order.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                             </button>
                           )}
                         </div>
@@ -1132,6 +1250,8 @@ export default function LogistDashboardScreen({
               placementFilter={equipmentPlacementFilter}
               onPlacementFilterChange={setEquipmentPlacementFilter}
             />
+          ) : activeTab === "moderation" ? (
+            <WaterSepticModerationPanel token={token} />
           ) : activeTab === "support" ? (
             <SupportScreen operatorMode />
           ) : activeTab === "profile" ? (
@@ -1173,17 +1293,18 @@ export default function LogistDashboardScreen({
           <span className="text-[10px] font-bold">Водители</span>
         </button>
         <button
-          onClick={() => setActiveTab("equipment")}
-          className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${activeTab === "equipment" ? "text-[#2DB0E6]" : "text-gray-400"}`}
-        >
-          <div className={`p-1.5 rounded-xl ${activeTab === "equipment" ? "bg-[#2DB0E6]/10" : ""}`}><Wrench className="w-6 h-6" /></div>
-          <span className="text-[10px] font-bold">Техника</span>
-        </button>
-        <button
           onClick={() => setActiveTab("support")}
-          className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${activeTab === "support" ? "text-[#2DB0E6]" : "text-gray-400"}`}
+          className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${
+            activeTab === "support"
+              ? "text-[#2DB0E6]"
+              : "text-gray-400 hover:text-gray-600"
+          }`}
         >
-          <div className={`p-1.5 rounded-xl ${activeTab === "support" ? "bg-[#2DB0E6]/10" : ""}`}><Headphones className="w-6 h-6" /></div>
+          <div
+            className={`p-1.5 rounded-xl transition-colors ${activeTab === "support" ? "bg-[#2DB0E6]/10" : ""}`}
+          >
+            <Headphones className="w-6 h-6" />
+          </div>
           <span className="text-[10px] font-bold">Поддержка</span>
         </button>
         <button
@@ -1234,6 +1355,34 @@ export default function LogistDashboardScreen({
           await fetchOrders(true);
         }}
       />
+
+      {clarificationOrder && (
+        <div className="fixed inset-0 z-[60] flex items-end justify-center bg-slate-900/50 p-4 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="clarification-title">
+          <form onSubmit={(event) => { event.preventDefault(); void handleRequestClarification(); }} className="w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 id="clarification-title" className="text-xl font-black text-slate-900">Запросить уточнение</h3>
+                <p className="mt-1 text-sm text-slate-500">Клиент получит push-уведомление и увидит причину в заказе.</p>
+              </div>
+              <button type="button" onClick={closeClarificationModal} disabled={isClarificationSaving} className="rounded-full bg-slate-100 p-2 text-slate-500 hover:bg-slate-200 disabled:opacity-50" aria-label="Закрыть">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <label className="mt-5 block text-sm font-bold text-slate-800">
+              Что нужно уточнить?
+              <textarea required value={clarificationComment} onChange={(event) => { setClarificationComment(event.target.value); setClarificationError(""); }} placeholder="Например: уточните адрес доставки и удобное время" className="mt-2 min-h-28 w-full resize-none rounded-xl border border-slate-200 p-3 text-sm font-normal outline-none focus:border-amber-400" />
+            </label>
+            {clarificationError ? <p className="mt-2 text-sm font-medium text-red-600">{clarificationError}</p> : null}
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <button type="button" onClick={closeClarificationModal} disabled={isClarificationSaving} className="rounded-xl bg-slate-100 py-3 font-bold text-slate-700 disabled:opacity-50">Отмена</button>
+              <button disabled={isClarificationSaving} className="flex items-center justify-center gap-2 rounded-xl bg-amber-500 py-3 font-bold text-white hover:bg-amber-600 disabled:opacity-50">
+                {isClarificationSaving ? <Loader2 className="h-5 w-5 animate-spin" /> : <SearchX className="h-5 w-5" />}
+                Отправить
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {manualAssignOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">

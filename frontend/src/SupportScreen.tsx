@@ -101,6 +101,7 @@ const requesterRoleLabels: Record<string, string> = {
   client: "Клиент",
   driver: "Водитель",
   supplier: "Поставщик",
+  water_septic_partner: "Партнёр воды и септиков",
   admin: "Администратор",
   logist: "Логист",
   operator: "Оператор",
@@ -109,6 +110,7 @@ const requesterRoleClasses: Record<string, string> = {
   client: "bg-slate-100 text-slate-600",
   driver: "bg-orange-100 text-orange-700",
   supplier: "bg-slate-200 text-slate-700",
+  water_septic_partner: "bg-sky-100 text-sky-700",
   admin: "bg-violet-100 text-violet-700",
   logist: "bg-sky-100 text-sky-700",
   operator: "bg-emerald-100 text-emerald-700",
@@ -240,7 +242,9 @@ export default function SupportScreen({
   const endpoint = operatorMode ? `${baseURL}/admin/support/tickets` : `${baseURL}/support/tickets`;
   const headers = { Authorization: `Bearer ${token}` };
   const supportCategories =
-    role === "supplier" ? supplierSupportCategories : defaultSupportCategories;
+    role === "supplier" || role === "water_septic_partner"
+      ? supplierSupportCategories
+      : defaultSupportCategories;
   const visibleTickets = operatorMode
     ? tickets
     : tickets.filter((ticket) =>

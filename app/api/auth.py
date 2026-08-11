@@ -1,5 +1,7 @@
 import json
+import logging
 import secrets
+from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -24,6 +26,7 @@ from app.schemas.driver import (
     DriverVerifyCodeRequest,
 )
 from app.schemas.token import Token
+from app.schemas.sprint19 import PasswordResetComplete, PasswordResetRequest, PasswordResetVerify, PasswordResetVerifyResponse
 from app.security.auth import get_password_hash, verify_password
 from app.security.jwt import create_access_token
 from app.services.auth_email_service import send_auth_email_code
@@ -32,6 +35,7 @@ from app.services.sms_service import generate_otp_code, normalize_sms_phone, sen
 from app.utils.phones import normalize_phone, normalize_phone_like_username
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 driver_auth_router = APIRouter()
 
 DRIVER_AUTH_CODE_TTL_SECONDS = 300
@@ -41,6 +45,8 @@ DRIVER_REGISTER_CODE_KEY_PREFIX = "otp:driver_register"
 DRIVER_REGISTER_PENDING_KEY_PREFIX = "otp:driver_register_pending"
 EMAIL_AUTH_CODE_TTL_SECONDS = 300
 EMAIL_AUTH_CODE_KEY_PREFIX = "otp:email"
+PASSWORD_RESET_CODE_PREFIX = "otp:password_reset"
+PASSWORD_RESET_TOKEN_PREFIX = "password_reset:token"
 
 
 def _error_detail(code: str, message: str) -> dict[str, str]:
@@ -88,6 +94,70 @@ def _email_auth_code_key(scope: str, email: str) -> str:
     return f"{EMAIL_AUTH_CODE_KEY_PREFIX}:{scope}:{email}"
 
 
+def _password_reset_code_key(email: str) -> str:
+    return f"{PASSWORD_RESET_CODE_PREFIX}:{email}"
+
+
+@router.post("/password-reset/request", status_code=status.HTTP_202_ACCEPTED)
+async def request_password_reset(payload: PasswordResetRequest, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
+    email = payload.email.strip().lower()
+    user = await _get_user_by_email(db, email)
+    if user and user.is_active and not user.is_deleted and user.role and user.role.name in {"admin", "logist"}:
+        code = generate_otp_code()
+        await get_redis().setex(_password_reset_code_key(email), 300, code)
+        logger.warning("Password reset OTP for %s: %s", email, code)
+        background_tasks.add_task(send_auth_email_code, to_email=email, code=code)
+    return {"ok": True, "status": "email_sent"}
+
+
+@router.post("/password-reset/verify", response_model=PasswordResetVerifyResponse)
+async def verify_password_reset(payload: PasswordResetVerify, db: AsyncSession = Depends(get_db)) -> PasswordResetVerifyResponse:
+    email = payload.email.strip().lower(); redis = get_redis()
+    code = await redis.get(_password_reset_code_key(email))
+    user = await _get_user_by_email(db, email)
+    if code is None or payload.code.strip() != code or user is None or not user.role or user.role.name not in {"admin", "logist"}:
+        raise HTTPException(status_code=400, detail="Неверный или истёкший код")
+    token = secrets.token_urlsafe(32)
+    await redis.delete(_password_reset_code_key(email))
+    await redis.setex(f"{PASSWORD_RESET_TOKEN_PREFIX}:{token}", 600, str(user.id))
+    return PasswordResetVerifyResponse(
+        reset_token=token,
+        role=user.role.name,
+        name=user.display_name,
+        email=user.email,
+    )
+
+
+@router.post("/password-reset/complete")
+async def complete_password_reset(payload: PasswordResetComplete, db: AsyncSession = Depends(get_db)):
+    redis = get_redis()
+    user_id = await redis.get(f"{PASSWORD_RESET_TOKEN_PREFIX}:{payload.reset_token}")
+    if user_id is None: raise HTTPException(status_code=400, detail="Ссылка сброса истекла")
+
+    try:
+        reset_user_id = UUID(user_id)
+    except (TypeError, ValueError):
+        await redis.delete(f"{PASSWORD_RESET_TOKEN_PREFIX}:{payload.reset_token}")
+        raise HTTPException(status_code=400, detail="Ссылка сброса недействительна")
+
+    user = await db.get(User, reset_user_id)
+    if user is None or not user.is_active or user.is_deleted: raise HTTPException(status_code=400, detail="Аккаунт недоступен")
+
+    user.hashed_password = get_password_hash(payload.new_password)
+    user.auth_version = (user.auth_version or 0) + 1
+    try:
+        await db.flush()
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        logger.exception("password_reset_commit_failed user_id=%s", user.id)
+        raise
+
+    await redis.delete(f"{PASSWORD_RESET_TOKEN_PREFIX}:{payload.reset_token}")
+    logger.warning("password_reset_completed user_id=%s", user.id)
+    return {"ok": True}
+
+
 def _default_client_name_from_email(email: str) -> str:
     local_part = email.split("@", 1)[0].strip()
     normalized = local_part.replace(".", " ").replace("_", " ").replace("-", " ").strip()
@@ -101,6 +171,7 @@ def _build_email_auth_response(*, user: User) -> EmailAuthResponse:
             data={
                 "sub": user.username,
                 "role": role_name,
+                "auth_version": user.auth_version,
             }
         ),
         role=role_name,
@@ -210,7 +281,7 @@ async def _create_driver_from_payload(
 
 
 def _build_driver_registration_response(*, role: Role, user: User, driver: Driver) -> DriverRegistrationResponse:
-    access_token = create_access_token(data={"sub": user.username, "role": role.name})
+    access_token = create_access_token(data={"sub": user.username, "role": role.name, "auth_version": user.auth_version})
     return DriverRegistrationResponse(
         access_token=access_token,
         token_type="bearer",
@@ -301,6 +372,7 @@ async def verify_email_code(
                     "sub": normalized_email,
                     "role": "client",
                     "client_id": str(client.id),
+                    "auth_version": client.auth_version,
                 }
             ),
             role="client",
@@ -399,8 +471,9 @@ async def login(
 
     access_token = create_access_token(
         data={
-            "sub": user.username,
-            "role": role_name,
+                "sub": user.username,
+                "role": role_name,
+                "auth_version": user.auth_version,
         }
     )
     return Token(
@@ -443,6 +516,7 @@ async def verify_driver_login(
         data={
             "sub": user.username,
             "role": user.role.name if user.role else None,
+            "auth_version": user.auth_version,
         }
     )
     await redis.delete(_driver_login_code_key(normalized_phone))

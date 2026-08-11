@@ -28,6 +28,13 @@ import {
   Clock,
   Filter,
   Wrench,
+  BarChart3,
+  Building2,
+  ClipboardList,
+  Headphones,
+  Menu,
+  X,
+  Droplets,
 } from "lucide-react";
 import AdminProfileScreen from "./AdminProfileScreen";
 import AdminQuarriesScreen from "./AdminQuarriesScreen";
@@ -35,11 +42,13 @@ import AdminSuppliersScreen from "./AdminSuppliersScreen";
 import AdminCategoriesPanel from "./AdminCategoriesPanel";
 import PlacementSummaryPanel from "./components/admin/PlacementSummaryPanel";
 import { DriverHistoryModal } from "./components/admin/DriverHistoryModal";
+import WaterSepticModerationPanel from "./components/admin/WaterSepticModerationPanel";
 import toast from "react-hot-toast";
 import { logoutCurrentSession } from "./pushAuth";
 import AdminEquipmentScreen, { type AdminEquipmentTab } from "./AdminEquipmentScreen";
 import SupportScreen from "./SupportScreen";
 import { type PlacementStatus } from "./placement";
+import NotificationCenter from "./components/shared/NotificationCenter";
 
 interface AdminCategory {
   id: string;
@@ -154,6 +163,18 @@ interface AdminDashboardScreenProps {
   onLogout: () => void;
 }
 
+type AdminTab =
+  | "materials"
+  | "quarries"
+  | "delivery"
+  | "drivers"
+  | "moderation"
+  | "water_septic"
+  | "suppliers"
+  | "equipment"
+  | "support"
+  | "profile";
+
 interface QuarrySummaryFilters {
   statusFilter: string;
   placementFilter: PlacementStatus | "";
@@ -167,9 +188,20 @@ export default function AdminDashboardScreen({
   const moderationRefreshNonce = useAdminModerationStore(
     (state) => state.refreshNonce,
   );
-  const [activeTab, setActiveTab] = useState<
-    "materials" | "quarries" | "delivery" | "drivers" | "moderation" | "suppliers" | "equipment" | "support" | "profile"
-  >("materials");
+  const [activeTab, setActiveTab] = useState<AdminTab>("materials");
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  const openSidebarSection = (tab: AdminTab) => {
+    setActiveTab(tab);
+    setIsSidebarOpen(false);
+  };
+
+  const sidebarButtonClass = (tab: AdminTab) =>
+    `flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold transition-colors ${
+      activeTab === tab
+        ? "bg-sky-50 text-sky-600"
+        : "text-slate-700 hover:bg-slate-100"
+    }`;
 
   const [materials, setMaterials] = useState<AdminMaterial[]>([]);
   const [deliveryOptions, setDeliveryOptions] = useState<AdminDeliveryOption[]>(
@@ -222,6 +254,13 @@ export default function AdminDashboardScreen({
     useState(0);
   const [pendingEquipmentModerationCount, setPendingEquipmentModerationCount] =
     useState(0);
+  const [pendingWaterSepticCount, setPendingWaterSepticCount] = useState(0);
+  const [pendingWaterCount, setPendingWaterCount] = useState(0);
+  const [pendingSepticProfileCount, setPendingSepticProfileCount] = useState(0);
+  const [hideWaterBanner, setHideWaterBanner] = useState(false);
+  const [hideSepticBanner, setHideSepticBanner] = useState(false);
+  const [ordersRequiresClarificationCount, setOrdersRequiresClarificationCount] =
+    useState(0);
   const [quarryStatusFilter, setQuarryStatusFilter] = useState("");
   const [quarryPlacementFilter, setQuarryPlacementFilter] = useState<PlacementStatus | "">("");
   const [quarryTypeFilter, setQuarryTypeFilter] = useState("");
@@ -237,6 +276,8 @@ export default function AdminDashboardScreen({
   const [isLoadingModeration, setIsLoadingModeration] = useState(false);
   const summaryManagedSection =
     activeTab === "quarries" ? "quarries" : activeTab === "equipment" ? "equipment" : null;
+  const shouldShowPlacementSummary =
+    activeTab === "materials" || activeTab === "quarries" || activeTab === "equipment";
   const effectiveQuarryStatusFilter =
     quarrySummaryFilters?.statusFilter ?? quarryStatusFilter;
   const effectiveQuarryPlacementFilter =
@@ -415,7 +456,6 @@ export default function AdminDashboardScreen({
   const [previewLeft, setPreviewLeft] = useState<string | null>(null);
   const [previewPlate, setPreviewPlate] = useState<string | null>(null);
 
-  const pendingDriversCount = pendingDriverModerationCount;
   const pendingModerationTotal =
     pendingDriverModerationCount +
     pendingPointModerationCount +
@@ -782,6 +822,23 @@ export default function AdminDashboardScreen({
     }
   };
 
+  const fetchSidebarCounts = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${baseURL}/admin/sidebar/counts`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const data = await res.json().catch(() => ({}));
+      setPendingWaterSepticCount(Number(data.water_septic) || 0);
+      setPendingWaterCount(Number(data.water_points) || 0);
+      setPendingSepticProfileCount(Number(data.septic_profiles) || 0);
+      setOrdersRequiresClarificationCount(Number(data.orders_requires_clarification) || 0);
+    } catch {
+      // Счётчики не должны мешать работе панели, если фоновый запрос недоступен.
+    }
+  };
+
   const fetchLiveCars = async () => {
     if (!token) return;
     setIsLoadingCars(true);
@@ -835,8 +892,10 @@ export default function AdminDashboardScreen({
     if (!token) return;
 
     void fetchModerationCounts(true);
+    void fetchSidebarCounts();
     const intervalId = window.setInterval(() => {
       void fetchModerationCounts(true);
+      void fetchSidebarCounts();
     }, 30000);
 
     return () => window.clearInterval(intervalId);
@@ -846,6 +905,7 @@ export default function AdminDashboardScreen({
     if (!token || moderationRefreshNonce === 0) return;
 
     void fetchModerationCounts(true);
+    void fetchSidebarCounts();
     if (activeTab === "moderation") {
       void fetchPendingRequests(true);
     }
@@ -1579,8 +1639,39 @@ export default function AdminDashboardScreen({
   return (
     <div className="flex flex-col h-screen bg-slate-50 relative overflow-hidden text-slate-800">
       {/* Header */}
-      <div className="bg-white px-6 pb-4 pt-[max(env(safe-area-inset-top,0px),1rem)] shadow-sm z-10 sticky top-0 border-b border-slate-100 flex flex-col gap-4">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <header className="sticky top-0 z-10 bg-white border-b border-slate-100 pb-4 pt-[max(env(safe-area-inset-top),2.5rem)] shadow-sm">
+        <div className="mx-auto grid w-full max-w-7xl grid-cols-[auto_1fr_auto] items-center gap-3 px-4 sm:px-6 lg:px-8">
+          <button
+            type="button"
+            onClick={() => setIsSidebarOpen((current) => !current)}
+            className="rounded-xl p-2 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
+            aria-label={isSidebarOpen ? "Закрыть меню" : "Открыть меню"}
+            aria-expanded={isSidebarOpen}
+          >
+            <span className="relative block h-6 w-6">
+              <Menu className={`absolute inset-0 h-6 w-6 transition-all duration-300 ${isSidebarOpen ? "rotate-90 opacity-0" : "rotate-0 opacity-100"}`} />
+              <X className={`absolute inset-0 h-6 w-6 transition-all duration-300 ${isSidebarOpen ? "rotate-0 opacity-100" : "-rotate-90 opacity-0"}`} />
+            </span>
+          </button>
+          <h1 className="flex flex-col items-center text-center leading-tight">
+            <span className="text-lg font-bold text-[#0ea5e9]">Дармавоз</span>
+            <span className="text-xs font-normal text-gray-500">Панель администратора</span>
+          </h1>
+          <div className="flex items-center justify-end gap-1">
+            <NotificationCenter token={token} />
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="rounded-xl p-2 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
+              aria-label="Выйти из аккаунта"
+              title="Выйти"
+            >
+              <LogOut className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="hidden">
         <div className="flex items-center justify-between sm:justify-start gap-6">
           <div>
             <h1 className="text-2xl font-black text-[#2DB0E6] tracking-tight">
@@ -1689,110 +1780,116 @@ export default function AdminDashboardScreen({
           <span>Выйти</span>
         </button>
         </div>
-        {pendingDriversCount > 0 ? (
-          <div className="w-full rounded-2xl border border-emerald-200 bg-[linear-gradient(135deg,rgba(236,253,245,1)_0%,rgba(239,246,255,1)_100%)] px-4 py-3 shadow-sm">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 rounded-2xl bg-emerald-500/10 p-2 text-emerald-600">
-                  <Users className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-black text-slate-900">
-                    Новые водители ожидают проверки
-                  </p>
-                  <p className="mt-1 text-sm text-slate-600">
-                    Сейчас на модерации: {pendingDriversCount}.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveTab("drivers")}
-                className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-700"
-              >
-                Перейти
-              </button>
+      </header>
+
+      {pendingWaterCount > 0 && !hideWaterBanner ? (
+        <div className="mx-auto mt-4 flex w-full max-w-6xl flex-col gap-3 rounded-2xl border border-sky-200 bg-[linear-gradient(135deg,rgba(240,249,255,1)_0%,rgba(224,242,254,1)_100%)] px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 rounded-2xl bg-sky-500/10 p-2 text-sky-600">
+              <Droplets className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-sm font-black text-slate-900">Есть новые точки воды, ожидающие модерации</p>
+              <p className="mt-1 text-sm text-slate-600">Сейчас на проверке: {pendingWaterCount}.</p>
             </div>
           </div>
-        ) : null}
-        {pendingEquipmentModerationCount > 0 ? (
-          <div className="w-full rounded-2xl border border-amber-200 bg-[linear-gradient(135deg,rgba(255,251,235,1)_0%,rgba(255,237,213,1)_100%)] px-4 py-3 shadow-sm">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 rounded-2xl bg-amber-500/10 p-2 text-amber-700">
-                  <Wrench className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-black text-slate-900">
-                    Есть объявления, ожидающие модерации
-                  </p>
-                  <p className="mt-1 text-sm text-slate-600">
-                    Сейчас на проверке: {pendingEquipmentModerationCount}.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveTab("equipment")}
-                className="inline-flex items-center justify-center rounded-xl bg-amber-500 px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-amber-600"
-              >
-                Проверить
-              </button>
+          <button
+            type="button"
+            onClick={() => {
+              setHideWaterBanner(true);
+              openSidebarSection("water_septic");
+            }}
+            className="inline-flex items-center justify-center rounded-xl bg-sky-500 px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-sky-600"
+          >
+            Проверить
+          </button>
+        </div>
+      ) : null}
+
+      {pendingSepticProfileCount > 0 && !hideSepticBanner ? (
+        <div className="mx-auto mt-4 flex w-full max-w-6xl flex-col gap-3 rounded-2xl border border-sky-200 bg-[linear-gradient(135deg,rgba(240,249,255,1)_0%,rgba(224,242,254,1)_100%)] px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 rounded-2xl bg-sky-500/10 p-2 text-sky-600">
+              <Droplets className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-sm font-black text-slate-900">Есть новые профили септиков, ожидающие модерации</p>
+              <p className="mt-1 text-sm text-slate-600">Сейчас на проверке: {pendingSepticProfileCount}.</p>
             </div>
           </div>
-        ) : null}
-        {pendingPointModerationCount > 0 ? (
-          <div className="w-full rounded-2xl border border-cyan-200 bg-[linear-gradient(135deg,rgba(236,254,255,1)_0%,rgba(240,249,255,1)_100%)] px-4 py-3 shadow-sm">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 rounded-2xl bg-cyan-500/10 p-2 text-cyan-700">
-                  <Map className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-black text-slate-900">
-                    Есть новые точки забора, ожидающие модерации
-                  </p>
-                  <p className="mt-1 text-sm text-slate-600">
-                    Сейчас на проверке: {pendingPointModerationCount}.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() =>
-                  openSummaryPoints({
-                    statusFilter: "pending_moderation",
-                    placementFilter: "",
-                    typeFilter: "",
-                  })
-                }
-                className="inline-flex items-center justify-center rounded-xl bg-cyan-500 px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-cyan-600"
-              >
-                Перейти
-              </button>
+          <button
+            type="button"
+            onClick={() => {
+              setHideSepticBanner(true);
+              openSidebarSection("water_septic");
+            }}
+            className="inline-flex items-center justify-center rounded-xl bg-sky-500 px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-sky-600"
+          >
+            Проверить
+          </button>
+        </div>
+      ) : null}
+
+      <div className={`fixed inset-0 z-[60] ${isSidebarOpen ? "pointer-events-auto" : "pointer-events-none"}`} aria-hidden={!isSidebarOpen}>
+        <button
+          type="button"
+          onClick={() => setIsSidebarOpen(false)}
+          className={`absolute inset-0 bg-slate-900/45 backdrop-blur-sm transition-opacity duration-300 ${isSidebarOpen ? "opacity-100" : "opacity-0"}`}
+          aria-label="Закрыть меню"
+        />
+        <aside
+          className={`absolute inset-y-0 left-0 flex w-[min(20rem,86vw)] flex-col bg-white px-4 pb-6 pt-[max(env(safe-area-inset-top),2.5rem)] shadow-2xl transition-transform duration-300 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
+          aria-label="Навигация администратора"
+        >
+          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+            <div>
+              <p className="text-sm font-black text-slate-900">Панель администратора</p>
+              <p className="mt-1 text-xs text-slate-500">Навигация</p>
             </div>
+            <button type="button" onClick={() => setIsSidebarOpen(false)} className="rounded-xl p-2 text-slate-500 transition-colors hover:bg-slate-100" aria-label="Закрыть меню">
+              <X className="h-5 w-5" />
+            </button>
           </div>
-        ) : null}
+
+          <nav className="mt-4 flex flex-1 flex-col gap-1 overflow-y-auto" aria-label="Разделы администратора">
+            <button type="button" onClick={() => openSidebarSection("suppliers")} className={sidebarButtonClass("suppliers")}><Building2 className="h-5 w-5" />Поставщики</button>
+            <button type="button" onClick={() => openSidebarSection("equipment")} className={sidebarButtonClass("equipment")}><Wrench className="h-5 w-5" />Спецтехника</button>
+            <button type="button" onClick={() => openSidebarSection("water_septic")} className={sidebarButtonClass("water_septic")}><ClipboardCheck className="h-5 w-5" />Вода и септики{pendingWaterSepticCount > 0 ? <span className="ml-auto rounded-full bg-red-500 px-2 py-0.5 text-xs text-white">{pendingWaterSepticCount}</span> : null}</button>
+            <a href="/admin/orders" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-100"><ClipboardList className="h-5 w-5" />Список заказов{ordersRequiresClarificationCount > 0 ? <span className="ml-auto rounded-full bg-red-500 px-2 py-0.5 text-xs text-white">{ordersRequiresClarificationCount}</span> : null}</a>
+            <a href="/admin/statistics" onClick={() => setIsSidebarOpen(false)} className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-100"><BarChart3 className="h-5 w-5" />Статистика</a>
+            <button type="button" onClick={() => openSidebarSection("support")} className={sidebarButtonClass("support")}><Headphones className="h-5 w-5" />Поддержка</button>
+
+            <div className="my-3 border-t border-slate-100" />
+            <p className="px-3 pb-1 text-xs font-bold uppercase tracking-wide text-slate-400">Управление</p>
+            <button type="button" onClick={() => openSidebarSection("materials")} className={sidebarButtonClass("materials")}><Layers className="h-5 w-5" />Каталог</button>
+            <button type="button" onClick={() => openSidebarSection("quarries")} className={sidebarButtonClass("quarries")}><Map className="h-5 w-5" />Точки</button>
+            <button type="button" onClick={() => openSidebarSection("delivery")} className={sidebarButtonClass("delivery")}><Truck className="h-5 w-5" />Автопарк</button>
+            <button type="button" onClick={() => openSidebarSection("drivers")} className={sidebarButtonClass("drivers")}><Users className="h-5 w-5" />Водители</button>
+            <button type="button" onClick={() => openSidebarSection("profile")} className={sidebarButtonClass("profile")}><User className="h-5 w-5" />Профиль</button>
+          </nav>
+        </aside>
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-y-auto p-6 lg:p-8 sm:pb-8 pb-28 relative">
+      <div className="flex-1 overflow-y-auto p-6 pb-28 lg:p-8 sm:pb-8 relative">
         <div className="max-w-6xl mx-auto flex flex-col gap-6">
-          <PlacementSummaryPanel
-            token={token || ""}
-            activeSection={summaryManagedSection}
-            pointFilters={{
-              statusFilter: effectiveQuarryStatusFilter,
-              placementFilter: effectiveQuarryPlacementFilter,
-              typeFilter: effectiveQuarryTypeFilter,
-            }}
-            equipmentFilters={{
-              placementFilter: equipmentPlacementFilter,
-              tab: equipmentTab,
-            }}
-            onOpenPoints={openSummaryPoints}
-            onOpenEquipment={openSummaryEquipment}
-          />
+          {shouldShowPlacementSummary ? (
+            <PlacementSummaryPanel
+              token={token || ""}
+              activeSection={summaryManagedSection}
+              pointFilters={{
+                statusFilter: effectiveQuarryStatusFilter,
+                placementFilter: effectiveQuarryPlacementFilter,
+                typeFilter: effectiveQuarryTypeFilter,
+              }}
+              equipmentFilters={{
+                placementFilter: equipmentPlacementFilter,
+                tab: equipmentTab,
+              }}
+              onOpenPoints={openSummaryPoints}
+              onOpenEquipment={openSummaryEquipment}
+            />
+          ) : null}
           {activeTab === "materials" ? (
             <>
               <AdminCategoriesPanel
@@ -2876,6 +2973,8 @@ export default function AdminDashboardScreen({
                 </div>
               )}
             </>
+          ) : activeTab === "water_septic" ? (
+            <WaterSepticModerationPanel token={token} />
           ) : activeTab === "moderation" ? (
             <>
               <div className="flex justify-between items-center bg-white p-5 rounded-2xl shadow-sm border border-slate-100 mb-2">
@@ -3192,18 +3291,13 @@ export default function AdminDashboardScreen({
           ) : activeTab === "support" ? (
             <SupportScreen operatorMode />
           ) : activeTab === "profile" ? (
-            <AdminProfileScreen
-              onLogout={handleLogout}
-              onOpenSuppliers={() => setActiveTab("suppliers")}
-              onOpenEquipment={() => setActiveTab("equipment")}
-              onOpenSupport={() => setActiveTab("support")}
-            />
+            <AdminProfileScreen onLogout={handleLogout} />
           ) : null}
         </div>
       </div>
 
       {/* Mobile Bottom Navigation Menu */}
-      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-50 flex min-h-[68px] items-center justify-start overflow-x-auto border-t border-gray-200 bg-white px-2 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)]">
+      <div className="fixed bottom-0 left-0 right-0 z-50 flex min-h-[68px] items-center justify-start overflow-x-auto border-t border-gray-200 bg-white px-2 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] sm:hidden">
         <button
           onClick={() => setActiveTab("materials")}
           className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${
@@ -3212,19 +3306,10 @@ export default function AdminDashboardScreen({
               : "text-slate-400 hover:text-slate-600"
           }`}
         >
-          <div
-            className={`p-1.5 rounded-xl transition-colors ${activeTab === "materials" ? "bg-[#2DB0E6]/10" : ""}`}
-          >
+          <div className={`p-1.5 rounded-xl transition-colors ${activeTab === "materials" ? "bg-[#2DB0E6]/10" : ""}`}>
             <Layers className="w-6 h-6" />
           </div>
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] font-bold">Каталог</span>
-            {pendingPointModerationCount > 0 && (
-              <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
-                {pendingPointModerationCount}
-              </span>
-            )}
-          </div>
+          <span className="text-[10px] font-bold">Каталог</span>
         </button>
         <button
           onClick={() => setActiveTab("quarries")}
@@ -3234,19 +3319,15 @@ export default function AdminDashboardScreen({
               : "text-slate-400 hover:text-slate-600"
           }`}
         >
-          <div
-            className={`p-1.5 rounded-xl transition-colors ${activeTab === "quarries" ? "bg-[#2DB0E6]/10" : ""}`}
-          >
+          <div className={`relative p-1.5 rounded-xl transition-colors ${activeTab === "quarries" ? "bg-[#2DB0E6]/10" : ""}`}>
             <Map className="w-6 h-6" />
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] font-bold">Точки</span>
             {pendingPointModerationCount > 0 && (
-              <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+              <span className="absolute -top-1 -right-2 min-w-[16px] rounded-full bg-red-500 px-1.5 text-center text-[10px] font-bold leading-4 text-white">
                 {pendingPointModerationCount}
               </span>
             )}
           </div>
+          <span className="text-[10px] font-bold">Точки</span>
         </button>
         <button
           onClick={() => setActiveTab("delivery")}
@@ -3280,7 +3361,7 @@ export default function AdminDashboardScreen({
         </button>
         <button
           onClick={() => setActiveTab("moderation")}
-          className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all relative ${
+          className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${
             activeTab === "moderation"
               ? "text-[#2DB0E6]"
               : "text-slate-400 hover:text-slate-600"
@@ -3290,10 +3371,10 @@ export default function AdminDashboardScreen({
             className={`relative p-1.5 rounded-xl transition-colors ${activeTab === "moderation" ? "bg-[#2DB0E6]/10" : ""}`}
           >
             <ClipboardCheck className="w-6 h-6" />
-            {pendingModerationTotal > 0 && (
-              <div className="absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] font-bold w-3.5 h-3.5 rounded-full flex items-center justify-center shadow-sm">
-                {pendingModerationTotal}
-              </div>
+            {pendingDriverModerationCount > 0 && (
+              <span className="absolute -top-1 -right-2 min-w-[16px] rounded-full bg-red-500 px-1.5 text-center text-[10px] font-bold leading-4 text-white">
+                {pendingDriverModerationCount}
+              </span>
             )}
           </div>
           <span className="text-[10px] font-bold">Модерация</span>

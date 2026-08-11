@@ -8,7 +8,7 @@ from sqlalchemy import and_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
-from app.models.models import DeliveryOption, Driver, Material, MediaFile, ModerationStatus, Order, Quarry, SpecialEquipmentListing, User, Vehicle
+from app.models.models import DeliveryOption, Driver, Material, MediaFile, ModerationStatus, Order, Quarry, SepticProviderProfile, SpecialEquipmentListing, User, Vehicle, WaterPoint
 from app.schemas.media import (
     ConfirmUploadRequest,
     ConfirmUploadResponse,
@@ -46,6 +46,8 @@ def _get_entity_model(entity_type: str):
         "vehicle": Vehicle,
         "quarry": Quarry,
         "equipment_listing": SpecialEquipmentListing,
+        "water_point": WaterPoint,
+        "septic_profile": SepticProviderProfile,
     }
     return model_map[entity_type]
 
@@ -109,7 +111,7 @@ async def _resolve_media_entity_context(
         if entity_id is None or entity_type != "equipment_listing":
             raise HTTPException(
                 status_code=403,
-                detail="Equipment owners can upload media only for their own equipment listings",
+                detail="Equipment owners can upload media only for their own listings",
             )
         listing = await db.get(SpecialEquipmentListing, entity_id)
         if listing is None or listing.owner_user_id != current_user.id:
@@ -131,6 +133,22 @@ async def _resolve_media_entity_context(
         if point is None or point.owner_user_id != current_user.id:
             raise HTTPException(status_code=404, detail="Pickup point not found")
         return "quarry", entity_id, None
+
+    if role_name == "water_septic_partner":
+        if entity_id is None or entity_type not in {"water_point", "septic_profile"}:
+            raise HTTPException(
+                status_code=403,
+                detail="Water and septic partners can upload media only for their own water points and septic profiles",
+            )
+        if entity_type == "water_point":
+            point = await db.get(WaterPoint, entity_id)
+            if point is None or point.owner_user_id != current_user.id:
+                raise HTTPException(status_code=404, detail="Water point not found")
+            return "water_point", entity_id, None
+        profile = await db.get(SepticProviderProfile, entity_id)
+        if profile is None or profile.owner_user_id != current_user.id:
+            raise HTTPException(status_code=404, detail="Septic profile not found")
+        return "septic_profile", entity_id, None
 
     if role_name != "driver":
         raise HTTPException(status_code=403, detail="Not enough permissions to manage media")
@@ -172,7 +190,7 @@ async def _apply_supplier_media_moderation(
     action_label: str,
 ) -> None:
     role_name = current_user.role.name if current_user.role else None
-    if role_name not in {"supplier", "equipment_owner"}:
+    if role_name not in {"supplier", "equipment_owner", "water_septic_partner"}:
         return
     entity = None
     entity_label = None
@@ -185,6 +203,14 @@ async def _apply_supplier_media_moderation(
         entity = await db.get(Quarry, entity_id)
         entity_label = entity.name if entity is not None else None
         entity_audit_type = QUARRY_ENTITY_TYPE
+    elif entity_type == "septic_profile":
+        entity = await db.get(SepticProviderProfile, entity_id)
+        entity_label = entity.address if entity is not None else None
+        entity_audit_type = "septic_profile"
+    elif entity_type == "water_point":
+        entity = await db.get(WaterPoint, entity_id)
+        entity_label = (entity.name or entity.source) if entity is not None else None
+        entity_audit_type = "water_point"
     if entity is None or entity_audit_type is None:
         return
 
@@ -374,7 +400,7 @@ async def delete_media(
     current_user: User = Depends(get_current_user),
 ) -> dict[str, bool]:
     role_name = current_user.role.name if current_user.role else None
-    if role_name not in {"admin", "logist", "supplier", "equipment_owner"}:
+    if role_name not in {"admin", "logist", "supplier", "equipment_owner", "water_septic_partner"}:
         raise HTTPException(status_code=403, detail="Media deletion is not allowed")
 
     result = await db.execute(select(MediaFile).where(MediaFile.id == media_id))

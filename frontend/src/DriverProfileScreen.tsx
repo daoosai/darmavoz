@@ -27,6 +27,7 @@ import { logoutCurrentSession } from "./pushAuth";
 import UpdateBanner from "./UpdateBanner";
 import toast from "react-hot-toast";
 import { DriverOrder, DriverOrderCard } from "./DriverOrdersScreen";
+import DeleteAccountButton from "./components/shared/DeleteAccountButton";
 
 interface DriverProfile {
   id: string;
@@ -782,6 +783,13 @@ export default function DriverProfileScreen({
           <LogOut className="w-5 h-5" />
           Выйти из аккаунта
         </button>
+        <DeleteAccountButton
+          token={token}
+          onDeleted={async () => {
+            await logoutCurrentSession();
+            onLogout();
+          }}
+        />
         {/* Распорка для TabBar */}
         <div className="h-32 w-full flex-shrink-0"></div>
       </div>

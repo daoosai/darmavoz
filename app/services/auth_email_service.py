@@ -18,12 +18,9 @@ def mask_auth_email(email: str) -> str:
 
 def send_auth_email_code(*, to_email: str, code: str) -> None:
     message_body = f"Ваш код авторизации Дармавоз: {code}. Никому не сообщайте его."
+    masked_email = mask_auth_email(to_email)
     if not settings.SMTP_HOST:
-        logger.info(
-            "email_auth_code_generated email=%s code=%s smtp_configured=false",
-            mask_auth_email(to_email),
-            code,
-        )
+        logger.warning("auth_email_code_not_sent email=%s smtp_configured=false", masked_email)
         return
 
     message = EmailMessage()
@@ -36,20 +33,25 @@ def send_auth_email_code(*, to_email: str, code: str) -> None:
     smtp_user = settings.SMTP_USER or ""
     smtp_password = settings.SMTP_PASSWORD or ""
 
-    if smtp_port == 465:
-        with smtplib.SMTP_SSL(settings.SMTP_HOST, smtp_port) as smtp:
-            if smtp_user:
-                smtp.login(smtp_user, smtp_password)
-            smtp.send_message(message)
-        return
+    try:
+        if smtp_port == 465:
+            with smtplib.SMTP_SSL(settings.SMTP_HOST, smtp_port, timeout=15) as smtp:
+                if smtp_user:
+                    smtp.login(smtp_user, smtp_password)
+                smtp.send_message(message)
+        else:
+            with smtplib.SMTP(settings.SMTP_HOST, smtp_port, timeout=15) as smtp:
+                smtp.ehlo()
+                try:
+                    smtp.starttls()
+                    smtp.ehlo()
+                except smtplib.SMTPNotSupportedError:
+                    logger.warning("smtp_starttls_not_supported host=%s", settings.SMTP_HOST)
+                if smtp_user:
+                    smtp.login(smtp_user, smtp_password)
+                smtp.send_message(message)
+    except (OSError, smtplib.SMTPException):
+        logger.exception("auth_email_code_send_failed email=%s", masked_email)
+        raise
 
-    with smtplib.SMTP(settings.SMTP_HOST, smtp_port) as smtp:
-        smtp.ehlo()
-        try:
-            smtp.starttls()
-            smtp.ehlo()
-        except smtplib.SMTPNotSupportedError:
-            logger.info("smtp_starttls_not_supported host=%s", settings.SMTP_HOST)
-        if smtp_user:
-            smtp.login(smtp_user, smtp_password)
-        smtp.send_message(message)
+    logger.warning("auth_email_code_sent email=%s", masked_email)

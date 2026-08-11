@@ -3,6 +3,7 @@ import { Building2, Headphones, Loader2, LogOut, Mail, Phone } from "lucide-reac
 import toast from "react-hot-toast";
 
 import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
+import DeleteAccountButton from "./components/shared/DeleteAccountButton";
 
 interface Props {
   token: string;
@@ -151,6 +152,7 @@ export default function SupplierProfileScreen({
         {isLoggingOut ? <Loader2 className="h-5 w-5 animate-spin" /> : <LogOut className="h-5 w-5" />}
         Выйти из аккаунта
       </button>
+      <DeleteAccountButton token={token} onDeleted={onLogout} />
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { ArrowLeft, Eye, EyeOff, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
 
 import OtpVerificationStep from "./OtpVerificationStep";
+import PasswordResetModal from "./PasswordResetModal";
 import { switchAuthenticatedSession } from "./pushAuth";
 import { UserRole } from "./store";
 import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
@@ -12,6 +13,7 @@ interface LoginScreenProps {
   onBack: () => void;
   onSelectSupplierRegister: () => void;
   onSelectEquipmentOwnerRegister: () => void;
+  onSelectWaterSepticPartnerRegister: () => void;
   onSelectDriverRegister: () => void;
 }
 
@@ -22,6 +24,7 @@ export default function LoginScreen({
   onBack,
   onSelectSupplierRegister,
   onSelectEquipmentOwnerRegister,
+  onSelectWaterSepticPartnerRegister,
   onSelectDriverRegister,
 }: LoginScreenProps) {
   const [username, setUsername] = useState("");
@@ -31,6 +34,7 @@ export default function LoginScreen({
   const [otpStep, setOtpStep] = useState(false);
   const [otpRecipient, setOtpRecipient] = useState("");
   const [otpError, setOtpError] = useState("");
+  const [isPasswordResetOpen, setIsPasswordResetOpen] = useState(false);
 
   const handleLoginChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
@@ -193,6 +197,13 @@ export default function LoginScreen({
                     {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setIsPasswordResetOpen(true)}
+                  className="self-end text-sm font-medium text-blue-500 transition-colors hover:text-blue-700"
+                >
+                  Забыли пароль?
+                </button>
               </div>
 
               <button
@@ -229,12 +240,20 @@ export default function LoginScreen({
                 onClick={onSelectDriverRegister}
                 className="text-sm font-semibold text-[#2DB0E6]"
               >
-                Регистрация водителей
+                Регистрация самосвалов
+              </button>
+              <button
+                type="button"
+                onClick={onSelectWaterSepticPartnerRegister}
+                className="text-sm font-semibold text-[#2DB0E6]"
+              >
+                Регистрация предложений по воде/септику
               </button>
             </div>
           </>
         )}
       </div>
+      {isPasswordResetOpen ? <PasswordResetModal onClose={() => setIsPasswordResetOpen(false)} /> : null}
     </div>
   );
 }

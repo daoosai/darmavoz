@@ -1,33 +1,21 @@
 import React, { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { BarChart3, Building2, ClipboardList, Headphones, LogOut, Wrench } from "lucide-react";
-import { NotificationToggle } from "./components/shared/NotificationToggle";
+import { LogOut } from "lucide-react";
 import { baseURL, handleApiError } from "./utils";
 import { useAuthStore } from "./store";
+import DeleteAccountButton from "./components/shared/DeleteAccountButton";
 
 interface AdminProfileScreenProps {
   onLogout: () => void;
-  notificationRole?: "admin" | "logist";
-  onOpenSuppliers?: () => void;
-  onOpenEquipment?: () => void;
-  onOpenSupport?: () => void;
 }
 
 export default function AdminProfileScreen({
   onLogout,
-  notificationRole,
-  onOpenSuppliers,
-  onOpenEquipment,
-  onOpenSupport,
 }: AdminProfileScreenProps) {
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const token = useAuthStore((state) => state.token);
-  const authRole = useAuthStore((state) => state.role);
-  const effectiveNotificationRole =
-    notificationRole || (authRole === "logist" ? "logist" : "admin");
-  const routeBase = effectiveNotificationRole === "logist" ? "/logist" : "/admin";
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -117,73 +105,6 @@ export default function AdminProfileScreen({
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-        <div className="p-4 flex flex-col gap-3">
-          <a
-            href={`${routeBase}/orders`}
-            className="w-full h-14 bg-sky-500 active:bg-sky-600 text-white font-bold text-lg rounded-xl flex items-center justify-between px-6 shadow-sm"
-          >
-            <span className="flex items-center gap-3">
-              <ClipboardList className="w-5 h-5" />
-              {"\u0421\u043f\u0438\u0441\u043e\u043a \u0437\u0430\u043a\u0430\u0437\u043e\u0432"}
-            </span>
-            <span className="text-white/85 text-sm">{"\u041e\u0442\u043a\u0440\u044b\u0442\u044c"}</span>
-          </a>
-          <a
-            href={`${routeBase}/statistics`}
-            className="w-full h-14 bg-sky-500 active:bg-sky-600 text-white font-bold text-lg rounded-xl flex items-center justify-between px-6 shadow-sm"
-          >
-            <span className="flex items-center gap-3">
-              <BarChart3 className="w-5 h-5" />
-              {"\u0421\u0442\u0430\u0442\u0438\u0441\u0442\u0438\u043a\u0430"}
-            </span>
-            <span className="text-white/85 text-sm">{"\u041e\u0442\u043a\u0440\u044b\u0442\u044c"}</span>
-          </a>
-          {effectiveNotificationRole === "admin" && onOpenSuppliers ? (
-            <button
-              type="button"
-              onClick={onOpenSuppliers}
-              className="w-full h-14 bg-white active:bg-slate-50 text-slate-800 font-bold text-lg rounded-xl flex items-center justify-between px-6 border border-slate-200 shadow-sm"
-            >
-              <span className="flex items-center gap-3">
-                <Building2 className="w-5 h-5 text-sky-500" />
-                Поставщики
-              </span>
-              <span className="text-sky-600 text-sm">Открыть</span>
-            </button>
-          ) : null}
-          {effectiveNotificationRole === "admin" && onOpenEquipment ? (
-            <button
-              type="button"
-              onClick={onOpenEquipment}
-              className="relative w-full h-14 bg-white active:bg-slate-50 text-slate-800 font-bold text-lg rounded-xl flex items-center justify-between px-6 border border-slate-200 shadow-sm"
-            >
-              <span className="flex items-center gap-3">
-                <Wrench className="w-5 h-5 text-sky-500" />
-                Спецтехника
-              </span>
-              <span className="flex items-center gap-3">
-                <span className="text-sky-600 text-sm">Открыть</span>
-              </span>
-            </button>
-          ) : null}
-          {effectiveNotificationRole === "admin" && onOpenSupport ? (
-            <button
-              type="button"
-              onClick={onOpenSupport}
-              className="w-full h-14 bg-white active:bg-slate-50 text-slate-800 font-bold text-lg rounded-xl flex items-center justify-between px-6 border border-slate-200 shadow-sm"
-            >
-              <span className="flex items-center gap-3">
-                <Headphones className="w-5 h-5 text-sky-500" />
-                Поддержка
-              </span>
-              <span className="text-sky-600 text-sm">Открыть</span>
-            </button>
-          ) : null}
-        </div>
-      </div>
-
-      <NotificationToggle role={effectiveNotificationRole} />
       <button
         onClick={onLogout}
         className="flex items-center justify-center gap-2 w-full bg-red-50 text-red-600 rounded-xl py-3.5 font-bold hover:bg-red-100 transition-colors mt-2"
@@ -191,6 +112,7 @@ export default function AdminProfileScreen({
         <LogOut className="w-5 h-5" />
         Выйти из аккаунта
       </button>
+      <DeleteAccountButton token={token} onDeleted={onLogout} />
     </div>
   );
 }

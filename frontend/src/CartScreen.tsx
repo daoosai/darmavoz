@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   ShoppingCart,
   X,
@@ -139,8 +139,11 @@ export default function CartScreen({
   const [deliveryCoords, setDeliveryCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [preferredPointIds, setPreferredPointIds] = useState<Record<string, string>>({});
+  const [manualCalculationRevision, setManualCalculationRevision] = useState(0);
   const [mapContext, setMapContext] = useState<MapContext | null>(null);
   const [draftVolumes, setDraftVolumes] = useState<Record<string, number>>({});
+  const calculationVersionRef = useRef(0);
+  const processedManualCalculationRevisionRef = useRef(0);
 
   useEffect(() => {
     if (!token || role !== "client") {
@@ -204,13 +207,22 @@ export default function CartScreen({
 
   useEffect(() => {
     const controller = new AbortController();
+    const calculationVersion = ++calculationVersionRef.current;
+    const isCurrentCalculation = () =>
+      !controller.signal.aborted && calculationVersion === calculationVersionRef.current;
+    const shouldCalculateImmediately =
+      manualCalculationRevision !== processedManualCalculationRevisionRef.current;
+    if (shouldCalculateImmediately) {
+      processedManualCalculationRevisionRef.current = manualCalculationRevision;
+    }
+
     const calculateDelivery = async () => {
       if (
         cartItems.length === 0 ||
         !globalAddress.trim() ||
         role !== "client"
       ) {
-        setCalcResults({});
+        if (isCurrentCalculation()) setCalcResults({});
         return;
       }
 
@@ -238,12 +250,13 @@ export default function CartScreen({
         if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lon))) {
           throw new Error("Не удалось определить координаты адреса доставки.");
         }
-        if (controller.signal.aborted) return;
+        if (!isCurrentCalculation()) return;
         setDeliveryCoords({ lat, lon });
 
         // Fetch calculation for each item
         const newResults: Record<string, CalculationResult> = {};
         for (const item of cartItems) {
+          const selectedQuarryId = preferredPointIds[item.id] || item.pickupPoint?.id;
           const res = await fetch(`${baseURL}/client/orders/calculate`, {
             method: "POST",
             headers: {
@@ -257,11 +270,18 @@ export default function CartScreen({
               delivery_lat: lat,
               delivery_lon: lon,
               quantity: item.quantity,
-              quarry_id: preferredPointIds[item.id] || item.pickupPoint?.id || undefined,
+              quarry_id: selectedQuarryId || undefined,
             }),
           });
           if (res.ok) {
-            newResults[item.id] = await res.json();
+            const calculation: MarketplaceCalculation = await res.json();
+            if (
+              selectedQuarryId
+              && String(calculation.best_option?.quarry_id) !== String(selectedQuarryId)
+            ) {
+              throw new Error("Сервер вернул расчёт для другой точки забора.");
+            }
+            newResults[item.id] = calculation;
           } else {
             const errorText = await parseErrorResponse(
               res,
@@ -270,9 +290,9 @@ export default function CartScreen({
             newResults[item.id] = { error: true, errorText };
           }
         }
-        if (!controller.signal.aborted) setCalcResults(newResults);
+        if (isCurrentCalculation()) setCalcResults(newResults);
       } catch (e) {
-        if (controller.signal.aborted) return;
+        if (!isCurrentCalculation()) return;
         setDeliveryCoords(null);
         console.error("Calculation error", e);
         const errorText = extractApiErrorMessage(
@@ -286,47 +306,52 @@ export default function CartScreen({
         }
         setCalcResults(errResults);
       } finally {
-        if (!controller.signal.aborted) setIsCalculating(false);
+        if (isCurrentCalculation()) setIsCalculating(false);
       }
     };
 
-    const timer = setTimeout(calculateDelivery, 800);
+    const timer = setTimeout(calculateDelivery, shouldCalculateImmediately ? 0 : 800);
     return () => {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [globalAddress, cartItems, token, role, preferredPointIds]);
+  }, [
+    globalAddress,
+    cartItems,
+    token,
+    role,
+    preferredPointIds,
+    manualCalculationRevision,
+  ]);
 
   const handleAddressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setGlobalAddress(e.target.value);
     setSelectedAddress(e.target.value);
   };
 
-  const selectMarketplaceOption = (itemId: string, selected: MarketplaceOption) => {
+  const selectPickupPoint = (itemId: string, quarryId: string) => {
+    // Invalidate a previous automatic calculation before rendering the manual choice.
+    // This prevents a delayed 40 km response from replacing the selected point's result.
+    calculationVersionRef.current += 1;
     setPreferredPointIds((current) => ({
       ...current,
-      [itemId]: selected.quarry_id,
+      [itemId]: quarryId,
     }));
     setCalcResults((currentResults) => {
-      const current = currentResults[itemId];
-      if (!isMarketplaceCalculation(current)) return currentResults;
-      const allOptions = [current.best_option, ...current.alternatives];
-      return {
-        ...currentResults,
-        [itemId]: {
-          best_option: selected,
-          alternatives: allOptions.filter((option) => option.quarry_id !== selected.quarry_id),
-        },
-      };
+      const nextResults = { ...currentResults };
+      delete nextResults[itemId];
+      return nextResults;
     });
+    setManualCalculationRevision((current) => current + 1);
+  };
+
+  const selectMarketplaceOption = (itemId: string, selected: MarketplaceOption) => {
+    selectPickupPoint(itemId, selected.quarry_id);
   };
 
   const selectPointFromMap = (point: PickupPointSelection) => {
     if (!mapContext) return;
-    setPreferredPointIds((current) => ({
-      ...current,
-      [mapContext.itemId]: point.id,
-    }));
+    selectPickupPoint(mapContext.itemId, point.id);
     setMapContext(null);
     toast.success("Точка выбрана, пересчитываем стоимость");
   };

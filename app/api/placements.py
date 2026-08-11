@@ -26,6 +26,32 @@ from app.services.relevance import (
 router = APIRouter()
 
 
+async def _apply_pending_point_changes(db: AsyncSession, point: Quarry) -> None:
+    if not point.pending_changes:
+        return
+
+    from app.api.admin_quarries import _apply_point_changes
+    from app.schemas.quarry import QuarryUpdate
+
+    pending_payload = QuarryUpdate.model_validate(point.pending_changes)
+    await _apply_point_changes(db, point, pending_payload.model_dump(exclude_unset=True))
+
+
+async def _apply_pending_equipment_changes(
+    db: AsyncSession,
+    listing: SpecialEquipmentListing,
+) -> None:
+    if not listing.pending_changes:
+        return
+
+    from app.api.equipment import _apply_listing_update_data, _normalize_listing_update_data
+    from app.schemas.equipment import EquipmentListingUpdate
+
+    pending_payload = EquipmentListingUpdate.model_validate(listing.pending_changes)
+    pending_data = await _normalize_listing_update_data(db, pending_payload)
+    _apply_listing_update_data(listing, pending_data)
+
+
 def _policy() -> PlacementPolicyOut:
     return PlacementPolicyOut(
         trial_days=settings.PLACEMENT_TRIAL_DAYS,
@@ -116,12 +142,16 @@ async def placement_summary(
 
 async def _admin_point_action(db, point_id, current_user, action) -> PlacementActionResult:
     point = await _point_or_404(db, point_id)
+    if action is extend_placement:
+        await _apply_pending_point_changes(db, point)
     await action(db, point, actor_user_id=current_user.id)
     return await _commit_action(db, point)
 
 
 async def _admin_equipment_action(db, listing_id, current_user, action) -> PlacementActionResult:
     listing = await _equipment_or_404(db, listing_id)
+    if action is extend_placement:
+        await _apply_pending_equipment_changes(db, listing)
     await action(db, listing, actor_user_id=current_user.id)
     return await _commit_action(db, listing)
 

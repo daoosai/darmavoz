@@ -13,6 +13,9 @@ from app.models.models import (
     Quarry,
     SpecialEquipmentApplication,
     SpecialEquipmentListing,
+    Role,
+    User,
+    UserNotification,
 )
 from app.services.push_service import (
     schedule_push_to_client,
@@ -22,6 +25,17 @@ from app.services.push_service import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+async def create_operator_notifications(session, *, event_type: str, title: str, body: str, payload: dict[str, str]) -> None:
+    """Persist operator inbox records in the same transaction as the business event."""
+    result = await session.execute(
+        select(User.id).join(Role, User.role_id == Role.id).where(
+            Role.name.in_(("admin", "logist")), User.is_active.is_(True), User.is_deleted.is_(False)
+        )
+    )
+    for user_id in result.scalars():
+        session.add(UserNotification(user_id=user_id, event_type=event_type, title=title, body=body, payload=payload))
 
 
 def _safe_schedule(schedule_func, *args, **kwargs) -> None:
@@ -131,6 +145,16 @@ def schedule_client_searching_driver_status_notification(order: Order) -> None:
         "Поиск машины",
         "Ищем водителя для вашего заказа.",
         _order_push_data(order),
+    )
+
+
+def schedule_client_requires_clarification_notification(order: Order, comment: str) -> None:
+    _safe_schedule(
+        schedule_push_to_client,
+        order.client_id,
+        "Требуется уточнение по заказу",
+        f"Пожалуйста, уточните детали заказа. Причина: {comment}",
+        {**_order_push_data(order), "event": "requires_clarification"},
     )
 
 
@@ -265,6 +289,28 @@ def schedule_logist_no_driver_found_notification(order: Order) -> None:
             **_order_push_data(order),
             "event": "no_driver_found",
         },
+    )
+
+
+def schedule_logist_order_created_notification(
+    order: Order,
+    *,
+    material_name: str = "Груз",
+) -> None:
+    _safe_schedule(
+        schedule_push_to_logists,
+        "Новый заказ",
+        f"Новый заказ: {material_name}.",
+        {**_order_push_data(order), "event": "order_created"},
+    )
+
+
+def schedule_logist_requires_clarification_notification(order: Order) -> None:
+    _safe_schedule(
+        schedule_push_to_logists,
+        "Заказ требует уточнения",
+        f"Заказ #{order.id} ожидает ручной проверки оператором.",
+        {**_order_push_data(order), "event": "requires_clarification"},
     )
 
 

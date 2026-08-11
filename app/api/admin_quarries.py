@@ -269,7 +269,7 @@ async def update_pickup_point(
     payload_data = payload.model_dump(exclude_unset=True)
     await _apply_point_changes(db, point, payload_data)
     changed = set(payload_data)
-    if "subscription_end_date" in changed and payload_data.get("is_active") is not False:
+    if "subscription_end_date" in changed:
         await apply_manual_placement_end_date(
             db,
             point,
@@ -302,6 +302,12 @@ async def update_pickup_point(
         except HTTPException:
             await db.rollback()
             raise
+    await recalculate_status(
+        db,
+        point,
+        actor_user_id=current_user.id,
+        action="admin_pickup_point_updated",
+    )
     await db.commit()
     await db.refresh(point)
     return await _admin_pickup_point_payload(db, point)

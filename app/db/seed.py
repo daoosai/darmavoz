@@ -17,6 +17,7 @@ async def seed_data() -> None:
             {"name": "driver", "description": "Driver who receives and accepts incoming orders"},
             {"name": "supplier", "description": "Pickup point owner"},
             {"name": "equipment_owner", "description": "Special equipment owner"},
+            {"name": "water_septic_partner", "description": "Water points and septic services partner"},
         ]
 
         for role_info in roles_data:

@@ -1,8 +1,12 @@
 export const ORDER_STATUSES_RU: Record<string, string> = {
-  created: "Создан",
+  draft: "Черновик",
+  created: "Заказ создан",
   searching_driver: "Поиск водителя",
-  driver_assigned: "Назначен",
-  driver_accepted: "Принят",
+  offered_to_driver: "Поиск водителя",
+  no_driver_found: "Водитель не найден",
+  requires_clarification: "Требует уточнения",
+  driver_assigned: "Водитель назначен",
+  driver_accepted: "Водитель подтвердил заказ",
   heading_to_pickup: "Выехал на загрузку",
   arrived_at_pickup: "Прибыл на загрузку",
   loading: "Загрузка",
@@ -10,9 +14,10 @@ export const ORDER_STATUSES_RU: Record<string, string> = {
   delivered: "Доставил",
   completed: "Завершён",
   cancelled: "Отменён",
+  cancelled_by_client: "Отменён",
+  cancelled_by_operator: "Отменён",
   canceled: "Отменён",
   timeout: "Таймаут (нет ответа)",
-  no_driver_found: "Нет исполнителя",
   driver_cancel: "Отказ водителя",
 };
 
@@ -21,6 +26,7 @@ export const ORDER_TRACKER_PROGRESS: Record<string, { percentage: number; text: 
   searching_driver: { percentage: 20, text: "Ищем водителя..." },
   offered_to_driver: { percentage: 20, text: "Ищем водителя..." },
   no_driver_found: { percentage: 20, text: "Ищем водителя..." },
+  timeout: { percentage: 20, text: "Ищем водителя..." },
   driver_assigned: { percentage: 40, text: "Водитель назначен" },
   driver_accepted: { percentage: 40, text: "Водитель назначен" },
   heading_to_pickup: { percentage: 60, text: "Машина едет на погрузку" },
@@ -36,6 +42,7 @@ const STEP_INDEX_BY_STATUS: Record<string, number> = {
   searching_driver: 1,
   offered_to_driver: 1,
   no_driver_found: 1,
+  timeout: 1,
   driver_assigned: 2,
   driver_accepted: 2,
   heading_to_pickup: 3,
@@ -48,12 +55,20 @@ const STEP_INDEX_BY_STATUS: Record<string, number> = {
 
 export const getOrderStatusText = (status: string | undefined | null) => {
   if (!status) return "Неизвестно";
-  return ORDER_STATUSES_RU[status.toLowerCase()] || status;
+  return ORDER_STATUSES_RU[status.toLowerCase()] || "Статус обновляется";
+};
+
+export const getClientOrderStatusText = (status: string | undefined | null) => {
+  const normalizedStatus = status?.toLowerCase();
+  if (normalizedStatus === "no_driver_found" || normalizedStatus === "timeout") {
+    return ORDER_STATUSES_RU.searching_driver;
+  }
+  return getOrderStatusText(normalizedStatus);
 };
 
 export const getOrderTrackerProgress = (status: string | undefined | null) => {
   if (!status) return null;
-  return ORDER_TRACKER_PROGRESS[status] ?? null;
+  return ORDER_TRACKER_PROGRESS[status.toLowerCase()] ?? null;
 };
 
 export const getOrderStepIndex = (status: string | undefined | null) => {

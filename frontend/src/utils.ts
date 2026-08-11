@@ -5,7 +5,7 @@ export const baseURL =
   import.meta.env.VITE_API_URL ||
   "/api/v1";
 
-export const APP_VERSION = import.meta.env.VITE_APP_VERSION || "2.6.1";
+export const APP_VERSION = import.meta.env.VITE_APP_VERSION || "2.8.0";
 
 export const orderStatusColors: Record<string, string> = {
   created: "bg-gray-200 text-gray-700 border border-gray-300",
@@ -250,10 +250,13 @@ export const translateReason = (reason: string | undefined | null) => {
 };
 
 export const clientOrderStatusColors: Record<string, string> = {
+  draft: "bg-slate-100 text-slate-600 border border-slate-200",
   created: "bg-gray-100 text-gray-700 border border-gray-200",
+  requires_clarification: "bg-amber-100 text-amber-700 border border-amber-200",
   searching_driver: "bg-gray-100 text-gray-600 border border-gray-200",
   offered_to_driver: "bg-gray-100 text-gray-600 border border-gray-200",
   no_driver_found: "bg-gray-100 text-gray-600 border border-gray-200",
+  timeout: "bg-gray-100 text-gray-600 border border-gray-200",
   driver_assigned: "bg-blue-100 text-blue-600 border border-blue-200",
   driver_accepted: "bg-blue-100 text-blue-600 border border-blue-200",
   heading_to_pickup: "bg-indigo-100 text-indigo-600 border border-indigo-200",
@@ -263,6 +266,8 @@ export const clientOrderStatusColors: Record<string, string> = {
   delivered: "bg-green-100 text-green-700 border border-green-200",
   completed: "bg-green-100 text-green-700 border border-green-200",
   cancelled: "bg-red-100 text-red-600 border border-red-200",
+  cancelled_by_client: "bg-red-100 text-red-600 border border-red-200",
+  cancelled_by_operator: "bg-red-100 text-red-600 border border-red-200",
   canceled: "bg-red-100 text-red-600 border border-red-200",
 };
 

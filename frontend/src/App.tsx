@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Truck,
   Wrench,
+  Droplets,
   X,
 } from "lucide-react";
 import { MaterialProps } from "./MaterialDetailScreen";
@@ -49,9 +50,13 @@ import SupplierPortalScreen from "./SupplierPortalScreen";
 import FloatingOrderTracker from "./FloatingOrderTracker";
 import EquipmentCatalogScreen from "./EquipmentCatalogScreen";
 import GlobalMapScreen from "./GlobalMapScreen";
+import WaterMapScreen from "./WaterMapScreen";
+import SepticCatalogScreen from "./SepticCatalogScreen";
 import SupportScreen from "./SupportScreen";
 import PickupPointMapScreen, { PickupPointSelection } from "./PickupPointMapScreen";
 import EquipmentOwnerPortalScreen from "./EquipmentOwnerPortalScreen";
+import WaterSepticPartnerPortalScreen from "./WaterSepticPartnerPortalScreen";
+import AdminNotificationToastListener from "./components/shared/AdminNotificationToastListener";
 
 // Reuse Material type as MaterialProps by exporting it from MaterialDetailScreen or type matching
 export default function App() {
@@ -66,6 +71,7 @@ export default function App() {
     if (nextRole === "admin") return "admin" as const;
     if (nextRole === "supplier") return "supplier" as const;
     if (nextRole === "equipment_owner") return "equipment_owner" as const;
+    if (nextRole === "water_septic_partner") return "water_septic_partner" as const;
     return "main" as const;
   };
   const [currentRoute, setCurrentRoute] = useState<
@@ -77,8 +83,10 @@ export default function App() {
     | "admin"
     | "supplier"
     | "equipment_owner"
+    | "water_septic_partner"
     | "supplier_register"
     | "equipment_owner_register"
+    | "water_septic_partner_register"
     | "driver_register"
   >(
     role === "client" && currentPath.startsWith("/client/orders/")
@@ -93,6 +101,8 @@ export default function App() {
             ? "supplier"
             : role === "equipment_owner"
               ? "equipment_owner"
+              : role === "water_septic_partner"
+                ? "water_septic_partner"
           : "welcome",
   );
 
@@ -182,6 +192,7 @@ export default function App() {
         onBack={() => setCurrentRoute("welcome")}
         onSelectSupplierRegister={() => setCurrentRoute("supplier_register")}
         onSelectEquipmentOwnerRegister={() => setCurrentRoute("equipment_owner_register")}
+        onSelectWaterSepticPartnerRegister={() => setCurrentRoute("water_septic_partner_register")}
         onSelectDriverRegister={() => setCurrentRoute("driver_register")}
       />
     );
@@ -236,6 +247,13 @@ export default function App() {
       currentRoute === "equipment_owner"
     ) {
       return <EquipmentOwnerPortalScreen onBack={() => setCurrentRoute("login")} />;
+    }
+
+    if (
+      currentRoute === "water_septic_partner_register" ||
+      currentRoute === "water_septic_partner"
+    ) {
+      return <WaterSepticPartnerPortalScreen onBack={() => setCurrentRoute("login")} />;
     }
 
     if (currentRoute === "login") {
@@ -302,6 +320,7 @@ export default function App() {
         }}
       />
       <InstallPWA />
+      <AdminNotificationToastListener />
       {renderContent()}
     </>
   );
@@ -343,6 +362,7 @@ function MainContent({
       badge: cartItemsCount > 0 ? cartItemsCount : undefined,
     },
     { id: "map", label: "Карта", icon: Map },
+    { id: "water", label: "Вода", icon: Droplets },
     { id: "profile", label: "Профиль", icon: User },
   ];
 
@@ -424,7 +444,9 @@ function MainContent({
       setActiveTab("map");
       return;
     }
-    if (currentPath !== "/map" && activeTab === "map") {
+    if (currentPath === "/water" && activeTab !== "water") { setActiveTab("water"); return; }
+    if (currentPath === "/septic" && activeTab !== "septic") { setActiveTab("septic"); return; }
+    if (currentPath !== "/map" && currentPath !== "/water" && currentPath !== "/septic" && (activeTab === "map" || activeTab === "water" || activeTab === "septic")) {
       setActiveTab("home");
     }
   }, [activeTab, currentPath, setActiveTab]);
@@ -481,6 +503,29 @@ function MainContent({
                   className={`flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-bold transition ${serviceDirection === "equipment" ? "bg-white text-sky-600 shadow-sm" : "text-slate-500"}`}
                 >
                   <Wrench className="h-4 w-4" /> Спецтехника
+                </button>
+              </div>
+
+              <div className="mx-4 mb-5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextPath = "/septic";
+                    if (typeof window !== "undefined" && window.location.pathname !== nextPath) {
+                      window.history.pushState({}, "", nextPath);
+                    }
+                    setCurrentPath(nextPath);
+                    setMapMaterial(null);
+                    closeMaterialSheet();
+                    setActiveTab("septic");
+                  }}
+                  className="flex w-full items-center gap-4 rounded-2xl bg-sky-500 p-4 text-left text-white shadow-[0_10px_24px_rgba(14,165,233,0.22)] transition hover:bg-sky-600"
+                >
+                  <span className="rounded-2xl bg-white/20 p-3"><Droplets className="h-6 w-6" /></span>
+                  <span className="min-w-0">
+                    <span className="block text-base font-black">Откачка септиков</span>
+                    <span className="mt-0.5 block text-sm text-sky-50">Выбрать исполнителя и позвонить</span>
+                  </span>
                 </button>
               </div>
 
@@ -592,6 +637,14 @@ function MainContent({
           )}
 
           {activeTab === "map" && <GlobalMapScreen />}
+          {activeTab === "water" && <WaterMapScreen />}
+          {activeTab === "septic" && <SepticCatalogScreen onBack={() => {
+            if (typeof window !== "undefined" && window.location.pathname !== "/") {
+              window.history.pushState({}, "", "/");
+            }
+            setCurrentPath("/");
+            setActiveTab("home");
+          }} />}
 
           {activeTab === "profile" &&
             (role === "client" ? (
@@ -624,7 +677,7 @@ function MainContent({
                   key={tab.id}
                   onClick={() => {
                     onClearFocusedOrder();
-                    const nextPath = tab.id === "map" ? "/map" : "/";
+                    const nextPath = tab.id === "map" ? "/map" : tab.id === "water" ? "/water" : "/";
                     if (typeof window !== "undefined" && window.location.pathname !== nextPath) {
                       window.history.pushState({}, "", nextPath);
                     }

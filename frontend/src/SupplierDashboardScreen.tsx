@@ -39,6 +39,25 @@ const SUPPLIER_DASHBOARD_TEXT = {
   confirmRelevance: "Подтвердить актуальность",
 } as const;
 
+const EXPIRED_PLACEMENT_PUBLISH_MESSAGE =
+  "Нельзя опубликовать точку с истекшим сроком размещения";
+
+const isPlacementExpired = (point: SupplierPoint) => {
+  if (point.placement_status === "expired") return true;
+  if (!point.placement_ends_at) return false;
+
+  const endsAt = /^\d{4}-\d{2}-\d{2}$/.test(point.placement_ends_at)
+    ? new Date(`${point.placement_ends_at}T23:59:59.999`).getTime()
+    : new Date(point.placement_ends_at).getTime();
+
+  return !Number.isNaN(endsAt) && endsAt <= Date.now();
+};
+
+const canPublishPoint = (point: SupplierPoint) =>
+  point.placement_status === "hidden" &&
+  point.moderation_status === "approved" &&
+  !isPlacementExpired(point);
+
 const getPointStatusMeta = (point: SupplierPoint) => {
   if (point.is_active === false || point.moderation_status === "suspended") {
     return { label: "Скрыт", className: "bg-gray-100 text-gray-800" };
@@ -74,15 +93,6 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
   const [showCreatePoint, setShowCreatePoint] = useState(false);
   const [editingPoint, setEditingPoint] = useState<SupplierPoint | null>(null);
   const [displayName, setDisplayName] = useState("");
-
-  const getPendingChangesSummary = (point: SupplierPoint) => {
-    const pendingChanges = point.pending_changes;
-    if (!pendingChanges || typeof pendingChanges !== "object") {
-      return null;
-    }
-    const keys = Object.keys(pendingChanges);
-    return keys.length ? keys.join(", ") : null;
-  };
 
   const fetchPoints = async () => {
     try {
@@ -263,6 +273,11 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
   };
 
   const togglePointVisibility = async (point: SupplierPoint) => {
+    if (point.is_active === false && isPlacementExpired(point)) {
+      toast.error(EXPIRED_PLACEMENT_PUBLISH_MESSAGE);
+      return;
+    }
+
     setIsBusy(true);
     try {
       const response = await fetch(`${baseURL}/supplier/points/${point.id}`, {
@@ -282,7 +297,8 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
       await fetchPoints();
       toast.success(point.is_active === false ? "Точка опубликована" : "Точка скрыта");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось обновить точку");
+      const message = error instanceof Error ? error.message : "Не удалось обновить точку";
+      toast.error(/истек|expired/i.test(message) ? EXPIRED_PLACEMENT_PUBLISH_MESSAGE : message);
     } finally {
       setIsBusy(false);
     }
@@ -373,12 +389,6 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
                     </p>
                   ) : null}
 
-                  {point.moderation_status === "has_pending_changes" ? (
-                    <p className="mt-4 rounded-2xl bg-sky-50 p-3 text-sm text-sky-700">
-                      На модерации правки: {getPendingChangesSummary(point) || "есть обновления"}
-                    </p>
-                  ) : null}
-
                   {(point.media_files || []).length > 0 ? (
                     <div className="mt-4 grid grid-cols-3 gap-2">
                       {(point.media_files || []).map((media) => (
@@ -436,20 +446,22 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
                     ) : null}
                   </div>
 
-                  <button
-                    type="button"
-                    disabled={isBusy}
-                    onClick={() => void togglePointVisibility(point)}
-                    className={`mt-3 w-full rounded-2xl px-3 py-3 text-sm font-bold ${
-                      point.is_active === false
-                        ? "bg-emerald-50 text-emerald-700"
-                        : "bg-slate-100 text-slate-700"
-                    } disabled:opacity-50`}
-                  >
-                    {point.is_active === false
-                      ? SUPPLIER_DASHBOARD_TEXT.publishPoint
-                      : SUPPLIER_DASHBOARD_TEXT.hidePoint}
-                  </button>
+                  {canPublishPoint(point) || (point.is_active !== false && !isPlacementExpired(point)) ? (
+                    <button
+                      type="button"
+                      disabled={isBusy}
+                      onClick={() => void togglePointVisibility(point)}
+                      className={`mt-3 w-full rounded-2xl px-3 py-3 text-sm font-bold ${
+                        canPublishPoint(point)
+                          ? "bg-emerald-50 text-emerald-700"
+                          : "bg-slate-100 text-slate-700"
+                      } disabled:opacity-50`}
+                    >
+                      {canPublishPoint(point)
+                        ? SUPPLIER_DASHBOARD_TEXT.publishPoint
+                        : SUPPLIER_DASHBOARD_TEXT.hidePoint}
+                    </button>
+                  ) : null}
                   {shouldShowConfirmationAction(point) ? <button type="button" disabled={isBusy} onClick={() => void confirmPointRelevance(point)} className="mt-3 w-full rounded-2xl bg-orange-50 px-3 py-3 text-sm font-bold text-orange-800 disabled:opacity-50">{SUPPLIER_DASHBOARD_TEXT.confirmRelevance}</button> : null}
                 </div>
               </article>

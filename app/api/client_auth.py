@@ -136,6 +136,7 @@ async def verify_code(
             "sub": normalized_phone,
             "role": "client",
             "client_id": str(client.id),
+            "auth_version": client.auth_version,
         }
     )
     await get_redis().delete(_code_key(normalized_phone))

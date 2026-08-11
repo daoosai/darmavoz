@@ -98,7 +98,7 @@ async def verify_equipment_owner_registration(
         raise HTTPException(status_code=403, detail="EQUIPMENT_OWNER_ACCOUNT_DISABLED")
 
     await redis.delete(f"{CODE_PREFIX}:{phone}")
-    token = create_access_token(data={"sub": user.username, "role": "equipment_owner"})
+    token = create_access_token(data={"sub": user.username, "role": "equipment_owner", "auth_version": user.auth_version})
     return PartnerRegistrationOut(
         access_token=token,
         role="equipment_owner",

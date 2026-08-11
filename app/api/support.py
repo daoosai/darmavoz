@@ -84,7 +84,7 @@ async def get_support_actor(
         return SupportActor(role="client", client=await get_current_client(token=token, db=db))
     user = await get_current_user(token=token, db=db)
     role_name = user.role.name if user.role else ""
-    if role_name not in {"driver", "supplier", "equipment_owner"}:
+    if role_name not in {"driver", "supplier", "equipment_owner", "water_septic_partner"}:
         raise HTTPException(
             status_code=403,
             detail="Обращения доступны клиентам, водителям и поставщикам",
@@ -105,7 +105,7 @@ async def get_support_session_actor(
         return SupportActor(role="client", client=await get_current_client(token=token, db=db))
     user = await get_current_user(token=token, db=db)
     role_name = user.role.name if user.role else ""
-    if role_name not in {"driver", "supplier", "equipment_owner", "admin", "logist"}:
+    if role_name not in {"driver", "supplier", "equipment_owner", "water_septic_partner", "admin", "logist"}:
         raise HTTPException(
             status_code=403,
             detail="Обращения доступны клиентам, водителям, поставщикам, администраторам и логистам",
@@ -184,7 +184,7 @@ async def _resolve_support_reply_target(
         driver_profile = _get_loaded_driver_profile(ticket.user)
         if driver_profile is not None:
             return None, driver_profile.id, None
-        if ticket.user.role is not None and ticket.user.role.name == "supplier":
+        if ticket.user.role is not None and ticket.user.role.name in {"supplier", "equipment_owner", "water_septic_partner"}:
             return None, None, ticket.user.id
 
     if ticket.user_id is None:

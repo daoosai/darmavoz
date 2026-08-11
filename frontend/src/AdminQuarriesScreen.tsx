@@ -491,7 +491,7 @@ export default function AdminQuarriesScreen({
                 <th className="p-4 border-b border-slate-100">Адрес</th>
                 <th className="p-4 border-b border-slate-100">Статус</th>
                 <th className="p-4 border-b border-slate-100">Модерация</th>
-                <th className="w-[340px] min-w-[340px] whitespace-nowrap p-4 border-b border-slate-100">Действия</th>
+                <th className="w-[340px] min-w-[340px] whitespace-nowrap border-b border-slate-100 p-4 pr-6">Действия</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -547,8 +547,8 @@ export default function AdminQuarriesScreen({
                         {moderationBadge(quarry.moderation_status).label}
                       </span>
                     </td>
-                    <td className="w-[340px] min-w-[340px] align-top p-4">
-                      <div className="flex flex-wrap gap-2 md:flex-nowrap md:whitespace-nowrap">
+                    <td className="w-[340px] min-w-[340px] align-top p-4 pr-6">
+                      <div className="flex max-w-full flex-wrap items-center justify-end gap-2">
                         <button
                           onClick={() => handleOpenModal(quarry)}
                           className="p-2 text-slate-400 hover:text-[#2DB0E6] hover:bg-[#2DB0E6]/10 rounded-xl transition-all"
@@ -567,9 +567,9 @@ export default function AdminQuarriesScreen({
                           <Trash2 className="w-5 h-5" />
                         </button>
                         {["pending_moderation", "has_pending_changes"].includes(quarry.moderation_status || "") && quarry.id && (
-                          <div className="flex flex-col items-stretch gap-2">
-                            <button disabled={isModerating} onClick={() => void moderatePoint(quarry.id!, "approve")} className="w-28 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50">Одобрить</button>
-                            <button disabled={isModerating} onClick={() => rejectPoint(quarry.id!)} className="w-28 rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-50">Отклонить</button>
+                          <div className="flex max-w-full flex-wrap items-center justify-end gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2">
+                            <button disabled={isModerating} onClick={() => void moderatePoint(quarry.id!, "approve")} className="w-28 shrink-0 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50">Одобрить</button>
+                            <button disabled={isModerating} onClick={() => rejectPoint(quarry.id!)} className="w-28 shrink-0 rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-50">Отклонить</button>
                           </div>
                         )}
                       </div>
@@ -631,7 +631,7 @@ export default function AdminQuarriesScreen({
                   ) : null}
                 </div>
                 <PlacementDates item={quarry} />
-                <div className="flex flex-wrap gap-2 mt-3 md:mt-0 md:justify-end">
+                <div className="mt-3 flex max-w-full flex-wrap items-center justify-end gap-2 md:mt-0">
                   <button
                     onClick={() => handleOpenModal(quarry)}
                     className="p-2 text-slate-400 hover:text-[#2DB0E6] hover:bg-[#2DB0E6]/10 rounded-xl transition-all"
@@ -650,9 +650,9 @@ export default function AdminQuarriesScreen({
                     <Trash2 className="w-5 h-5" />
                   </button>
                   {["pending_moderation", "has_pending_changes"].includes(quarry.moderation_status || "") && quarry.id ? (
-                    <div className="flex flex-col items-stretch gap-2">
-                      <button disabled={isModerating} onClick={() => void moderatePoint(quarry.id!, "approve")} className="w-28 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 disabled:opacity-50">Одобрить</button>
-                      <button disabled={isModerating} onClick={() => rejectPoint(quarry.id!)} className="w-28 rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 disabled:opacity-50">Отклонить</button>
+                    <div className="flex max-w-full flex-wrap items-center justify-end gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2">
+                      <button disabled={isModerating} onClick={() => void moderatePoint(quarry.id!, "approve")} className="w-28 shrink-0 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 disabled:opacity-50">Одобрить</button>
+                      <button disabled={isModerating} onClick={() => rejectPoint(quarry.id!)} className="w-28 shrink-0 rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 disabled:opacity-50">Отклонить</button>
                     </div>
                   ) : null}
                 </div>

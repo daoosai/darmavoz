@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import PullToRefresh from "react-simple-pull-to-refresh";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, Info, List, MapPin, Package, Truck, X } from "lucide-react";
@@ -205,6 +205,7 @@ export default function OrdersScreen({
   focusedOrderId?: string | null;
   onBackToOrders?: () => void;
 }) {
+  const screenRef = useRef<HTMLDivElement>(null);
   const { role, token } = useAuthStore();
   const { orders, isLoading, setOrders, setIsLoading, clearOrders } = useClientOrdersStore();
   const [activeTab, setActiveTab] = useState<"current" | "history">("current");
@@ -259,6 +260,17 @@ export default function OrdersScreen({
       setActiveTab("current");
     }
   }, [focusedOrderId]);
+
+  useEffect(() => {
+    const scrollContainer = screenRef.current?.closest("main");
+
+    if (scrollContainer) {
+      scrollContainer.scrollTop = 0;
+      return;
+    }
+
+    window.scrollTo(0, 0);
+  }, []);
 
   const handleRefresh = async () => {
     await fetchOrders();
@@ -408,7 +420,7 @@ export default function OrdersScreen({
   }
 
   return (
-    <div className="min-h-[calc(100vh-68px)] bg-gray-50">
+    <div ref={screenRef} className="min-h-[calc(100vh-68px)] bg-gray-50">
       <div className="relative z-10 bg-gray-50 px-4 pb-2 pt-4">
         {focusedOrderId ? (
           <button
@@ -454,7 +466,7 @@ export default function OrdersScreen({
           <div className="p-4 text-center text-sm text-slate-500">Обновление...</div>
         }
       >
-        <div className="min-h-screen bg-gray-50 px-4 pb-24 pt-4">
+        <div className="bg-gray-50 px-4 pb-24 pt-4">
           <AnimatePresence mode="wait">
             {activeTab === "current" ? (
               <motion.div

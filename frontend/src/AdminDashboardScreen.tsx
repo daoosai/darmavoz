@@ -255,7 +255,9 @@ export default function AdminDashboardScreen({
   const [pendingEquipmentModerationCount, setPendingEquipmentModerationCount] =
     useState(0);
   const [pendingWaterSepticCount, setPendingWaterSepticCount] = useState(0);
+  const [pendingWaterCount, setPendingWaterCount] = useState(0);
   const [pendingSepticProfileCount, setPendingSepticProfileCount] = useState(0);
+  const [hideWaterBanner, setHideWaterBanner] = useState(false);
   const [hideSepticBanner, setHideSepticBanner] = useState(false);
   const [ordersRequiresClarificationCount, setOrdersRequiresClarificationCount] =
     useState(0);
@@ -829,6 +831,7 @@ export default function AdminDashboardScreen({
       if (!res.ok) return;
       const data = await res.json().catch(() => ({}));
       setPendingWaterSepticCount(Number(data.water_septic) || 0);
+      setPendingWaterCount(Number(data.water_points) || 0);
       setPendingSepticProfileCount(Number(data.septic_profiles) || 0);
       setOrdersRequiresClarificationCount(Number(data.orders_requires_clarification) || 0);
     } catch {
@@ -1778,6 +1781,30 @@ export default function AdminDashboardScreen({
         </button>
         </div>
       </header>
+
+      {pendingWaterCount > 0 && !hideWaterBanner ? (
+        <div className="mx-auto mt-4 flex w-full max-w-6xl flex-col gap-3 rounded-2xl border border-sky-200 bg-[linear-gradient(135deg,rgba(240,249,255,1)_0%,rgba(224,242,254,1)_100%)] px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 rounded-2xl bg-sky-500/10 p-2 text-sky-600">
+              <Droplets className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-sm font-black text-slate-900">Есть новые точки воды, ожидающие модерации</p>
+              <p className="mt-1 text-sm text-slate-600">Сейчас на проверке: {pendingWaterCount}.</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setHideWaterBanner(true);
+              openSidebarSection("water_septic");
+            }}
+            className="inline-flex items-center justify-center rounded-xl bg-sky-500 px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-sky-600"
+          >
+            Проверить
+          </button>
+        </div>
+      ) : null}
 
       {pendingSepticProfileCount > 0 && !hideSepticBanner ? (
         <div className="mx-auto mt-4 flex w-full max-w-6xl flex-col gap-3 rounded-2xl border border-sky-200 bg-[linear-gradient(135deg,rgba(240,249,255,1)_0%,rgba(224,242,254,1)_100%)] px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">

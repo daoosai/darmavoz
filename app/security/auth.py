@@ -49,7 +49,7 @@ async def get_current_user(
             username=username,
             role=payload.get("role"),
             client_id=payload.get("client_id"),
-            auth_version=payload.get("auth_version"),
+            auth_version=payload.get("auth_version", 1),
         )
     except JWTError:
         raise credentials_exception
@@ -85,7 +85,7 @@ async def get_current_client(
             username=payload.get("sub"),
             role=payload.get("role"),
             client_id=payload.get("client_id"),
-            auth_version=payload.get("auth_version"),
+            auth_version=payload.get("auth_version", 1),
         )
     except JWTError:
         raise credentials_exception

@@ -247,7 +247,7 @@ export default function LoginScreen({
                 onClick={onSelectWaterSepticPartnerRegister}
                 className="text-sm font-semibold text-[#2DB0E6]"
               >
-                Регистрация предложений по воде
+                Регистрация предложений по воде/септик
               </button>
             </div>
           </>

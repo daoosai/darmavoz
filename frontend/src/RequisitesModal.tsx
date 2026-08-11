@@ -33,10 +33,7 @@ export default function RequisitesModal({ isOpen, onClose }: RequisitesModalProp
         </div>
 
         <div className="mt-6 space-y-2 text-sm leading-relaxed text-slate-700">
-          <p>Индивидуальный предприниматель</p>
-          <p className="font-bold text-slate-900">Масловский Сергей Николаевич</p>
-          <p>ИНН: 720414310753</p>
-          <p>ОГРНИП: 324723200032630</p>
+          <p className="font-bold text-slate-900">ООО «ДАРМАВОЗ»</p>
           <p>Домен: darmavoz.ru</p>
           <p>Электронная почта: darmavozrt@mail.ru</p>
           <p>Телефон: +7 (922) 009-00-20</p>

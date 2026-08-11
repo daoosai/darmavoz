@@ -37,7 +37,7 @@ export default function WelcomeScreen({
           </a>
         </p>
         <div className="text-xs text-gray-500 mt-2 text-center">
-          ИП Масловский Сергей Николаевич | ИНН 720414310753 | ОГРНИП 324723200032630
+          ООО «ДАРМАВОЗ»
         </div>
       </footer>
     </div>

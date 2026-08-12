@@ -428,6 +428,36 @@ function MainContent({
     setMapMaterial(null);
   };
 
+  const openSpecialCategory = (path: "/water" | "/septics", tab: "water" | "septic") => {
+    if (typeof window !== "undefined" && window.location.pathname !== path) {
+      window.history.pushState({}, "", path);
+    }
+    setCurrentPath(path);
+    setMapMaterial(null);
+    closeMaterialSheet();
+    setActiveTab(tab);
+  };
+
+  const handleCatalogMaterialClick = (material: MaterialProps) => {
+    const categoryName = (
+      material.category?.name ||
+      categories.find((category: Category) => category.id === material.category_id)?.name ||
+      ""
+    ).toLowerCase();
+
+    if (categoryName.includes("вода") || categoryName.includes("water")) {
+      openSpecialCategory("/water", "water");
+      return;
+    }
+
+    if (categoryName.includes("септик") || categoryName.includes("septic")) {
+      openSpecialCategory("/septics", "septic");
+      return;
+    }
+
+    setMaterialActionChoice(material);
+  };
+
   useEffect(() => {
     if (!quickBuyMaterial) return;
     if (role !== "client" || !token) return;
@@ -445,8 +475,8 @@ function MainContent({
       return;
     }
     if (currentPath === "/water" && activeTab !== "water") { setActiveTab("water"); return; }
-    if (currentPath === "/septic" && activeTab !== "septic") { setActiveTab("septic"); return; }
-    if (currentPath !== "/map" && currentPath !== "/water" && currentPath !== "/septic" && (activeTab === "map" || activeTab === "water" || activeTab === "septic")) {
+    if ((currentPath === "/septic" || currentPath === "/septics") && activeTab !== "septic") { setActiveTab("septic"); return; }
+    if (currentPath !== "/map" && currentPath !== "/water" && currentPath !== "/septic" && currentPath !== "/septics" && (activeTab === "map" || activeTab === "water" || activeTab === "septic")) {
       setActiveTab("home");
     }
   }, [activeTab, currentPath, setActiveTab]);
@@ -506,25 +536,18 @@ function MainContent({
                 </button>
               </div>
 
-              <div className="mx-4 mb-5">
+              <div className="mx-4 mb-6">
                 <button
                   type="button"
-                  onClick={() => {
-                    const nextPath = "/septic";
-                    if (typeof window !== "undefined" && window.location.pathname !== nextPath) {
-                      window.history.pushState({}, "", nextPath);
-                    }
-                    setCurrentPath(nextPath);
-                    setMapMaterial(null);
-                    closeMaterialSheet();
-                    setActiveTab("septic");
-                  }}
-                  className="flex w-full items-center gap-4 rounded-2xl bg-sky-500 p-4 text-left text-white shadow-[0_10px_24px_rgba(14,165,233,0.22)] transition hover:bg-sky-600"
+                  onClick={() => openSpecialCategory("/septics", "septic")}
+                  className="flex w-full items-center gap-4 rounded-2xl bg-sky-500 px-5 py-4 text-left text-white shadow-sm transition active:scale-[0.99] hover:bg-sky-600"
                 >
-                  <span className="rounded-2xl bg-white/20 p-3"><Droplets className="h-6 w-6" /></span>
-                  <span className="min-w-0">
+                  <span className="rounded-xl bg-white/20 p-3">
+                    <Droplets className="h-7 w-7" />
+                  </span>
+                  <span>
                     <span className="block text-base font-black">Откачка септиков</span>
-                    <span className="mt-0.5 block text-sm text-sky-50">Выбрать исполнителя и позвонить</span>
+                    <span className="mt-0.5 block text-sm text-sky-100">Выбрать исполнителя и позвонить</span>
                   </span>
                 </button>
               </div>
@@ -544,21 +567,9 @@ function MainContent({
               </div>}
 
               {serviceDirection === "delivery" ? <>
-              {/* Delivery direction */}
-              <section className="mx-4 mb-6 overflow-hidden">
-                <div className="px-4 pb-3 pt-4">
-                  <h2 className="text-xl font-black text-slate-900">
-                    Доставка материалов
-                  </h2>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Выберите категорию сыпучих материалов
-                  </p>
-                </div>
-                <div
-                  className="overflow-x-auto px-4 pb-4"
-                  style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-                >
-                  <div className="flex gap-2">
+              {/* Category tabs */}
+              <section className="mb-6">
+                <div className="flex overflow-x-auto whitespace-nowrap hide-scrollbar gap-2 px-4 pb-2">
                     <button
                       onClick={() => setSelectedCategoryId(null)}
                       className={`px-5 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all duration-200 ${
@@ -582,7 +593,20 @@ function MainContent({
                         {cat?.name}
                       </button>
                     ))}
-                  </div>
+                    <button
+                      type="button"
+                      onClick={() => openSpecialCategory("/water", "water")}
+                      className="px-5 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all duration-200 bg-slate-50 text-slate-500 hover:bg-slate-100"
+                    >
+                      Вода
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openSpecialCategory("/septics", "septic")}
+                      className="px-5 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all duration-200 bg-slate-50 text-slate-500 hover:bg-slate-100"
+                    >
+                      Септики
+                    </button>
                 </div>
               </section>
 
@@ -610,7 +634,7 @@ function MainContent({
                       <ProductCard
                         key={material.id}
                         material={material}
-                        onClick={() => setMaterialActionChoice(material)}
+                        onClick={() => handleCatalogMaterialClick(material)}
                       />
                     ))
                 )}
@@ -638,13 +662,7 @@ function MainContent({
 
           {activeTab === "map" && <GlobalMapScreen />}
           {activeTab === "water" && <WaterMapScreen />}
-          {activeTab === "septic" && <SepticCatalogScreen onBack={() => {
-            if (typeof window !== "undefined" && window.location.pathname !== "/") {
-              window.history.pushState({}, "", "/");
-            }
-            setCurrentPath("/");
-            setActiveTab("home");
-          }} />}
+          {activeTab === "septic" && <SepticCatalogScreen />}
 
           {activeTab === "profile" &&
             (role === "client" ? (

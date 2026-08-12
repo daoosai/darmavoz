@@ -3,9 +3,12 @@ import {
   Archive,
   CheckCircle2,
   Loader2,
+  ImagePlus,
   MapPin,
   Phone,
   RefreshCw,
+  Star,
+  Trash2,
   Truck,
   X,
   XCircle,
@@ -23,6 +26,14 @@ import {
 type ManagementTab = "water" | "septic";
 type StatusFilter = "all" | "pending_moderation" | "approved" | "suspended";
 
+interface MediaFile {
+  id: string;
+  public_url: string;
+  file_name: string;
+  is_primary: boolean;
+  sort_order?: number | null;
+}
+
 interface WaterPoint {
   id: string;
   water_type: "free" | "paid";
@@ -36,6 +47,7 @@ interface WaterPoint {
   price_unit?: string | null;
   description?: string | null;
   primary_image_url?: string | null;
+  media_files?: MediaFile[];
   moderation_status: string;
   moderation_comment?: string | null;
   is_active: boolean;
@@ -50,6 +62,7 @@ interface SepticProfile {
   tank_volume_m3: number | string;
   service_price: number | string;
   primary_image_url?: string | null;
+  media_files?: MediaFile[];
   moderation_status: string;
   moderation_comment?: string | null;
   is_active: boolean;
@@ -126,6 +139,8 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
   const [rejectTarget, setRejectTarget] = useState<RejectTarget | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
+  const [editMedia, setEditMedia] = useState<MediaFile[]>([]);
+  const [mediaActionId, setMediaActionId] = useState<string | null>(null);
   const [waterEditForm, setWaterEditForm] = useState(() => createWaterEditForm({
     id: "", water_type: "free", source: "", address: "", lat: 0, lon: 0, moderation_status: "", is_active: true,
   }));
@@ -236,12 +251,178 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
 
   const openWaterEdit = (point: WaterPoint) => {
     setWaterEditForm(createWaterEditForm(point));
+    setEditMedia(point.media_files || []);
     setEditTarget({ kind: "water", data: point });
   };
 
   const openSepticEdit = (profile: SepticProfile) => {
     setSepticEditForm(createSepticEditForm(profile));
+    setEditMedia(profile.media_files || []);
     setEditTarget({ kind: "septic", data: profile });
+  };
+
+  const closeEdit = () => {
+    setEditTarget(null);
+    setEditMedia([]);
+  };
+
+  const uploadAdminMedia = async (file: File, isPrimary: boolean, sortOrder: number) => {
+    if (!token || !editTarget) return;
+    const entityType = editTarget.kind === "water" ? "water_point" : "septic_profile";
+    const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+    const presignResponse = await fetch(`${baseURL}/media/presign-upload`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        entity_type: entityType,
+        entity_id: editTarget.data.id,
+        file_name: file.name,
+        content_type: file.type,
+        file_size: file.size,
+        is_primary: isPrimary,
+        sort_order: sortOrder,
+      }),
+    });
+    const presign = await presignResponse.json().catch(() => ({}));
+    if (!presignResponse.ok) {
+      throw new Error(extractApiErrorMessage(presign, "Не удалось подготовить загрузку фото"));
+    }
+
+    const uploadResponse = await fetch(presign.upload_url, {
+      method: "PUT",
+      headers: { "Content-Type": file.type },
+      body: file,
+    });
+    if (!uploadResponse.ok) throw new Error("Не удалось загрузить фотографию в хранилище");
+
+    const confirmResponse = await fetch(`${baseURL}/media/confirm`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        entity_type: entityType,
+        entity_id: editTarget.data.id,
+        object_key: presign.object_key,
+        file_name: file.name,
+        content_type: file.type,
+        file_size: file.size,
+        is_primary: isPrimary,
+        sort_order: sortOrder,
+      }),
+    });
+    const confirmed = await confirmResponse.json().catch(() => ({}));
+    if (!confirmResponse.ok) {
+      throw new Error(extractApiErrorMessage(confirmed, "Не удалось подтвердить загрузку фото"));
+    }
+    return confirmed.media_file as MediaFile;
+  };
+
+  const handleMediaFiles = async (files: FileList | null) => {
+    const images = Array.from(files || []).filter((file) => file.type.startsWith("image/"));
+    if (images.length === 0) return;
+    setMediaActionId("upload");
+    try {
+      const uploaded: MediaFile[] = [];
+      for (const [index, file] of images.entries()) {
+        const media = await uploadAdminMedia(file, editMedia.length === 0 && index === 0, editMedia.length + index);
+        if (media) uploaded.push(media);
+      }
+      setEditMedia((current) => [...current, ...uploaded]);
+      toast.success(images.length === 1 ? "Фотография добавлена" : `Добавлено фотографий: ${images.length}`);
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось добавить фотографии");
+    } finally {
+      setMediaActionId(null);
+    }
+  };
+
+  const makeMediaPrimary = async (media: MediaFile) => {
+    if (!token) return;
+    setMediaActionId(media.id);
+    try {
+      const response = await fetch(`${baseURL}/media/${media.id}/make-primary`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось выбрать главное фото"));
+      setEditMedia((current) => current.map((item) => ({ ...item, is_primary: item.id === media.id })));
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось выбрать главное фото");
+    } finally {
+      setMediaActionId(null);
+    }
+  };
+
+  const deleteMedia = async (media: MediaFile) => {
+    if (!token) return;
+    setMediaActionId(media.id);
+    try {
+      const response = await fetch(`${baseURL}/media/${media.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось удалить фото"));
+      setEditMedia((current) => current.filter((item) => item.id !== media.id));
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось удалить фото");
+    } finally {
+      setMediaActionId(null);
+    }
+  };
+
+  const renderMediaManager = () => {
+    const existingPrimaryUrl = editTarget?.data.primary_image_url;
+    const hasPrimaryInMedia = editMedia.some((media) => media.public_url === existingPrimaryUrl);
+    return (
+      <section className="rounded-2xl border border-slate-200 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h4 className="text-sm font-bold text-slate-900">Фотографии</h4>
+            <p className="mt-1 text-xs text-slate-500">Добавляйте, удаляйте и выбирайте главное фото с помощью звезды.</p>
+          </div>
+          <label className="inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold text-slate-700 hover:border-sky-400 hover:text-sky-600">
+            <ImagePlus className="h-4 w-4" />Добавить
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              disabled={mediaActionId !== null}
+              onChange={(event) => {
+                void handleMediaFiles(event.target.files);
+                event.currentTarget.value = "";
+              }}
+            />
+          </label>
+        </div>
+        {editMedia.length > 0 || existingPrimaryUrl ? (
+          <div className="mt-4 grid grid-cols-3 gap-3">
+            {editMedia.map((media) => (
+              <div key={media.id} className="relative aspect-square overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
+                <img src={resolveMediaUrl(media.public_url)} alt={media.file_name || "Фотография"} className="h-full w-full object-cover" />
+                <button type="button" disabled={media.is_primary || mediaActionId !== null} onClick={() => void makeMediaPrimary(media)} className={`absolute left-2 top-2 rounded-full p-2 shadow-sm disabled:opacity-50 ${media.is_primary ? "bg-amber-400 text-white" : "bg-white/95 text-slate-500"}`} aria-label={media.is_primary ? "Главная фотография" : "Сделать главным фото"} title={media.is_primary ? "Главная фотография" : "Сделать главным фото"}>
+                  <Star className="h-4 w-4" fill={media.is_primary ? "currentColor" : "none"} />
+                </button>
+                <button type="button" disabled={mediaActionId !== null} onClick={() => void deleteMedia(media)} className="absolute right-2 top-2 rounded-full bg-white/95 p-2 text-slate-500 shadow-sm hover:text-rose-600 disabled:opacity-50" aria-label="Удалить фото">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+                {media.is_primary ? <span className="absolute inset-x-0 bottom-0 bg-slate-900/75 px-2 py-1 text-center text-[10px] font-bold text-white">Главное фото</span> : null}
+              </div>
+            ))}
+            {existingPrimaryUrl && !hasPrimaryInMedia ? (
+              <div className="relative aspect-square overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
+                <img src={resolveMediaUrl(existingPrimaryUrl)} alt="Главная фотография" className="h-full w-full object-cover" />
+                <span className="absolute inset-x-0 bottom-0 bg-slate-900/75 px-2 py-1 text-center text-[10px] font-bold text-white">Главное фото</span>
+              </div>
+            ) : null}
+          </div>
+        ) : <div className="mt-4 rounded-xl border border-dashed border-slate-300 px-3 py-5 text-center text-sm text-slate-500">Фотографии пока не добавлены</div>}
+      </section>
+    );
   };
 
   const submitEdit = async (event: FormEvent) => {
@@ -279,7 +460,7 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось сохранить изменения"));
-      setEditTarget(null);
+      closeEdit();
       toast.success("Изменения сохранены");
       await load();
     } catch (error) {
@@ -351,7 +532,7 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
               <h3 className="text-lg font-black text-slate-900">
                 {editTarget.kind === "water" ? "Редактирование точки воды" : "Редактирование септика"}
               </h3>
-              <button type="button" onClick={() => setEditTarget(null)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100" aria-label="Закрыть">
+              <button type="button" onClick={closeEdit} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100" aria-label="Закрыть">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -378,6 +559,7 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
                   lon={waterEditForm.lon}
                   onChange={(location) => setWaterEditForm((current) => ({ ...current, ...location }))}
                 />
+                {renderMediaManager()}
                 <label className="block text-sm font-bold">Телефон
                   <input type="tel" inputMode="tel" autoComplete="tel" maxLength={18} value={waterEditForm.phone} onChange={(event) => setWaterEditForm((current) => ({ ...current, phone: formatPhoneNumber(event.target.value) }))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal" placeholder="+7 (999) 999-99-99" />
                 </label>
@@ -408,6 +590,7 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
                   lon={septicEditForm.lon}
                   onChange={(location) => setSepticEditForm((current) => ({ ...current, ...location }))}
                 />
+                {renderMediaManager()}
                 <div className="grid grid-cols-2 gap-3">
                   <label className="text-sm font-bold">Объём, м³
                     <input required type="number" min="0.1" step="0.1" value={septicEditForm.tank_volume_m3} onChange={(event) => setSepticEditForm((current) => ({ ...current, tank_volume_m3: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal" />
@@ -420,7 +603,7 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
             )}
 
             <div className="mt-5 grid grid-cols-2 gap-3">
-              <button type="button" onClick={() => setEditTarget(null)} className="rounded-xl bg-slate-100 py-3 font-bold text-slate-700">Отмена</button>
+              <button type="button" onClick={closeEdit} className="rounded-xl bg-slate-100 py-3 font-bold text-slate-700">Отмена</button>
               <button disabled={actionId === editTarget.data.id} className="flex items-center justify-center rounded-xl bg-sky-500 py-3 font-bold text-white disabled:opacity-50">
                 {actionId === editTarget.data.id ? <Loader2 className="h-5 w-5 animate-spin" /> : "Сохранить"}
               </button>

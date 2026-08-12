@@ -531,21 +531,9 @@ function MainContent({
               </div>}
 
               {serviceDirection === "delivery" ? <>
-              {/* Delivery direction */}
-              <section className="mx-4 mb-6 overflow-hidden">
-                <div className="px-4 pb-3 pt-4">
-                  <h2 className="text-xl font-black text-slate-900">
-                    Доставка материалов
-                  </h2>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Выберите категорию сыпучих материалов
-                  </p>
-                </div>
-                <div
-                  className="overflow-x-auto px-4 pb-4"
-                  style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-                >
-                  <div className="flex gap-2">
+              {/* Category tabs */}
+              <section className="mb-6">
+                <div className="flex overflow-x-auto whitespace-nowrap hide-scrollbar gap-2 px-4 pb-2">
                     <button
                       onClick={() => setSelectedCategoryId(null)}
                       className={`px-5 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all duration-200 ${
@@ -583,7 +571,6 @@ function MainContent({
                     >
                       Септики
                     </button>
-                  </div>
                 </div>
               </section>
 

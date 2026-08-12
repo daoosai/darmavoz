@@ -11,6 +11,8 @@ export interface MaterialProps {
   min_volume?: number;
   primary_image_url?: string;
   image_url?: string;
+  category_id?: string;
+  category?: { name?: string | null };
   media_files?: MediaFile[];
   delivery_options?: DeliveryOption[];
 }

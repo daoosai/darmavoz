@@ -438,6 +438,26 @@ function MainContent({
     setActiveTab(tab);
   };
 
+  const handleCatalogMaterialClick = (material: MaterialProps) => {
+    const categoryName = (
+      material.category?.name ||
+      categories.find((category: Category) => category.id === material.category_id)?.name ||
+      ""
+    ).toLowerCase();
+
+    if (categoryName.includes("вода") || categoryName.includes("water")) {
+      openSpecialCategory("/water", "water");
+      return;
+    }
+
+    if (categoryName.includes("септик") || categoryName.includes("septic")) {
+      openSpecialCategory("/septics", "septic");
+      return;
+    }
+
+    setMaterialActionChoice(material);
+  };
+
   useEffect(() => {
     if (!quickBuyMaterial) return;
     if (role !== "client" || !token) return;
@@ -598,7 +618,7 @@ function MainContent({
                       <ProductCard
                         key={material.id}
                         material={material}
-                        onClick={() => setMaterialActionChoice(material)}
+                        onClick={() => handleCatalogMaterialClick(material)}
                       />
                     ))
                 )}
@@ -626,13 +646,7 @@ function MainContent({
 
           {activeTab === "map" && <GlobalMapScreen />}
           {activeTab === "water" && <WaterMapScreen />}
-          {activeTab === "septic" && <SepticCatalogScreen onBack={() => {
-            if (typeof window !== "undefined" && window.location.pathname !== "/") {
-              window.history.pushState({}, "", "/");
-            }
-            setCurrentPath("/");
-            setActiveTab("home");
-          }} />}
+          {activeTab === "septic" && <SepticCatalogScreen />}
 
           {activeTab === "profile" &&
             (role === "client" ? (

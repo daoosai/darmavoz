@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Droplets, ImageIcon, List, Map, MapPin, Phone, X } from "lucide-react";
+import { Droplets, ImageIcon, List, Map, MapPin, Phone, X } from "lucide-react";
 
 import MapWebGLFallback, {
   load2GisMapSdk,
@@ -20,15 +20,11 @@ interface SepticProfile {
   media_files?: { id: string; public_url: string; is_primary?: boolean }[];
 }
 
-interface Props {
-  onBack: () => void;
-}
-
 const DEFAULT_CENTER: [number, number] = [65.534328, 57.152286];
 
 const phoneLink = (phone: string) => phone.replace(/[^+\d]/g, "");
 
-export default function SepticCatalogScreen({ onBack }: Props) {
+export default function SepticCatalogScreen() {
   const [profiles, setProfiles] = useState<SepticProfile[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -113,11 +109,12 @@ export default function SepticCatalogScreen({ onBack }: Props) {
         const element = document.createElement("button");
         element.type = "button";
         element.className = "water-map-marker";
-        element.setAttribute("aria-label", `Септик: ${formatPhoneNumber(profile.phone) || profile.address}`);
+        const labelText = `Септик ${Number(profile.tank_volume_m3).toLocaleString("ru-RU")} м³`;
+        element.setAttribute("aria-label", labelText);
 
         const label = document.createElement("span");
         label.className = "water-map-marker__label";
-        label.textContent = formatPhoneNumber(profile.phone) || "Септик";
+        label.textContent = labelText;
         element.appendChild(label);
 
         const labelTail = document.createElement("span");
@@ -187,9 +184,6 @@ export default function SepticCatalogScreen({ onBack }: Props) {
       <header className="pointer-events-none absolute inset-x-0 top-0 z-10 px-4 pt-[max(env(safe-area-inset-top),1rem)]">
         <div className="pointer-events-auto rounded-3xl bg-white/95 p-3 shadow-xl backdrop-blur">
           <div className="flex items-center gap-3">
-            <button type="button" onClick={onBack} className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-slate-100 text-slate-600" aria-label="Вернуться на главный экран">
-              <ArrowLeft className="h-5 w-5" />
-            </button>
             <span className="rounded-2xl bg-sky-100 p-2.5 text-sky-600"><Droplets className="h-5 w-5" /></span>
             <div className="min-w-0 flex-1">
               <h1 className="text-lg font-black text-slate-900">Карта септиков</h1>

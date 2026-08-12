@@ -536,6 +536,22 @@ function MainContent({
                 </button>
               </div>
 
+              <div className="mx-4 mb-6">
+                <button
+                  type="button"
+                  onClick={() => openSpecialCategory("/septics", "septic")}
+                  className="flex w-full items-center gap-4 rounded-2xl bg-sky-500 px-5 py-4 text-left text-white shadow-sm transition active:scale-[0.99] hover:bg-sky-600"
+                >
+                  <span className="rounded-xl bg-white/20 p-3">
+                    <Droplets className="h-7 w-7" />
+                  </span>
+                  <span>
+                    <span className="block text-base font-black">Откачка септиков</span>
+                    <span className="mt-0.5 block text-sm text-sky-100">Выбрать исполнителя и позвонить</span>
+                  </span>
+                </button>
+              </div>
+
               {/* Search Bar */}
               {serviceDirection === "delivery" && <div className="px-4 mb-6">
                 <div className="relative">

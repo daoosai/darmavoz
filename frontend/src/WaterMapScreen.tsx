@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Droplets, MapPin, Phone, X } from "lucide-react";
+import { Droplets, List, Map, MapPin, Phone, X } from "lucide-react";
 
 import MapWebGLFallback, {
   load2GisMapSdk,
@@ -31,6 +31,7 @@ export default function WaterMapScreen() {
   const [points, setPoints] = useState<WaterPoint[]>([]);
   const [filter, setFilter] = useState<"" | WaterType>("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showList, setShowList] = useState(false);
   const [loading, setLoading] = useState(true);
   const [mapUnavailable, setMapUnavailable] = useState(false);
   const [mapReady, setMapReady] = useState(false);
@@ -151,6 +152,24 @@ export default function WaterMapScreen() {
     }
   }, [mapReady, visiblePoints]);
 
+  const renderPointSummary = (point: WaterPoint) => (
+    <button
+      key={point.id}
+      type="button"
+      onClick={() => setSelectedId(point.id)}
+      className="w-full rounded-2xl bg-white p-4 text-left shadow-sm transition hover:shadow-md"
+    >
+      <div className="flex items-start gap-3">
+        <span className={`rounded-xl p-2.5 ${point.water_type === "free" ? "bg-sky-100 text-sky-600" : "bg-emerald-100 text-emerald-600"}`}><Droplets className="h-5 w-5" /></span>
+        <div className="min-w-0 flex-1">
+          <h2 className="font-black text-slate-900">{point.name || point.source}</h2>
+          <p className="mt-1 flex gap-1 text-sm text-slate-600"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" /><span className="line-clamp-2">{point.address}</span></p>
+          <p className="mt-2 text-sm font-bold text-sky-600">{point.water_type === "free" ? "Бесплатная вода" : `${Number(point.price).toLocaleString("ru-RU")} ₽/${point.price_unit || "ед."}`}</p>
+        </div>
+      </div>
+    </button>
+  );
+
   return (
     <section className="relative flex h-full min-h-[480px] flex-1 overflow-hidden rounded-t-[28px] bg-slate-100 sm:rounded-[28px]">
       <div className="absolute inset-0 bg-slate-100">
@@ -158,14 +177,28 @@ export default function WaterMapScreen() {
         {mapUnavailable ? <MapWebGLFallback className="absolute inset-0" /> : null}
       </div>
 
-      <header className="pointer-events-none absolute inset-x-0 top-0 z-10 p-4">
-        <div className="pointer-events-auto rounded-3xl bg-white/95 p-4 shadow-xl backdrop-blur">
+      {showList ? (
+        <div className="absolute inset-0 z-[5] overflow-y-auto bg-slate-100 px-4 pb-6 pt-44">
+          <div className="space-y-3">{visiblePoints.map(renderPointSummary)}</div>
+        </div>
+      ) : null}
+
+      <header className="pointer-events-none absolute inset-x-0 top-0 z-10 pt-[max(env(safe-area-inset-top),0px)]">
+        <div className={`pointer-events-auto bg-white/95 backdrop-blur ${showList ? "m-0 w-full rounded-none border-b border-gray-200 px-4 py-3 shadow-sm" : "m-4 rounded-xl p-4 shadow-lg"}`}>
         <div className="flex items-center gap-3">
           <span className="rounded-2xl bg-sky-100 p-3 text-sky-600"><Droplets /></span>
-          <div>
-            <h1 className="text-xl font-black text-slate-900">Карта воды</h1>
-              <p className="text-sm text-slate-500">Выберите каплю на карте</p>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl font-black text-slate-900">{showList ? "Список воды" : "Карта воды"}</h1>
+              <p className="text-sm text-slate-500">{showList ? "Выберите точку воды из списка" : "Выберите каплю на карте"}</p>
           </div>
+          <button
+            type="button"
+            onClick={() => { setShowList((current) => !current); setSelectedId(null); }}
+            className="flex shrink-0 items-center gap-1.5 rounded-xl bg-sky-500 px-3 py-2 text-sm font-bold text-white"
+          >
+            {showList ? <Map className="h-4 w-4" /> : <List className="h-4 w-4" />}
+            {showList ? "На карте" : "Списком"}
+          </button>
         </div>
         <div className="mt-4 flex gap-2" role="group" aria-label="Фильтр типа воды">
           {(["", "free", "paid"] as const).map((value) => (

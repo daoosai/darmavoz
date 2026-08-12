@@ -176,18 +176,18 @@ export default function SepticCatalogScreen() {
       </div>
 
       {showList ? (
-        <div className="absolute inset-0 z-[5] overflow-y-auto bg-slate-100 px-4 pb-6 pt-28">
+        <div className="absolute inset-0 z-[5] overflow-y-auto bg-slate-100 px-4 pb-6 pt-24">
           <div className="space-y-3">{profiles.map(renderProfileSummary)}</div>
         </div>
       ) : null}
 
-      <header className="pointer-events-none absolute inset-x-0 top-0 z-10 px-4 pt-[max(env(safe-area-inset-top),1rem)]">
-        <div className="pointer-events-auto rounded-3xl bg-white/95 p-3 shadow-xl backdrop-blur">
+      <header className="pointer-events-none absolute inset-x-0 top-0 z-10 pt-[max(env(safe-area-inset-top),0px)]">
+        <div className={`pointer-events-auto bg-white/95 backdrop-blur ${showList ? "m-0 w-full rounded-none border-b border-gray-200 px-4 py-3 shadow-sm" : "m-4 rounded-xl p-3 shadow-lg"}`}>
           <div className="flex items-center gap-3">
             <span className="rounded-2xl bg-sky-100 p-2.5 text-sky-600"><Droplets className="h-5 w-5" /></span>
             <div className="min-w-0 flex-1">
-              <h1 className="text-lg font-black text-slate-900">Карта септиков</h1>
-              <p className="text-sm text-slate-500">Выберите машину на карте</p>
+              <h1 className="text-lg font-black text-slate-900">{showList ? "Список септиков" : "Карта септиков"}</h1>
+              <p className="text-sm text-slate-500">{showList ? "Выберите исполнителя из списка" : "Выберите машину на карте"}</p>
             </div>
             <button
               type="button"

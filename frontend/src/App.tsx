@@ -428,6 +428,16 @@ function MainContent({
     setMapMaterial(null);
   };
 
+  const openSpecialCategory = (path: "/water" | "/septics", tab: "water" | "septic") => {
+    if (typeof window !== "undefined" && window.location.pathname !== path) {
+      window.history.pushState({}, "", path);
+    }
+    setCurrentPath(path);
+    setMapMaterial(null);
+    closeMaterialSheet();
+    setActiveTab(tab);
+  };
+
   useEffect(() => {
     if (!quickBuyMaterial) return;
     if (role !== "client" || !token) return;
@@ -445,8 +455,8 @@ function MainContent({
       return;
     }
     if (currentPath === "/water" && activeTab !== "water") { setActiveTab("water"); return; }
-    if (currentPath === "/septic" && activeTab !== "septic") { setActiveTab("septic"); return; }
-    if (currentPath !== "/map" && currentPath !== "/water" && currentPath !== "/septic" && (activeTab === "map" || activeTab === "water" || activeTab === "septic")) {
+    if ((currentPath === "/septic" || currentPath === "/septics") && activeTab !== "septic") { setActiveTab("septic"); return; }
+    if (currentPath !== "/map" && currentPath !== "/water" && currentPath !== "/septic" && currentPath !== "/septics" && (activeTab === "map" || activeTab === "water" || activeTab === "septic")) {
       setActiveTab("home");
     }
   }, [activeTab, currentPath, setActiveTab]);
@@ -506,29 +516,6 @@ function MainContent({
                 </button>
               </div>
 
-              <div className="mx-4 mb-5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const nextPath = "/septic";
-                    if (typeof window !== "undefined" && window.location.pathname !== nextPath) {
-                      window.history.pushState({}, "", nextPath);
-                    }
-                    setCurrentPath(nextPath);
-                    setMapMaterial(null);
-                    closeMaterialSheet();
-                    setActiveTab("septic");
-                  }}
-                  className="flex w-full items-center gap-4 rounded-2xl bg-sky-500 p-4 text-left text-white shadow-[0_10px_24px_rgba(14,165,233,0.22)] transition hover:bg-sky-600"
-                >
-                  <span className="rounded-2xl bg-white/20 p-3"><Droplets className="h-6 w-6" /></span>
-                  <span className="min-w-0">
-                    <span className="block text-base font-black">Откачка септиков</span>
-                    <span className="mt-0.5 block text-sm text-sky-50">Выбрать исполнителя и позвонить</span>
-                  </span>
-                </button>
-              </div>
-
               {/* Search Bar */}
               {serviceDirection === "delivery" && <div className="px-4 mb-6">
                 <div className="relative">
@@ -582,6 +569,20 @@ function MainContent({
                         {cat?.name}
                       </button>
                     ))}
+                    <button
+                      type="button"
+                      onClick={() => openSpecialCategory("/water", "water")}
+                      className="px-5 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all duration-200 bg-slate-50 text-slate-500 hover:bg-slate-100"
+                    >
+                      Вода
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openSpecialCategory("/septics", "septic")}
+                      className="px-5 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all duration-200 bg-slate-50 text-slate-500 hover:bg-slate-100"
+                    >
+                      Септики
+                    </button>
                   </div>
                 </div>
               </section>

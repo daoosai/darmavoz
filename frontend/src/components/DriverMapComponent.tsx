@@ -112,6 +112,11 @@ export default function DriverMapComponent() {
     [drivers, filters],
   );
 
+  const offlineDrivers = useMemo(
+    () => drivers.filter((driver) => !driver.is_on_shift),
+    [drivers],
+  );
+
   const selectedDriver = useMemo(
     () => visibleDrivers.find((driver) => driver.id === selectedDriverId) ?? null,
     [selectedDriverId, visibleDrivers],
@@ -235,7 +240,7 @@ export default function DriverMapComponent() {
     setFilters((current) => ({ ...current, [status]: !current[status] }));
   };
 
-  const renderDriverCard = (driver: DriverMapItem) => {
+  const renderDriverCard = (driver: DriverMapItem, onClose?: () => void) => {
     const status = getMapStatus(driver);
     return (
       <div className="space-y-4">
@@ -247,9 +252,21 @@ export default function DriverMapComponent() {
               {formatPhoneNumber(driver.phone)}
             </a>
           </div>
-          <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${statusMeta[status].badgeClass}`}>
-            {statusMeta[status].label}
-          </span>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${statusMeta[status].badgeClass}`}>
+              {statusMeta[status].label}
+            </span>
+            {onClose ? (
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-full p-2 text-slate-500 hover:bg-slate-100"
+                aria-label="Закрыть карточку водителя"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            ) : null}
+          </div>
         </div>
 
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-sm">
@@ -278,8 +295,8 @@ export default function DriverMapComponent() {
         {mapUnavailable ? <MapWebGLFallback className="absolute inset-0" /> : null}
       </div>
 
-      <header className="pointer-events-none absolute inset-x-0 top-0 z-10 pt-[max(env(safe-area-inset-top),2.5rem)]">
-        <div className="pointer-events-auto m-3 rounded-2xl border border-white/60 bg-white/85 p-3 shadow-lg backdrop-blur sm:m-4 sm:max-w-xl">
+      <header className="pointer-events-none absolute inset-x-0 top-0 z-10 pt-[max(env(safe-area-inset-top),0.25rem)]">
+        <div className="pointer-events-auto mx-3 rounded-2xl border border-white/60 bg-white/85 p-3 shadow-lg backdrop-blur sm:mx-4 sm:max-w-xl">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">
               <span className="rounded-xl bg-sky-100 p-2 text-sky-600"><MapPin className="h-5 w-5" /></span>
@@ -305,6 +322,21 @@ export default function DriverMapComponent() {
               </label>
             ))}
           </div>
+
+          {offlineDrivers.length > 0 ? (
+            <section className="mt-3 max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-white/90 p-3" aria-label="Водители не в сети">
+              <h2 className="text-sm font-black text-slate-900">Водители не в сети</h2>
+              <ul className="mt-2 space-y-2">
+                {offlineDrivers.map((driver) => (
+                  <li key={driver.id} className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                    <p className="truncate font-bold text-slate-800">{driver.name}</p>
+                    <p className="mt-0.5 truncate">{formatPhoneNumber(driver.phone)}</p>
+                    <p className="mt-0.5 truncate">{driver.vehicle_title || "Автомобиль не указан"}{driver.vehicle_plate_number ? ` · ${driver.vehicle_plate_number}` : ""}</p>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
         </div>
       </header>
 
@@ -314,8 +346,7 @@ export default function DriverMapComponent() {
 
       {selectedDriver ? (
         <aside className="absolute right-4 top-40 z-20 hidden w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl sm:block">
-          <button type="button" onClick={() => setSelectedDriverId(null)} className="absolute right-3 top-3 rounded-full p-2 text-slate-500 hover:bg-slate-100" aria-label="Закрыть карточку водителя"><X className="h-5 w-5" /></button>
-          {renderDriverCard(selectedDriver)}
+          {renderDriverCard(selectedDriver, () => setSelectedDriverId(null))}
         </aside>
       ) : null}
 
@@ -326,7 +357,7 @@ export default function DriverMapComponent() {
         sheetClassName="pointer-events-auto w-full max-w-md rounded-t-2xl bg-white shadow-2xl"
         showOverlay={false}
       >
-        {selectedDriver ? <div className="max-h-[70dvh] overflow-y-auto px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))]">{renderDriverCard(selectedDriver)}</div> : null}
+        {selectedDriver ? <div className="max-h-[70dvh] overflow-y-auto px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))]">{renderDriverCard(selectedDriver, () => setSelectedDriverId(null))}</div> : null}
       </SwipeableBottomSheet>
     </section>
   );

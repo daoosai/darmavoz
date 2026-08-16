@@ -548,11 +548,6 @@ export default function DriverProfileScreen({
                 );
               })}
             </div>
-            {hasActiveOrder && (
-              <span className="px-1 text-center text-xs text-red-500">
-                Во время активного заказа водитель автоматически занят.
-              </span>
-            )}
           </div>
         )}
 
@@ -578,7 +573,7 @@ export default function DriverProfileScreen({
             {isOnShift && (
               <p className={`mt-3 rounded-xl px-3 py-2 text-xs font-semibold ${trackingState === "tracking" ? "bg-emerald-50 text-emerald-700" : trackingState === "permission_denied" ? "bg-amber-50 text-amber-800" : trackingState === "error" ? "bg-rose-50 text-rose-700" : "bg-slate-50 text-slate-600"}`}>
                 {trackingState === "tracking"
-                  ? "Геопозиция передаётся. Не закрывайте приложение во время смены."
+                  ? "Геопозиция передаётся логисту и администратору"
                   : trackingState === "permission_denied"
                     ? "Разрешите доступ к геопозиции в настройках телефона."
                     : trackingState === "error"

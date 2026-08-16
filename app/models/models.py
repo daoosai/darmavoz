@@ -161,6 +161,19 @@ class Driver(Base):
         nullable=False,
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_on_shift: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        server_default=text("false"),
+    )
+    last_lat: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    last_lon: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    last_location_updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+    )
     is_auto_dispatch_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     dispatch_priority: Mapped[int] = mapped_column(Integer, default=100, nullable=False)
     temporary_penalty_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

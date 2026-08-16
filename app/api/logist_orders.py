@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_db
 from app.models.models import Order, User
 from app.schemas.client import ClientFcmTokenIn, ClientFcmTokenOut
+from app.schemas.driver import DriverMapResponse
 from app.schemas.order import (
     ClarificationRequest,
     ClarificationResolveRequest,
@@ -21,6 +22,7 @@ from app.schemas.order import (
 )
 from app.security.auth import get_current_logist_user
 from app.services.fcm_tokens import detach_fcm_token_from_other_entities
+from app.services.driver_locations import list_driver_map
 from app.services.dispatch_service import (
     build_dispatch_history,
     build_order_status_history,
@@ -36,6 +38,15 @@ from app.services.dispatch_service import (
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+@router.get("/driver-map", response_model=list[DriverMapResponse])
+async def get_driver_map(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_logist_user),
+) -> list[DriverMapResponse]:
+    del current_user
+    return await list_driver_map(db)
 
 
 @router.post("/me/fcm-token", response_model=ClientFcmTokenOut)

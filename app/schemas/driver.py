@@ -162,6 +162,26 @@ class DriverStatusUpdate(BaseModel):
     status: str
 
 
+class DriverShiftUpdate(BaseModel):
+    is_on_shift: bool
+
+
+class DriverShiftOut(BaseModel):
+    ok: bool
+    is_on_shift: bool
+    status: str
+
+
+class DriverLocationUpdate(BaseModel):
+    lat: float = Field(ge=-90, le=90)
+    lon: float = Field(ge=-180, le=180)
+
+
+class DriverLocationUpdateOut(BaseModel):
+    ok: bool
+    received_at: datetime
+
+
 class DriverFcmTokenIn(BaseModel):
     token: str = Field(min_length=1, max_length=1024)
 
@@ -184,6 +204,10 @@ class DriverResponse(BaseModel):
     name: str
     phone: str
     status: str | None = None
+    is_on_shift: bool = False
+    last_lat: float | None = None
+    last_lon: float | None = None
+    last_location_updated_at: datetime | None = None
     vehicle_id: UUID | None = None
     is_auto_dispatch_enabled: bool = True
     dispatch_priority: int = 100
@@ -210,6 +234,26 @@ class DriverFleetResponse(DriverResponse):
     @classmethod
     def normalize_fleet_vehicle_urls(cls, value: str | None) -> str | None:
         return normalize_public_url(value)
+
+
+class DriverMapResponse(BaseModel):
+    id: UUID
+    name: str
+    phone: str
+    is_on_shift: bool
+    map_status: str
+    last_lat: float | None = None
+    last_lon: float | None = None
+    last_location_updated_at: datetime | None = None
+    last_location_is_stale: bool
+    vehicle_id: UUID
+    vehicle_title: str
+    vehicle_plate_number: str | None = None
+    vehicle_type: str | None = None
+    vehicle_cubature_min: float | None = None
+    vehicle_cubature_max: float | None = None
+    vehicle_tonnage_min: float | None = None
+    vehicle_tonnage_max: float | None = None
 
 
 class DriverRegistrationResponse(BaseModel):

@@ -559,6 +559,30 @@ export default function DriverOrdersScreen({
             Активные заказы
           </h2>
 
+          {!isOnShift && isDriverActive && moderationStatus === "approved" && (
+            <section className="mb-4 rounded-2xl border border-sky-100 bg-gradient-to-br from-sky-50 to-white p-4 shadow-sm">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <h3 className="font-bold text-slate-900">Начать смену</h3>
+                  <p className="mt-1 text-xs font-medium leading-relaxed text-slate-600">
+                    Передавайте геопозицию каждые 15 секунд, пока приложение открыто.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={false}
+                  aria-label="Начать смену"
+                  disabled={isUpdatingShift}
+                  onClick={() => handleShiftChange(true)}
+                  className={`relative h-8 w-14 shrink-0 rounded-full bg-slate-300 transition-colors ${isUpdatingShift ? "cursor-not-allowed opacity-60" : ""}`}
+                >
+                  <span className="absolute top-1 h-6 w-6 translate-x-1 rounded-full bg-white shadow transition-transform" />
+                </button>
+              </div>
+            </section>
+          )}
+
           {isProfileLoading ? (
             <div className="flex flex-col items-center justify-center p-10 text-slate-400 min-h-[50vh]">
               <Loader2 className="w-8 h-8 animate-spin mb-3 text-[#2DB0E6]" />
@@ -657,6 +681,7 @@ export default function DriverOrdersScreen({
         <DriverProfileScreen
           onLogout={handleLogout}
           onProfileUpdate={fetchProfile}
+          hasActiveOrder={orders.length > 0}
           onOpenSupport={() => setActiveTab("support")}
           isOnShift={isOnShift}
           isUpdatingShift={isUpdatingShift}

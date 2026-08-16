@@ -70,6 +70,7 @@ interface DriverProfile {
 export default function DriverProfileScreen({
   onLogout,
   onProfileUpdate,
+  hasActiveOrder,
   onOpenSupport,
   isOnShift = false,
   isUpdatingShift = false,
@@ -78,6 +79,7 @@ export default function DriverProfileScreen({
 }: {
   onLogout: () => void;
   onProfileUpdate?: () => void;
+  hasActiveOrder?: boolean;
   onOpenSupport?: () => void;
   isOnShift?: boolean;
   isUpdatingShift?: boolean;
@@ -95,6 +97,9 @@ export default function DriverProfileScreen({
     {},
   );
   const isDriverInactive = profile?.is_active === false;
+
+  const [status, setStatus] = useState<"available" | "busy" | "offline">("offline");
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
   const [showHistory, setShowHistory] = useState(false);
   const [historyOrders, setHistoryOrders] = useState<DriverOrder[]>([]);
@@ -146,12 +151,64 @@ export default function DriverProfileScreen({
         const data = await res.json();
         const prof = Array.isArray(data) ? data[0] : data;
         setProfile(prof);
+        setStatus(hasActiveOrder ? "busy" : prof?.status || "offline");
       }
     } catch (e) {
     } finally {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (hasActiveOrder) {
+      setStatus("busy");
+    }
+  }, [hasActiveOrder]);
+
+  const handleStatusChange = async (newStatus: "available" | "busy" | "offline") => {
+    if (hasActiveOrder && newStatus !== "busy") return;
+
+    try {
+      setIsUpdatingStatus(true);
+      const currentToken = useAuthStore.getState().token;
+      const res = await fetch(`${baseURL}/driver/profile/status`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${currentToken}`,
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (res.status === 401) {
+        await logoutCurrentSession();
+        onLogout();
+        return;
+      }
+      if (res.status === 403) {
+        toast.error("Недостаточно прав (403)");
+        return;
+      }
+      if (!res.ok) {
+        throw new Error("Не удалось обновить статус");
+      }
+
+      setStatus(newStatus);
+      toast.success("Статус изменен");
+      onProfileUpdate?.();
+    } catch (error) {
+      console.error("Error updating status:", error);
+      toast.error("Не удалось обновить статус");
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
+
+  const statuses = [
+    { id: "available", label: "Свободен", dot: "bg-emerald-500" },
+    { id: "busy", label: "Занят", dot: "bg-amber-500" },
+    { id: "offline", label: "Недоступен", dot: "bg-slate-400" },
+  ] as const;
 
   const handleSubmitForModeration = async () => {
     try {
@@ -468,6 +525,38 @@ export default function DriverProfileScreen({
         <UpdateBanner />
 
         {moderationStatus === "approved" && !isDriverInactive && (
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-1 rounded-xl border border-slate-100 bg-white p-1 shadow-sm">
+              {statuses.map((item) => {
+                const isActive = status === item.id;
+                const isBlocked = Boolean(hasActiveOrder && item.id !== "busy");
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    disabled={isUpdatingStatus || isBlocked}
+                    onClick={() => handleStatusChange(item.id)}
+                    className={`flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-bold transition-all ${
+                      isActive
+                        ? "scale-100 bg-slate-100 text-slate-900 shadow-inner"
+                        : "scale-95 text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+                    } ${isUpdatingStatus || isBlocked ? "cursor-not-allowed opacity-50" : ""}`}
+                  >
+                    <span className={`h-2 w-2 rounded-full ${item.dot} ${isActive ? "animate-pulse" : ""}`} />
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+            {hasActiveOrder && (
+              <span className="px-1 text-center text-xs text-red-500">
+                Во время активного заказа водитель автоматически занят.
+              </span>
+            )}
+          </div>
+        )}
+
+        {moderationStatus === "approved" && !isDriverInactive && isOnShift && (
           <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between gap-4">
               <div>

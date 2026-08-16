@@ -570,9 +570,9 @@ export default function DriverProfileScreen({
                 aria-label="На смене"
                 disabled={isUpdatingShift || !onShiftChange}
                 onClick={() => onShiftChange?.(!isOnShift)}
-                className={`relative h-8 w-14 shrink-0 rounded-full transition-colors ${isOnShift ? "bg-emerald-500" : "bg-slate-300"} ${isUpdatingShift || !onShiftChange ? "cursor-not-allowed opacity-60" : ""}`}
+                className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${isOnShift ? "bg-emerald-500" : "bg-slate-300"} ${isUpdatingShift || !onShiftChange ? "cursor-not-allowed opacity-60" : ""}`}
               >
-                <span className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-transform ${isOnShift ? "translate-x-7" : "translate-x-1"}`} />
+                <span className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${isOnShift ? "translate-x-5" : "translate-x-0"}`} />
               </button>
             </div>
             {isOnShift && (

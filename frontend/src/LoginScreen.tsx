@@ -226,28 +226,28 @@ export default function LoginScreen({
                 onClick={onSelectSupplierRegister}
                 className="text-sm font-semibold text-[#2DB0E6]"
               >
-                Регистрация карьеров/накопителей
+                Регистрация/вход карьеров и накопителей
               </button>
               <button
                 type="button"
                 onClick={onSelectEquipmentOwnerRegister}
                 className="text-sm font-semibold text-[#2DB0E6]"
               >
-                Регистрация спецтехники
+                Регистрация/вход спецтехники
               </button>
               <button
                 type="button"
                 onClick={onSelectDriverRegister}
                 className="text-sm font-semibold text-[#2DB0E6]"
               >
-                Регистрация самосвалов
+                Регистрация/вход самосвалов
               </button>
               <button
                 type="button"
                 onClick={onSelectWaterSepticPartnerRegister}
                 className="text-sm font-semibold text-[#2DB0E6]"
               >
-                Регистрация предложений по воде/септику
+                Регистрация/вход предложений по воде и септику
               </button>
             </div>
           </>

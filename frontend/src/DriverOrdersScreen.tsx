@@ -575,9 +575,9 @@ export default function DriverOrdersScreen({
                   aria-label="Начать смену"
                   disabled={isUpdatingShift}
                   onClick={() => handleShiftChange(true)}
-                  className={`relative h-8 w-14 shrink-0 rounded-full bg-slate-300 transition-colors ${isUpdatingShift ? "cursor-not-allowed opacity-60" : ""}`}
+                  className={`relative h-6 w-11 shrink-0 rounded-full bg-slate-300 transition-colors ${isUpdatingShift ? "cursor-not-allowed opacity-60" : ""}`}
                 >
-                  <span className="absolute top-1 h-6 w-6 translate-x-1 rounded-full bg-white shadow transition-transform" />
+                  <span className="absolute left-0.5 top-0.5 h-5 w-5 translate-x-0 rounded-full bg-white shadow transition-transform" />
                 </button>
               </div>
             </section>

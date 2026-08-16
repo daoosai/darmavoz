@@ -59,9 +59,9 @@ class Settings(BaseSettings):
     PLACEMENT_WORKER_BATCH_SIZE: int = 200
     DRIVER_TEST_USERNAME: str = "driver1"
     DRIVER_TEST_PASSWORD: str = "driver123"
-    ANDROID_VERSION: str = "2.8.1"
-    IOS_VERSION: str = "2.8.1"
-    WEB_VERSION: str = "2.8.1"
+    ANDROID_VERSION: str = "2.9.0"
+    IOS_VERSION: str = "2.9.0"
+    WEB_VERSION: str = "2.9.0"
     APK_DOWNLOAD_URL: str = "/static/darmavoz-test.apk"
     APK_FORCE_UPDATE: bool = False
     SMTP_HOST: str | None = None

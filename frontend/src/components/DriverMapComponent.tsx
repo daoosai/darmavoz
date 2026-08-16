@@ -10,6 +10,7 @@ import MapWebGLFallback, {
 } from "./MapWebGLFallback";
 
 type DriverMapStatus = "available" | "busy" | "offline";
+type ActiveDriverMapStatus = Exclude<DriverMapStatus, "offline">;
 
 export interface DriverMapItem {
   id: string;
@@ -34,6 +35,7 @@ export interface DriverMapItem {
 const DEFAULT_CENTER: [number, number] = [65.534328, 57.152286];
 const STALE_LOCATION_MS = 2 * 60 * 1000;
 const POLLING_INTERVAL_MS = 15 * 1000;
+const activeDriverStatuses: ActiveDriverMapStatus[] = ["available", "busy"];
 
 const statusMeta: Record<DriverMapStatus, { label: string; markerClass: string; badgeClass: string }> = {
   available: {
@@ -92,10 +94,9 @@ const formatLocationUpdatedAt = (value: string | null) => {
 export default function DriverMapComponent() {
   const token = useAuthStore((state) => state.token);
   const [drivers, setDrivers] = useState<DriverMapItem[]>([]);
-  const [filters, setFilters] = useState<Record<DriverMapStatus, boolean>>({
+  const [filters, setFilters] = useState<Record<ActiveDriverMapStatus, boolean>>({
     available: true,
     busy: true,
-    offline: true,
   });
   const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -107,13 +108,21 @@ export default function DriverMapComponent() {
   const markerRefs = useRef<any[]>([]);
   const hasCenteredOnDrivers = useRef(false);
 
+  const activeDrivers = useMemo(
+    () => drivers.filter((driver) => getMapStatus(driver) !== "offline"),
+    [drivers],
+  );
+
   const visibleDrivers = useMemo(
-    () => drivers.filter((driver) => filters[getMapStatus(driver)]),
-    [drivers, filters],
+    () => activeDrivers.filter((driver) => {
+      const status = getMapStatus(driver);
+      return status !== "offline" && filters[status];
+    }),
+    [activeDrivers, filters],
   );
 
   const offlineDrivers = useMemo(
-    () => drivers.filter((driver) => !driver.is_on_shift),
+    () => drivers.filter((driver) => getMapStatus(driver) === "offline"),
     [drivers],
   );
 
@@ -236,7 +245,7 @@ export default function DriverMapComponent() {
     }
   }, [mapReady, visibleDrivers]);
 
-  const toggleFilter = (status: DriverMapStatus) => {
+  const toggleFilter = (status: ActiveDriverMapStatus) => {
     setFilters((current) => ({ ...current, [status]: !current[status] }));
   };
 
@@ -289,13 +298,14 @@ export default function DriverMapComponent() {
   };
 
   return (
-    <section className="relative flex min-h-[calc(100dvh-13rem)] flex-1 overflow-hidden rounded-[28px] bg-slate-100 sm:min-h-[560px]">
+    <section className="flex min-h-[calc(100dvh-13rem)] flex-1 flex-col gap-4">
+      <div className="relative flex min-h-[50vh] flex-1 overflow-hidden rounded-[28px] bg-slate-100 sm:min-h-[560px]">
       <div className="absolute inset-0 bg-slate-100">
         <div ref={mapContainerRef} className="h-full w-full" aria-label="Карта водителей" />
         {mapUnavailable ? <MapWebGLFallback className="absolute inset-0" /> : null}
       </div>
 
-      <header className="pointer-events-none absolute inset-x-0 top-0 z-10 pt-[max(env(safe-area-inset-top),0.25rem)]">
+      <header className="pointer-events-none absolute inset-x-0 top-4 z-10 pt-[env(safe-area-inset-top)]">
         <div className="pointer-events-auto mx-3 rounded-2xl border border-white/60 bg-white/85 p-3 shadow-lg backdrop-blur sm:mx-4 sm:max-w-xl">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">
@@ -305,11 +315,11 @@ export default function DriverMapComponent() {
                 <p className="text-xs font-medium text-slate-500">Обновляется каждые 15 секунд</p>
               </div>
             </div>
-            <span className="flex shrink-0 items-center gap-1 text-xs font-bold text-slate-500"><Truck className="h-4 w-4" />{visibleDrivers.length}</span>
+            <span className="flex shrink-0 items-center gap-1 text-xs font-bold text-slate-500"><Truck className="h-4 w-4" />{activeDrivers.length}</span>
           </div>
 
           <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Фильтр статуса водителей">
-            {(Object.keys(statusMeta) as DriverMapStatus[]).map((status) => (
+            {activeDriverStatuses.map((status) => (
               <label key={status} className="flex cursor-pointer items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm">
                 <input
                   type="checkbox"
@@ -323,20 +333,6 @@ export default function DriverMapComponent() {
             ))}
           </div>
 
-          {offlineDrivers.length > 0 ? (
-            <section className="mt-3 max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-white/90 p-3" aria-label="Водители не в сети">
-              <h2 className="text-sm font-black text-slate-900">Водители не в сети</h2>
-              <ul className="mt-2 space-y-2">
-                {offlineDrivers.map((driver) => (
-                  <li key={driver.id} className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                    <p className="truncate font-bold text-slate-800">{driver.name}</p>
-                    <p className="mt-0.5 truncate">{formatPhoneNumber(driver.phone)}</p>
-                    <p className="mt-0.5 truncate">{driver.vehicle_title || "Автомобиль не указан"}{driver.vehicle_plate_number ? ` · ${driver.vehicle_plate_number}` : ""}</p>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
         </div>
       </header>
 
@@ -359,6 +355,23 @@ export default function DriverMapComponent() {
       >
         {selectedDriver ? <div className="max-h-[70dvh] overflow-y-auto px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))]">{renderDriverCard(selectedDriver, () => setSelectedDriverId(null))}</div> : null}
       </SwipeableBottomSheet>
+      </div>
+
+      {offlineDrivers.length > 0 ? (
+        <section className="max-h-72 shrink-0 overflow-y-auto rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm" aria-label="Водители не в сети или недоступны">
+          <h2 className="text-lg font-black text-slate-900">Водители не в сети / недоступны</h2>
+          <ul className="mt-3 space-y-2">
+            {offlineDrivers.map((driver) => (
+              <li key={driver.id} className="rounded-xl bg-slate-50 px-3 py-3 text-sm text-slate-600">
+                <p className="truncate font-bold text-slate-900">{driver.name}</p>
+                <p className="mt-0.5 truncate">{formatPhoneNumber(driver.phone)}</p>
+                <p className="mt-0.5 truncate">{driver.vehicle_title || "Автомобиль не указан"}</p>
+                <p className="mt-0.5 truncate">{driver.vehicle_plate_number || "Госномер не указан"}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </section>
   );
 }

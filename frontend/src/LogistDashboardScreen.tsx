@@ -32,6 +32,7 @@ import {
   ClipboardList,
   Layers,
   Headphones,
+  Map,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import UpdateBanner from "./UpdateBanner";
@@ -46,6 +47,7 @@ import AdminEquipmentScreen, { type AdminEquipmentTab } from "./AdminEquipmentSc
 import SupportScreen from "./SupportScreen";
 import WaterSepticModerationPanel from "./components/admin/WaterSepticModerationPanel";
 import NotificationCenter from "./components/shared/NotificationCenter";
+import DriverMapComponent from "./components/DriverMapComponent";
 
 interface AdminOrder {
   id: string;
@@ -159,15 +161,17 @@ const isDriverCompatibleWithOrder = (
 
 interface LogistDashboardScreenProps {
   onLogout: () => void;
+  initialTab?: LogistTab;
 }
+
+type LogistTab = "orders" | "drivers" | "driver_map" | "equipment" | "moderation" | "support" | "profile";
 
 export default function LogistDashboardScreen({
   onLogout,
+  initialTab = "orders",
 }: LogistDashboardScreenProps) {
   const { token } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<"orders" | "drivers" | "equipment" | "moderation" | "support" | "profile">(
-    "orders",
-  );
+  const [activeTab, setActiveTab] = useState<LogistTab>(initialTab);
   const [equipmentTab, setEquipmentTab] = useState<AdminEquipmentTab>("listings");
   const [equipmentPlacementFilter, setEquipmentPlacementFilter] =
     useState<PlacementStatus | "">("");
@@ -628,6 +632,16 @@ export default function LogistDashboardScreen({
             >
               Водители
             </button>
+            <a
+              href="/logist/driver-map"
+              className={`flex-1 sm:w-32 py-2 text-sm font-bold rounded-lg transition-colors flex justify-center items-center gap-2 ${
+                activeTab === "driver_map"
+                  ? "bg-white text-slate-800 shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              Карта
+            </a>
             <button
               onClick={() => setActiveTab("support")}
               className={`flex-1 sm:w-32 py-2 text-sm font-bold rounded-lg transition-colors flex justify-center items-center gap-2 ${
@@ -1243,6 +1257,8 @@ export default function LogistDashboardScreen({
                 </div>
               )}
             </>
+          ) : activeTab === "driver_map" ? (
+            <DriverMapComponent />
           ) : activeTab === "equipment" ? (
             <AdminEquipmentScreen
               tab={equipmentTab}
@@ -1292,6 +1308,19 @@ export default function LogistDashboardScreen({
           </div>
           <span className="text-[10px] font-bold">Водители</span>
         </button>
+        <a
+          href="/logist/driver-map"
+          className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${
+            activeTab === "driver_map"
+              ? "text-[#2DB0E6]"
+              : "text-gray-400 hover:text-gray-600"
+          }`}
+        >
+          <div className={`p-1.5 rounded-xl transition-colors ${activeTab === "driver_map" ? "bg-[#2DB0E6]/10" : ""}`}>
+            <Map className="w-6 h-6" />
+          </div>
+          <span className="text-[10px] font-bold">Карта</span>
+        </a>
         <button
           onClick={() => setActiveTab("support")}
           className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${

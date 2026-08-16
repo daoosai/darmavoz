@@ -48,6 +48,7 @@ interface DriverProfile {
     | "rejected"
     | "suspended"
     | null;
+  is_on_shift?: boolean;
   vehicle: {
     id: string;
     brand: string;
@@ -69,13 +70,19 @@ interface DriverProfile {
 export default function DriverProfileScreen({
   onLogout,
   onProfileUpdate,
-  hasActiveOrder,
   onOpenSupport,
+  isOnShift = false,
+  isUpdatingShift = false,
+  trackingState = "idle",
+  onShiftChange,
 }: {
   onLogout: () => void;
   onProfileUpdate?: () => void;
-  hasActiveOrder?: boolean;
   onOpenSupport?: () => void;
+  isOnShift?: boolean;
+  isUpdatingShift?: boolean;
+  trackingState?: "idle" | "tracking" | "permission_denied" | "error";
+  onShiftChange?: (isOnShift: boolean) => void;
 }) {
   const { token } = useAuthStore();
   const [profile, setProfile] = useState<DriverProfile | null>(null);
@@ -88,9 +95,6 @@ export default function DriverProfileScreen({
     {},
   );
   const isDriverInactive = profile?.is_active === false;
-
-  const [status, setStatus] = useState<"available" | "busy" | "offline">("offline");
-  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
   const [showHistory, setShowHistory] = useState(false);
   const [historyOrders, setHistoryOrders] = useState<DriverOrder[]>([]);
@@ -142,61 +146,12 @@ export default function DriverProfileScreen({
         const data = await res.json();
         const prof = Array.isArray(data) ? data[0] : data;
         setProfile(prof);
-        if (prof?.status) {
-          setStatus(prof.status);
-        }
       }
     } catch (e) {
     } finally {
       setIsLoading(false);
     }
   };
-
-  const handleStatusChange = async (newStatus: "available" | "busy" | "offline") => {
-    try {
-      setIsUpdatingStatus(true);
-      const currentToken = useAuthStore.getState().token;
-      const res = await fetch(`${baseURL}/driver/profile/status`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${currentToken}`,
-        },
-        body: JSON.stringify({ status: newStatus }),
-      });
-
-      if (res.status === 401) {
-        await logoutCurrentSession();
-        onLogout();
-        return;
-      }
-      if (res.status === 403) {
-        toast.error("Недостаточно прав (403)");
-        return;
-      }
-
-      if (!res.ok) {
-        throw new Error("Не удалось обновить статус");
-      }
-
-      setStatus(newStatus);
-      toast.success(`Статус изменен`);
-      onProfileUpdate?.();
-    } catch (error) {
-      console.error("Error updating status:", error);
-      setStatus(newStatus);
-      toast.success(`[Mock] Статус изменен`);
-      onProfileUpdate?.();
-    } finally {
-      setIsUpdatingStatus(false);
-    }
-  };
-
-  const statuses = [
-    { id: "available", label: "Свободен", dot: "bg-emerald-500" },
-    { id: "busy", label: "Занят", dot: "bg-amber-500" },
-    { id: "offline", label: "Недоступен", dot: "bg-slate-400" },
-  ] as const;
 
   const handleSubmitForModeration = async () => {
     try {
@@ -513,38 +468,34 @@ export default function DriverProfileScreen({
         <UpdateBanner />
 
         {moderationStatus === "approved" && !isDriverInactive && (
-          <div className="flex flex-col gap-2">
-            <div className="bg-white p-1 rounded-xl flex items-center relative gap-1 shadow-sm border border-slate-100">
-              {statuses.map((s) => {
-                const isActive = status === s.id;
-                const isBlocked = hasActiveOrder && (s.id === "available" || s.id === "offline");
-                return (
-                  <button
-                    key={s.id}
-                    disabled={isUpdatingStatus || isBlocked}
-                    onClick={() => handleStatusChange(s.id)}
-                    className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all duration-200 flex justify-center items-center gap-1.5 min-h-[40px]
-                      ${
-                        isActive
-                          ? "bg-slate-100 shadow-inner text-slate-900 scale-100"
-                          : "text-slate-500 hover:text-slate-700 hover:bg-slate-50 scale-95"
-                      } 
-                      ${isUpdatingStatus || isBlocked ? "opacity-50 cursor-not-allowed pointer-events-none" : ""}`}
-                  >
-                    <span
-                      className={`w-2 h-2 rounded-full ${s.dot} ${
-                        isActive ? "animate-pulse" : ""
-                      }`}
-                    />
-                    {s.label}
-                  </button>
-                );
-              })}
+          <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h2 className="font-bold text-slate-900">На смене</h2>
+                <p className="mt-1 text-xs font-medium text-slate-500">Передаём геопозицию раз в 15 секунд, пока приложение открыто.</p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={isOnShift}
+                aria-label="На смене"
+                disabled={isUpdatingShift || !onShiftChange}
+                onClick={() => onShiftChange?.(!isOnShift)}
+                className={`relative h-8 w-14 shrink-0 rounded-full transition-colors ${isOnShift ? "bg-emerald-500" : "bg-slate-300"} ${isUpdatingShift || !onShiftChange ? "cursor-not-allowed opacity-60" : ""}`}
+              >
+                <span className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-transform ${isOnShift ? "translate-x-7" : "translate-x-1"}`} />
+              </button>
             </div>
-            {!!hasActiveOrder && (
-              <span className="text-xs text-red-500 px-1 text-center">
-                Смена статуса недоступна во время активного заказа
-              </span>
+            {isOnShift && (
+              <p className={`mt-3 rounded-xl px-3 py-2 text-xs font-semibold ${trackingState === "tracking" ? "bg-emerald-50 text-emerald-700" : trackingState === "permission_denied" ? "bg-amber-50 text-amber-800" : trackingState === "error" ? "bg-rose-50 text-rose-700" : "bg-slate-50 text-slate-600"}`}>
+                {trackingState === "tracking"
+                  ? "Геопозиция передаётся. Не закрывайте приложение во время смены."
+                  : trackingState === "permission_denied"
+                    ? "Разрешите доступ к геопозиции в настройках телефона."
+                    : trackingState === "error"
+                      ? "Не удалось получить или передать геопозицию. Повторим через 15 секунд."
+                      : "Подготавливаем передачу геопозиции…"}
+              </p>
             )}
           </div>
         )}
@@ -765,14 +716,13 @@ export default function DriverProfileScreen({
             try {
               const currentToken = useAuthStore.getState().token;
 
-              // Set offline status
-              await fetch(`${baseURL}/driver/profile/status`, {
+              await fetch(`${baseURL}/driver/profile/shift`, {
                 method: "PATCH",
                 headers: {
                   "Content-Type": "application/json",
                   Authorization: `Bearer ${currentToken}`,
                 },
-                body: JSON.stringify({ status: "offline" }),
+                body: JSON.stringify({ is_on_shift: false }),
               });
             } catch (e) {}
             await logoutCurrentSession();

@@ -28,6 +28,7 @@ import toast from "react-hot-toast";
 import { logoutCurrentSession } from "./pushAuth";
 import SupportScreen from "./SupportScreen";
 import { handleOpenNavigator } from "./openNavigator";
+import { useDriverLocationTracking } from "./useDriverLocationTracking";
 
 export interface DriverOrder {
   id: string;
@@ -68,8 +69,6 @@ const getEstimatedTotalAmount = (
 const formatCurrency = (value?: number | null) =>
   `${Number(value ?? 0).toLocaleString("ru-RU")} ₽`;
 
-type DriverStatus = "available" | "busy" | "offline";
-
 interface DriverOrdersScreenProps {
   onLogout: () => void;
 }
@@ -78,9 +77,9 @@ export default function DriverOrdersScreen({
   onLogout,
 }: DriverOrdersScreenProps) {
   const { token } = useAuthStore();
-  const [status, setStatus] = useState<DriverStatus>("offline");
-  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [activeTab, setActiveTab] = useState<"orders" | "profile" | "support">("orders");
+  const [isOnShift, setIsOnShift] = useState(false);
+  const [isUpdatingShift, setIsUpdatingShift] = useState(false);
 
   const [orders, setOrders] = useState<DriverOrder[]>([]);
 
@@ -90,6 +89,7 @@ export default function DriverOrdersScreen({
   const [isLoading, setIsLoading] = useState(true);
   const [moderationStatus, setModerationStatus] = useState<string | null>(null);
   const [isDriverActive, setIsDriverActive] = useState(true);
+  const { trackingState } = useDriverLocationTracking({ isOnShift, token });
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playCount = useRef(0);
@@ -148,9 +148,7 @@ export default function DriverOrdersScreen({
         const profile = Array.isArray(data) ? data[0] : data;
         setModerationStatus(profile?.moderation_status || null);
         setIsDriverActive(profile?.is_active !== false);
-        if (profile?.status) {
-          setStatus(profile.status);
-        }
+        setIsOnShift(Boolean(profile?.is_on_shift));
 
         if (
           profile?.is_active === false ||
@@ -164,6 +162,40 @@ export default function DriverOrdersScreen({
       // Ignore error for now
     } finally {
       setIsProfileLoading(false);
+    }
+  };
+
+  const handleShiftChange = async (nextValue: boolean) => {
+    const currentToken = useAuthStore.getState().token;
+    if (!currentToken) return;
+
+    try {
+      setIsUpdatingShift(true);
+      const response = await fetch(`${baseURL}/driver/profile/shift`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${currentToken}`,
+        },
+        body: JSON.stringify({ is_on_shift: nextValue }),
+      });
+      if (response.status === 401) {
+        await logoutCurrentSession();
+        onLogout();
+        return;
+      }
+      if (!response.ok) {
+        throw new Error("Не удалось изменить статус смены");
+      }
+
+      const data = await response.json().catch(() => ({}));
+      setIsOnShift(Boolean(data?.is_on_shift ?? nextValue));
+      toast.success(nextValue ? "Смена начата" : "Смена завершена");
+    } catch (error) {
+      console.warn("Не удалось изменить статус смены", error);
+      toast.error("Не удалось изменить статус смены");
+    } finally {
+      setIsUpdatingShift(false);
     }
   };
 
@@ -625,8 +657,11 @@ export default function DriverOrdersScreen({
         <DriverProfileScreen
           onLogout={handleLogout}
           onProfileUpdate={fetchProfile}
-          hasActiveOrder={orders.length > 0}
           onOpenSupport={() => setActiveTab("support")}
+          isOnShift={isOnShift}
+          isUpdatingShift={isUpdatingShift}
+          trackingState={trackingState}
+          onShiftChange={handleShiftChange}
         />
       ) : (
         <SupportScreen onBack={() => setActiveTab("profile")} />

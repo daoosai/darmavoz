@@ -201,9 +201,21 @@ export default function App() {
       return role === "admin" ? <AdminOrdersListScreen role="admin" /> : renderPartnerLogin();
     }
 
+    if (currentPath === "/admin/driver-map") {
+      return role === "admin" ? (
+        <AdminDashboardScreen onLogout={() => setCurrentRoute("login")} initialTab="driver_map" />
+      ) : renderPartnerLogin();
+    }
+
     if (currentPath === "/logist/orders") {
       return role === "logist" ? (
         <LogistDashboardScreen onLogout={() => setCurrentRoute("login")} />
+      ) : renderPartnerLogin();
+    }
+
+    if (currentPath === "/logist/driver-map") {
+      return role === "logist" ? (
+        <LogistDashboardScreen onLogout={() => setCurrentRoute("login")} initialTab="driver_map" />
       ) : renderPartnerLogin();
     }
 

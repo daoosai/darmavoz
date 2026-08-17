@@ -7,6 +7,11 @@ import { Geolocation } from "@capacitor/geolocation";
 import { baseURL } from "./utils";
 
 const LOCATION_INTERVAL_MS = 30 * 1000;
+const GPS_POSITION_OPTIONS = {
+  enableHighAccuracy: true,
+  maximumAge: 0,
+  timeout: 10_000,
+} as const;
 
 type TrackingState = "idle" | "tracking" | "permission_denied" | "error";
 
@@ -15,8 +20,8 @@ interface UseDriverLocationTrackingParams {
   token: string | null;
 }
 
-const isLocationGranted = (permissions: Awaited<ReturnType<typeof Geolocation.checkPermissions>>) =>
-  permissions.location === "granted" || permissions.coarseLocation === "granted";
+const isPreciseLocationGranted = (permissions: Awaited<ReturnType<typeof Geolocation.checkPermissions>>) =>
+  permissions.location === "granted";
 
 export function useDriverLocationTracking({
   isOnShift,
@@ -83,31 +88,33 @@ export function useDriverLocationTracking({
     }
   }, [isOnShift, token]);
 
+  const ensurePreciseLocationPermission = useCallback(async () => {
+    let permissions = await Geolocation.checkPermissions();
+    if (!isPreciseLocationGranted(permissions)) {
+      permissions = await Geolocation.requestPermissions({ permissions: ["location"] });
+    }
+
+    if (!isPreciseLocationGranted(permissions)) {
+      setTrackingState("permission_denied");
+      return false;
+    }
+
+    return true;
+  }, []);
+
   const sendForegroundLocation = useCallback(async () => {
     if (!isOnShift || !token) return;
 
     try {
-      let permissions = await Geolocation.checkPermissions();
-      if (!isLocationGranted(permissions)) {
-        permissions = await Geolocation.requestPermissions();
-      }
+      if (!await ensurePreciseLocationPermission()) return;
 
-      if (!isLocationGranted(permissions)) {
-        setTrackingState("permission_denied");
-        return;
-      }
-
-      const position = await Geolocation.getCurrentPosition({
-        enableHighAccuracy: true,
-        timeout: 10_000,
-        maximumAge: 0,
-      });
+      const position = await Geolocation.getCurrentPosition(GPS_POSITION_OPTIONS);
       await sendLocationCoordinates(position.coords.latitude, position.coords.longitude);
     } catch (error) {
       console.warn("Не удалось получить геопозицию водителя", error);
       setTrackingState("error");
     }
-  }, [isOnShift, sendLocationCoordinates, token]);
+  }, [ensurePreciseLocationPermission, isOnShift, sendLocationCoordinates, token]);
 
   const startForegroundTracking = useCallback(() => {
     if (intervalRef.current != null) return;
@@ -123,11 +130,13 @@ export function useDriverLocationTracking({
     if (backgroundTrackingActiveRef.current) return;
 
     try {
-      await BackgroundGeolocation.start(
+      if (!await ensurePreciseLocationPermission()) return;
+
+      const startPromise = BackgroundGeolocation.start(
         {
           backgroundTitle: "Геопозиция Дармавоз",
           backgroundMessage: "Передаём ваше местоположение логисту",
-          requestPermissions: true,
+          requestPermissions: false,
           stale: false,
           distanceFilter: 0,
           minIntervalMs: LOCATION_INTERVAL_MS,
@@ -148,11 +157,16 @@ export function useDriverLocationTracking({
       );
       backgroundTrackingActiveRef.current = true;
       void sendForegroundLocation();
+      void startPromise.catch((error) => {
+        backgroundTrackingActiveRef.current = false;
+        console.warn("Не удалось запустить фоновую геолокацию", error);
+        startForegroundTracking();
+      });
     } catch (error) {
       console.warn("Не удалось запустить фоновую геолокацию", error);
       startForegroundTracking();
     }
-  }, [sendForegroundLocation, sendLocationCoordinates, startForegroundTracking]);
+  }, [ensurePreciseLocationPermission, sendForegroundLocation, sendLocationCoordinates, startForegroundTracking]);
 
   const startTracking = useCallback(() => {
     if (!isOnShift || !token) return;

@@ -565,7 +565,7 @@ export default function DriverOrdersScreen({
                 <div>
                   <h3 className="font-bold text-slate-900">Начать смену</h3>
                   <p className="mt-1 text-xs font-medium leading-relaxed text-slate-600">
-                    Передавайте геопозицию каждые 15 секунд, пока приложение открыто.
+                    Геопозиция передаётся логисту и администратору каждые 30 секунд.
                   </p>
                 </div>
                 <button

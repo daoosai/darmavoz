@@ -569,7 +569,7 @@ export default function DriverProfileScreen({
             <div className="flex items-center justify-between gap-4">
               <div>
                 <h2 className="font-bold text-slate-900">На смене</h2>
-                <p className="mt-1 text-xs font-medium text-slate-500">Передаём геопозицию раз в 15 секунд, пока приложение открыто.</p>
+                <p className="mt-1 text-xs font-medium text-slate-500">Геопозиция передаётся логисту и администратору каждые 30 секунд.</p>
               </div>
               <button
                 type="button"
@@ -590,7 +590,7 @@ export default function DriverProfileScreen({
                   : trackingState === "permission_denied"
                     ? "Разрешите доступ к геопозиции в настройках телефона."
                     : trackingState === "error"
-                      ? "Не удалось получить или передать геопозицию. Повторим через 15 секунд."
+                      ? "Не удалось получить или передать геопозицию. Повторим через 30 секунд."
                       : "Подготавливаем передачу геопозиции…"}
               </p>
             )}

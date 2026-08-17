@@ -36,6 +36,7 @@ const DEFAULT_CENTER: [number, number] = [65.534328, 57.152286];
 const STALE_LOCATION_MS = 2 * 60 * 1000;
 const POLLING_INTERVAL_MS = 15 * 1000;
 const activeDriverStatuses: ActiveDriverMapStatus[] = ["available", "busy"];
+const toMapGlCoordinates = (longitude: number, latitude: number): [number, number] => [longitude, latitude];
 
 const statusMeta: Record<DriverMapStatus, { label: string; markerClass: string; badgeClass: string }> = {
   available: {
@@ -232,14 +233,14 @@ export default function DriverMapComponent() {
       marker.addEventListener("click", () => setSelectedDriverId(driver.id));
 
       return new mapgl.HtmlMarker(mapRef.current, {
-        coordinates: [Number(driver.last_lon), Number(driver.last_lat)],
+        coordinates: toMapGlCoordinates(Number(driver.last_lon), Number(driver.last_lat)),
         html: marker,
       });
     });
 
     const firstDriver = driversWithCoordinates[0];
     if (!hasCenteredOnDrivers.current && firstDriver) {
-      mapRef.current.setCenter?.([Number(firstDriver.last_lon), Number(firstDriver.last_lat)]);
+      mapRef.current.setCenter?.(toMapGlCoordinates(Number(firstDriver.last_lon), Number(firstDriver.last_lat)));
       mapRef.current.setZoom?.(11);
       hasCenteredOnDrivers.current = true;
     }
@@ -312,7 +313,7 @@ export default function DriverMapComponent() {
               <span className="rounded-xl bg-sky-100 p-2 text-sky-600"><MapPin className="h-5 w-5" /></span>
               <div>
                 <h1 className="text-lg font-black text-slate-900">Карта водителей</h1>
-                <p className="text-xs font-medium text-slate-500">Обновляется каждые 15 секунд</p>
+                <p className="text-xs font-medium text-slate-500">Обновляется каждые 30 секунд</p>
               </div>
             </div>
             <span className="flex shrink-0 items-center gap-1 text-xs font-bold text-slate-500"><Truck className="h-4 w-4" />{activeDrivers.length}</span>

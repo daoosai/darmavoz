@@ -47,7 +47,17 @@ export function useDriverLocationTracking({
 
   const sendLocationCoordinates = useCallback(async (lat: number, lon: number) => {
     if (!isOnShift || !token || isSendingRef.current) return;
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+    if (
+      !Number.isFinite(lat) ||
+      !Number.isFinite(lon) ||
+      lat < -90 ||
+      lat > 90 ||
+      lon < -180 ||
+      lon > 180
+    ) {
+      console.warn("Получены некорректные координаты водителя");
+      return;
+    }
 
     isSendingRef.current = true;
     try {
@@ -90,7 +100,7 @@ export function useDriverLocationTracking({
       const position = await Geolocation.getCurrentPosition({
         enableHighAccuracy: true,
         timeout: 10_000,
-        maximumAge: 10_000,
+        maximumAge: 0,
       });
       await sendLocationCoordinates(position.coords.latitude, position.coords.longitude);
     } catch (error) {

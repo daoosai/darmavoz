@@ -26,7 +26,16 @@ from app.schemas.driver import (
     DriverVerifyCodeRequest,
 )
 from app.schemas.token import Token
-from app.schemas.sprint19 import PasswordResetComplete, PasswordResetRequest, PasswordResetVerify, PasswordResetVerifyResponse
+from app.schemas.sprint19 import (
+    PasswordResetComplete,
+    PasswordResetRequest,
+    PasswordResetVerify,
+    PasswordResetVerifyResponse,
+    PhonePasswordResetComplete,
+    PhonePasswordResetRequest,
+    PhonePasswordResetVerify,
+    PhonePasswordResetVerifyResponse,
+)
 from app.security.auth import get_password_hash, verify_password
 from app.security.jwt import create_access_token
 from app.services.auth_email_service import send_auth_email_code
@@ -47,6 +56,11 @@ EMAIL_AUTH_CODE_TTL_SECONDS = 300
 EMAIL_AUTH_CODE_KEY_PREFIX = "otp:email"
 PASSWORD_RESET_CODE_PREFIX = "otp:password_reset"
 PASSWORD_RESET_TOKEN_PREFIX = "password_reset:token"
+PHONE_PASSWORD_RESET_OTP_PREFIX = "reset_otp:phone"
+PHONE_PASSWORD_RESET_TOKEN_PREFIX = "reset_token:phone"
+PHONE_PASSWORD_RESET_ROLES = {"driver", "supplier"}
+PHONE_PASSWORD_RESET_OTP_TTL_SECONDS = 300
+PHONE_PASSWORD_RESET_TOKEN_TTL_SECONDS = 600
 
 
 def _error_detail(code: str, message: str) -> dict[str, str]:
@@ -96,6 +110,22 @@ def _email_auth_code_key(scope: str, email: str) -> str:
 
 def _password_reset_code_key(email: str) -> str:
     return f"{PASSWORD_RESET_CODE_PREFIX}:{email}"
+
+
+def _phone_password_reset_otp_key(phone: str) -> str:
+    return f"{PHONE_PASSWORD_RESET_OTP_PREFIX}:{phone}"
+
+
+def _phone_password_reset_token_key(reset_token: str) -> str:
+    return f"{PHONE_PASSWORD_RESET_TOKEN_PREFIX}:{reset_token}"
+
+
+def _can_reset_password_by_phone(user: User | None) -> bool:
+    if user is None or not user.is_active or user.is_deleted or user.role is None:
+        return False
+    if user.role.name not in PHONE_PASSWORD_RESET_ROLES:
+        return False
+    return user.driver_profile is None or user.driver_profile.moderation_status != ModerationStatus.suspended.value
 
 
 @router.post("/password-reset/request", status_code=status.HTTP_202_ACCEPTED)
@@ -158,6 +188,83 @@ async def complete_password_reset(payload: PasswordResetComplete, db: AsyncSessi
     return {"ok": True}
 
 
+@router.post("/forgot-password/phone", status_code=status.HTTP_202_ACCEPTED)
+async def request_phone_password_reset(
+    payload: PhonePasswordResetRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    phone = normalize_phone(payload.phone)
+    user = await _get_user_by_phone(db, phone)
+    if _can_reset_password_by_phone(user):
+        code = generate_otp_code()
+        stored_code = await send_auth_sms_code(
+            phone_number=normalize_sms_phone(phone),
+            code=code,
+            log_prefix="phone_password_reset_sms",
+        )
+        await get_redis().setex(
+            _phone_password_reset_otp_key(phone),
+            PHONE_PASSWORD_RESET_OTP_TTL_SECONDS,
+            stored_code,
+        )
+    return {"ok": True, "status": "sms_sent"}
+
+
+@router.post("/forgot-password/verify-phone", response_model=PhonePasswordResetVerifyResponse)
+async def verify_phone_password_reset(
+    payload: PhonePasswordResetVerify,
+    db: AsyncSession = Depends(get_db),
+) -> PhonePasswordResetVerifyResponse:
+    phone = normalize_phone(payload.phone)
+    redis = get_redis()
+    code = await redis.get(_phone_password_reset_otp_key(phone))
+    user = await _get_user_by_phone(db, phone)
+    if code is None or not secrets.compare_digest(payload.code, code) or not _can_reset_password_by_phone(user):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неверный или истёкший код")
+
+    reset_token = secrets.token_urlsafe(32)
+    await redis.delete(_phone_password_reset_otp_key(phone))
+    await redis.setex(
+        _phone_password_reset_token_key(reset_token),
+        PHONE_PASSWORD_RESET_TOKEN_TTL_SECONDS,
+        str(user.id),
+    )
+    return PhonePasswordResetVerifyResponse(
+        reset_token=reset_token,
+        role=user.role.name,
+        name=user.display_name,
+        phone=phone,
+    )
+
+
+@router.post("/forgot-password/reset-phone")
+async def complete_phone_password_reset(
+    payload: PhonePasswordResetComplete,
+    db: AsyncSession = Depends(get_db),
+):
+    phone = normalize_phone(payload.phone)
+    redis = get_redis()
+    token_key = _phone_password_reset_token_key(payload.reset_token)
+    user_id = await redis.get(token_key)
+    user = await _get_user_by_phone(db, phone)
+    if user_id is None or not _can_reset_password_by_phone(user) or str(user.id) != user_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ссылка сброса недействительна или истекла")
+
+    user.hashed_password = get_password_hash(payload.new_password)
+    user.auth_version = (user.auth_version or 0) + 1
+    try:
+        await db.flush()
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        logger.exception("phone_password_reset_commit_failed user_id=%s", user.id)
+        raise
+
+    await redis.delete(token_key)
+    logger.warning("phone_password_reset_completed user_id=%s", user.id)
+    return {"ok": True}
+
+
 def _default_client_name_from_email(email: str) -> str:
     local_part = email.split("@", 1)[0].strip()
     normalized = local_part.replace(".", " ").replace("_", " ").replace("-", " ").strip()
@@ -192,6 +299,15 @@ async def _get_user_by_email(db: AsyncSession, email: str) -> User | None:
     result = await db.execute(
         select(User)
         .where(func.lower(User.email) == email)
+        .options(selectinload(User.role), selectinload(User.driver_profile))
+    )
+    return result.scalar_one_or_none()
+
+
+async def _get_user_by_phone(db: AsyncSession, phone: str) -> User | None:
+    result = await db.execute(
+        select(User)
+        .where(User.username == phone)
         .options(selectinload(User.role), selectinload(User.driver_profile))
     )
     return result.scalar_one_or_none()

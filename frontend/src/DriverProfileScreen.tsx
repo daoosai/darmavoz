@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { NotificationToggle } from "./components/shared/NotificationToggle";
 import { logoutCurrentSession } from "./pushAuth";
+import { compressImageFile } from "./imageCompression";
 import UpdateBanner from "./UpdateBanner";
 import toast from "react-hot-toast";
 import { DriverOrder, DriverOrderCard } from "./DriverOrdersScreen";
@@ -48,6 +49,8 @@ interface DriverProfile {
     | "rejected"
     | "suspended"
     | null;
+  is_on_shift?: boolean;
+  status?: "available" | "busy" | "offline";
   vehicle: {
     id: string;
     brand: string;
@@ -71,11 +74,21 @@ export default function DriverProfileScreen({
   onProfileUpdate,
   hasActiveOrder,
   onOpenSupport,
+  isOnShift = false,
+  isUpdatingShift = false,
+  trackingState = "idle",
+  driverStatus,
+  onShiftChange,
 }: {
   onLogout: () => void;
   onProfileUpdate?: () => void;
   hasActiveOrder?: boolean;
   onOpenSupport?: () => void;
+  isOnShift?: boolean;
+  isUpdatingShift?: boolean;
+  trackingState?: "idle" | "tracking" | "permission_denied" | "error";
+  driverStatus?: "available" | "busy" | "offline";
+  onShiftChange?: (isOnShift: boolean) => void;
 }) {
   const { token } = useAuthStore();
   const [profile, setProfile] = useState<DriverProfile | null>(null);
@@ -142,9 +155,7 @@ export default function DriverProfileScreen({
         const data = await res.json();
         const prof = Array.isArray(data) ? data[0] : data;
         setProfile(prof);
-        if (prof?.status) {
-          setStatus(prof.status);
-        }
+        setStatus(hasActiveOrder ? "busy" : prof?.status || "offline");
       }
     } catch (e) {
     } finally {
@@ -152,7 +163,13 @@ export default function DriverProfileScreen({
     }
   };
 
+  useEffect(() => {
+    setStatus(hasActiveOrder ? "busy" : driverStatus || profile?.status || "offline");
+  }, [driverStatus, hasActiveOrder, profile?.status]);
+
   const handleStatusChange = async (newStatus: "available" | "busy" | "offline") => {
+    if (hasActiveOrder && newStatus !== "busy") return;
+
     try {
       setIsUpdatingStatus(true);
       const currentToken = useAuthStore.getState().token;
@@ -174,19 +191,16 @@ export default function DriverProfileScreen({
         toast.error("Недостаточно прав (403)");
         return;
       }
-
       if (!res.ok) {
         throw new Error("Не удалось обновить статус");
       }
 
       setStatus(newStatus);
-      toast.success(`Статус изменен`);
+      toast.success("Статус изменен");
       onProfileUpdate?.();
     } catch (error) {
       console.error("Error updating status:", error);
-      setStatus(newStatus);
-      toast.success(`[Mock] Статус изменен`);
-      onProfileUpdate?.();
+      toast.error("Не удалось обновить статус");
     } finally {
       setIsUpdatingStatus(false);
     }
@@ -247,29 +261,37 @@ export default function DriverProfileScreen({
       return;
     }
 
-    const localUrl = URL.createObjectURL(file);
-    setLocalPreviews((prev) => ({ ...prev, [slotId]: localUrl }));
     setUploadingSlots((prev) => ({ ...prev, [slotId]: true }));
+    let localUrl: string | null = null;
 
     try {
+      const compressedFile = await compressImageFile(file);
+      localUrl = URL.createObjectURL(compressedFile);
+      setLocalPreviews((prev) => {
+        if (prev[slotId]) {
+          URL.revokeObjectURL(prev[slotId]);
+        }
+        return { ...prev, [slotId]: localUrl! };
+      });
+
       const currentToken = useAuthStore.getState().token;
-      let fileExt = file.name.includes(".")
-        ? file.name.split(".").pop()?.toLowerCase()
+      let fileExt = compressedFile.name.includes(".")
+        ? compressedFile.name.split(".").pop()?.toLowerCase()
         : "";
       if (
         !fileExt ||
         !["jpg", "jpeg", "png", "webp", "gif"].includes(fileExt)
       ) {
         fileExt =
-          file.type === "image/png"
+          compressedFile.type === "image/png"
             ? "png"
-            : file.type === "image/webp"
+            : compressedFile.type === "image/webp"
               ? "webp"
               : "jpg";
       }
       const safeFileName = `photo-${Date.now()}.${fileExt}`;
       const safeContentType =
-        file.type || `image/${fileExt === "jpg" ? "jpeg" : fileExt}`;
+        compressedFile.type || `image/${fileExt === "jpg" ? "jpeg" : fileExt}`;
 
       // 1: Presign
       const presignRes = await fetch(`${baseURL}/media/presign-upload`, {
@@ -281,7 +303,7 @@ export default function DriverProfileScreen({
         body: JSON.stringify({
           file_name: safeFileName,
           content_type: safeContentType,
-          file_size: file.size,
+          file_size: compressedFile.size,
           entity_type: "vehicle",
           entity_id: profile.vehicle.id,
           is_primary: false,
@@ -303,7 +325,7 @@ export default function DriverProfileScreen({
       const uploadRes = await fetch(presignData.upload_url, {
         method: "PUT",
         headers: { "Content-Type": safeContentType },
-        body: file,
+        body: compressedFile,
       });
       if (!uploadRes.ok) throw new Error("Ошибка загрузки в S3");
 
@@ -320,7 +342,7 @@ export default function DriverProfileScreen({
           object_key: presignData.object_key,
           file_name: safeFileName,
           content_type: safeContentType,
-          file_size: file.size,
+          file_size: compressedFile.size,
           is_primary: false,
           sort_order: 0,
           slot_key: slotId,
@@ -340,6 +362,9 @@ export default function DriverProfileScreen({
       }
       setLocalPreviews((prev) => {
         const copy = { ...prev };
+        if (copy[slotId]) {
+          URL.revokeObjectURL(copy[slotId]);
+        }
         delete copy[slotId];
         return copy;
       });
@@ -409,7 +434,7 @@ export default function DriverProfileScreen({
               type="file"
               accept="image/*"
               className="hidden"
-              disabled={isReadOnly}
+              disabled={isReadOnly || isUploading}
               onChange={(e) => {
                 if (e.target.files && e.target.files[0]) {
                   handleFileUpload(e.target.files[0], slotKey);
@@ -429,6 +454,7 @@ export default function DriverProfileScreen({
     profile.vehicle.media_files.some((m) => m.slot_key === "vehicle_plate");
 
   const isProfileComplete = hasAllPhotos;
+  const isPhotoProcessing = Object.values(uploadingSlots).some(Boolean);
 
   const getModerationBanner = () => {
     if (isDriverInactive) {
@@ -514,37 +540,60 @@ export default function DriverProfileScreen({
 
         {moderationStatus === "approved" && !isDriverInactive && (
           <div className="flex flex-col gap-2">
-            <div className="bg-white p-1 rounded-xl flex items-center relative gap-1 shadow-sm border border-slate-100">
-              {statuses.map((s) => {
-                const isActive = status === s.id;
-                const isBlocked = hasActiveOrder && (s.id === "available" || s.id === "offline");
+            <div className="flex gap-1 rounded-xl border border-slate-100 bg-white p-1 shadow-sm">
+              {statuses.map((item) => {
+                const isActive = status === item.id;
+                const isBlocked = Boolean(hasActiveOrder && item.id !== "busy");
                 return (
                   <button
-                    key={s.id}
+                    key={item.id}
+                    type="button"
                     disabled={isUpdatingStatus || isBlocked}
-                    onClick={() => handleStatusChange(s.id)}
-                    className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all duration-200 flex justify-center items-center gap-1.5 min-h-[40px]
-                      ${
-                        isActive
-                          ? "bg-slate-100 shadow-inner text-slate-900 scale-100"
-                          : "text-slate-500 hover:text-slate-700 hover:bg-slate-50 scale-95"
-                      } 
-                      ${isUpdatingStatus || isBlocked ? "opacity-50 cursor-not-allowed pointer-events-none" : ""}`}
+                    onClick={() => handleStatusChange(item.id)}
+                    className={`flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-bold transition-all ${
+                      isActive
+                        ? "scale-100 bg-slate-100 text-slate-900 shadow-inner"
+                        : "scale-95 text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+                    } ${isUpdatingStatus || isBlocked ? "cursor-not-allowed opacity-50" : ""}`}
                   >
-                    <span
-                      className={`w-2 h-2 rounded-full ${s.dot} ${
-                        isActive ? "animate-pulse" : ""
-                      }`}
-                    />
-                    {s.label}
+                    <span className={`h-2 w-2 rounded-full ${item.dot} ${isActive ? "animate-pulse" : ""}`} />
+                    {item.label}
                   </button>
                 );
               })}
             </div>
-            {!!hasActiveOrder && (
-              <span className="text-xs text-red-500 px-1 text-center">
-                Смена статуса недоступна во время активного заказа
-              </span>
+          </div>
+        )}
+
+        {moderationStatus === "approved" && !isDriverInactive && isOnShift && (
+          <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h2 className="font-bold text-slate-900">На смене</h2>
+                <p className="mt-1 text-xs font-medium text-slate-500">Геопозиция передаётся логисту и администратору каждые 30 секунд.</p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={isOnShift}
+                aria-label="На смене"
+                disabled={isUpdatingShift || !onShiftChange}
+                onClick={() => onShiftChange?.(!isOnShift)}
+                className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${isOnShift ? "bg-emerald-500" : "bg-slate-300"} ${isUpdatingShift || !onShiftChange ? "cursor-not-allowed opacity-60" : ""}`}
+              >
+                <span className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${isOnShift ? "translate-x-5" : "translate-x-0"}`} />
+              </button>
+            </div>
+            {isOnShift && (
+              <p className={`mt-3 rounded-xl px-3 py-2 text-xs font-semibold ${trackingState === "tracking" ? "bg-emerald-50 text-emerald-700" : trackingState === "permission_denied" ? "bg-amber-50 text-amber-800" : trackingState === "error" ? "bg-rose-50 text-rose-700" : "bg-slate-50 text-slate-600"}`}>
+                {trackingState === "tracking"
+                  ? "Геопозиция передаётся логисту и администратору"
+                  : trackingState === "permission_denied"
+                    ? "Разрешите доступ к геопозиции в настройках телефона."
+                    : trackingState === "error"
+                      ? "Не удалось получить или передать геопозицию. Повторим через 30 секунд."
+                      : "Подготавливаем передачу геопозиции…"}
+              </p>
             )}
           </div>
         )}
@@ -716,15 +765,15 @@ export default function DriverProfileScreen({
                 )}
                 <button
                   onClick={handleSubmitForModeration}
-                  disabled={isSaving || isDriverInactive || !isProfileComplete}
-                  className={`w-full py-4 font-bold rounded-full shadow-sm transition-all flex items-center justify-center gap-2 ${!isProfileComplete || isDriverInactive || isSaving ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-[#2DB0E6] text-white hover:bg-[#209BD6] active:bg-[#1b8bc2]"}`}
+                  disabled={isSaving || isPhotoProcessing || isDriverInactive || !isProfileComplete}
+                  className={`w-full py-4 font-bold rounded-full shadow-sm transition-all flex items-center justify-center gap-2 ${!isProfileComplete || isDriverInactive || isSaving || isPhotoProcessing ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-[#2DB0E6] text-white hover:bg-[#209BD6] active:bg-[#1b8bc2]"}`}
                 >
-                  {isSaving ? (
+                  {isSaving || isPhotoProcessing ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
                     <CheckCircle2 className="w-5 h-5" />
                   )}
-                  {isSaving ? "Отправка..." : "Отправить на проверку"}
+                  {isPhotoProcessing ? "Загрузка..." : isSaving ? "Отправка..." : "Отправить на проверку"}
                 </button>
               </div>
             )}
@@ -765,14 +814,13 @@ export default function DriverProfileScreen({
             try {
               const currentToken = useAuthStore.getState().token;
 
-              // Set offline status
-              await fetch(`${baseURL}/driver/profile/status`, {
+              await fetch(`${baseURL}/driver/profile/shift`, {
                 method: "PATCH",
                 headers: {
                   "Content-Type": "application/json",
                   Authorization: `Bearer ${currentToken}`,
                 },
-                body: JSON.stringify({ status: "offline" }),
+                body: JSON.stringify({ is_on_shift: false }),
               });
             } catch (e) {}
             await logoutCurrentSession();

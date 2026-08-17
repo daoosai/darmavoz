@@ -28,6 +28,7 @@ import toast from "react-hot-toast";
 import { logoutCurrentSession } from "./pushAuth";
 import SupportScreen from "./SupportScreen";
 import { handleOpenNavigator } from "./openNavigator";
+import { useDriverLocationTracking } from "./useDriverLocationTracking";
 
 export interface DriverOrder {
   id: string;
@@ -56,6 +57,11 @@ export interface DriverOrder {
   quarry?: { name: string };
 }
 
+type DriverAvailabilityStatus = "available" | "busy" | "offline";
+
+const isDriverAvailabilityStatus = (value: unknown): value is DriverAvailabilityStatus =>
+  value === "available" || value === "busy" || value === "offline";
+
 const getDeliveryCost = (order: Pick<DriverOrder, "delivery_cost">) =>
   Number(order.delivery_cost ?? 0);
 
@@ -68,8 +74,6 @@ const getEstimatedTotalAmount = (
 const formatCurrency = (value?: number | null) =>
   `${Number(value ?? 0).toLocaleString("ru-RU")} ₽`;
 
-type DriverStatus = "available" | "busy" | "offline";
-
 interface DriverOrdersScreenProps {
   onLogout: () => void;
 }
@@ -78,9 +82,9 @@ export default function DriverOrdersScreen({
   onLogout,
 }: DriverOrdersScreenProps) {
   const { token } = useAuthStore();
-  const [status, setStatus] = useState<DriverStatus>("offline");
-  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [activeTab, setActiveTab] = useState<"orders" | "profile" | "support">("orders");
+  const [isOnShift, setIsOnShift] = useState(false);
+  const [isUpdatingShift, setIsUpdatingShift] = useState(false);
 
   const [orders, setOrders] = useState<DriverOrder[]>([]);
 
@@ -90,6 +94,8 @@ export default function DriverOrdersScreen({
   const [isLoading, setIsLoading] = useState(true);
   const [moderationStatus, setModerationStatus] = useState<string | null>(null);
   const [isDriverActive, setIsDriverActive] = useState(true);
+  const [driverStatus, setDriverStatus] = useState<DriverAvailabilityStatus>("offline");
+  const { trackingState } = useDriverLocationTracking({ isOnShift, token });
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playCount = useRef(0);
@@ -148,8 +154,9 @@ export default function DriverOrdersScreen({
         const profile = Array.isArray(data) ? data[0] : data;
         setModerationStatus(profile?.moderation_status || null);
         setIsDriverActive(profile?.is_active !== false);
-        if (profile?.status) {
-          setStatus(profile.status);
+        setIsOnShift(Boolean(profile?.is_on_shift));
+        if (isDriverAvailabilityStatus(profile?.status)) {
+          setDriverStatus(profile.status);
         }
 
         if (
@@ -164,6 +171,43 @@ export default function DriverOrdersScreen({
       // Ignore error for now
     } finally {
       setIsProfileLoading(false);
+    }
+  };
+
+  const handleShiftChange = async (nextValue: boolean) => {
+    const currentToken = useAuthStore.getState().token;
+    if (!currentToken) return;
+
+    try {
+      setIsUpdatingShift(true);
+      const response = await fetch(`${baseURL}/driver/profile/shift`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${currentToken}`,
+        },
+        body: JSON.stringify({ is_on_shift: nextValue }),
+      });
+      if (response.status === 401) {
+        await logoutCurrentSession();
+        onLogout();
+        return;
+      }
+      if (!response.ok) {
+        throw new Error("Не удалось изменить статус смены");
+      }
+
+      const data = await response.json().catch(() => ({}));
+      setIsOnShift(Boolean(data?.is_on_shift ?? nextValue));
+      if (isDriverAvailabilityStatus(data?.status)) {
+        setDriverStatus(data.status);
+      }
+      toast.success(nextValue ? "Смена начата" : "Смена завершена");
+    } catch (error) {
+      console.warn("Не удалось изменить статус смены", error);
+      toast.error("Не удалось изменить статус смены");
+    } finally {
+      setIsUpdatingShift(false);
     }
   };
 
@@ -527,6 +571,30 @@ export default function DriverOrdersScreen({
             Активные заказы
           </h2>
 
+          {!isOnShift && isDriverActive && moderationStatus === "approved" && (
+            <section className="mb-4 rounded-2xl border border-sky-100 bg-gradient-to-br from-sky-50 to-white p-4 shadow-sm">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <h3 className="font-bold text-slate-900">Начать смену</h3>
+                  <p className="mt-1 text-xs font-medium leading-relaxed text-slate-600">
+                    Геопозиция передаётся логисту и администратору каждые 30 секунд.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={false}
+                  aria-label="Начать смену"
+                  disabled={isUpdatingShift}
+                  onClick={() => handleShiftChange(true)}
+                  className={`relative h-6 w-11 shrink-0 rounded-full bg-slate-300 transition-colors ${isUpdatingShift ? "cursor-not-allowed opacity-60" : ""}`}
+                >
+                  <span className="absolute left-0.5 top-0.5 h-5 w-5 translate-x-0 rounded-full bg-white shadow transition-transform" />
+                </button>
+              </div>
+            </section>
+          )}
+
           {isProfileLoading ? (
             <div className="flex flex-col items-center justify-center p-10 text-slate-400 min-h-[50vh]">
               <Loader2 className="w-8 h-8 animate-spin mb-3 text-[#2DB0E6]" />
@@ -627,6 +695,11 @@ export default function DriverOrdersScreen({
           onProfileUpdate={fetchProfile}
           hasActiveOrder={orders.length > 0}
           onOpenSupport={() => setActiveTab("support")}
+          isOnShift={isOnShift}
+          isUpdatingShift={isUpdatingShift}
+          trackingState={trackingState}
+          driverStatus={driverStatus}
+          onShiftChange={handleShiftChange}
         />
       ) : (
         <SupportScreen onBack={() => setActiveTab("profile")} />

@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     DISPATCH_TIMEOUT_PENALTY_SECONDS: int = 1800
     DRIVER_ORDER_REMINDER_DELAY_SECONDS: int = 600
     DISPATCH_LOCK_TTL_SECONDS: int = 30
+    DRIVER_LOCATION_TTL_SECONDS: int = Field(default=120, ge=1)
     PLACEMENT_TRIAL_DAYS: int = 14
     PLACEMENT_EXTENSION_DAYS: int = 30
     PLACEMENT_CONFIRMATION_INTERVAL_DAYS: int = 14
@@ -58,9 +59,9 @@ class Settings(BaseSettings):
     PLACEMENT_WORKER_BATCH_SIZE: int = 200
     DRIVER_TEST_USERNAME: str = "driver1"
     DRIVER_TEST_PASSWORD: str = "driver123"
-    ANDROID_VERSION: str = "2.8.1"
-    IOS_VERSION: str = "2.8.1"
-    WEB_VERSION: str = "2.8.1"
+    ANDROID_VERSION: str = "2.9.0"
+    IOS_VERSION: str = "2.9.0"
+    WEB_VERSION: str = "2.9.0"
     APK_DOWNLOAD_URL: str = "/static/darmavoz-test.apk"
     APK_FORCE_UPDATE: bool = False
     SMTP_HOST: str | None = None

@@ -5,7 +5,7 @@ export const baseURL =
   import.meta.env.VITE_API_URL ||
   "/api/v1";
 
-export const APP_VERSION = import.meta.env.VITE_APP_VERSION || "2.8.0";
+export const APP_VERSION = import.meta.env.VITE_APP_VERSION || "2.9.0";
 
 export const orderStatusColors: Record<string, string> = {
   created: "bg-gray-200 text-gray-700 border border-gray-300",

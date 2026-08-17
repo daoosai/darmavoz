@@ -13,6 +13,8 @@ from app.models.models import DeliveryOption, Driver, DriverStatus, MediaFile, M
 from app.schemas.driver import (
     DriverFcmTokenIn,
     DriverFcmTokenOut,
+    DriverLocationUpdate,
+    DriverLocationUpdateOut,
     DriverResponse,
     DriverFullProfileResponse,
     DriverIncomingOfferOut,
@@ -20,6 +22,8 @@ from app.schemas.driver import (
     DriverOfferDecisionOut,
     DriverOfferOrderOut,
     DriverProfileUpdate,
+    DriverShiftOut,
+    DriverShiftUpdate,
     DriverStatusUpdate,
     DriverVehicleUpdate,
 )
@@ -34,6 +38,7 @@ from app.services.dispatch_service import (
     mask_phone,
     set_driver_order_status,
 )
+from app.services.driver_locations import save_driver_location, set_driver_shift
 from app.services.email_service import send_email
 from app.services.fcm_tokens import detach_fcm_token_from_other_entities
 from app.services.vehicle_moderation import (
@@ -595,3 +600,38 @@ async def update_driver_status(
     current_driver.status = payload.status
     await db.commit()
     return {"ok": True, "status": current_driver.status}
+
+
+@router.patch("/profile/shift", response_model=DriverShiftOut)
+async def update_driver_shift(
+    payload: DriverShiftUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_driver: Driver = Depends(get_current_driver),
+) -> DriverShiftOut:
+    if not current_driver.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Driver profile is inactive")
+    await set_driver_shift(db, driver=current_driver, is_on_shift=payload.is_on_shift)
+    return DriverShiftOut(
+        ok=True,
+        is_on_shift=current_driver.is_on_shift,
+        status=current_driver.status,
+    )
+
+
+@router.post("/location", response_model=DriverLocationUpdateOut)
+async def update_driver_location(
+    payload: DriverLocationUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_driver: Driver = Depends(get_current_driver),
+) -> DriverLocationUpdateOut:
+    if not current_driver.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Driver profile is inactive")
+    if not current_driver.is_on_shift:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Driver shift is disabled")
+    received_at = await save_driver_location(
+        db,
+        driver=current_driver,
+        lat=payload.lat,
+        lon=payload.lon,
+    )
+    return DriverLocationUpdateOut(ok=True, received_at=received_at)

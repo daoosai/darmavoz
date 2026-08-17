@@ -24,6 +24,7 @@ import {
   User,
   Camera,
   Map,
+  MapPin,
   Search,
   Clock,
   Filter,
@@ -49,6 +50,7 @@ import AdminEquipmentScreen, { type AdminEquipmentTab } from "./AdminEquipmentSc
 import SupportScreen from "./SupportScreen";
 import { type PlacementStatus } from "./placement";
 import NotificationCenter from "./components/shared/NotificationCenter";
+import DriverMapComponent from "./components/DriverMapComponent";
 
 interface AdminCategory {
   id: string;
@@ -161,6 +163,7 @@ interface PendingModerationRequest {
 
 interface AdminDashboardScreenProps {
   onLogout: () => void;
+  initialTab?: AdminTab;
 }
 
 type AdminTab =
@@ -172,6 +175,7 @@ type AdminTab =
   | "water_septic"
   | "suppliers"
   | "equipment"
+  | "driver_map"
   | "support"
   | "profile";
 
@@ -183,12 +187,13 @@ interface QuarrySummaryFilters {
 
 export default function AdminDashboardScreen({
   onLogout,
+  initialTab = "materials",
 }: AdminDashboardScreenProps) {
   const { token } = useAuthStore();
   const moderationRefreshNonce = useAdminModerationStore(
     (state) => state.refreshNonce,
   );
-  const [activeTab, setActiveTab] = useState<AdminTab>("materials");
+  const [activeTab, setActiveTab] = useState<AdminTab>(initialTab);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const openSidebarSection = (tab: AdminTab) => {
@@ -1865,6 +1870,7 @@ export default function AdminDashboardScreen({
             <button type="button" onClick={() => openSidebarSection("quarries")} className={sidebarButtonClass("quarries")}><Map className="h-5 w-5" />Точки</button>
             <button type="button" onClick={() => openSidebarSection("delivery")} className={sidebarButtonClass("delivery")}><Truck className="h-5 w-5" />Автопарк</button>
             <button type="button" onClick={() => openSidebarSection("drivers")} className={sidebarButtonClass("drivers")}><Users className="h-5 w-5" />Водители</button>
+            <a href="/admin/driver-map" onClick={() => setIsSidebarOpen(false)} className={sidebarButtonClass("driver_map")}><MapPin className="h-5 w-5" />Карта водителей</a>
             <button type="button" onClick={() => openSidebarSection("profile")} className={sidebarButtonClass("profile")}><User className="h-5 w-5" />Профиль</button>
           </nav>
         </aside>
@@ -1890,7 +1896,9 @@ export default function AdminDashboardScreen({
               onOpenEquipment={openSummaryEquipment}
             />
           ) : null}
-          {activeTab === "materials" ? (
+          {activeTab === "driver_map" ? (
+            <DriverMapComponent />
+          ) : activeTab === "materials" ? (
             <>
               <AdminCategoriesPanel
                 token={token || ""}

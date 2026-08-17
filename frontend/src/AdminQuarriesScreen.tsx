@@ -1636,6 +1636,7 @@ function EnhancedEditQuarryModal({
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [pendingFilePreviews, setPendingFilePreviews] = useState<string[]>([]);
   const [isMapUnavailable, setIsMapUnavailable] = useState(false);
   const usesOwnerPhone = Boolean(formData.owner_user_id);
   const pointTitle = formData.point_type === "accumulator" ? "накопитель" : "карьер";
@@ -1648,6 +1649,12 @@ function EnhancedEditQuarryModal({
   const lastGeocodedAddressRef = React.useRef(
     normalizeOptionalText(quarry.address)?.toLowerCase() || "",
   );
+
+  useEffect(() => {
+    const previews = pendingFiles.map((file) => URL.createObjectURL(file));
+    setPendingFilePreviews(previews);
+    return () => previews.forEach((preview) => URL.revokeObjectURL(preview));
+  }, [pendingFiles]);
 
   const getParsedCoordinates = () => {
     const lat = parseCoordinate(formData.lat);
@@ -2412,19 +2419,29 @@ function EnhancedEditQuarryModal({
             {pendingFiles.length > 0 ? (
               <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-4">
                 <div className="text-sm font-semibold text-slate-700">Фото в очереди на загрузку</div>
-                <div className="mt-3 flex flex-col gap-2">
+                <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
                   {pendingFiles.map((file, index) => (
                     <div
                       key={`${file.name}-${file.size}-${index}`}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                      className="group relative aspect-square overflow-hidden rounded-xl border border-slate-200 bg-slate-100"
                     >
-                      <span className="truncate font-medium text-slate-700">{file.name}</span>
+                      {pendingFilePreviews[index] ? (
+                        <img
+                          src={pendingFilePreviews[index]}
+                          alt={file.name}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : null}
+                      <span className="absolute inset-x-0 bottom-0 truncate bg-slate-900/70 px-2 py-1 text-[10px] font-semibold text-white">
+                        {file.name}
+                      </span>
                       <button
                         type="button"
                         onClick={() => removePendingPhoto(index)}
-                        className="shrink-0 text-rose-600 hover:text-rose-700"
+                        aria-label={`Убрать ${file.name}`}
+                        className="absolute right-2 top-2 grid h-8 w-8 place-items-center rounded-full bg-white/95 text-rose-600 shadow-sm hover:bg-white hover:text-rose-700"
                       >
-                        Убрать
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
                   ))}

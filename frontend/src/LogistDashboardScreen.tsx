@@ -32,6 +32,7 @@ import {
   ClipboardList,
   Layers,
   Headphones,
+  Map,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import UpdateBanner from "./UpdateBanner";
@@ -46,6 +47,7 @@ import AdminEquipmentScreen, { type AdminEquipmentTab } from "./AdminEquipmentSc
 import SupportScreen from "./SupportScreen";
 import WaterSepticModerationPanel from "./components/admin/WaterSepticModerationPanel";
 import NotificationCenter from "./components/shared/NotificationCenter";
+import DriverMapComponent from "./components/DriverMapComponent";
 
 interface AdminOrder {
   id: string;
@@ -84,6 +86,7 @@ interface AdminDriver {
   name: string;
   phone: string;
   status: string;
+  is_on_shift?: boolean;
   moderation_status?: string;
   vehicle_main_url?: string | null;
   vehicle_left_url?: string | null;
@@ -119,8 +122,15 @@ const isOrderEditLocked = (status?: string | null) =>
 
 const driverStatusLabelMap: Record<string, string> = {
   available: "Свободен",
+  free: "Свободен",
   busy: "Занят",
   offline: "Недоступен",
+};
+
+const getFleetDriverStatus = (status: string | null | undefined) => {
+  if (status === "available" || status === "free") return "available";
+  if (status === "busy") return "busy";
+  return "offline";
 };
 
 const isDriverCompatibleWithOrder = (
@@ -132,7 +142,7 @@ const isDriverCompatibleWithOrder = (
   }
 
   // Убедимся, что машина есть и статус Свободен
-  if (!driver.vehicle || driver.status !== "available") {
+  if (!driver.vehicle || getFleetDriverStatus(driver.status) !== "available") {
     return false;
   }
 
@@ -159,15 +169,17 @@ const isDriverCompatibleWithOrder = (
 
 interface LogistDashboardScreenProps {
   onLogout: () => void;
+  initialTab?: LogistTab;
 }
+
+type LogistTab = "orders" | "drivers" | "driver_map" | "equipment" | "moderation" | "support" | "profile";
 
 export default function LogistDashboardScreen({
   onLogout,
+  initialTab = "orders",
 }: LogistDashboardScreenProps) {
   const { token } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<"orders" | "drivers" | "equipment" | "moderation" | "support" | "profile">(
-    "orders",
-  );
+  const [activeTab, setActiveTab] = useState<LogistTab>(initialTab);
   const [equipmentTab, setEquipmentTab] = useState<AdminEquipmentTab>("listings");
   const [equipmentPlacementFilter, setEquipmentPlacementFilter] =
     useState<PlacementStatus | "">("");
@@ -628,6 +640,16 @@ export default function LogistDashboardScreen({
             >
               Водители
             </button>
+            <a
+              href="/logist/driver-map"
+              className={`flex-1 sm:w-32 py-2 text-sm font-bold rounded-lg transition-colors flex justify-center items-center gap-2 ${
+                activeTab === "driver_map"
+                  ? "bg-white text-slate-800 shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              Карта
+            </a>
             <button
               onClick={() => setActiveTab("support")}
               className={`flex-1 sm:w-32 py-2 text-sm font-bold rounded-lg transition-colors flex justify-center items-center gap-2 ${
@@ -1029,6 +1051,7 @@ export default function LogistDashboardScreen({
                           </div>
                         </div>
                         {(() => {
+                          const fleetStatus = getFleetDriverStatus(driver.status);
                           if (
                             driver.moderation_status === "pending_moderation"
                           ) {
@@ -1051,16 +1074,16 @@ export default function LogistDashboardScreen({
                           return (
                             <span
                               className={`text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-lg border shrink-0 ${
-                                driver.status === "available"
+                                fleetStatus === "available"
                                   ? "bg-green-50 text-green-700 border-green-200"
-                                  : driver.status === "busy"
+                                  : fleetStatus === "busy"
                                     ? "bg-orange-50 text-orange-700 border-orange-200"
                                     : "bg-slate-50 text-slate-600 border-slate-200"
                               }`}
                             >
-                              {driver.status === "available"
+                              {fleetStatus === "available"
                                 ? "Свободен"
-                                : driver.status === "busy"
+                                : fleetStatus === "busy"
                                   ? "Занят"
                                   : "Недоступен"}
                             </span>
@@ -1243,6 +1266,8 @@ export default function LogistDashboardScreen({
                 </div>
               )}
             </>
+          ) : activeTab === "driver_map" ? (
+            <DriverMapComponent />
           ) : activeTab === "equipment" ? (
             <AdminEquipmentScreen
               tab={equipmentTab}
@@ -1292,6 +1317,19 @@ export default function LogistDashboardScreen({
           </div>
           <span className="text-[10px] font-bold">Водители</span>
         </button>
+        <a
+          href="/logist/driver-map"
+          className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${
+            activeTab === "driver_map"
+              ? "text-[#2DB0E6]"
+              : "text-gray-400 hover:text-gray-600"
+          }`}
+        >
+          <div className={`p-1.5 rounded-xl transition-colors ${activeTab === "driver_map" ? "bg-[#2DB0E6]/10" : ""}`}>
+            <Map className="w-6 h-6" />
+          </div>
+          <span className="text-[10px] font-bold">Карта</span>
+        </a>
         <button
           onClick={() => setActiveTab("support")}
           className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${
@@ -1456,7 +1494,8 @@ export default function LogistDashboardScreen({
                   <div className="absolute z-[9999] top-full left-0 w-full mt-1 bg-white rounded-xl shadow-2xl border border-gray-100 max-h-60 overflow-y-auto">
                     {compatibleDrivers.map((driver) => {
                       const vehicleTitle = getVehicleString(driver);
-                      const isAvailable = driver.status === "available";
+                      const fleetStatus = getFleetDriverStatus(driver.status);
+                      const isAvailable = fleetStatus === "available";
                       return (
                         <div
                           key={driver.id}
@@ -1476,11 +1515,10 @@ export default function LogistDashboardScreen({
                           </div>
                           <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-md">
                             <div
-                              className={`w-2 h-2 rounded-full ${isAvailable ? "bg-emerald-500" : driver.status === "busy" ? "bg-amber-500" : "bg-slate-400"}`}
+                              className={`w-2 h-2 rounded-full ${isAvailable ? "bg-emerald-500" : fleetStatus === "busy" ? "bg-amber-500" : "bg-slate-400"}`}
                             ></div>
                             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
-                              {driverStatusLabelMap[driver.status] ||
-                                driver.status}
+                              {driverStatusLabelMap[fleetStatus] || fleetStatus}
                             </span>
                           </div>
                         </div>

@@ -26,6 +26,14 @@
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Нам нужно ваше местоположение для отображения вас на карте и поиска ближайших точек.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Геопозиция нужна, чтобы логист видел автомобиль на карте во время смены, даже когда приложение свёрнуто.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Геопозиция нужна, чтобы логист видел автомобиль на карте во время смены, даже когда приложение свёрнуто.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

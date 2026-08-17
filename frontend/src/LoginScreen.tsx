@@ -240,7 +240,7 @@ export default function LoginScreen({
                 onClick={onSelectDriverRegister}
                 className="text-sm font-semibold text-[#2DB0E6]"
               >
-                Регистрация/вход самосвалов
+                Регистрация самосвалов
               </button>
               <button
                 type="button"

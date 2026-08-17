@@ -64,6 +64,7 @@ async def test_driver_location_updates_redis_database_and_logist_map(
         driver_role = await ensure_role(session, "driver")
         logist_user = await create_user(session, username="telemetry-logist", role=logist_role)
         driver_user = await create_user(session, username="telemetry-driver", role=driver_role)
+        second_driver_user = await create_user(session, username="telemetry-driver-second", role=driver_role)
         vehicle = Vehicle(
             title="Самосвал 20 м3",
             plate_number="А123АА72",
@@ -85,8 +86,19 @@ async def test_driver_location_updates_redis_database_and_logist_map(
             moderation_status="approved",
         )
         session.add(driver)
+        second_driver = Driver(
+            name="Второй водитель телеметрии",
+            phone="+79990012005",
+            user_id=second_driver_user.id,
+            vehicle_id=vehicle.id,
+            status="offline",
+            is_active=True,
+            moderation_status="approved",
+        )
+        session.add(second_driver)
         await session.commit()
         driver_id = driver.id
+        second_driver_id = second_driver.id
 
     shift_response = await client.patch(
         "/api/v1/driver/profile/shift",
@@ -95,7 +107,15 @@ async def test_driver_location_updates_redis_database_and_logist_map(
     )
     assert shift_response.status_code == 200
     assert shift_response.json()["is_on_shift"] is True
-    assert shift_response.json()["status"] == "offline"
+    assert shift_response.json()["status"] == "available"
+
+    second_shift_response = await client.patch(
+        "/api/v1/driver/profile/shift",
+        json={"is_on_shift": True},
+        headers=auth_headers("telemetry-driver-second"),
+    )
+    assert second_shift_response.status_code == 200
+    assert second_shift_response.json()["status"] == "available"
 
     location_response = await client.post(
         "/api/v1/driver/location",
@@ -105,6 +125,13 @@ async def test_driver_location_updates_redis_database_and_logist_map(
     assert location_response.status_code == 200
     assert location_response.json()["ok"] is True
     assert fake_redis.values
+
+    second_location_response = await client.post(
+        "/api/v1/driver/location",
+        json={"lat": 57.252286, "lon": 65.634328},
+        headers=auth_headers("telemetry-driver-second"),
+    )
+    assert second_location_response.status_code == 200
 
     async with session_factory() as session:
         driver = await session.get(Driver, driver_id)
@@ -120,10 +147,19 @@ async def test_driver_location_updates_redis_database_and_logist_map(
     )
     assert map_response.status_code == 200
     payload = map_response.json()
+    assert {str(driver_id), str(second_driver_id)}.issubset({item["id"] for item in payload})
     driver_payload = next(item for item in payload if item["id"] == str(driver_id))
     assert driver_payload["map_status"] == "available"
     assert driver_payload["last_location_is_stale"] is False
     assert driver_payload["vehicle_cubature_max"] == 20.0
+
+    shift_off_response = await client.patch(
+        "/api/v1/driver/profile/shift",
+        json={"is_on_shift": False},
+        headers=auth_headers("telemetry-driver"),
+    )
+    assert shift_off_response.status_code == 200
+    assert shift_off_response.json()["status"] == "offline"
 
 
 @pytest.mark.asyncio
@@ -164,6 +200,14 @@ async def test_driver_map_marks_busy_and_stale_locations(client, session_factory
         session.add(order)
         await session.commit()
         driver_id = driver.id
+
+    shift_response = await client.patch(
+        "/api/v1/driver/profile/shift",
+        json={"is_on_shift": True},
+        headers=auth_headers("telemetry-driver-busy"),
+    )
+    assert shift_response.status_code == 200
+    assert shift_response.json()["status"] == "busy"
 
     busy_response = await client.get(
         "/api/v1/logist/driver-map",

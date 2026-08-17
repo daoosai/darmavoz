@@ -50,6 +50,7 @@ interface DriverProfile {
     | "suspended"
     | null;
   is_on_shift?: boolean;
+  status?: "available" | "busy" | "offline";
   vehicle: {
     id: string;
     brand: string;
@@ -76,6 +77,7 @@ export default function DriverProfileScreen({
   isOnShift = false,
   isUpdatingShift = false,
   trackingState = "idle",
+  driverStatus,
   onShiftChange,
 }: {
   onLogout: () => void;
@@ -85,6 +87,7 @@ export default function DriverProfileScreen({
   isOnShift?: boolean;
   isUpdatingShift?: boolean;
   trackingState?: "idle" | "tracking" | "permission_denied" | "error";
+  driverStatus?: "available" | "busy" | "offline";
   onShiftChange?: (isOnShift: boolean) => void;
 }) {
   const { token } = useAuthStore();
@@ -161,10 +164,8 @@ export default function DriverProfileScreen({
   };
 
   useEffect(() => {
-    if (hasActiveOrder) {
-      setStatus("busy");
-    }
-  }, [hasActiveOrder]);
+    setStatus(hasActiveOrder ? "busy" : driverStatus || profile?.status || "offline");
+  }, [driverStatus, hasActiveOrder, profile?.status]);
 
   const handleStatusChange = async (newStatus: "available" | "busy" | "offline") => {
     if (hasActiveOrder && newStatus !== "busy") return;

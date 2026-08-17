@@ -57,6 +57,11 @@ export interface DriverOrder {
   quarry?: { name: string };
 }
 
+type DriverAvailabilityStatus = "available" | "busy" | "offline";
+
+const isDriverAvailabilityStatus = (value: unknown): value is DriverAvailabilityStatus =>
+  value === "available" || value === "busy" || value === "offline";
+
 const getDeliveryCost = (order: Pick<DriverOrder, "delivery_cost">) =>
   Number(order.delivery_cost ?? 0);
 
@@ -89,6 +94,7 @@ export default function DriverOrdersScreen({
   const [isLoading, setIsLoading] = useState(true);
   const [moderationStatus, setModerationStatus] = useState<string | null>(null);
   const [isDriverActive, setIsDriverActive] = useState(true);
+  const [driverStatus, setDriverStatus] = useState<DriverAvailabilityStatus>("offline");
   const { trackingState } = useDriverLocationTracking({ isOnShift, token });
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -149,6 +155,9 @@ export default function DriverOrdersScreen({
         setModerationStatus(profile?.moderation_status || null);
         setIsDriverActive(profile?.is_active !== false);
         setIsOnShift(Boolean(profile?.is_on_shift));
+        if (isDriverAvailabilityStatus(profile?.status)) {
+          setDriverStatus(profile.status);
+        }
 
         if (
           profile?.is_active === false ||
@@ -190,6 +199,9 @@ export default function DriverOrdersScreen({
 
       const data = await response.json().catch(() => ({}));
       setIsOnShift(Boolean(data?.is_on_shift ?? nextValue));
+      if (isDriverAvailabilityStatus(data?.status)) {
+        setDriverStatus(data.status);
+      }
       toast.success(nextValue ? "Смена начата" : "Смена завершена");
     } catch (error) {
       console.warn("Не удалось изменить статус смены", error);
@@ -686,6 +698,7 @@ export default function DriverOrdersScreen({
           isOnShift={isOnShift}
           isUpdatingShift={isUpdatingShift}
           trackingState={trackingState}
+          driverStatus={driverStatus}
           onShiftChange={handleShiftChange}
         />
       ) : (

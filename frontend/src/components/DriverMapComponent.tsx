@@ -38,6 +38,14 @@ const POLLING_INTERVAL_MS = 15 * 1000;
 const activeDriverStatuses: ActiveDriverMapStatus[] = ["available", "busy"];
 const toMapGlCoordinates = (longitude: number, latitude: number): [number, number] => [longitude, latitude];
 
+interface DriverMapMarker {
+  marker: {
+    setCoordinates: (coordinates: [number, number]) => void;
+    destroy: () => void;
+  };
+  element: HTMLButtonElement;
+}
+
 const statusMeta: Record<DriverMapStatus, { label: string; markerClass: string; badgeClass: string }> = {
   available: {
     label: "Свободен",
@@ -54,6 +62,14 @@ const statusMeta: Record<DriverMapStatus, { label: string; markerClass: string; 
     markerClass: "border-slate-500 bg-slate-400",
     badgeClass: "bg-slate-100 text-slate-600",
   },
+};
+
+const getMarkerClassName = (status: DriverMapStatus) =>
+  "flex h-11 w-11 items-center justify-center rounded-full border-2 text-lg text-white shadow-lg transition-transform hover:scale-110 focus:outline-none focus:ring-4 focus:ring-sky-300 " + statusMeta[status].markerClass;
+
+const updateMarkerElement = (element: HTMLButtonElement, driver: DriverMapItem, status: DriverMapStatus) => {
+  element.className = getMarkerClassName(status);
+  element.setAttribute("aria-label", `Водитель ${driver.name}: ${statusMeta[status].label}`);
 };
 
 const getMapStatus = (driver: DriverMapItem): DriverMapStatus => {
@@ -106,7 +122,7 @@ export default function DriverMapComponent() {
   const [mapReady, setMapReady] = useState(false);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
-  const markerRefs = useRef<any[]>([]);
+  const markerRefs = useRef<Map<string, DriverMapMarker>>(new Map());
   const hasCenteredOnDrivers = useRef(false);
 
   const activeDrivers = useMemo(
@@ -205,8 +221,8 @@ export default function DriverMapComponent() {
 
     return () => {
       disposed = true;
-      markerRefs.current.forEach((marker) => marker.destroy?.());
-      markerRefs.current = [];
+      markerRefs.current.forEach(({ marker }) => marker.destroy());
+      markerRefs.current.clear();
       mapRef.current?.destroy?.();
       mapRef.current = null;
       hasCenteredOnDrivers.current = false;
@@ -218,24 +234,39 @@ export default function DriverMapComponent() {
     const mapgl = (window as any).mapgl;
     if (!mapReady || !mapRef.current || !mapgl?.HtmlMarker) return;
 
-    markerRefs.current.forEach((marker) => marker.destroy?.());
     const driversWithCoordinates = visibleDrivers.filter(
       (driver) => Number.isFinite(driver.last_lat) && Number.isFinite(driver.last_lon),
     );
+    const driverIdsWithCoordinates = new Set(driversWithCoordinates.map((driver) => driver.id));
 
-    markerRefs.current = driversWithCoordinates.map((driver) => {
+    markerRefs.current.forEach((markerEntry, driverId) => {
+      if (!driverIdsWithCoordinates.has(driverId)) {
+        markerEntry.marker.destroy();
+        markerRefs.current.delete(driverId);
+      }
+    });
+
+    driversWithCoordinates.forEach((driver) => {
       const status = getMapStatus(driver);
+      const coordinates = toMapGlCoordinates(Number(driver.last_lon), Number(driver.last_lat));
+      const existingMarker = markerRefs.current.get(driver.id);
+      if (existingMarker) {
+        existingMarker.marker.setCoordinates(coordinates);
+        updateMarkerElement(existingMarker.element, driver, status);
+        return;
+      }
+
       const marker = document.createElement("button");
       marker.type = "button";
-      marker.className = "flex h-11 w-11 items-center justify-center rounded-full border-2 text-lg text-white shadow-lg transition-transform hover:scale-110 focus:outline-none focus:ring-4 focus:ring-sky-300 " + statusMeta[status].markerClass;
-      marker.setAttribute("aria-label", `Водитель ${driver.name}: ${statusMeta[status].label}`);
+      updateMarkerElement(marker, driver, status);
       marker.textContent = "🚚";
       marker.addEventListener("click", () => setSelectedDriverId(driver.id));
 
-      return new mapgl.HtmlMarker(mapRef.current, {
-        coordinates: toMapGlCoordinates(Number(driver.last_lon), Number(driver.last_lat)),
+      const mapMarker = new mapgl.HtmlMarker(mapRef.current, {
+        coordinates,
         html: marker,
       });
+      markerRefs.current.set(driver.id, { marker: mapMarker, element: marker });
     });
 
     const firstDriver = driversWithCoordinates[0];

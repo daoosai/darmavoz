@@ -94,11 +94,13 @@ async def set_driver_shift(
     driver: Driver,
     is_on_shift: bool,
 ) -> None:
-    was_on_shift = driver.is_on_shift
     driver.is_on_shift = is_on_shift
-    # A fresh location after enabling a shift is required before the driver is available.
-    if not is_on_shift or not was_on_shift:
+    if not is_on_shift:
         driver.status = DriverStatus.offline.value
+    elif await _driver_has_active_order(db, driver.id):
+        driver.status = DriverStatus.busy.value
+    else:
+        driver.status = DriverStatus.available.value
     await db.commit()
 
     if not is_on_shift:

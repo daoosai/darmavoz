@@ -3,7 +3,7 @@ from typing import Literal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class PasswordResetRequest(BaseModel):
@@ -22,6 +22,34 @@ class PasswordResetVerifyResponse(BaseModel):
 
 
 class PasswordResetComplete(BaseModel):
+    reset_token: str = Field(min_length=20, max_length=512)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class PhonePasswordResetRequest(BaseModel):
+    phone: str = Field(min_length=5, max_length=20)
+
+
+class PhonePasswordResetVerify(PhonePasswordResetRequest):
+    code: str = Field(min_length=4, max_length=4)
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) != 4 or not normalized.isdigit():
+            raise ValueError("Код должен состоять из 4 цифр")
+        return normalized
+
+
+class PhonePasswordResetVerifyResponse(BaseModel):
+    reset_token: str
+    role: Literal["driver", "supplier"]
+    name: str | None
+    phone: str
+
+
+class PhonePasswordResetComplete(PhonePasswordResetRequest):
     reset_token: str = Field(min_length=20, max_length=512)
     new_password: str = Field(min_length=8, max_length=128)
 

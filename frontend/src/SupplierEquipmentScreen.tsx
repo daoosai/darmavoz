@@ -9,6 +9,7 @@ import {
   getEquipmentTariffs,
 } from "./EquipmentCatalogScreen";
 import { useAuthStore } from "./store";
+import { compressImageFile, compressImageFiles } from "./imageCompression";
 import { baseURL, extractApiErrorMessage, formatPhoneNumber, resolveMediaUrl } from "./utils";
 import {
   PlacementBadge,
@@ -127,6 +128,7 @@ export default function SupplierEquipmentScreen({
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<EquipmentForm>(EMPTY_FORM);
   const [pendingPhotos, setPendingPhotos] = useState<PendingPhotoItem[]>([]);
+  const [isCompressingPhotos, setIsCompressingPhotos] = useState(false);
   const [equipmentOwnerName, setEquipmentOwnerName] = useState(currentUser?.name?.trim() || "");
   const pendingPhotoPreviews = pendingPhotos.map((item) => item.previewUrl);
   const requiresEquipmentOwnerName = apiPrefix === "/equipment-owner";
@@ -275,16 +277,24 @@ export default function SupplierEquipmentScreen({
     setShowForm(true);
   };
 
-  const appendPendingPhotos = (fileList: FileList | null) => {
+  const appendPendingPhotos = async (fileList: FileList | null) => {
     if (!fileList?.length) {
       return;
     }
-    const nextItems = Array.from(fileList).map((file, index) => ({
-      id: `${file.name}-${file.size}-${file.lastModified}-${Date.now()}-${index}`,
-      file,
-      previewUrl: URL.createObjectURL(file),
-    }));
-    setPendingPhotos((current) => [...current, ...nextItems]);
+    setIsCompressingPhotos(true);
+    try {
+      const compressedFiles = await compressImageFiles(Array.from(fileList));
+      const nextItems = compressedFiles.map((file, index) => ({
+        id: `${file.name}-${file.size}-${file.lastModified}-${Date.now()}-${index}`,
+        file,
+        previewUrl: URL.createObjectURL(file),
+      }));
+      setPendingPhotos((current) => [...current, ...nextItems]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось сжать фотографии");
+    } finally {
+      setIsCompressingPhotos(false);
+    }
   };
 
   const removePendingPhoto = (indexToRemove: number) => {
@@ -506,11 +516,15 @@ export default function SupplierEquipmentScreen({
   };
 
   const uploadPhoto = async (listing: EquipmentListing, file: File) => {
+    setIsCompressingPhotos(true);
     try {
-      await uploadPhotos(listing.id, [file], listing.media_files?.length || 0);
+      const compressedFile = await compressImageFile(file);
+      await uploadPhotos(listing.id, [compressedFile], listing.media_files?.length || 0);
       await load();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Ошибка загрузки");
+    } finally {
+      setIsCompressingPhotos(false);
     }
   };
 
@@ -674,6 +688,7 @@ export default function SupplierEquipmentScreen({
                     type="file"
                     accept="image/*"
                     className="hidden"
+                    disabled={isCompressingPhotos}
                     onChange={(event) => {
                       const file = event.target.files?.[0];
                       if (file) void uploadPhoto(listing, file);
@@ -799,8 +814,9 @@ export default function SupplierEquipmentScreen({
                     type="file"
                     multiple
                     accept="image/*"
+                    disabled={isCompressingPhotos}
                     onChange={(event) => {
-                      appendPendingPhotos(event.target.files);
+                      void appendPendingPhotos(event.target.files);
                       event.target.value = "";
                     }}
                     className="hidden"
@@ -908,10 +924,10 @@ export default function SupplierEquipmentScreen({
             </div>
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || isCompressingPhotos}
               className="w-full rounded-xl bg-sky-500 p-3 font-bold text-white disabled:opacity-50"
             >
-              {saving ? "Сохранение..." : "Сохранить и отправить на модерацию"}
+              {isCompressingPhotos ? "Загрузка..." : saving ? "Сохранение..." : "Сохранить и отправить на модерацию"}
             </button>
           </form>
         </div>

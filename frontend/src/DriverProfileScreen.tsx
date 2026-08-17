@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { NotificationToggle } from "./components/shared/NotificationToggle";
 import { logoutCurrentSession } from "./pushAuth";
+import { compressImageFile } from "./imageCompression";
 import UpdateBanner from "./UpdateBanner";
 import toast from "react-hot-toast";
 import { DriverOrder, DriverOrderCard } from "./DriverOrdersScreen";
@@ -259,29 +260,37 @@ export default function DriverProfileScreen({
       return;
     }
 
-    const localUrl = URL.createObjectURL(file);
-    setLocalPreviews((prev) => ({ ...prev, [slotId]: localUrl }));
     setUploadingSlots((prev) => ({ ...prev, [slotId]: true }));
+    let localUrl: string | null = null;
 
     try {
+      const compressedFile = await compressImageFile(file);
+      localUrl = URL.createObjectURL(compressedFile);
+      setLocalPreviews((prev) => {
+        if (prev[slotId]) {
+          URL.revokeObjectURL(prev[slotId]);
+        }
+        return { ...prev, [slotId]: localUrl! };
+      });
+
       const currentToken = useAuthStore.getState().token;
-      let fileExt = file.name.includes(".")
-        ? file.name.split(".").pop()?.toLowerCase()
+      let fileExt = compressedFile.name.includes(".")
+        ? compressedFile.name.split(".").pop()?.toLowerCase()
         : "";
       if (
         !fileExt ||
         !["jpg", "jpeg", "png", "webp", "gif"].includes(fileExt)
       ) {
         fileExt =
-          file.type === "image/png"
+          compressedFile.type === "image/png"
             ? "png"
-            : file.type === "image/webp"
+            : compressedFile.type === "image/webp"
               ? "webp"
               : "jpg";
       }
       const safeFileName = `photo-${Date.now()}.${fileExt}`;
       const safeContentType =
-        file.type || `image/${fileExt === "jpg" ? "jpeg" : fileExt}`;
+        compressedFile.type || `image/${fileExt === "jpg" ? "jpeg" : fileExt}`;
 
       // 1: Presign
       const presignRes = await fetch(`${baseURL}/media/presign-upload`, {
@@ -293,7 +302,7 @@ export default function DriverProfileScreen({
         body: JSON.stringify({
           file_name: safeFileName,
           content_type: safeContentType,
-          file_size: file.size,
+          file_size: compressedFile.size,
           entity_type: "vehicle",
           entity_id: profile.vehicle.id,
           is_primary: false,
@@ -315,7 +324,7 @@ export default function DriverProfileScreen({
       const uploadRes = await fetch(presignData.upload_url, {
         method: "PUT",
         headers: { "Content-Type": safeContentType },
-        body: file,
+        body: compressedFile,
       });
       if (!uploadRes.ok) throw new Error("Ошибка загрузки в S3");
 
@@ -332,7 +341,7 @@ export default function DriverProfileScreen({
           object_key: presignData.object_key,
           file_name: safeFileName,
           content_type: safeContentType,
-          file_size: file.size,
+          file_size: compressedFile.size,
           is_primary: false,
           sort_order: 0,
           slot_key: slotId,
@@ -352,6 +361,9 @@ export default function DriverProfileScreen({
       }
       setLocalPreviews((prev) => {
         const copy = { ...prev };
+        if (copy[slotId]) {
+          URL.revokeObjectURL(copy[slotId]);
+        }
         delete copy[slotId];
         return copy;
       });
@@ -421,7 +433,7 @@ export default function DriverProfileScreen({
               type="file"
               accept="image/*"
               className="hidden"
-              disabled={isReadOnly}
+              disabled={isReadOnly || isUploading}
               onChange={(e) => {
                 if (e.target.files && e.target.files[0]) {
                   handleFileUpload(e.target.files[0], slotKey);
@@ -441,6 +453,7 @@ export default function DriverProfileScreen({
     profile.vehicle.media_files.some((m) => m.slot_key === "vehicle_plate");
 
   const isProfileComplete = hasAllPhotos;
+  const isPhotoProcessing = Object.values(uploadingSlots).some(Boolean);
 
   const getModerationBanner = () => {
     if (isDriverInactive) {
@@ -751,15 +764,15 @@ export default function DriverProfileScreen({
                 )}
                 <button
                   onClick={handleSubmitForModeration}
-                  disabled={isSaving || isDriverInactive || !isProfileComplete}
-                  className={`w-full py-4 font-bold rounded-full shadow-sm transition-all flex items-center justify-center gap-2 ${!isProfileComplete || isDriverInactive || isSaving ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-[#2DB0E6] text-white hover:bg-[#209BD6] active:bg-[#1b8bc2]"}`}
+                  disabled={isSaving || isPhotoProcessing || isDriverInactive || !isProfileComplete}
+                  className={`w-full py-4 font-bold rounded-full shadow-sm transition-all flex items-center justify-center gap-2 ${!isProfileComplete || isDriverInactive || isSaving || isPhotoProcessing ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-[#2DB0E6] text-white hover:bg-[#209BD6] active:bg-[#1b8bc2]"}`}
                 >
-                  {isSaving ? (
+                  {isSaving || isPhotoProcessing ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
                     <CheckCircle2 className="w-5 h-5" />
                   )}
-                  {isSaving ? "Отправка..." : "Отправить на проверку"}
+                  {isPhotoProcessing ? "Загрузка..." : isSaving ? "Отправка..." : "Отправить на проверку"}
                 </button>
               </div>
             )}

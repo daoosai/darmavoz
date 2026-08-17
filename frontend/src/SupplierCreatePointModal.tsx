@@ -12,6 +12,7 @@ import {
   withTyumenBias,
 } from "./addressSearch";
 import { type MaterialProps } from "./MaterialDetailScreen";
+import { compressImageFiles } from "./imageCompression";
 import { baseURL, extractApiErrorMessage } from "./utils";
 
 type EditablePointType = "quarry" | "accumulator";
@@ -183,6 +184,7 @@ export default function SupplierCreatePointModal({
   const [isMapUnavailable, setIsMapUnavailable] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [pendingFilePreviews, setPendingFilePreviews] = useState<string[]>([]);
+  const [isCompressingFiles, setIsCompressingFiles] = useState(false);
   const addressContainerRef = useRef<HTMLDivElement | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
@@ -365,9 +367,17 @@ export default function SupplierCreatePointModal({
     return nextMedia;
   };
 
-  const handleSelectFiles = (files: FileList | null) => {
+  const handleSelectFiles = async (files: FileList | null) => {
     if (!files?.length) return;
-    setPendingFiles((current) => [...current, ...Array.from(files)]);
+    setIsCompressingFiles(true);
+    try {
+      const compressedFiles = await compressImageFiles(Array.from(files));
+      setPendingFiles((current) => [...current, ...compressedFiles]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось сжать фотографии");
+    } finally {
+      setIsCompressingFiles(false);
+    }
   };
 
   const removePendingFile = (index: number) => {
@@ -880,7 +890,11 @@ export default function SupplierCreatePointModal({
                   accept="image/*"
                   multiple
                   className="hidden"
-                  onChange={(event) => handleSelectFiles(event.target.files)}
+                  disabled={isCompressingFiles}
+                  onChange={(event) => {
+                    void handleSelectFiles(event.target.files);
+                    event.currentTarget.value = "";
+                  }}
                 />
               </label>
             </div>
@@ -943,11 +957,11 @@ export default function SupplierCreatePointModal({
               Отмена
             </button>
             <button
-              disabled={isBusy}
+              disabled={isBusy || isCompressingFiles}
               className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-sky-500 py-4 text-lg font-black text-white hover:bg-sky-600 disabled:opacity-50"
             >
-              {isBusy ? <Loader2 className="h-5 w-5 animate-spin" /> : null}
-              {isEditing ? "Сохранить и отправить на модерацию" : "Отправить на модерацию"}
+              {isBusy || isCompressingFiles ? <Loader2 className="h-5 w-5 animate-spin" /> : null}
+              {isCompressingFiles ? "Загрузка..." : isEditing ? "Сохранить и отправить на модерацию" : "Отправить на модерацию"}
             </button>
           </div>
         </form>

@@ -222,3 +222,10 @@ async def test_driver_location_requires_shift_and_valid_coordinates(client, sess
         headers=headers,
     )
     assert invalid_coordinate_response.status_code == 422
+
+    invalid_longitude_response = await client.post(
+        "/api/v1/driver/location",
+        json={"lat": 57.15, "lon": 181},
+        headers=headers,
+    )
+    assert invalid_longitude_response.status_code == 422

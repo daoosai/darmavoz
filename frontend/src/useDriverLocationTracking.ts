@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { App } from "@capacitor/app";
-import { Capacitor, type PluginListenerHandle } from "@capacitor/core";
+import { Capacitor } from "@capacitor/core";
 import { BackgroundGeolocation } from "@capgo/background-geolocation";
 import { Geolocation } from "@capacitor/geolocation";
 
@@ -10,7 +9,12 @@ const LOCATION_INTERVAL_MS = 30 * 1000;
 const GPS_POSITION_OPTIONS = {
   enableHighAccuracy: true,
   maximumAge: 0,
-  timeout: 10_000,
+  timeout: 20_000,
+} as const;
+const FALLBACK_POSITION_OPTIONS = {
+  enableHighAccuracy: false,
+  maximumAge: 30_000,
+  timeout: 20_000,
 } as const;
 
 type TrackingState = "idle" | "tracking" | "permission_denied" | "error";
@@ -20,8 +24,8 @@ interface UseDriverLocationTrackingParams {
   token: string | null;
 }
 
-const isPreciseLocationGranted = (permissions: Awaited<ReturnType<typeof Geolocation.checkPermissions>>) =>
-  permissions.location === "granted";
+const isLocationGranted = (permissions: Awaited<ReturnType<typeof Geolocation.checkPermissions>>) =>
+  permissions.location === "granted" || permissions.coarseLocation === "granted";
 
 export function useDriverLocationTracking({
   isOnShift,
@@ -29,11 +33,13 @@ export function useDriverLocationTracking({
 }: UseDriverLocationTrackingParams) {
   const intervalRef = useRef<number | null>(null);
   const backgroundTrackingActiveRef = useRef(false);
+  const isTrackingEnabledRef = useRef(false);
   const isSendingRef = useRef(false);
   const lastBackgroundSendAtRef = useRef(0);
   const [trackingState, setTrackingState] = useState<TrackingState>("idle");
 
   const stopTracking = useCallback(async () => {
+    isTrackingEnabledRef.current = false;
     if (intervalRef.current != null) {
       window.clearInterval(intervalRef.current);
       intervalRef.current = null;
@@ -51,7 +57,7 @@ export function useDriverLocationTracking({
   }, []);
 
   const sendLocationCoordinates = useCallback(async (lat: number, lon: number) => {
-    if (!isOnShift || !token || isSendingRef.current) return;
+    if (!isTrackingEnabledRef.current || !isOnShift || !token || isSendingRef.current) return;
     if (
       !Number.isFinite(lat) ||
       !Number.isFinite(lon) ||
@@ -88,13 +94,13 @@ export function useDriverLocationTracking({
     }
   }, [isOnShift, token]);
 
-  const ensurePreciseLocationPermission = useCallback(async () => {
+  const ensureLocationPermission = useCallback(async () => {
     let permissions = await Geolocation.checkPermissions();
-    if (!isPreciseLocationGranted(permissions)) {
+    if (!isLocationGranted(permissions)) {
       permissions = await Geolocation.requestPermissions({ permissions: ["location"] });
     }
 
-    if (!isPreciseLocationGranted(permissions)) {
+    if (!isLocationGranted(permissions)) {
       setTrackingState("permission_denied");
       return false;
     }
@@ -102,22 +108,31 @@ export function useDriverLocationTracking({
     return true;
   }, []);
 
+  const getForegroundPosition = useCallback(async () => {
+    try {
+      return await Geolocation.getCurrentPosition(GPS_POSITION_OPTIONS);
+    } catch (error) {
+      console.warn("Не удалось получить точную GPS-геопозицию, используем резервный источник", error);
+      return Geolocation.getCurrentPosition(FALLBACK_POSITION_OPTIONS);
+    }
+  }, []);
+
   const sendForegroundLocation = useCallback(async () => {
     if (!isOnShift || !token) return;
 
     try {
-      if (!await ensurePreciseLocationPermission()) return;
+      if (!await ensureLocationPermission()) return;
 
-      const position = await Geolocation.getCurrentPosition(GPS_POSITION_OPTIONS);
+      const position = await getForegroundPosition();
       await sendLocationCoordinates(position.coords.latitude, position.coords.longitude);
     } catch (error) {
       console.warn("Не удалось получить геопозицию водителя", error);
       setTrackingState("error");
     }
-  }, [ensurePreciseLocationPermission, isOnShift, sendLocationCoordinates, token]);
+  }, [ensureLocationPermission, getForegroundPosition, isOnShift, sendLocationCoordinates, token]);
 
   const startForegroundTracking = useCallback(() => {
-    if (intervalRef.current != null) return;
+    if (!isTrackingEnabledRef.current || intervalRef.current != null) return;
 
     void sendForegroundLocation();
     intervalRef.current = window.setInterval(
@@ -130,7 +145,12 @@ export function useDriverLocationTracking({
     if (backgroundTrackingActiveRef.current) return;
 
     try {
-      if (!await ensurePreciseLocationPermission()) return;
+      if (!await ensureLocationPermission() || !isTrackingEnabledRef.current) return;
+
+      // Получаем первую позицию до запуска watcher: fallback поможет в помещении,
+      // а дальше нативный watcher будет единственным источником обновлений.
+      await sendForegroundLocation();
+      if (!isTrackingEnabledRef.current) return;
 
       const startPromise = BackgroundGeolocation.start(
         {
@@ -156,17 +176,16 @@ export function useDriverLocationTracking({
         },
       );
       backgroundTrackingActiveRef.current = true;
-      void sendForegroundLocation();
       void startPromise.catch((error) => {
         backgroundTrackingActiveRef.current = false;
         console.warn("Не удалось запустить фоновую геолокацию", error);
-        startForegroundTracking();
+        if (isTrackingEnabledRef.current) startForegroundTracking();
       });
     } catch (error) {
       console.warn("Не удалось запустить фоновую геолокацию", error);
-      startForegroundTracking();
+      if (isTrackingEnabledRef.current) startForegroundTracking();
     }
-  }, [ensurePreciseLocationPermission, sendForegroundLocation, sendLocationCoordinates, startForegroundTracking]);
+  }, [ensureLocationPermission, sendForegroundLocation, sendLocationCoordinates, startForegroundTracking]);
 
   const startTracking = useCallback(() => {
     if (!isOnShift || !token) return;
@@ -180,6 +199,7 @@ export function useDriverLocationTracking({
   }, [isOnShift, startBackgroundTracking, startForegroundTracking, token]);
 
   useEffect(() => {
+    isTrackingEnabledRef.current = isOnShift && Boolean(token);
     if (isOnShift && token) {
       startTracking();
       return;
@@ -188,30 +208,6 @@ export function useDriverLocationTracking({
     void stopTracking();
     setTrackingState("idle");
   }, [isOnShift, startTracking, stopTracking, token]);
-
-  useEffect(() => {
-    let isDisposed = false;
-    let listener: PluginListenerHandle | undefined;
-
-    void App.addListener("appStateChange", ({ isActive }) => {
-      if (isActive && isOnShift && token) {
-        void sendForegroundLocation();
-      }
-    })
-      .then((handle) => {
-        if (isDisposed) {
-          void handle.remove();
-          return;
-        }
-        listener = handle;
-      })
-      .catch((error) => console.warn("Не удалось подписаться на состояние приложения", error));
-
-    return () => {
-      isDisposed = true;
-      void listener?.remove();
-    };
-  }, [isOnShift, sendForegroundLocation, token]);
 
   useEffect(() => () => {
     void stopTracking();

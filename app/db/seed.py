@@ -3,7 +3,6 @@ from sqlalchemy.future import select
 
 from app.core.config import settings
 from app.db.database import AsyncSessionLocal
-from app.db.seed_catalog import seed_catalog
 from app.models.models import DeliveryOption, Driver, DriverStatus, Role, User, Vehicle
 from app.security.auth import get_password_hash
 
@@ -35,7 +34,6 @@ async def seed_data() -> None:
         await ensure_user(session, settings.ADMIN_USERNAME, settings.ADMIN_PASSWORD, "admin")
         await ensure_optional_user(session, settings.LOGIST_USERNAME, settings.LOGIST_PASSWORD, "logist")
         await ensure_optional_user(session, settings.MANAGER_USERNAME, settings.MANAGER_PASSWORD, "manager")
-        await seed_catalog(session)
 
 
 async def ensure_optional_user(session, username: str | None, password: str | None, role_name: str) -> None:

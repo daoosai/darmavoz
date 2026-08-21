@@ -527,7 +527,7 @@ async def test_admin_approve_applies_quarry_defaults(
             insert(quarry_materials).values(
                 quarry_id=point.id,
                 material_id=material.id,
-                price=700,
+                price=0,
                 is_active=True,
             )
         )

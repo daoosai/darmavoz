@@ -312,7 +312,7 @@ async def validate_point_can_be_approved(
     if require_materials and (
         not payload["material_offers"]
         or not any(
-            offer["is_active"] and offer["price"] is not None and float(offer["price"]) > 0
+            offer["is_active"] and offer["price"] is not None and float(offer["price"]) >= 0
             for offer in payload["material_offers"]
         )
     ):

@@ -106,6 +106,25 @@ async def list_water_points_for_moderation(
     return await _serialize_points(list(points), db)
 
 
+@router.post("/admin/water-points", response_model=WaterPointOut, status_code=status.HTTP_201_CREATED)
+async def create_water_point_by_admin(
+    payload: WaterPointIn,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_logist_user),
+):
+    point = WaterPoint(
+        **payload.model_dump(),
+        owner_user_id=current_user.id,
+        moderation_status="approved",
+        moderated_at=datetime.now(UTC),
+        moderated_by_user_id=current_user.id,
+    )
+    db.add(point)
+    await db.commit()
+    await db.refresh(point)
+    return await _serialize_point(point, db)
+
+
 @router.get("/water-points/{point_id}", response_model=WaterPointOut)
 async def get_water_point(point_id: UUID, db: AsyncSession = Depends(get_db)):
     point = await db.scalar(_public_stmt().where(WaterPoint.id == point_id))

@@ -64,6 +64,7 @@ class MaterialCreate(BaseModel):
     unit: str
     min_volume: float = 1.0
     image_url: str | None = None
+    is_free: bool = False
     category_id: UUID | None = None
     is_active: bool = True
     sort_order: int = 0
@@ -76,6 +77,7 @@ class MaterialUpdate(BaseModel):
     unit: str | None = None
     min_volume: float | None = None
     image_url: str | None = None
+    is_free: bool | None = None
     category_id: UUID | None = None
     is_active: bool | None = None
     sort_order: int | None = None
@@ -112,6 +114,7 @@ class MaterialOut(BaseModel):
     unit: str
     min_volume: float
     image_url: str | None = None
+    is_free: bool = False
     category_id: UUID | None = None
     is_active: bool = True
     sort_order: int = 0

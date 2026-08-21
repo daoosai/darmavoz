@@ -932,9 +932,13 @@ function ProductCard({ material, onClick }: ProductCardProps) {
         <h3 className="font-bold text-[18px] text-slate-900 leading-tight">
           {material?.name}
         </h3>
-        <p className="text-[14px] font-bold text-[#2DB0E6]">
-          от {material.price} ₽ / {material.unit}
-        </p>
+        {material.is_free || Number(material.price) === 0 ? (
+          <p className="text-[14px] font-bold text-emerald-600">Бесплатно</p>
+        ) : (
+          <p className="text-[14px] font-bold text-[#2DB0E6]">
+            от {material.price} ₽ / {material.unit}
+          </p>
+        )}
       </div>
     </div>
   );

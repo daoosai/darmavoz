@@ -20,12 +20,16 @@ interface WaterPoint {
   lon: number;
   phone?: string | null;
   price?: number | null;
+  is_free?: boolean;
   price_unit?: string | null;
   description?: string | null;
   primary_image_url?: string | null;
 }
 
 const DEFAULT_CENTER: [number, number] = [65.534328, 57.152286];
+
+const isFreePoint = (point: WaterPoint) =>
+  point.is_free === true || point.water_type === "free" || Number(point.price) === 0;
 
 export default function WaterMapScreen() {
   const [points, setPoints] = useState<WaterPoint[]>([]);
@@ -164,7 +168,7 @@ export default function WaterMapScreen() {
         <div className="min-w-0 flex-1">
           <h2 className="font-black text-slate-900">{point.name || point.source}</h2>
           <p className="mt-1 flex gap-1 text-sm text-slate-600"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" /><span className="line-clamp-2">{point.address}</span></p>
-          <p className="mt-2 text-sm font-bold text-sky-600">{point.water_type === "free" ? "Бесплатная вода" : `${Number(point.price).toLocaleString("ru-RU")} ₽/${point.price_unit || "ед."}`}</p>
+          <p className="mt-2 text-sm font-bold text-emerald-600">{isFreePoint(point) ? "Бесплатно" : `${Number(point.price).toLocaleString("ru-RU")} ₽/${point.price_unit || "ед."}`}</p>
         </div>
       </div>
     </button>
@@ -231,8 +235,8 @@ export default function WaterMapScreen() {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-xl font-black text-slate-900">{selectedPoint.name || selectedPoint.source}</h2>
-                  <span className={`rounded-full px-3 py-1 text-xs font-bold ${selectedPoint.water_type === "free" ? "bg-sky-100 text-sky-800" : "bg-emerald-100 text-emerald-800"}`}>
-                    {selectedPoint.water_type === "free" ? "Бесплатная вода" : "Платная вода"}
+                  <span className={`rounded-full px-3 py-1 text-xs font-bold ${isFreePoint(selectedPoint) ? "bg-emerald-100 text-emerald-800" : "bg-sky-100 text-sky-800"}`}>
+                    {isFreePoint(selectedPoint) ? "Бесплатно" : "Платная вода"}
                   </span>
                 </div>
                 <p className="mt-1 text-sm text-slate-500">Источник: {selectedPoint.source}</p>
@@ -252,7 +256,7 @@ export default function WaterMapScreen() {
 
             <div className="mt-4 space-y-3">
               <p className="flex gap-2 text-sm leading-relaxed text-slate-600"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" />{selectedPoint.address}</p>
-              {selectedPoint.water_type === "paid" && selectedPoint.price !== null && selectedPoint.price !== undefined ? <p className="text-lg font-black text-slate-900">{Number(selectedPoint.price).toLocaleString("ru-RU")} ₽/{selectedPoint.price_unit || "ед."}</p> : null}
+              {isFreePoint(selectedPoint) ? <p className="text-lg font-black text-emerald-600">Бесплатно</p> : selectedPoint.price !== null && selectedPoint.price !== undefined ? <p className="text-lg font-black text-slate-900">{Number(selectedPoint.price).toLocaleString("ru-RU")} ₽/{selectedPoint.price_unit || "ед."}</p> : null}
               {selectedPoint.description ? <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-600">{selectedPoint.description}</p> : null}
               {selectedPoint.phone ? <a className="flex items-center gap-2 rounded-2xl bg-sky-50 px-4 py-3 text-sm font-bold text-sky-700" href={`tel:${selectedPoint.phone}`}><Phone className="h-4 w-4" />{formatPhoneNumber(selectedPoint.phone)}</a> : null}
             </div>

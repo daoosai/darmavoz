@@ -62,7 +62,8 @@ class WaterPointIn(BaseModel):
     lat: float = Field(ge=-90, le=90)
     lon: float = Field(ge=-180, le=180)
     phone: str | None = Field(default=None, max_length=20)
-    price: float | None = Field(default=None, gt=0)
+    price: float | None = Field(default=None, ge=0)
+    is_free: bool = False
     price_unit: str | None = Field(default=None, max_length=50)
     description: str | None = Field(default=None, max_length=5000)
 
@@ -73,10 +74,13 @@ class WaterPointIn(BaseModel):
                 raise ValueError("Для платной воды обязательно название")
             if not self.phone or not self.phone.strip():
                 raise ValueError("Для платной воды обязательно заполните телефон")
-            if self.price is None:
+            if not self.is_free and (self.price is None or self.price <= 0):
                 raise ValueError("Для платной воды обязательно укажите цену")
-            if not self.price_unit or not self.price_unit.strip():
+            if not self.is_free and (not self.price_unit or not self.price_unit.strip()):
                 raise ValueError("Для платной воды обязательно укажите единицу измерения")
+        if self.is_free:
+            self.price = 0 if self.water_type == "paid" else None
+            self.price_unit = None
         if self.water_type == "free" and (self.price is not None or self.price_unit is not None):
             raise ValueError("Для бесплатной воды цена не указывается")
         return self

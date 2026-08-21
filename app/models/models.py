@@ -285,6 +285,7 @@ class Material(Base):
     unit: Mapped[str] = mapped_column(String(50), nullable=False)
     min_volume: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
     image_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    is_free: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default=text("false"))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
@@ -537,6 +538,7 @@ class WaterPoint(Base):
     lon: Mapped[float] = mapped_column(Float, nullable=False)
     phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
+    is_free: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
     price_unit: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     moderation_status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending_moderation", index=True)
@@ -551,7 +553,7 @@ class WaterPoint(Base):
 
     __table_args__ = (
         CheckConstraint("lat >= -90 AND lat <= 90 AND lon >= -180 AND lon <= 180", name="ck_water_point_coordinates"),
-        CheckConstraint("water_type <> 'paid' OR (name IS NOT NULL AND btrim(name) <> '' AND phone IS NOT NULL AND btrim(phone) <> '' AND price > 0 AND price_unit IS NOT NULL AND btrim(price_unit) <> '')", name="ck_paid_water_required"),
+        CheckConstraint("water_type <> 'paid' OR (name IS NOT NULL AND btrim(name) <> '' AND phone IS NOT NULL AND btrim(phone) <> '' AND (is_free OR (price > 0 AND price_unit IS NOT NULL AND btrim(price_unit) <> '')))", name="ck_paid_water_required"),
         CheckConstraint("water_type <> 'free' OR (price IS NULL AND price_unit IS NULL)", name="ck_free_water_no_price"),
         Index("ix_water_points_public", "moderation_status", "is_active", "is_deleted"),
     )

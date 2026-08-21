@@ -112,6 +112,25 @@ async def list_septic_providers_for_moderation(
     return await _serialize_septic_profiles(list(profiles), db)
 
 
+@router.post("/admin/septic-providers", response_model=SepticProfileOut, status_code=201)
+async def create_septic_provider_by_admin(
+    payload: SepticProfileIn,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_logist_user),
+):
+    profile = SepticProviderProfile(
+        **payload.model_dump(),
+        owner_user_id=current_user.id,
+        moderation_status="approved",
+        moderated_at=datetime.now(UTC),
+        moderated_by_user_id=current_user.id,
+    )
+    db.add(profile)
+    await db.commit()
+    await db.refresh(profile)
+    return await _serialize_septic_profile(profile, db)
+
+
 @water_septic_partner_router.get("/septic-profiles", response_model=list[SepticProfileOut])
 async def list_my_septic_profiles(
     db: AsyncSession = Depends(get_db),

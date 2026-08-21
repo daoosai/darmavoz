@@ -6,6 +6,7 @@ import {
   ImagePlus,
   MapPin,
   Phone,
+  Plus,
   RefreshCw,
   Star,
   Trash2,
@@ -44,6 +45,7 @@ interface WaterPoint {
   lon: number;
   phone?: string | null;
   price?: number | string | null;
+  is_free?: boolean;
   price_unit?: string | null;
   description?: string | null;
   primary_image_url?: string | null;
@@ -112,6 +114,7 @@ const createWaterEditForm = (point: WaterPoint) => ({
   lon: String(point.lon ?? ""),
   phone: formatPhoneNumber(point.phone || ""),
   price: point.price == null ? "" : String(point.price),
+  is_free: Boolean(point.is_free),
   price_unit: point.price_unit || "литр",
   description: point.description || "",
 });
@@ -139,6 +142,7 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
   const [rejectTarget, setRejectTarget] = useState<RejectTarget | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
+  const [createTarget, setCreateTarget] = useState<ManagementTab | null>(null);
   const [editMedia, setEditMedia] = useState<MediaFile[]>([]);
   const [mediaActionId, setMediaActionId] = useState<string | null>(null);
   const [waterEditForm, setWaterEditForm] = useState(() => createWaterEditForm({
@@ -261,8 +265,25 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
     setEditTarget({ kind: "septic", data: profile });
   };
 
+  const openCreate = (kind: ManagementTab) => {
+    setCreateTarget(kind);
+    setEditMedia([]);
+    if (kind === "water") {
+      setWaterEditForm(createWaterEditForm({
+        id: "", water_type: "paid", source: "", address: "", lat: 0, lon: 0,
+        moderation_status: "", is_active: true, is_free: false,
+      }));
+      return;
+    }
+    setSepticEditForm(createSepticEditForm({
+      id: "", phone: "", address: "", lat: 0, lon: 0, tank_volume_m3: "", service_price: "",
+      moderation_status: "", is_active: true,
+    }));
+  };
+
   const closeEdit = () => {
     setEditTarget(null);
+    setCreateTarget(null);
     setEditMedia([]);
   };
 
@@ -427,10 +448,13 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
 
   const submitEdit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!token || !editTarget) return;
-    setActionId(editTarget.data.id);
+    const targetKind = editTarget?.kind ?? createTarget;
+    if (!token || !targetKind) return;
+    const isCreating = !editTarget;
+    const actionKey = editTarget?.data.id ?? `create-${targetKind}`;
+    setActionId(actionKey);
     try {
-      const isWater = editTarget.kind === "water";
+      const isWater = targetKind === "water";
       const resource = isWater ? "/admin/water-points" : "/admin/septic-providers";
       const payload = isWater
         ? {
@@ -441,8 +465,9 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
             lat: Number(waterEditForm.lat),
             lon: Number(waterEditForm.lon),
             phone: normalizePhoneForApi(waterEditForm.phone) || null,
-            price: waterEditForm.water_type === "paid" ? Number(waterEditForm.price) : null,
-            price_unit: waterEditForm.water_type === "paid" ? waterEditForm.price_unit.trim() : null,
+            price: waterEditForm.water_type === "paid" ? (waterEditForm.is_free ? 0 : Number(waterEditForm.price)) : null,
+            is_free: waterEditForm.is_free,
+            price_unit: waterEditForm.water_type === "paid" && !waterEditForm.is_free ? waterEditForm.price_unit.trim() : null,
             description: waterEditForm.description.trim() || null,
           }
         : {
@@ -453,13 +478,14 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
             tank_volume_m3: Number(septicEditForm.tank_volume_m3),
             service_price: Number(septicEditForm.service_price),
           };
-      const response = await fetch(`${baseURL}${resource}/${editTarget.data.id}`, {
-        method: "PATCH",
+      const response = await fetch(`${baseURL}${resource}${isCreating ? "" : `/${editTarget.data.id}`}`, {
+        method: isCreating ? "POST" : "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(payload),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось сохранить изменения"));
+      if (isCreating) setStatusFilter("all");
       closeEdit();
       toast.success("Изменения сохранены");
       await load();
@@ -470,6 +496,8 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
     }
   };
 
+  const modalKind = editTarget?.kind ?? createTarget;
+
   return (
     <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -477,9 +505,14 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
           <h2 className="text-xl font-bold text-slate-800">Вода и септики</h2>
           <p className="mt-1 text-sm text-slate-500">Управление точками воды и профилями септиков</p>
         </div>
-        <button type="button" onClick={() => void load()} disabled={loading} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-50">
-          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />Обновить
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => openCreate(tab)} className="flex items-center gap-2 rounded-lg bg-sky-500 px-4 py-2 text-sm font-bold text-white hover:bg-sky-600">
+            <Plus className="h-4 w-4" />{tab === "water" ? "Добавить точку воды" : "Добавить септик"}
+          </button>
+          <button type="button" onClick={() => void load()} disabled={loading} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-50">
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />Обновить
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1" role="tablist" aria-label="Тип записей">
@@ -525,19 +558,19 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
 
       {rejectTarget ? <div className="fixed inset-0 z-[70] flex items-end justify-center bg-slate-900/40 p-4 sm:items-center" role="dialog" aria-modal="true"><div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl"><div className="flex items-start justify-between gap-4"><div><h3 className="text-lg font-black text-slate-900">Отклонить заявку?</h3><p className="mt-1 text-sm text-slate-500">{rejectTarget.label}</p></div><button type="button" onClick={() => setRejectTarget(null)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100" aria-label="Закрыть"><X className="h-5 w-5" /></button></div><label className="mt-4 block text-sm font-bold text-slate-700">Причина отклонения<textarea value={rejectReason} onChange={(event) => setRejectReason(event.target.value)} className="mt-1 min-h-24 w-full rounded-xl border border-slate-200 p-3 font-normal outline-none focus:border-sky-400" placeholder="Опишите, что нужно исправить" /></label><div className="mt-5 grid grid-cols-2 gap-3"><button type="button" onClick={() => setRejectTarget(null)} className="rounded-xl bg-slate-100 py-3 font-bold text-slate-700">Отмена</button><button type="button" disabled={!rejectReason.trim() || actionId === rejectTarget.id} onClick={() => void requestAction(rejectTarget.kind, rejectTarget.id, "reject", rejectReason)} className="rounded-xl bg-rose-500 py-3 font-bold text-white disabled:opacity-50">Отклонить</button></div></div></div> : null}
 
-      {editTarget ? (
+      {modalKind ? (
         <div className="fixed inset-0 z-[70] flex items-end justify-center bg-slate-900/40 p-4 sm:items-center" role="dialog" aria-modal="true">
           <form onSubmit={submitEdit} className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <h3 className="text-lg font-black text-slate-900">
-                {editTarget.kind === "water" ? "Редактирование точки воды" : "Редактирование септика"}
+                {modalKind === "water" ? (editTarget ? "Редактирование точки воды" : "Добавить точку воды") : (editTarget ? "Редактирование септика" : "Добавить септик")}
               </h3>
               <button type="button" onClick={closeEdit} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100" aria-label="Закрыть">
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            {editTarget.kind === "water" ? (
+            {modalKind === "water" ? (
               <div className="mt-4 space-y-3">
                 <label className="block text-sm font-bold">Тип воды
                   <select value={waterEditForm.water_type} onChange={(event) => setWaterEditForm((current) => ({ ...current, water_type: event.target.value as "free" | "paid" }))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal">
@@ -559,17 +592,21 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
                   lon={waterEditForm.lon}
                   onChange={(location) => setWaterEditForm((current) => ({ ...current, ...location }))}
                 />
-                {renderMediaManager()}
+                {editTarget ? renderMediaManager() : <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">Фотографии можно добавить после сохранения.</p>}
                 <label className="block text-sm font-bold">Телефон
                   <input type="tel" inputMode="tel" autoComplete="tel" maxLength={18} value={waterEditForm.phone} onChange={(event) => setWaterEditForm((current) => ({ ...current, phone: formatPhoneNumber(event.target.value) }))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal" placeholder="+7 (999) 999-99-99" />
                 </label>
                 {waterEditForm.water_type === "paid" ? (
                   <div className="grid grid-cols-2 gap-3">
                     <label className="text-sm font-bold">Цена
-                      <input required type="number" min="0.01" step="0.01" value={waterEditForm.price} onChange={(event) => setWaterEditForm((current) => ({ ...current, price: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal" />
+                      <input required={!waterEditForm.is_free} disabled={waterEditForm.is_free} type="number" min={waterEditForm.is_free ? "0" : "0.01"} step="0.01" value={waterEditForm.is_free ? "0" : waterEditForm.price} onChange={(event) => setWaterEditForm((current) => ({ ...current, price: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal disabled:bg-slate-100" />
+                      <span className="mt-2 flex items-center gap-2 text-sm font-semibold text-emerald-700">
+                        <input type="checkbox" checked={waterEditForm.is_free} onChange={(event) => setWaterEditForm((current) => ({ ...current, is_free: event.target.checked, price: event.target.checked ? "0" : current.price }))} />
+                        Бесплатно
+                      </span>
                     </label>
                     <label className="text-sm font-bold">Единица
-                      <input required value={waterEditForm.price_unit} onChange={(event) => setWaterEditForm((current) => ({ ...current, price_unit: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal" />
+                      <input required={!waterEditForm.is_free} disabled={waterEditForm.is_free} value={waterEditForm.price_unit} onChange={(event) => setWaterEditForm((current) => ({ ...current, price_unit: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal disabled:bg-slate-100" />
                     </label>
                   </div>
                 ) : null}
@@ -590,7 +627,7 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
                   lon={septicEditForm.lon}
                   onChange={(location) => setSepticEditForm((current) => ({ ...current, ...location }))}
                 />
-                {renderMediaManager()}
+                {editTarget ? renderMediaManager() : <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">Фотографии можно добавить после сохранения.</p>}
                 <div className="grid grid-cols-2 gap-3">
                   <label className="text-sm font-bold">Объём, м³
                     <input required type="number" min="0.1" step="0.1" value={septicEditForm.tank_volume_m3} onChange={(event) => setSepticEditForm((current) => ({ ...current, tank_volume_m3: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal" />
@@ -604,8 +641,8 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
 
             <div className="mt-5 grid grid-cols-2 gap-3">
               <button type="button" onClick={closeEdit} className="rounded-xl bg-slate-100 py-3 font-bold text-slate-700">Отмена</button>
-              <button disabled={actionId === editTarget.data.id} className="flex items-center justify-center rounded-xl bg-sky-500 py-3 font-bold text-white disabled:opacity-50">
-                {actionId === editTarget.data.id ? <Loader2 className="h-5 w-5 animate-spin" /> : "Сохранить"}
+              <button disabled={actionId === (editTarget?.data.id ?? `create-${modalKind}`)} className="flex items-center justify-center rounded-xl bg-sky-500 py-3 font-bold text-white disabled:opacity-50">
+                {actionId === (editTarget?.data.id ?? `create-${modalKind}`) ? <Loader2 className="h-5 w-5 animate-spin" /> : "Сохранить"}
               </button>
             </div>
           </form>

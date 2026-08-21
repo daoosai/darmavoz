@@ -75,6 +75,7 @@ interface AdminMaterial {
   price: number;
   unit: string;
   min_volume: number;
+  is_free?: boolean;
   is_active: boolean;
   media_files?: AdminMediaFile[];
   primary_image_url?: string;
@@ -1057,7 +1058,10 @@ export default function AdminDashboardScreen({
 
   const handleSaveMaterial = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingMaterial?.name || editingMaterial.price === undefined) {
+    if (
+      !editingMaterial?.name ||
+      (!editingMaterial.is_free && (!Number.isFinite(Number(editingMaterial.price)) || Number(editingMaterial.price) <= 0))
+    ) {
       toast.error("Заполните обязательные поля (Название, Цена)");
       return;
     }
@@ -1073,7 +1077,8 @@ export default function AdminDashboardScreen({
       const payload: any = {
         name: editingMaterial.name,
         description: editingMaterial.description || "",
-        price: Number(editingMaterial.price),
+        price: editingMaterial.is_free ? 0 : Number(editingMaterial.price),
+        is_free: Boolean(editingMaterial.is_free),
         unit: editingMaterial.unit || "м3",
         min_volume: Number(editingMaterial.min_volume || 1),
         is_active: editingMaterial.is_active ?? true,
@@ -1509,6 +1514,7 @@ export default function AdminDashboardScreen({
         unit: "м3",
         min_volume: 1,
         price: 0,
+        is_free: false,
         category_id: categories[0]?.id,
       });
       setIsMaterialModalOpen(true);
@@ -3491,10 +3497,11 @@ export default function AdminDashboardScreen({
                   </label>
                   <input
                     type="number"
-                    required
+                    required={!editingMaterial.is_free}
                     step="0.01"
-                    min="0"
-                    value={editingMaterial.price || ""}
+                    min={editingMaterial.is_free ? "0" : "0.01"}
+                    disabled={editingMaterial.is_free}
+                    value={editingMaterial.is_free ? 0 : editingMaterial.price ?? ""}
                     onChange={(e) =>
                       setEditingMaterial({
                         ...editingMaterial,
@@ -3503,6 +3510,20 @@ export default function AdminDashboardScreen({
                     }
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
                   />
+                  <label className="mt-2 flex items-center gap-2 text-sm font-semibold text-emerald-700">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(editingMaterial.is_free)}
+                      onChange={(event) =>
+                        setEditingMaterial({
+                          ...editingMaterial,
+                          is_free: event.target.checked,
+                          price: event.target.checked ? 0 : editingMaterial.price,
+                        })
+                      }
+                    />
+                    Бесплатно
+                  </label>
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">

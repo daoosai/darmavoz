@@ -61,6 +61,7 @@ class QuarryMaterialRef(BaseModel):
     name: str
     unit: str
     price: Optional[float] = None
+    is_free: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -77,6 +78,7 @@ class QuarryMaterialOfferOut(BaseModel):
     is_active: bool = True
     material_name: str
     unit: str
+    is_free: bool = False
 
 
 class QuarryBase(BaseModel):
@@ -289,6 +291,7 @@ class PickupPointMarkerOut(BaseModel):
     lon: float
     material_id: UUID
     price: float
+    is_free: bool = False
     unit: str
     min_delivery_price: float
     primary_image_url: Optional[str] = None
@@ -299,6 +302,7 @@ class GlobalPickupPointMaterialOut(BaseModel):
     material_name: str
     unit: str
     price: Optional[float] = None
+    is_free: bool = False
 
 
 class GlobalPickupPointOut(BaseModel):

@@ -7,6 +7,7 @@ export interface MaterialProps {
   name: string;
   description?: string;
   price: number;
+  is_free?: boolean;
   unit: string;
   min_volume?: number;
   primary_image_url?: string;

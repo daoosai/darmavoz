@@ -59,6 +59,7 @@ async def list_pickup_points(
             Quarry.min_delivery_price,
             quarry_materials.c.price,
             Material.unit,
+            Material.is_free,
             primary_image.label("primary_image_url"),
         )
         .join(quarry_materials, quarry_materials.c.quarry_id == Quarry.id)
@@ -93,6 +94,7 @@ async def list_pickup_points(
             "lon": row.lon,
             "material_id": material_id,
             "price": row.price,
+            "is_free": row.is_free,
             "unit": row.unit,
             "min_delivery_price": row.min_delivery_price or 0,
             "primary_image_url": row.primary_image_url,
@@ -127,6 +129,7 @@ async def list_global_pickup_points(
                 "material_name": offer["material_name"],
                 "unit": offer["unit"],
                 "price": offer["price"],
+                "is_free": offer["is_free"],
             }
             for offer in payload["material_offers"]
             if offer["is_active"]

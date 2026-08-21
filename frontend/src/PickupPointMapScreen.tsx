@@ -30,6 +30,7 @@ export interface PickupPointMarker {
   lon: number;
   material_id: string;
   price: number;
+  is_free?: boolean;
   unit: string;
   min_delivery_price: number;
   primary_image_url?: string | null;
@@ -44,6 +45,7 @@ export interface PickupPointSelection extends PickupPointMarker {
     material_id: string;
     material_name: string;
     price: number | null;
+    is_free?: boolean;
     unit: string;
     is_active: boolean;
   }[];
@@ -94,6 +96,9 @@ function getClientFacingAddress(address: string | null | undefined) {
 function formatDistance(distance: number) {
   return distance < 10 ? distance.toFixed(1) : Math.round(distance).toString();
 }
+
+const isFreeOffer = (isFree: boolean | undefined, price: number | null | undefined) =>
+  isFree === true || Number(price) === 0;
 
 const TYPE_LABELS: Record<string, string> = {
   quarry: "Карьер",
@@ -406,7 +411,9 @@ export default function PickupPointMapScreen({
       title.textContent = point.short_name || point.name;
       const price = document.createElement("strong");
       price.className = "pickup-point-marker__price";
-      price.textContent = `${Number(point.price).toLocaleString("ru-RU")} ₽/${point.unit}`;
+      price.textContent = isFreeOffer(point.is_free, point.price)
+        ? "Бесплатно"
+        : `${Number(point.price).toLocaleString("ru-RU")} ₽/${point.unit}`;
       content.append(title, price);
       element.append(icon, content);
       element.addEventListener("click", () => void openPointDetails(point));
@@ -622,7 +629,7 @@ export default function PickupPointMapScreen({
                 <div className="min-w-0 flex-1 py-0.5">
                   <h2 className="truncate font-bold text-gray-900">{point.short_name || point.name}</h2>
                   <p className="mt-1 text-sm font-bold text-sky-500">
-                    {Number(point.price).toLocaleString("ru-RU")} ₽/{point.unit}
+                    {isFreeOffer(point.is_free, point.price) ? "Бесплатно" : `${Number(point.price).toLocaleString("ru-RU")} ₽/${point.unit}`}
                   </p>
                   {distance !== null && (
                     <p className="mt-1 text-xs text-gray-500">
@@ -751,7 +758,7 @@ export default function PickupPointMapScreen({
             <div className="border-t border-gray-200 pt-3">
               <span className="block text-xs text-gray-500">Материал</span>
               <strong className="text-gray-900">
-                {material.name} {" — "} {Number(selected.price).toLocaleString("ru-RU")} {"₽"}/{selected.unit}
+                {material.name} {" — "} {isFreeOffer(selected.is_free || material.is_free, selected.price) ? "Бесплатно" : `${Number(selected.price).toLocaleString("ru-RU")} ₽/${selected.unit}`}
               </strong>
             </div>
           </div>
@@ -768,8 +775,10 @@ export default function PickupPointMapScreen({
                       {offer.material_name}
                     </span>
                     <strong className="shrink-0 text-sm text-gray-900">
-                      {offer.price !== null
-                        ? `${Number(offer.price).toLocaleString("ru-RU")} \u20BD/${offer.unit}`
+                      {isFreeOffer(offer.is_free, offer.price)
+                        ? "Бесплатно"
+                        : offer.price !== null
+                        ? `${Number(offer.price).toLocaleString("ru-RU")} ₽/${offer.unit}`
                         : "Цена не указана"}
                     </strong>
                   </div>

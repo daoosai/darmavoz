@@ -189,6 +189,7 @@ async def pickup_point_payload(
                 quarry_materials.c.is_active,
                 Material.name,
                 Material.unit,
+                Material.is_free,
             )
             .join(Material, Material.id == quarry_materials.c.material_id)
             .where(quarry_materials.c.quarry_id == point.id)
@@ -239,7 +240,7 @@ async def pickup_point_payload(
 
     active_offers = [row for row in offer_rows if row.is_active]
     material_by_id = {
-        row.material_id: Material(id=row.material_id, name=row.name, unit=row.unit, price=row.price)
+        row.material_id: Material(id=row.material_id, name=row.name, unit=row.unit, price=row.price, is_free=row.is_free)
         for row in active_offers
     }
     media_by_delivery_option: dict = {}
@@ -279,6 +280,7 @@ async def pickup_point_payload(
                 "material_name": row.name,
                 "unit": row.unit,
                 "price": row.price,
+                "is_free": row.is_free,
                 "is_active": row.is_active,
             }
             for row in offer_rows

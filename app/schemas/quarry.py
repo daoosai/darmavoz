@@ -68,7 +68,7 @@ class QuarryMaterialRef(BaseModel):
 
 class QuarryMaterialOfferIn(BaseModel):
     material_id: UUID
-    price: float = Field(gt=0)
+    price: float = Field(ge=0)
     is_active: bool = True
 
 

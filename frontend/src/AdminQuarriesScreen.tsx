@@ -1503,9 +1503,9 @@ function EditQuarryModal({
                   {offer && (
                     <input
                       type="number"
-                      min="0.01"
+                      min="0"
                       step="0.01"
-                      value={offer.price || ""}
+                      value={offer.price ?? ""}
                       onChange={(event) => setFormData({
                         ...formData,
                         material_offers: (formData.material_offers || []).map((item) => item.material_id === m.id ? { ...item, price: Number(event.target.value) } : item),
@@ -2335,9 +2335,9 @@ function EnhancedEditQuarryModal({
                     {offer ? (
                       <input
                         type="number"
-                        min="0.01"
+                        min="0"
                         step="0.01"
-                        value={offer.price || ""}
+                        value={offer.price ?? ""}
                         onChange={(event) =>
                           setFormData({
                             ...formData,

@@ -232,19 +232,17 @@ async def get_route_distance(
     payload = {
         "points": [
             {
-                "type": "stop",
-                "lon": pickup_lon,
-                "lat": pickup_lat,
+                "type": "walking",
+                "x": pickup_lon,
+                "y": pickup_lat,
             },
             {
-                "type": "stop",
-                "lon": delivery_lon,
-                "lat": delivery_lat,
+                "type": "walking",
+                "x": delivery_lon,
+                "y": delivery_lat,
             },
         ],
-        "transport": "driving",
-        "route_mode": "fastest",
-        "traffic_mode": "jam",
+        "type": "truck_jam",
         "output": "detailed",
         "locale": "ru",
     }
@@ -252,7 +250,7 @@ async def get_route_distance(
     try:
         async with httpx.AsyncClient(timeout=20.0) as client:
             response = await client.post(
-                "https://routing.api.2gis.com/routing/7.0.0/global",
+                "https://routing.api.2gis.com/truck/6.0.0/global",
                 params={"key": settings.TWOGIS_API_KEY},
                 json=payload,
                 headers={"Accept": "application/json"},

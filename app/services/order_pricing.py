@@ -53,11 +53,11 @@ def has_valid_coordinates(lat: float | None, lon: float | None) -> bool:
 
 
 def build_2gis_route_stop(lat: float, lon: float) -> dict[str, float | str]:
-    """Build a 2GIS route point in the API-required longitude/latitude order."""
+    """Build a Truck Directions point using the required longitude/latitude axes."""
     return {
-        "type": "stop",
-        "lon": float(lon),
-        "lat": float(lat),
+        "type": "walking",
+        "x": float(lon),
+        "y": float(lat),
     }
 
 
@@ -192,11 +192,7 @@ async def get_2gis_route_distance(
             build_2gis_route_stop(lat_a, lon_a),
             build_2gis_route_stop(lat_b, lon_b),
         ],
-        # Keep routing compatible with base 2GIS Navigation API keys: no truck
-        # parameters, only the documented passenger-car profile.
-        "transport": "driving",
-        "route_mode": "fastest",
-        "traffic_mode": "jam",
+        "type": "truck_jam",
         "output": "summary",
         "locale": "ru",
     }
@@ -210,7 +206,7 @@ async def get_2gis_route_distance(
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
                 response = await client.post(
-                    "https://routing.api.2gis.com/routing/7.0.0/global",
+                    "https://routing.api.2gis.com/truck/6.0.0/global",
                     params={"key": settings.TWOGIS_API_KEY},
                     json=payload,
                     headers={

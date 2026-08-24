@@ -35,6 +35,7 @@ from app.schemas.order import (
     LogistOrderCreate,
     OrderHistoryEventOut,
     OrderHistoryOut,
+    DriverRecommendationsOut,
 )
 from app.services.notifications import (
     schedule_client_completed_status_notification,
@@ -59,6 +60,7 @@ from app.services.relevance import public_placement_filters
 from app.services.order_pricing import calculate_client_order_pricing, resolve_min_delivery_price
 from app.services.pickup_points import is_pickup_point_publicly_available
 from app.services.redis_client import enqueue_dispatch_order
+from app.services.smart_matching import smart_matching_service
 from app.utils.phones import normalize_phone
 
 GUEST_CLIENT_PHONE = "00000000000"
@@ -829,6 +831,21 @@ async def assign_order_to_driver_manually(session: AsyncSession, *, order_id: UU
         raise HTTPException(status_code=400, detail=MANUAL_ASSIGN_APPROVAL_ERROR)
     ensure_driver_vehicle_matches_order_volume(order, driver)
 
+    matching = await smart_matching_service.calculate(
+        session,
+        order,
+        trigger_source="manual_assignment",
+        selected_driver_id=driver.id,
+    )
+    matching_candidate = next(
+        (
+            candidate
+            for candidate in matching["candidates"] + matching["not_recommended"]
+            if candidate["driver_id"] == str(driver.id)
+        ),
+        None,
+    )
+
     now = utcnow()
     pending_offers = await session.scalars(
         select(OrderOffer).where(
@@ -856,7 +873,7 @@ async def assign_order_to_driver_manually(session: AsyncSession, *, order_id: UU
         expires_at=now,
         responded_at=now,
         decision_reason="Manual assignment by logist",
-        priority_snapshot={"manual_assignment": True},
+        priority_snapshot={"manual_assignment": True, "smart_matching": matching_candidate},
     )
     session.add(accepted_offer)
     await session.flush()
@@ -1304,6 +1321,41 @@ async def get_matching_drivers(
 
     preferred_result = await session.execute(preferred_stmt)
     preferred = list(preferred_result.scalars().all())
+    legacy_candidates = preferred
+    if not legacy_candidates:
+        fallback_result = await session.execute(fallback_stmt)
+        legacy_candidates = list(fallback_result.scalars().all())
+
+    # Orders created before pickup/delivery coordinates remain compatible with
+    # the previous priority-based dispatch. Smart Matching exposes an explicit
+    # explanation to the logist but must not strand these legacy orders.
+    has_order_coordinates = all(
+        value is not None
+        for value in (order.pickup_lat, order.pickup_lon, order.delivery_lat, order.delivery_lon)
+    )
+    if has_order_coordinates:
+        matching = await smart_matching_service.calculate(
+            session,
+            order,
+            trigger_source="auto_dispatch",
+            exclude_attempted_drivers=exclude_attempted_drivers,
+            excluded_driver_ids=excluded_driver_ids,
+            allow_penalty_fallback=allow_attempted_fallback,
+        )
+        ranked_ids = [UUID(row["driver_id"]) for row in matching["candidates"]]
+        candidate_by_id = {driver.id: driver for driver in legacy_candidates}
+        ranked_candidates = [candidate_by_id[driver_id] for driver_id in ranked_ids if driver_id in candidate_by_id]
+        if ranked_candidates:
+            logger.info(
+                "dispatch_candidates_selected",
+                extra={"order_id": str(order.id), "stage": "smart_matching", "driver_ids": [str(driver.id) for driver in ranked_candidates]},
+            )
+            return ranked_candidates
+        # For fully geocoded orders a stale or missing driver location is a
+        # hard Smart Matching exclusion, not a reason to fall back to the old
+        # priority-only dispatch sequence.
+        return []
+
     if preferred:
         logger.info(
             'dispatch_candidates_selected',
@@ -1316,8 +1368,7 @@ async def get_matching_drivers(
         )
         return preferred
 
-    fallback_result = await session.execute(fallback_stmt)
-    fallback = list(fallback_result.scalars().all())
+    fallback = legacy_candidates
     if fallback:
         logger.info(
             'dispatch_candidates_selected',
@@ -1348,6 +1399,11 @@ async def create_offer_for_driver(session: AsyncSession, order: Order, driver: D
     next_sequence_no = (
         await session.scalar(select(func.coalesce(func.max(OrderOffer.sequence_no), 0)).where(OrderOffer.order_id == order.id))
     ) or 0
+    matching_snapshot = await smart_matching_service.latest(session, order.id)
+    candidate_snapshot = next(
+        (candidate for candidate in (matching_snapshot or {}).get("candidates", []) if candidate.get("driver_id") == str(driver.id)),
+        None,
+    )
     offer = OrderOffer(
         order_id=order.id,
         driver_id=driver.id,
@@ -1361,6 +1417,7 @@ async def create_offer_for_driver(session: AsyncSession, order: Order, driver: D
             "temporary_penalty_until": driver.temporary_penalty_until.isoformat()
             if driver.temporary_penalty_until
             else None,
+            "smart_matching": candidate_snapshot,
         },
     )
     session.add(offer)
@@ -1940,6 +1997,7 @@ async def build_dispatch_history(session: AsyncSession, order_id: UUID) -> Dispa
             expires_at=offer.expires_at,
             responded_at=offer.responded_at,
             decision_reason=offer.decision_reason,
+            priority_snapshot=offer.priority_snapshot,
         )
         for offer in offers
     ]
@@ -1948,6 +2006,11 @@ async def build_dispatch_history(session: AsyncSession, order_id: UUID) -> Dispa
         status=order.status,
         assigned_driver_id=order.driver_id,
         attempts=attempts,
+        latest_recommendation=(
+            DriverRecommendationsOut.model_validate(latest)
+            if (latest := await smart_matching_service.latest(session, order_id)) is not None
+            else None
+        ),
     )
 
 

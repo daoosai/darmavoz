@@ -79,6 +79,10 @@ class AdminDriverCreate(BaseModel):
     is_active: bool = True
     is_auto_dispatch_enabled: bool = True
     dispatch_priority: int = 100
+    rating: float = Field(default=5.0, ge=1, le=5)
+    is_dispatch_eligible: bool = True
+    dispatch_admission_score: int = Field(default=100, ge=0, le=100)
+    dispatch_admission_comment: str | None = Field(default=None, max_length=2000)
     vehicle_brand: str | None = None
     vehicle_plate_number: str | None = None
     vehicle_type: str | None = None
@@ -105,6 +109,10 @@ class AdminDriverUpdate(BaseModel):
     is_active: bool | None = None
     is_auto_dispatch_enabled: bool | None = None
     dispatch_priority: int | None = None
+    rating: float | None = Field(default=None, ge=1, le=5)
+    is_dispatch_eligible: bool | None = None
+    dispatch_admission_score: int | None = Field(default=None, ge=0, le=100)
+    dispatch_admission_comment: str | None = Field(default=None, max_length=2000)
     vehicle_brand: str | None = None
     vehicle_plate_number: str | None = None
     vehicle_type: str | None = None
@@ -211,6 +219,10 @@ class DriverResponse(BaseModel):
     vehicle_id: UUID | None = None
     is_auto_dispatch_enabled: bool = True
     dispatch_priority: int = 100
+    rating: float = 5.0
+    is_dispatch_eligible: bool = True
+    dispatch_admission_score: int = 100
+    dispatch_admission_comment: str | None = None
     temporary_penalty_until: datetime | None = None
     last_offer_at: datetime | None = None
     moderation_status: str

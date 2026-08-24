@@ -77,6 +77,10 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("TWOGIS_API_KEY", "VITE_2GIS_KEY"),
     )
+    TWOGIS_TRUCK_DIRECTIONS_BASE_URL: str | None = None
+    TWOGIS_TRUCK_DIRECTIONS_CACHE_TTL_SECONDS: int = Field(default=300, ge=1)
+    TWOGIS_TRUCK_DIRECTIONS_TOP_N: int = Field(default=3, ge=1, le=10)
+    TWOGIS_TRUCK_DIRECTIONS_TIMEOUT_SECONDS: float = Field(default=8.0, gt=0)
     YANDEX_GEOCODER_API_KEY: str | None = None
     YANDEX_ROUTER_API_KEY: str | None = None
 

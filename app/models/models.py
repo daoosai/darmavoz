@@ -15,6 +15,7 @@ from sqlalchemy import (
     Integer,
     Index,
     Numeric,
+    SmallInteger,
     String,
     Table,
     Text,
@@ -176,6 +177,14 @@ class Driver(Base):
     )
     is_auto_dispatch_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     dispatch_priority: Mapped[int] = mapped_column(Integer, default=100, nullable=False)
+    rating: Mapped[float] = mapped_column(Numeric(2, 1), default=5.0, nullable=False, server_default="5.0")
+    is_dispatch_eligible: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False, server_default=text("true")
+    )
+    dispatch_admission_score: Mapped[int] = mapped_column(
+        SmallInteger, default=100, nullable=False, server_default="100"
+    )
+    dispatch_admission_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     temporary_penalty_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     last_offer_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     moderation_status: Mapped[str] = mapped_column(
@@ -1138,6 +1147,32 @@ class OrderOffer(Base):
 
     order: Mapped["Order"] = relationship("Order", back_populates="offers", foreign_keys=[order_id])
     driver: Mapped["Driver"] = relationship("Driver", back_populates="offers")
+
+
+class OrderDistributionHistory(Base):
+    """Immutable snapshot of a Smart Matching calculation for an order."""
+
+    __tablename__ = "order_distribution_history"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orders.id"), nullable=False, index=True)
+    calculated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), index=True
+    )
+    trigger_source: Mapped[str] = mapped_column(String(32), nullable=False)
+    algorithm_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    input_snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    candidates_snapshot: Mapped[list] = mapped_column(JSONB, nullable=False)
+    recommended_driver_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("drivers.id"), nullable=True
+    )
+    selected_driver_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("drivers.id"), nullable=True
+    )
+    distance_source: Mapped[str] = mapped_column(String(32), nullable=False)
+    twogis_status: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    order: Mapped["Order"] = relationship("Order", foreign_keys=[order_id])
 
 
 class IntegrationEvent(Base):

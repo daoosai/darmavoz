@@ -1371,6 +1371,10 @@ async def create_admin_driver(
         is_active=payload.is_active,
         is_auto_dispatch_enabled=payload.is_auto_dispatch_enabled,
         dispatch_priority=payload.dispatch_priority,
+        rating=payload.rating,
+        is_dispatch_eligible=payload.is_dispatch_eligible,
+        dispatch_admission_score=payload.dispatch_admission_score,
+        dispatch_admission_comment=payload.dispatch_admission_comment,
         moderation_status=ModerationStatus.approved.value,
         moderated_at=datetime.now(UTC),
         moderated_by_user_id=current_admin.id,
@@ -1486,6 +1490,14 @@ async def update_admin_driver(
         driver.is_auto_dispatch_enabled = payload.is_auto_dispatch_enabled
     if payload.dispatch_priority is not None:
         driver.dispatch_priority = payload.dispatch_priority
+    if payload.rating is not None:
+        driver.rating = payload.rating
+    if payload.is_dispatch_eligible is not None:
+        driver.is_dispatch_eligible = payload.is_dispatch_eligible
+    if payload.dispatch_admission_score is not None:
+        driver.dispatch_admission_score = payload.dispatch_admission_score
+    if "dispatch_admission_comment" in payload.model_fields_set:
+        driver.dispatch_admission_comment = payload.dispatch_admission_comment
 
     await _ensure_driver_user(
         db,

@@ -58,6 +58,10 @@ interface AdminCategory {
   slug: string;
   sort_order: number;
   is_active: boolean;
+  rating?: number;
+  is_dispatch_eligible?: boolean;
+  dispatch_admission_score?: number;
+  dispatch_admission_comment?: string | null;
 }
 
 interface AdminMediaFile {
@@ -1289,6 +1293,10 @@ export default function AdminDashboardScreen({
         tonnage_max: parseNumber(editingDriver.tonnage_max),
         vehicle_brand: editingDriver.vehicle_brand,
         vehicle_plate_number: editingDriver.vehicle_plate_number,
+        rating: Number(editingDriver.rating ?? 5),
+        is_dispatch_eligible: editingDriver.is_dispatch_eligible ?? true,
+        dispatch_admission_score: Number(editingDriver.dispatch_admission_score ?? 100),
+        dispatch_admission_comment: editingDriver.dispatch_admission_comment || null,
       };
 
       if (!isEdit && payload.is_active) {
@@ -3595,6 +3603,51 @@ export default function AdminDashboardScreen({
                     Для загрузки фотографий сначала сохраните материал.
                   </div>
                 )}
+              </div>
+
+              <div className="rounded-xl border border-slate-200 p-4 space-y-3">
+                <p className="text-sm font-bold text-slate-800">Скоринг и допуск к распределению</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="text-xs font-semibold text-slate-600">
+                    Рейтинг (1–5)
+                    <input
+                      type="number"
+                      min="1"
+                      max="5"
+                      step="0.1"
+                      value={editingDriver.rating ?? 5}
+                      onChange={(e) => setEditingDriver({ ...editingDriver, rating: Number(e.target.value) })}
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="text-xs font-semibold text-slate-600">
+                    Оценка допуска (0–100)
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={editingDriver.dispatch_admission_score ?? 100}
+                      onChange={(e) => setEditingDriver({ ...editingDriver, dispatch_admission_score: Number(e.target.value) })}
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                    />
+                  </label>
+                </div>
+                <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={editingDriver.is_dispatch_eligible !== false}
+                    onChange={(e) => setEditingDriver({ ...editingDriver, is_dispatch_eligible: e.target.checked })}
+                    className="h-4 w-4 rounded border-slate-300 text-[#2DB0E6]"
+                  />
+                  Допущен к автоматическому распределению
+                </label>
+                <textarea
+                  value={editingDriver.dispatch_admission_comment || ""}
+                  onChange={(e) => setEditingDriver({ ...editingDriver, dispatch_admission_comment: e.target.value })}
+                  placeholder="Комментарий к допуску (необязательно)"
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                  rows={2}
+                />
               </div>
 
               <label className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer">

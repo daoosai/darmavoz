@@ -115,6 +115,25 @@ def _normalize_place(item: object) -> ParsedPlace | None:
     )
 
 
+def _places_error_message(payload: object, fallback: str) -> str:
+    if not isinstance(payload, dict):
+        return fallback
+
+    meta = payload.get("meta")
+    nested_error = meta.get("error") if isinstance(meta, dict) else None
+    candidates = (
+        nested_error.get("message") if isinstance(nested_error, dict) else None,
+        nested_error if isinstance(nested_error, str) else None,
+        payload.get("message"),
+        payload.get("detail"),
+        payload.get("error"),
+    )
+    for candidate in candidates:
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate.strip()
+    return fallback
+
+
 async def _fetch_page(client: httpx.AsyncClient, params: dict[str, Any]) -> dict[str, Any]:
     response: httpx.Response | None = None
     for attempt in range(1, settings.TWOGIS_PLACES_MAX_RETRIES + 1):
@@ -136,26 +155,63 @@ async def _fetch_page(client: httpx.AsyncClient, params: dict[str, Any]) -> dict
             logger.warning("twogis_places_rate_limited", extra={"attempt": attempt})
             await asyncio.sleep(attempt)
 
-    if response is None or response.status_code != status.HTTP_200_OK:
+    if response is None:
         logger.warning(
             "twogis_places_response_failed",
-            extra={"status_code": response.status_code if response else None},
+            extra={"status_code": None},
         )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="2GIS Places API is temporarily unavailable",
         )
+    if response.status_code in {
+        status.HTTP_401_UNAUTHORIZED,
+        status.HTTP_403_FORBIDDEN,
+    }:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Ошибка 2ГИС: Нет доступа к Places API. Проверьте лимиты ключа.",
+        )
     try:
         payload = response.json()
     except ValueError as exc:
+        if response.status_code != status.HTTP_200_OK:
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=f"Ошибка 2ГИС: {response.reason_phrase or 'Places API returned an error'}",
+            ) from exc
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="2GIS Places API returned an invalid response",
+            detail="Ошибка 2ГИС: Places API вернул некорректный ответ.",
         ) from exc
+    if response.status_code != status.HTTP_200_OK:
+        logger.warning(
+            "twogis_places_response_failed",
+            extra={"status_code": response.status_code},
+        )
+        raise HTTPException(
+            status_code=response.status_code,
+            detail=f"Ошибка 2ГИС: {_places_error_message(payload, response.reason_phrase)}",
+        )
     if not isinstance(payload, dict):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="2GIS Places API returned an invalid response",
+            detail="Ошибка 2ГИС: Places API вернул некорректный ответ.",
+        )
+    meta = payload.get("meta")
+    meta_code = meta.get("code") if isinstance(meta, dict) else None
+    if isinstance(meta_code, int) and meta_code >= status.HTTP_400_BAD_REQUEST:
+        if meta_code in {
+            status.HTTP_401_UNAUTHORIZED,
+            status.HTTP_403_FORBIDDEN,
+        }:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Ошибка 2ГИС: Нет доступа к Places API. Проверьте лимиты ключа.",
+            )
+        raise HTTPException(
+            status_code=meta_code,
+            detail=f"Ошибка 2ГИС: {_places_error_message(payload, 'Places API returned an error')}",
         )
     return payload
 

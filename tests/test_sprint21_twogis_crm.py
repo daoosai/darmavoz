@@ -1,14 +1,52 @@
 import pytest
+import httpx
+from fastapi import HTTPException
 from sqlalchemy import select
 
 from app.models.models import CrmStatus, PointAuditLog, Quarry, Role, User
 from app.security.jwt import create_access_token
 from app.services.pickup_points import is_pickup_point_publicly_available
-from app.services.twogis_places import ParsedPlace
+from app.services.twogis_places import ParsedPlace, _fetch_page
 
 
 def auth_headers(username: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {create_access_token(data={'sub': username})}"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("response_status", "response_payload"),
+    [
+        (403, {"meta": {"code": 403, "error": {"message": "Access denied"}}}),
+        (200, {"meta": {"code": 403, "error": {"message": "Access denied"}}}),
+    ],
+)
+async def test_places_access_error_is_exposed(response_status, response_payload):
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(response_status, json=response_payload)
+    )
+    async with httpx.AsyncClient(transport=transport) as client:
+        with pytest.raises(HTTPException) as exc_info:
+            await _fetch_page(client, {})
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == "Ошибка 2ГИС: Нет доступа к Places API. Проверьте лимиты ключа."
+
+
+@pytest.mark.asyncio
+async def test_places_meta_error_keeps_twogis_message():
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            json={"meta": {"code": 429, "error": {"message": "Rate limit exceeded"}}},
+        )
+    )
+    async with httpx.AsyncClient(transport=transport) as client:
+        with pytest.raises(HTTPException) as exc_info:
+            await _fetch_page(client, {})
+
+    assert exc_info.value.status_code == 429
+    assert exc_info.value.detail == "Ошибка 2ГИС: Rate limit exceeded"
 
 
 async def ensure_role(session, name: str) -> Role:

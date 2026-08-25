@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
 from app.models.models import (
+    CrmStatus,
     Material,
     MediaFile,
     Quarry,
@@ -110,7 +111,9 @@ async def list_global_pickup_points(
     result = await db.execute(
         select(Quarry)
         .where(
-            *public_pickup_point_filters(),
+            Quarry.crm_status.in_(
+                [CrmStatus.active.value, CrmStatus.parsed.value, CrmStatus.rejected.value]
+            ),
             Quarry.lat.is_not(None),
             Quarry.lon.is_not(None),
         )
@@ -134,8 +137,6 @@ async def list_global_pickup_points(
             for offer in payload["material_offers"]
             if offer["is_active"]
         ]
-        if not active_offers:
-            continue
         items.append(
             {
                 "id": payload["id"],
@@ -149,6 +150,8 @@ async def list_global_pickup_points(
                 "lon": payload["lon"],
                 "primary_image_url": payload["primary_image_url"],
                 "material_offers": active_offers,
+                "crm_status": payload["crm_status"],
+                "parsed_data": payload["parsed_data"],
             }
         )
     return items

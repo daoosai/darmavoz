@@ -12,6 +12,8 @@ import { useAuthStore, usePlacementStore } from "./store";
 import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
 import { PlacementBadge, PlacementDates, type PlacementFields, type PlacementStatus } from "./placement";
 import MapWebGLFallback, { tryCreate2GisMap } from "./components/MapWebGLFallback";
+import CrmPanel from "./components/admin/CrmPanel";
+import ParserRunPanel from "./components/admin/ParserRunPanel";
 
 export interface Quarry extends PlacementFields {
   id?: string;
@@ -37,6 +39,10 @@ export interface Quarry extends PlacementFields {
   materials?: any[];
   owner_name?: string | null;
   owner_phone?: string | null;
+  twogis_id?: string | null;
+  crm_status?: "parsed" | "active" | "rejected";
+  crm_comment?: string | null;
+  parsed_data?: Record<string, unknown> | null;
   primary_image_url?: string | null;
   media_files?: {
     id: string;
@@ -453,6 +459,8 @@ export default function AdminQuarriesScreen({
         </button>
       </div>
 
+      <ParserRunPanel target="material" token={token} onCompleted={fetchQuarries} />
+
       <div className="grid grid-cols-2 gap-3 bg-white p-3 rounded-2xl border border-slate-100">
         <select value={normalizedStatusFilter} onChange={(event) => onStatusFilterChange(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
           <option value="">Все статусы</option>
@@ -491,13 +499,15 @@ export default function AdminQuarriesScreen({
                 <th className="p-4 border-b border-slate-100">Адрес</th>
                 <th className="p-4 border-b border-slate-100">Статус</th>
                 <th className="p-4 border-b border-slate-100">Модерация</th>
+                <th className="p-4 border-b border-slate-100">Статус CRM</th>
+                <th className="p-4 border-b border-slate-100">Источник</th>
                 <th className="w-[340px] min-w-[340px] whitespace-nowrap border-b border-slate-100 p-4 pr-6">Действия</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {quarries.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-slate-500">
+                  <td colSpan={8} className="p-8 text-center text-slate-500">
                     Нет точек
                   </td>
                 </tr>
@@ -547,6 +557,8 @@ export default function AdminQuarriesScreen({
                         {moderationBadge(quarry.moderation_status).label}
                       </span>
                     </td>
+                    <td className="p-4"><span className={`inline-flex rounded-lg px-2 py-1 text-xs font-bold ${quarry.crm_status === "active" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"}`}>{quarry.crm_status || "active"}</span></td>
+                    <td className="p-4 text-sm text-slate-600">{quarry.twogis_id ? "2ГИС" : "Ручной"}</td>
                     <td className="w-[340px] min-w-[340px] align-top p-4 pr-6">
                       <div className="flex max-w-full flex-wrap items-center justify-end gap-2">
                         <button
@@ -2499,6 +2511,15 @@ function EnhancedEditQuarryModal({
               <span className="ml-3 text-sm font-medium text-slate-700">Активен</span>
             </label>
           </div>
+
+          {formData.id ? <CrmPanel
+            token={token}
+            pointKind="quarry"
+            pointId={formData.id}
+            initialStatus={formData.crm_status}
+            initialComment={formData.crm_comment}
+            initialOwnerId={formData.owner_user_id}
+          /> : null}
 
           <div className="mt-4 flex gap-3">
             <button

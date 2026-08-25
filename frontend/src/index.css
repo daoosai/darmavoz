@@ -46,6 +46,13 @@
 
 .water-map-marker__pin--free { background: #d1fae5; }
 .water-map-marker__pin--paid { background: #dbeafe; }
+.water-map-marker__pin--unknown { background: #e2e8f0; }
+.water-map-marker__pin--muted { background: #cbd5e1; }
+.water-map-marker--crm-active .water-map-marker__label { background: #16a34a; }
+.water-map-marker--crm-active .water-map-marker__label-tail { border-top-color: #16a34a; }
+.water-map-marker--crm-muted { opacity: 0.82; }
+.water-map-marker--crm-muted .water-map-marker__label { background: #64748b; }
+.water-map-marker--crm-muted .water-map-marker__label-tail { border-top-color: #64748b; }
 .water-map-marker__pin--septic { background: #e0f2fe; }
 
 html,
@@ -214,6 +221,10 @@ body {
 /* Вытаскиваем подсказки Яндекса поверх всех модалок */
 .ymaps-2-1-79-search__suggest, [class*="ymaps-"][class*="-suggest"] {
     z-index: 99999 !important;
+}
+
+.water-map-card--muted > p {
+  display: none;
 }
 
 @layer utilities {

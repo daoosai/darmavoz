@@ -313,10 +313,10 @@ async def _list_admin_partner_users(
     current_admin: User = Depends(get_current_admin_user),
 ) -> list[AdminSupplierOut]:
     del current_admin
-    if role not in {"supplier", "equipment_owner"}:
+    if role not in {"supplier", "equipment_owner", "water_septic_partner"}:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Поддерживаются только роли supplier и equipment_owner",
+            detail="Поддерживаются роли supplier, equipment_owner и water_septic_partner",
         )
 
     result = await db.execute(

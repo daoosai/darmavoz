@@ -56,9 +56,11 @@ from app.services.notifications import (
     schedule_logist_requires_clarification_notification,
     create_operator_notifications,
 )
-from app.services.relevance import public_placement_filters
 from app.services.order_pricing import calculate_client_order_pricing, resolve_min_delivery_price
-from app.services.pickup_points import is_pickup_point_publicly_available
+from app.services.pickup_points import (
+    is_pickup_point_publicly_available,
+    public_pickup_point_filters,
+)
 from app.services.redis_client import enqueue_dispatch_order
 from app.services.smart_matching import smart_matching_service
 from app.utils.phones import normalize_phone
@@ -669,7 +671,7 @@ async def _resolve_logist_order_quarry(
         select(Quarry)
         .join(quarry_materials, quarry_materials.c.quarry_id == Quarry.id)
         .where(
-            *public_placement_filters(Quarry),
+            *public_pickup_point_filters(),
             quarry_materials.c.material_id == material_id,
             quarry_materials.c.is_active.is_(True),
         )

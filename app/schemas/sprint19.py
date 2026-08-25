@@ -55,7 +55,7 @@ class PhonePasswordResetComplete(PhonePasswordResetRequest):
 
 
 class WaterPointIn(BaseModel):
-    water_type: Literal["free", "paid"]
+    water_type: Literal["free", "paid", "unknown"]
     name: str | None = Field(default=None, max_length=255)
     source: str = Field(min_length=1, max_length=255)
     address: str = Field(min_length=1, max_length=2000)
@@ -69,6 +69,11 @@ class WaterPointIn(BaseModel):
 
     @model_validator(mode="after")
     def validate_type(self):
+        if self.water_type == "unknown":
+            self.price = None
+            self.price_unit = None
+            self.is_free = False
+            return self
         if self.water_type == "paid":
             if not self.name or not self.name.strip():
                 raise ValueError("Для платной воды обязательно название")
@@ -91,6 +96,10 @@ class WaterPointOut(WaterPointIn):
     owner_user_id: UUID | None = None
     moderation_status: str
     moderation_comment: str | None = None
+    twogis_id: str | None = None
+    crm_status: Literal["parsed", "active", "rejected"] = "active"
+    crm_comment: str | None = None
+    parsed_data: dict | None = None
     is_active: bool
     created_at: datetime | None = None
     primary_image_url: str | None = None

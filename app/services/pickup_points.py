@@ -11,6 +11,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.models import (
+    CrmStatus,
     DeliveryOption,
     Material,
     MediaFile,
@@ -38,7 +39,7 @@ DEFAULT_MIN_DELIVERY_PRICE = {
 
 
 def public_pickup_point_filters():
-    return public_placement_filters(Quarry)
+    return (*public_placement_filters(Quarry), Quarry.crm_status == CrmStatus.active.value)
 
 
 def is_pickup_point_publicly_available(
@@ -46,7 +47,7 @@ def is_pickup_point_publicly_available(
     *,
     now: datetime | None = None,
 ) -> bool:
-    return is_publicly_available(point, now=now)
+    return point.crm_status == CrmStatus.active.value and is_publicly_available(point, now=now)
 
 
 def default_min_delivery_price(point_type: str) -> Decimal | None:
@@ -272,6 +273,10 @@ async def pickup_point_payload(
         "moderation_comment": point.moderation_comment,
         "pending_changes": serialize_moderation_value(point.pending_changes) if include_pending_changes else None,
         "owner_user_id": point.owner_user_id,
+        "twogis_id": point.twogis_id,
+        "crm_status": point.crm_status,
+        "crm_comment": point.crm_comment,
+        "parsed_data": point.parsed_data,
         "material_ids": list(material_by_id),
         "materials": list(material_by_id.values()),
         "material_offers": [

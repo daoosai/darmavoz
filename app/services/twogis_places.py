@@ -1,0 +1,276 @@
+from __future__ import annotations
+
+import asyncio
+import logging
+import re
+from dataclasses import dataclass
+from typing import Any
+
+import httpx
+from fastapi import HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import settings
+from app.models.models import CrmStatus, PointAuditLog, Quarry, WaterPoint
+from app.schemas.parser import MATERIAL_KEYWORDS, ParserRunRequest, ParserRunResult
+
+
+logger = logging.getLogger(__name__)
+PHONE_PATTERN = re.compile(r"\+?[\d][\d\s()\-]{4,}[\d]")
+PLACES_FIELDS = ",".join(
+    (
+        "items.point",
+        "items.full_address_name",
+        "items.contact_groups",
+        "items.schedule",
+        "items.rubrics",
+    )
+)
+
+
+@dataclass(frozen=True)
+class ParsedPlace:
+    twogis_id: str
+    name: str
+    address: str
+    lat: float
+    lon: float
+    phone: str | None
+    parsed_data: dict[str, Any]
+
+
+def _contact_value(contact: dict[str, Any]) -> str | None:
+    for key in ("value", "text", "url", "number"):
+        value = contact.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _extract_contacts(item: dict[str, Any]) -> tuple[list[str], list[str]]:
+    phones: list[str] = []
+    websites: list[str] = []
+    groups = item.get("contact_groups")
+    if not isinstance(groups, list):
+        return phones, websites
+
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        contacts = group.get("contacts")
+        if not isinstance(contacts, list):
+            continue
+        for contact in contacts:
+            if not isinstance(contact, dict):
+                continue
+            value = _contact_value(contact)
+            if not value:
+                continue
+            contact_type = str(contact.get("type") or "").casefold()
+            if "site" in contact_type or "web" in contact_type or value.startswith(("http://", "https://")):
+                websites.append(value)
+            elif "phone" in contact_type or PHONE_PATTERN.search(value):
+                phones.append(value)
+
+    return list(dict.fromkeys(phones)), list(dict.fromkeys(websites))
+
+
+def _normalize_place(item: object) -> ParsedPlace | None:
+    if not isinstance(item, dict):
+        return None
+    item_id = item.get("id")
+    name = item.get("name")
+    point = item.get("point")
+    address = item.get("full_address_name") or item.get("address_name")
+    if not isinstance(item_id, str) or not item_id.strip() or not isinstance(name, str) or not name.strip():
+        return None
+    if not isinstance(address, str) or not address.strip() or not isinstance(point, dict):
+        return None
+    try:
+        lat = float(point["lat"])
+        lon = float(point["lon"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        return None
+
+    phones, websites = _extract_contacts(item)
+    parsed_data: dict[str, Any] = {
+        "source": "2gis",
+        "phones": phones,
+        "websites": websites,
+        "schedule": item.get("schedule"),
+        "rubrics": item.get("rubrics"),
+        "raw": item,
+    }
+    return ParsedPlace(
+        twogis_id=item_id,
+        name=name.strip(),
+        address=address.strip(),
+        lat=lat,
+        lon=lon,
+        phone=phones[0] if phones else None,
+        parsed_data=parsed_data,
+    )
+
+
+async def _fetch_page(client: httpx.AsyncClient, params: dict[str, Any]) -> dict[str, Any]:
+    response: httpx.Response | None = None
+    for attempt in range(1, settings.TWOGIS_PLACES_MAX_RETRIES + 1):
+        try:
+            response = await client.get(settings.TWOGIS_PLACES_BASE_URL, params=params)
+        except httpx.HTTPError:
+            if attempt == settings.TWOGIS_PLACES_MAX_RETRIES:
+                logger.exception("twogis_places_request_failed", extra={"attempt": attempt})
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="2GIS Places API is temporarily unavailable",
+                )
+            await asyncio.sleep(attempt)
+            continue
+
+        if response.status_code != status.HTTP_429_TOO_MANY_REQUESTS:
+            break
+        if attempt < settings.TWOGIS_PLACES_MAX_RETRIES:
+            logger.warning("twogis_places_rate_limited", extra={"attempt": attempt})
+            await asyncio.sleep(attempt)
+
+    if response is None or response.status_code != status.HTTP_200_OK:
+        logger.warning(
+            "twogis_places_response_failed",
+            extra={"status_code": response.status_code if response else None},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="2GIS Places API is temporarily unavailable",
+        )
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="2GIS Places API returned an invalid response",
+        ) from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="2GIS Places API returned an invalid response",
+        )
+    return payload
+
+
+async def search_places(payload: ParserRunRequest) -> tuple[list[ParsedPlace], bool]:
+    if not settings.TWOGIS_API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="2GIS Places API key is not configured",
+        )
+
+    collected: list[ParsedPlace] = []
+    page = 1
+    total: int | None = None
+    page_size = min(50, settings.TWOGIS_PLACES_MAX_RESULTS)
+    base_params = {
+        "key": settings.TWOGIS_API_KEY,
+        "q": f"{payload.keyword}, {payload.city}",
+        "type": "branch",
+        "point": f"{payload.center_lon},{payload.center_lat}",
+        "radius": payload.radius_m,
+        "locale": "ru_RU",
+        "fields": PLACES_FIELDS,
+        "page_size": page_size,
+    }
+
+    async with httpx.AsyncClient(timeout=settings.TWOGIS_PLACES_TIMEOUT_SECONDS) as client:
+        while len(collected) < settings.TWOGIS_PLACES_MAX_RESULTS:
+            response_payload = await _fetch_page(client, {**base_params, "page": page})
+            result = response_payload.get("result")
+            if not isinstance(result, dict):
+                break
+            items = result.get("items")
+            if not isinstance(items, list) or not items:
+                break
+            if isinstance(result.get("total"), int):
+                total = result["total"]
+            collected.extend(place for item in items if (place := _normalize_place(item)) is not None)
+            if len(items) < page_size:
+                break
+            page += 1
+
+    unique_places = list({place.twogis_id: place for place in collected}.values())
+    truncated = bool(total is not None and total > len(unique_places) and len(unique_places) >= settings.TWOGIS_PLACES_MAX_RESULTS)
+    return unique_places[: settings.TWOGIS_PLACES_MAX_RESULTS], truncated
+
+
+async def upsert_places(
+    db: AsyncSession,
+    *,
+    payload: ParserRunRequest,
+    places: list[ParsedPlace],
+    admin_id,
+    truncated: bool,
+) -> ParserRunResult:
+    result = ParserRunResult(found=len(places), truncated=truncated)
+    destination_model = Quarry if payload.target == "material" else WaterPoint
+    other_model = WaterPoint if payload.target == "material" else Quarry
+    point_kind = "quarry" if payload.target == "material" else "water"
+    point_type = MATERIAL_KEYWORDS.get(payload.keyword, "quarry")
+
+    for place in places:
+        existing = await db.scalar(select(destination_model).where(destination_model.twogis_id == place.twogis_id))
+        if existing is not None:
+            existing.parsed_data = place.parsed_data
+            result.updated += 1
+            continue
+
+        other_kind_match = await db.scalar(select(other_model.id).where(other_model.twogis_id == place.twogis_id))
+        if other_kind_match is not None:
+            result.cross_target_conflicts += 1
+            continue
+
+        if payload.target == "material":
+            point = Quarry(
+                name=place.name,
+                short_name=place.name,
+                point_type=point_type,
+                address=place.address,
+                contact_phone=place.phone,
+                lat=place.lat,
+                lon=place.lon,
+                is_active=False,
+                moderation_status="incomplete",
+                twogis_id=place.twogis_id,
+                crm_status=CrmStatus.parsed.value,
+                parsed_data=place.parsed_data,
+            )
+        else:
+            point = WaterPoint(
+                water_type="unknown",
+                name=place.name,
+                source="2GIS",
+                address=place.address,
+                lat=place.lat,
+                lon=place.lon,
+                phone=place.phone,
+                is_active=False,
+                moderation_status="pending_moderation",
+                twogis_id=place.twogis_id,
+                crm_status=CrmStatus.parsed.value,
+                parsed_data=place.parsed_data,
+            )
+        db.add(point)
+        await db.flush()
+        db.add(
+            PointAuditLog(
+                point_id=point.id,
+                point_kind=point_kind,
+                admin_id=admin_id,
+                old_status=None,
+                new_status=CrmStatus.parsed.value,
+            )
+        )
+        result.created += 1
+
+    result.skipped = result.found - result.created - result.updated - result.cross_target_conflicts
+    return result

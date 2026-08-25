@@ -19,7 +19,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 crm_status = postgresql.ENUM("parsed", "active", "rejected", name="crm_status", create_type=False)
-point_kind = postgresql.ENUM("quarry", "water", name="point_audit_point_kind")
+point_kind = postgresql.ENUM(
+    "quarry",
+    "water",
+    name="point_audit_point_kind",
+    create_type=False,
+)
 
 
 def upgrade() -> None:

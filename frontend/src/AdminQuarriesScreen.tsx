@@ -12,6 +12,7 @@ import { useAuthStore, usePlacementStore } from "./store";
 import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
 import { PlacementBadge, PlacementDates, type PlacementFields, type PlacementStatus } from "./placement";
 import MapWebGLFallback, { tryCreate2GisMap } from "./components/MapWebGLFallback";
+import AdminQuarriesMap from "./components/admin/AdminQuarriesMap";
 import CrmPanel from "./components/admin/CrmPanel";
 import ParserRunPanel from "./components/admin/ParserRunPanel";
 
@@ -239,6 +240,7 @@ export default function AdminQuarriesScreen({
   const [deletingPointId, setDeletingPointId] = useState<string | null>(null);
   const [rejectPointId, setRejectPointId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [parserCenter, setParserCenter] = useState({ lat: 57.1522, lon: 65.5272 });
   const { policy, loadPolicy, loadSummary } = usePlacementStore();
   const normalizedStatusFilter = ALLOWED_MODERATION_FILTERS.has(statusFilter)
     ? statusFilter
@@ -431,6 +433,10 @@ export default function AdminQuarriesScreen({
     setIsModalOpen(true);
   };
 
+  const handleParserCoordinatesChange = (coordinates: { lat: number; lon: number }) => {
+    setParserCenter(coordinates);
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -459,7 +465,12 @@ export default function AdminQuarriesScreen({
         </button>
       </div>
 
-      <ParserRunPanel target="material" token={token} onCompleted={fetchQuarries} />
+      <ParserRunPanel
+        target="material"
+        token={token}
+        onCoordinatesChange={handleParserCoordinatesChange}
+        onCompleted={fetchQuarries}
+      />
 
       <div className="grid grid-cols-2 gap-3 bg-white p-3 rounded-2xl border border-slate-100">
         <select value={normalizedStatusFilter} onChange={(event) => onStatusFilterChange(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
@@ -487,6 +498,30 @@ export default function AdminQuarriesScreen({
           <option value="supplier">Поставщики</option>
         </select>
       </div>
+
+      <section className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
+        <div className="mb-3 flex items-center justify-between gap-3 px-1">
+          <div>
+            <h3 className="text-base font-bold text-slate-800">Карта точек</h3>
+            <p className="text-xs text-slate-500">
+              Показаны точки из текущего списка с учётом фильтров
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-3 text-xs font-semibold text-slate-500">
+            <span className="flex items-center gap-1.5">
+              <span className="h-3 w-3 rounded-full bg-green-600" /> Активные
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-3 w-3 rounded-full bg-slate-500" /> CRM
+            </span>
+          </div>
+        </div>
+        <AdminQuarriesMap
+          points={quarries}
+          center={parserCenter}
+          onPointClick={(point) => handleOpenModal(point as Quarry)}
+        />
+      </section>
 
       {/* Desktop View */}
       <div className="hidden overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm md:block">

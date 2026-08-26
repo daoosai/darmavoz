@@ -10,6 +10,7 @@ import {
 } from "./addressSearch";
 import { useAuthStore, usePlacementStore } from "./store";
 import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
+import { getCrmStatusLabel, type CrmStatus } from "./crmStatus";
 import { PlacementBadge, PlacementDates, type PlacementFields, type PlacementStatus } from "./placement";
 import MapWebGLFallback, { tryCreate2GisMap } from "./components/MapWebGLFallback";
 import AdminQuarriesMap from "./components/admin/AdminQuarriesMap";
@@ -41,7 +42,8 @@ export interface Quarry extends PlacementFields {
   owner_name?: string | null;
   owner_phone?: string | null;
   twogis_id?: string | null;
-  crm_status?: "parsed" | "active" | "rejected";
+  crm_status?: CrmStatus;
+  is_ready?: boolean;
   crm_comment?: string | null;
   parsed_data?: Record<string, unknown> | null;
   primary_image_url?: string | null;
@@ -592,7 +594,7 @@ export default function AdminQuarriesScreen({
                         {moderationBadge(quarry.moderation_status).label}
                       </span>
                     </td>
-                    <td className="p-4"><span className={`inline-flex rounded-lg px-2 py-1 text-xs font-bold ${quarry.crm_status === "active" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"}`}>{quarry.crm_status || "active"}</span></td>
+                    <td className="p-4"><span className={`inline-flex rounded-lg px-2 py-1 text-xs font-bold ${quarry.crm_status === "active" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"}`}>{getCrmStatusLabel(quarry.crm_status)}</span></td>
                     <td className="p-4 text-sm text-slate-600">{quarry.twogis_id ? "2ГИС" : "Ручной"}</td>
                     <td className="w-[340px] min-w-[340px] align-top p-4 pr-6">
                       <div className="flex max-w-full flex-wrap items-center justify-end gap-2">

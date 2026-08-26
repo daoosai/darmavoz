@@ -2,15 +2,13 @@ import { useEffect, useState } from "react";
 import { Link2, Loader2, Save } from "lucide-react";
 import toast from "react-hot-toast";
 
+import { CRM_STATUS_LABELS, type CrmStatus } from "../../crmStatus";
 import { baseURL, extractApiErrorMessage } from "../../utils";
 
 type PointKind = "quarry" | "water";
-type CrmStatus = "parsed" | "active" | "rejected";
 
 type Owner = { id: string; display_name?: string | null; username?: string | null; phone?: string | null };
 type AuditEntry = { id: string; old_status?: CrmStatus | null; new_status: CrmStatus; created_at: string };
-
-const labels: Record<CrmStatus, string> = { parsed: "Распарсена", active: "Активна", rejected: "Отклонена" };
 
 export default function CrmPanel({ token, pointKind, pointId, initialStatus, initialComment, initialOwnerId, onUpdated }: {
   token: string | null;
@@ -75,9 +73,9 @@ export default function CrmPanel({ token, pointKind, pointId, initialStatus, ini
 
   return <section className="mt-5 space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
     <h4 className="font-black text-slate-900">CRM</h4>
-    <div className="grid gap-3 sm:grid-cols-2"><label className="text-sm font-bold">Статус<select value={crmStatus} onChange={(event) => setCrmStatus(event.target.value as CrmStatus)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-3 font-normal">{Object.entries(labels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="text-sm font-bold">Комментарий<textarea value={crmComment} onChange={(event) => setCrmComment(event.target.value)} className="mt-1 min-h-20 w-full rounded-xl border border-slate-200 bg-white p-3 font-normal" /></label></div>
+    <div className="grid gap-3 sm:grid-cols-2"><label className="text-sm font-bold">Статус<select value={crmStatus} onChange={(event) => setCrmStatus(event.target.value as CrmStatus)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-3 font-normal">{Object.entries(CRM_STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="text-sm font-bold">Комментарий<textarea value={crmComment} onChange={(event) => setCrmComment(event.target.value)} className="mt-1 min-h-20 w-full rounded-xl border border-slate-200 bg-white p-3 font-normal" /></label></div>
     <button type="button" disabled={loading || !token} onClick={() => void saveCrm()} className="flex items-center justify-center gap-2 rounded-xl bg-slate-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"><Save className="h-4 w-4" />Сохранить CRM</button>
     <div className="border-t border-slate-200 pt-3"><label className="block text-sm font-bold">Привязать владельца<select value={ownerId} onChange={(event) => setOwnerId(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-3 font-normal"><option value="">Выберите существующий аккаунт</option>{owners.map((owner) => <option key={owner.id} value={owner.id}>{owner.display_name || owner.username || owner.phone || owner.id}</option>)}</select></label><button type="button" disabled={loading || !ownerId || !token} onClick={() => void bindOwner()} className="mt-2 flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}Привязать владельца</button></div>
-    <div className="border-t border-slate-200 pt-3"><p className="text-sm font-bold text-slate-700">История статусов</p>{audit.length ? <ul className="mt-2 space-y-1 text-xs text-slate-600">{audit.map((entry) => <li key={entry.id}>{entry.old_status ? `${labels[entry.old_status]} → ` : "Создана → "}{labels[entry.new_status]} · {new Date(entry.created_at).toLocaleString("ru-RU")}</li>)}</ul> : <p className="mt-1 text-xs text-slate-500">Изменений пока нет.</p>}</div>
+    <div className="border-t border-slate-200 pt-3"><p className="text-sm font-bold text-slate-700">История статусов</p>{audit.length ? <ul className="mt-2 space-y-1 text-xs text-slate-600">{audit.map((entry) => <li key={entry.id}>{entry.old_status ? `${CRM_STATUS_LABELS[entry.old_status]} → ` : "Создана → "}{CRM_STATUS_LABELS[entry.new_status]} · {new Date(entry.created_at).toLocaleString("ru-RU")}</li>)}</ul> : <p className="mt-1 text-xs text-slate-500">Изменений пока нет.</p>}</div>
   </section>;
 }

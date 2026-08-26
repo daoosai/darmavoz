@@ -10,7 +10,8 @@ export interface AdminMapPoint {
   name: string;
   lat: number | null;
   lon: number | null;
-  crm_status?: "parsed" | "active" | "rejected";
+  crm_status?: "parsed" | "active" | "rejected" | "invite_sent";
+  is_ready?: boolean;
 }
 
 interface AdminQuarriesMapProps {
@@ -36,7 +37,7 @@ const createMarkerElement = (point: AdminMapPoint, onClick: () => void) => {
   marker.style.height = "30px";
   marker.style.borderRadius = "9999px";
   marker.style.border = "3px solid white";
-  marker.style.backgroundColor = point.crm_status === "active" ? "#16a34a" : "#64748b";
+  marker.style.backgroundColor = point.crm_status === "active" && point.is_ready === true ? "#16a34a" : "#64748b";
   marker.style.boxShadow = "0 2px 8px rgba(15, 23, 42, 0.35)";
   marker.style.cursor = "pointer";
   marker.addEventListener("click", (event) => {

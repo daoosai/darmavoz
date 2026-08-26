@@ -325,6 +325,7 @@ class CrmStatus(str, Enum):
     parsed = "parsed"
     active = "active"
     rejected = "rejected"
+    invite_sent = "invite_sent"
 
 
 class Quarry(Base):
@@ -393,7 +394,7 @@ class Quarry(Base):
         String(128), nullable=True, unique=True, index=True
     )
     crm_status: Mapped[str] = mapped_column(
-        SQLEnum("parsed", "active", "rejected", name="crm_status"),
+        SQLEnum("parsed", "active", "rejected", "invite_sent", name="crm_status"),
         nullable=False,
         default=CrmStatus.active.value,
         server_default=CrmStatus.active.value,
@@ -578,7 +579,7 @@ class WaterPoint(Base):
         String(128), nullable=True, unique=True, index=True
     )
     crm_status: Mapped[str] = mapped_column(
-        SQLEnum("parsed", "active", "rejected", name="crm_status"),
+        SQLEnum("parsed", "active", "rejected", "invite_sent", name="crm_status"),
         nullable=False,
         default=CrmStatus.active.value,
         server_default=CrmStatus.active.value,
@@ -1217,10 +1218,10 @@ class PointAuditLog(Base):
     )
     admin_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"), nullable=True)
     old_status: Mapped[Optional[str]] = mapped_column(
-        SQLEnum("parsed", "active", "rejected", name="crm_status"), nullable=True
+        SQLEnum("parsed", "active", "rejected", "invite_sent", name="crm_status"), nullable=True
     )
     new_status: Mapped[str] = mapped_column(
-        SQLEnum("parsed", "active", "rejected", name="crm_status"), nullable=False
+        SQLEnum("parsed", "active", "rejected", "invite_sent", name="crm_status"), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

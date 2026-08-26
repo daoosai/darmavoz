@@ -19,6 +19,14 @@ water_septic_partner_router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def _is_water_point_ready(point: WaterPoint) -> bool:
+    if point.crm_status != CrmStatus.active.value:
+        return False
+    if point.water_type == "free":
+        return True
+    return point.water_type == "paid" and point.price is not None
+
+
 def _public_stmt():
     return select(WaterPoint).where(
         WaterPoint.crm_status == CrmStatus.active.value,
@@ -44,7 +52,10 @@ async def _serialize_point(point: WaterPoint, db: AsyncSession) -> WaterPointOut
         .limit(1)
     )
     return WaterPointOut.model_validate(point).model_copy(
-        update={"primary_image_url": primary_image_url}
+        update={
+            "primary_image_url": primary_image_url,
+            "is_ready": _is_water_point_ready(point),
+        }
     )
 
 
@@ -104,7 +115,12 @@ async def list_water_points_for_map(
     stmt = select(WaterPoint).where(
         WaterPoint.is_deleted.is_(False),
         WaterPoint.crm_status.in_(
-            [CrmStatus.active.value, CrmStatus.parsed.value, CrmStatus.rejected.value]
+            [
+                CrmStatus.active.value,
+                CrmStatus.parsed.value,
+                CrmStatus.rejected.value,
+                CrmStatus.invite_sent.value,
+            ]
         ),
     )
     if water_type in {"free", "paid", "unknown"}:

@@ -27,11 +27,8 @@ interface GlobalPickupPoint {
   lon: number;
   primary_image_url?: string | null;
   material_offers: GlobalPickupPointMaterial[];
-  crm_status: "parsed" | "active" | "rejected";
-  parsed_data?: {
-    phones?: string[];
-    schedule?: unknown;
-  } | null;
+  crm_status: "parsed" | "active" | "rejected" | "invite_sent";
+  is_ready: boolean;
 }
 
 interface UserLocation {
@@ -57,21 +54,8 @@ const getRenderablePoints = (pickupPoints: GlobalPickupPoint[]) =>
     (point) => isValidCoordinate(point.lat) && isValidCoordinate(point.lon),
   );
 
-const getParsedPhones = (point: GlobalPickupPoint) =>
-  Array.isArray(point.parsed_data?.phones)
-    ? point.parsed_data.phones.filter((phone): phone is string => typeof phone === "string" && Boolean(phone.trim()))
-    : [];
-
-const formatParsedSchedule = (schedule: unknown) => {
-  if (!schedule) return null;
-  if (typeof schedule === "string") return schedule;
-  if (typeof schedule === "object") {
-    return Object.entries(schedule as Record<string, unknown>)
-      .map(([day, value]) => `${day}: ${typeof value === "string" ? value : JSON.stringify(value)}`)
-      .join("; ");
-  }
-  return null;
-};
+const isPointReady = (point: GlobalPickupPoint) =>
+  point.crm_status === "active" && point.is_ready === true;
 
 const calculateDistanceKm = (
   lat1: number,
@@ -422,10 +406,10 @@ export default function GlobalMapScreen() {
     pointMarkerRefs.current = [];
 
     pointMarkerRefs.current = visiblePoints.map((point) => {
-      const isCrmActive = point.crm_status === "active";
+      const isReady = isPointReady(point);
       const element = document.createElement("button");
       element.type = "button";
-      element.className = `global-pickup-marker global-pickup-marker--${isCrmActive ? "crm-active" : "crm-muted"}${point.id === selectedPoint?.id ? " global-pickup-marker--selected" : ""}`;
+      element.className = `global-pickup-marker global-pickup-marker--${isReady ? "crm-active" : "crm-muted"}${point.id === selectedPoint?.id ? " global-pickup-marker--selected" : ""}`;
       const label = document.createElement("span");
       label.className = "global-pickup-marker__label";
       label.textContent = point.short_name || point.name;
@@ -668,31 +652,11 @@ export default function GlobalMapScreen() {
                   </div>
                 </div>
 
-                {selectedPoint.crm_status !== "active" ? (
+                {!isPointReady(selectedPoint) ? (
                   <div className="flex-1 overflow-y-auto px-4 py-4">
-                    <div className="space-y-4">
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                        <p className="text-sm font-bold text-slate-900">Временно без доставки</p>
-                        <p className="mt-1 text-sm text-slate-600">Мы уточняем условия работы этой точки.</p>
-                      </div>
-                      {getParsedPhones(selectedPoint).length > 0 ? (
-                        <div>
-                          <p className="text-xs font-bold tracking-wide text-slate-400">ТЕЛЕФОНЫ</p>
-                          <div className="mt-2 space-y-2">
-                            {getParsedPhones(selectedPoint).map((phone) => (
-                              <a key={phone} href={`tel:${phone}`} className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm font-bold text-slate-800">
-                                <Phone className="h-4 w-4 text-slate-500" />{formatPhoneNumber(phone)}
-                              </a>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null}
-                      {formatParsedSchedule(selectedPoint.parsed_data?.schedule) ? (
-                        <div>
-                          <p className="text-xs font-bold tracking-wide text-slate-400">ЧАСЫ РАБОТЫ</p>
-                          <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{formatParsedSchedule(selectedPoint.parsed_data?.schedule)}</p>
-                        </div>
-                      ) : null}
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-sm font-bold text-slate-900">Временно без доставки</p>
+                      <p className="mt-1 text-sm text-slate-600">Точка ещё не готова принимать заказы.</p>
                     </div>
                   </div>
                 ) : (
@@ -762,7 +726,7 @@ export default function GlobalMapScreen() {
                 </div>
                 )}
 
-                {selectedPoint.crm_status === "active" ? <div className="shrink-0 border-t border-slate-100 bg-white px-4 pb-4 pt-3">
+                {isPointReady(selectedPoint) ? <div className="shrink-0 border-t border-slate-100 bg-white px-4 pb-4 pt-3">
                   <button
                     type="button"
                     onClick={() =>

@@ -112,7 +112,12 @@ async def list_global_pickup_points(
         select(Quarry)
         .where(
             Quarry.crm_status.in_(
-                [CrmStatus.active.value, CrmStatus.parsed.value, CrmStatus.rejected.value]
+                [
+                    CrmStatus.active.value,
+                    CrmStatus.parsed.value,
+                    CrmStatus.rejected.value,
+                    CrmStatus.invite_sent.value,
+                ]
             ),
             Quarry.lat.is_not(None),
             Quarry.lon.is_not(None),
@@ -151,6 +156,7 @@ async def list_global_pickup_points(
                 "primary_image_url": payload["primary_image_url"],
                 "material_offers": active_offers,
                 "crm_status": payload["crm_status"],
+                "is_ready": payload["is_ready"],
                 "parsed_data": payload["parsed_data"],
             }
         )

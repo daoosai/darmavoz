@@ -65,12 +65,14 @@ const createMarkerElement = (
   point: AdminMapPoint,
   isSelected: boolean,
   onSelect: () => void,
+  onClose: () => void,
   onEdit: () => void,
 ) => {
   const wrapper = document.createElement("div");
   wrapper.style.position = "relative";
   wrapper.style.width = "30px";
   wrapper.style.height = "30px";
+  wrapper.style.zIndex = isSelected ? "1000" : "1";
 
   const marker = document.createElement("button");
   marker.type = "button";
@@ -80,7 +82,7 @@ const createMarkerElement = (
   marker.style.height = "30px";
   marker.style.borderRadius = "9999px";
   marker.style.border = "3px solid white";
-  marker.style.backgroundColor = point.owner_user_id && point.is_active ? "#16a34a" : "#64748b";
+  marker.style.backgroundColor = point.is_active === true ? "#16a34a" : "#64748b";
   marker.style.boxShadow = "0 2px 8px rgba(15, 23, 42, 0.35)";
   marker.style.cursor = "pointer";
   marker.addEventListener("click", (event) => {
@@ -97,7 +99,7 @@ const createMarkerElement = (
     card.style.left = "50%";
     card.style.bottom = "42px";
     card.style.transform = "translateX(-50%)";
-    card.style.zIndex = "20";
+    card.style.zIndex = "1000";
     card.style.width = "280px";
     card.style.maxWidth = "calc(100vw - 32px)";
     card.style.padding = "14px";
@@ -141,7 +143,7 @@ const createMarkerElement = (
     closeButton.style.cursor = "pointer";
     closeButton.addEventListener("click", (event) => {
       event.stopPropagation();
-      onSelect();
+      onClose();
     });
     header.append(title, closeButton);
     card.appendChild(header);
@@ -257,7 +259,20 @@ export default function AdminQuarriesMap({
       const element = createMarkerElement(
         point,
         pointKey === selectedPointKey,
-        () => setSelectedPointKey((current) => (current === pointKey ? null : pointKey)),
+        () => {
+          const map = mapRef.current;
+          const center: [number, number] = [point.lon, point.lat];
+          if (typeof map?.flyTo === "function") {
+            map.flyTo({ center, zoom: 14, duration: 400 });
+          } else if (map) {
+            map.setCenter(center, { easing: "easeOutCubic", duration: 400 });
+            if (typeof map.setZoom === "function") {
+              map.setZoom(14, { easing: "easeOutCubic", duration: 400 });
+            }
+          }
+          setSelectedPointKey((current) => (current === pointKey ? null : pointKey));
+        },
+        () => setSelectedPointKey(null),
         () => {
           setSelectedPointKey(null);
           onPointClickRef.current(point);

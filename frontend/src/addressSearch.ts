@@ -1,6 +1,5 @@
 const DGIS_KEY = import.meta.env.VITE_2GIS_KEY;
 const TYUMEN_CITY = "Тюмень";
-const TYUMEN_LOCATION = "65.534328,57.152286";
 
 export const get2gisSuggestionLabel = (item: any): string =>
   item?.search_attributes?.suggested_text ||
@@ -54,7 +53,7 @@ export const withTyumenBias = (address: string): string => {
 export const fetch2gisAddressSuggestions = async (
   query: string,
 ): Promise<any[]> => {
-  const normalized = withTyumenBias(query);
+  const normalized = query.trim();
   if (normalized.length < 3 || !DGIS_KEY) {
     return [];
   }
@@ -62,10 +61,8 @@ export const fetch2gisAddressSuggestions = async (
   try {
     const params = new URLSearchParams({
       q: normalized,
-      suggest_type: "address",
+      suggest_type: "city_selector",
       key: DGIS_KEY,
-      location: TYUMEN_LOCATION,
-      radius: "40000",
       fields: "items.point",
       locale: "ru_RU",
     });

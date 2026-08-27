@@ -179,6 +179,29 @@ const parseCoordinate = (value?: string | number | null) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+const flyToMapCoordinates = (
+  map: any,
+  center: [number, number],
+  zoom?: number,
+  duration = 500,
+) => {
+  if (!map) return;
+
+  if (typeof map.flyTo === "function") {
+    map.flyTo({
+      center,
+      ...(zoom === undefined ? {} : { zoom }),
+      duration,
+    });
+    return;
+  }
+
+  map.setCenter(center, { easing: "easeOutCubic", duration });
+  if (zoom !== undefined && typeof map.setZoom === "function") {
+    map.setZoom(zoom, { easing: "easeOutCubic", duration });
+  }
+};
+
 const buildQuarryFormData = (quarry: Quarry): QuarryFormData => ({
   ...quarry,
   point_type: normalizeEditablePointType(quarry.point_type),
@@ -533,14 +556,13 @@ export default function AdminQuarriesScreen({
                 <th className="p-4 border-b border-slate-100">Адрес</th>
                 <th className="p-4 border-b border-slate-100">Статус</th>
                 <th className="p-4 border-b border-slate-100">Модерация</th>
-                <th className="p-4 border-b border-slate-100">Источник</th>
                 <th className="sticky right-0 z-20 w-[340px] min-w-[340px] whitespace-nowrap border-b border-slate-100 bg-slate-50/95 p-4 pr-6 shadow-[-10px_0_10px_-10px_rgba(0,0,0,0.1)]">Действия</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {quarries.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-500">
+                  <td colSpan={6} className="p-8 text-center text-slate-500">
                     Нет точек
                   </td>
                 </tr>
@@ -590,7 +612,6 @@ export default function AdminQuarriesScreen({
                         {moderationBadge(quarry.moderation_status).label}
                       </span>
                     </td>
-                    <td className="p-4 text-sm text-slate-600">{quarry.twogis_id ? "2ГИС" : "Ручной"}</td>
                     <td className="sticky right-0 z-10 w-[340px] min-w-[340px] align-top bg-white p-4 pr-6 shadow-[-10px_0_10px_-10px_rgba(0,0,0,0.1)] group-hover:bg-slate-50/50">
                       <div className="flex max-w-full flex-wrap items-center justify-end gap-2">
                         <button
@@ -884,7 +905,7 @@ function EditQuarryModal({
     if (!mapRef.current || !mapgl || !coordinates) return;
 
     const point: [number, number] = [coordinates.lon, coordinates.lat];
-    mapRef.current.setCenter(point);
+    flyToMapCoordinates(mapRef.current, point, undefined, 500);
 
     if (markerRef.current) {
       markerRef.current.setCoordinates(point);
@@ -997,6 +1018,7 @@ function EditQuarryModal({
 
     if (typeof suggestion.lat === "number" && typeof suggestion.lon === "number") {
       lastGeocodedAddressRef.current = address.toLowerCase();
+      flyToMapCoordinates(mapRef.current, [suggestion.lon, suggestion.lat], 10, 500);
       setFormData((prev) => ({
         ...prev,
         address,
@@ -1010,6 +1032,7 @@ function EditQuarryModal({
     if (!coords) return;
 
     lastGeocodedAddressRef.current = address.toLowerCase();
+    flyToMapCoordinates(mapRef.current, [coords.lon, coords.lat], 10, 500);
     setFormData((prev) => ({
       ...prev,
       address,
@@ -1782,7 +1805,7 @@ function EnhancedEditQuarryModal({
     if (!mapRef.current || !mapgl || !coordinates) return;
 
     const point: [number, number] = [coordinates.lon, coordinates.lat];
-    mapRef.current.setCenter(point);
+    flyToMapCoordinates(mapRef.current, point, undefined, 500);
     if (markerRef.current) {
       markerRef.current.setCoordinates(point);
       return;
@@ -1881,6 +1904,7 @@ function EnhancedEditQuarryModal({
 
     if (typeof suggestion.lat === "number" && typeof suggestion.lon === "number") {
       lastGeocodedAddressRef.current = address.toLowerCase();
+      flyToMapCoordinates(mapRef.current, [suggestion.lon, suggestion.lat], 10, 500);
       setFormData((current) => ({
         ...current,
         lat: stringifyCoordinate(suggestion.lat),
@@ -1892,6 +1916,7 @@ function EnhancedEditQuarryModal({
     try {
       const coords = await geocodeAddress(address);
       lastGeocodedAddressRef.current = address.toLowerCase();
+      flyToMapCoordinates(mapRef.current, [coords.lon, coords.lat], 10, 500);
       setFormData((current) => ({
         ...current,
         lat: stringifyCoordinate(coords.lat),

@@ -10,7 +10,6 @@ import {
 } from "./addressSearch";
 import { useAuthStore, usePlacementStore } from "./store";
 import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
-import { getCrmStatusLabel, type CrmStatus } from "./crmStatus";
 import { PlacementBadge, PlacementDates, type PlacementFields, type PlacementStatus } from "./placement";
 import MapWebGLFallback, { tryCreate2GisMap } from "./components/MapWebGLFallback";
 import AdminQuarriesMap from "./components/admin/AdminQuarriesMap";
@@ -42,8 +41,6 @@ export interface Quarry extends PlacementFields {
   owner_name?: string | null;
   owner_phone?: string | null;
   twogis_id?: string | null;
-  crm_status?: CrmStatus;
-  is_ready?: boolean;
   crm_comment?: string | null;
   parsed_data?: Record<string, unknown> | null;
   primary_image_url?: string | null;
@@ -511,10 +508,10 @@ export default function AdminQuarriesScreen({
           </div>
           <div className="flex shrink-0 items-center gap-3 text-xs font-semibold text-slate-500">
             <span className="flex items-center gap-1.5">
-              <span className="h-3 w-3 rounded-full bg-green-600" /> Активные
+              <span className="h-3 w-3 rounded-full bg-green-600" /> Готовы к работе
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="h-3 w-3 rounded-full bg-slate-500" /> CRM
+              <span className="h-3 w-3 rounded-full bg-slate-500" /> Не готовы
             </span>
           </div>
         </div>
@@ -527,8 +524,8 @@ export default function AdminQuarriesScreen({
 
       {/* Desktop View */}
       <div className="hidden overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm md:block">
-        <div className="w-full">
-          <table className="w-full border-collapse text-left">
+        <div className="w-full overflow-x-auto">
+          <table className="min-w-[1180px] w-full border-collapse text-left">
             <thead>
               <tr className="bg-slate-50/80 text-slate-500 text-xs uppercase tracking-wider font-bold">
                 <th className="p-4 border-b border-slate-100">Тип</th>
@@ -536,15 +533,14 @@ export default function AdminQuarriesScreen({
                 <th className="p-4 border-b border-slate-100">Адрес</th>
                 <th className="p-4 border-b border-slate-100">Статус</th>
                 <th className="p-4 border-b border-slate-100">Модерация</th>
-                <th className="p-4 border-b border-slate-100">Статус CRM</th>
                 <th className="p-4 border-b border-slate-100">Источник</th>
-                <th className="w-[340px] min-w-[340px] whitespace-nowrap border-b border-slate-100 p-4 pr-6">Действия</th>
+                <th className="sticky right-0 z-20 w-[340px] min-w-[340px] whitespace-nowrap border-b border-slate-100 bg-slate-50/95 p-4 pr-6 shadow-[-10px_0_10px_-10px_rgba(0,0,0,0.1)]">Действия</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {quarries.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-slate-500">
+                  <td colSpan={7} className="p-8 text-center text-slate-500">
                     Нет точек
                   </td>
                 </tr>
@@ -552,7 +548,7 @@ export default function AdminQuarriesScreen({
                 quarries.map((quarry) => (
                   <tr
                     key={quarry.id}
-                    className="hover:bg-slate-50/50 transition-colors"
+                    className="group hover:bg-slate-50/50 transition-colors"
                   >
                     <td className="p-4">
                       <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
@@ -594,9 +590,8 @@ export default function AdminQuarriesScreen({
                         {moderationBadge(quarry.moderation_status).label}
                       </span>
                     </td>
-                    <td className="p-4"><span className={`inline-flex rounded-lg px-2 py-1 text-xs font-bold ${quarry.crm_status === "active" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"}`}>{getCrmStatusLabel(quarry.crm_status)}</span></td>
                     <td className="p-4 text-sm text-slate-600">{quarry.twogis_id ? "2ГИС" : "Ручной"}</td>
-                    <td className="w-[340px] min-w-[340px] align-top p-4 pr-6">
+                    <td className="sticky right-0 z-10 w-[340px] min-w-[340px] align-top bg-white p-4 pr-6 shadow-[-10px_0_10px_-10px_rgba(0,0,0,0.1)] group-hover:bg-slate-50/50">
                       <div className="flex max-w-full flex-wrap items-center justify-end gap-2">
                         <button
                           onClick={() => handleOpenModal(quarry)}
@@ -2553,7 +2548,6 @@ function EnhancedEditQuarryModal({
             token={token}
             pointKind="quarry"
             pointId={formData.id}
-            initialStatus={formData.crm_status}
             initialComment={formData.crm_comment}
             initialOwnerId={formData.owner_user_id}
           /> : null}

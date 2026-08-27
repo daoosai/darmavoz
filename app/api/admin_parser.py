@@ -55,11 +55,13 @@ async def update_point_crm(point_kind: PointKind, point_id: UUID, payload: CrmUp
     if point_kind == "water" and payload.crm_status == CrmStatus.active.value and point.water_type == "unknown":
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Select a water type before CRM activation")
     old_status = point.crm_status
-    point.crm_status = payload.crm_status
+    if payload.crm_status is not None:
+        point.crm_status = payload.crm_status
     point.crm_comment = payload.crm_comment
     if payload.crm_status == CrmStatus.active.value:
         point.is_active = True
-    await _add_status_audit_log(db, point=point, point_kind=point_kind, admin_id=current_admin.id, old_status=old_status, new_status=payload.crm_status)
+    if payload.crm_status is not None:
+        await _add_status_audit_log(db, point=point, point_kind=point_kind, admin_id=current_admin.id, old_status=old_status, new_status=payload.crm_status)
     await db.commit()
     await db.refresh(point)
     return _serialize_crm_point(point, point_kind)

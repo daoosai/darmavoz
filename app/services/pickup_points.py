@@ -297,8 +297,7 @@ async def pickup_point_payload(
         "twogis_id": point.twogis_id,
         "crm_status": point.crm_status,
         "crm_comment": point.crm_comment,
-        "is_ready": point.crm_status == CrmStatus.active.value
-        and has_priced_material_offers(material_offers),
+        "is_ready": point.owner_user_id is not None and point.is_active,
         "parsed_data": point.parsed_data,
         "material_ids": list(material_by_id),
         "materials": list(material_by_id.values()),

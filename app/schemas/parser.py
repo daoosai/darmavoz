@@ -62,7 +62,7 @@ class ParserRunResult(BaseModel):
 
 
 class CrmUpdateRequest(BaseModel):
-    crm_status: CrmStatusValue
+    crm_status: CrmStatusValue | None = None
     crm_comment: str | None = Field(default=None, max_length=5000)
 
     model_config = ConfigDict(str_strip_whitespace=True)

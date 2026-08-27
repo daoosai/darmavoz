@@ -655,7 +655,6 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
               token={token}
               pointKind="water"
               pointId={editTarget.data.id}
-              initialStatus={(editTarget.data as WaterPoint).crm_status}
               initialComment={(editTarget.data as WaterPoint).crm_comment}
               initialOwnerId={(editTarget.data as WaterPoint).owner_user_id}
               onUpdated={load}

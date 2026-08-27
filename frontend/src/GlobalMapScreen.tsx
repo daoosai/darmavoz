@@ -27,7 +27,6 @@ interface GlobalPickupPoint {
   lon: number;
   primary_image_url?: string | null;
   material_offers: GlobalPickupPointMaterial[];
-  crm_status: "parsed" | "active" | "rejected" | "invite_sent";
   is_ready: boolean;
 }
 
@@ -55,7 +54,7 @@ const getRenderablePoints = (pickupPoints: GlobalPickupPoint[]) =>
   );
 
 const isPointReady = (point: GlobalPickupPoint) =>
-  point.crm_status === "active" && point.is_ready === true;
+  point.is_ready === true;
 
 const calculateDistanceKm = (
   lat1: number,
@@ -409,7 +408,7 @@ export default function GlobalMapScreen() {
       const isReady = isPointReady(point);
       const element = document.createElement("button");
       element.type = "button";
-      element.className = `global-pickup-marker global-pickup-marker--${isReady ? "crm-active" : "crm-muted"}${point.id === selectedPoint?.id ? " global-pickup-marker--selected" : ""}`;
+      element.className = `global-pickup-marker global-pickup-marker--${isReady ? "ready" : "muted"}${point.id === selectedPoint?.id ? " global-pickup-marker--selected" : ""}`;
       const label = document.createElement("span");
       label.className = "global-pickup-marker__label";
       label.textContent = point.short_name || point.name;
@@ -507,11 +506,11 @@ export default function GlobalMapScreen() {
           place-items: center;
           cursor: pointer;
         }
-        .global-pickup-marker--crm-active {
+        .global-pickup-marker--ready {
           background: #16a34a;
           color: #ffffff;
         }
-        .global-pickup-marker--crm-muted {
+        .global-pickup-marker--muted {
           background: #94a3b8;
           color: #ffffff;
           opacity: 0.82;

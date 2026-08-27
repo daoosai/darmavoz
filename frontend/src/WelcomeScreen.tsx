@@ -36,9 +36,12 @@ export default function WelcomeScreen({
             8 (3452) 900 900
           </a>
         </p>
-        <div className="text-xs text-gray-500 mt-2 text-center">
-          ООО «ДАРМАВОЗ»
-        </div>
+        <a
+          href="/privacy"
+          className="mt-2 text-xs text-gray-500 underline-offset-2 hover:text-gray-700 hover:underline"
+        >
+          Политика конфиденциальности
+        </a>
       </footer>
     </div>
   );

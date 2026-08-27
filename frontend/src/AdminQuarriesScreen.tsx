@@ -525,9 +525,6 @@ export default function AdminQuarriesScreen({
         <div className="mb-3 flex items-center justify-between gap-3 px-1">
           <div>
             <h3 className="text-base font-bold text-slate-800">Карта точек</h3>
-            <p className="text-xs text-slate-500">
-              Показаны точки из текущего списка с учётом фильтров
-            </p>
           </div>
           <div className="flex shrink-0 items-center gap-3 text-xs font-semibold text-slate-500">
             <span className="flex items-center gap-1.5">
@@ -555,7 +552,7 @@ export default function AdminQuarriesScreen({
                 <th className="p-4 border-b border-slate-100">Название</th>
                 <th className="p-4 border-b border-slate-100">Адрес</th>
                 <th className="p-4 border-b border-slate-100">Статус</th>
-                <th className="p-4 border-b border-slate-100">Модерация</th>
+                <th className="min-w-[120px] whitespace-nowrap border-b border-slate-100 p-4">Модерация</th>
                 <th className="sticky right-0 z-20 w-[340px] min-w-[340px] whitespace-nowrap border-b border-slate-100 bg-slate-50/95 p-4 pr-6 shadow-[-10px_0_10px_-10px_rgba(0,0,0,0.1)]">Действия</th>
               </tr>
             </thead>
@@ -607,7 +604,7 @@ export default function AdminQuarriesScreen({
                       </div>
                       <PlacementDates item={quarry} />
                     </td>
-                    <td className="p-4">
+                    <td className="min-w-[120px] whitespace-nowrap p-4">
                       <span className={`inline-flex items-center rounded-lg px-2 py-1 text-xs font-bold ${moderationBadge(quarry.moderation_status).className}`}>
                         {moderationBadge(quarry.moderation_status).label}
                       </span>

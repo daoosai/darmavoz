@@ -72,7 +72,7 @@ const createMarkerElement = (
   wrapper.style.position = "relative";
   wrapper.style.width = "30px";
   wrapper.style.height = "30px";
-  wrapper.style.zIndex = isSelected ? "1000" : "1";
+  wrapper.style.zIndex = isSelected ? "9999" : "1";
 
   const marker = document.createElement("button");
   marker.type = "button";
@@ -99,7 +99,7 @@ const createMarkerElement = (
     card.style.left = "50%";
     card.style.bottom = "42px";
     card.style.transform = "translateX(-50%)";
-    card.style.zIndex = "1000";
+    card.style.zIndex = "9999";
     card.style.width = "280px";
     card.style.maxWidth = "calc(100vw - 32px)";
     card.style.padding = "14px";

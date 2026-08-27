@@ -17,6 +17,7 @@ import {
 import { MaterialProps } from "./MaterialDetailScreen";
 import OrdersScreen from "./OrdersScreen";
 import WelcomeScreen from "./WelcomeScreen";
+import PrivacyPolicyScreen from "./PrivacyPolicyScreen";
 import { getImageUrl, baseURL, APP_VERSION } from "./utils";
 
 import CartScreen from "./CartScreen";
@@ -186,6 +187,18 @@ export default function App() {
   };
 
   const renderContent = () => {
+    if (currentPath === "/privacy" || currentPath === "/privacy/") {
+      return (
+        <PrivacyPolicyScreen
+          onBack={() => {
+            window.history.pushState({}, "", "/");
+            setCurrentPath("/");
+            setCurrentRoute("welcome");
+          }}
+        />
+      );
+    }
+
     const renderPartnerLogin = () => (
       <LoginScreen
         onLogin={(nextRole) => setCurrentRoute(resolveRouteForRole(nextRole))}

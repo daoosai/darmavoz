@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
@@ -69,7 +69,10 @@ async def list_pickup_points(
             *public_pickup_point_filters(),
             quarry_materials.c.material_id == material_id,
             quarry_materials.c.is_active.is_(True),
-            quarry_materials.c.price.is_not(None),
+            or_(
+                quarry_materials.c.price.is_not(None),
+                Material.is_free.is_(True),
+            ),
             Material.is_active.is_(True),
         )
         .order_by(Quarry.name.asc())
@@ -94,7 +97,7 @@ async def list_pickup_points(
             "lat": row.lat,
             "lon": row.lon,
             "material_id": material_id,
-            "price": row.price,
+            "price": row.price if row.price is not None else 0,
             "is_free": row.is_free,
             "unit": row.unit,
             "min_delivery_price": row.min_delivery_price or 0,
@@ -156,6 +159,7 @@ async def list_global_pickup_points(
                 "primary_image_url": payload["primary_image_url"],
                 "material_offers": active_offers,
                 "crm_status": payload["crm_status"],
+                "is_active": payload["is_active"],
                 "is_ready": payload["is_ready"],
                 "parsed_data": payload["parsed_data"],
             }

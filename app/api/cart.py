@@ -82,19 +82,19 @@ async def add_cart_item(
 
     if existing_item:
         existing_item.volume += item.volume
-        if unit_price:
+        if unit_price is not None:
             existing_item.unit_price = unit_price
             existing_item.amount = existing_item.volume * float(unit_price)
         cart_item = existing_item
     else:
-        amount = item.volume * material.price if material.price else None
+        amount = item.volume * material.price if material.price is not None else None
         cart_item = CartItem(
             session_key=session_key,
             material_id=item.material_id,
             quarry_id=item.quarry_id,
             volume=item.volume,
             unit_price=unit_price,
-            amount=item.volume * float(unit_price) if unit_price else amount,
+            amount=item.volume * float(unit_price) if unit_price is not None else amount,
         )
         db.add(cart_item)
 
@@ -127,7 +127,7 @@ async def update_cart_item(
         raise HTTPException(status_code=400, detail=f"Volume must be at least {material.min_volume}")
 
     cart_item.volume = item_update.volume
-    if cart_item.unit_price:
+    if cart_item.unit_price is not None:
         cart_item.amount = item_update.volume * float(cart_item.unit_price)
 
     await db.commit()

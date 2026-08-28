@@ -13,6 +13,7 @@ interface GlobalPickupPointMaterial {
   material_name: string;
   unit: string;
   price?: number | null;
+  is_free?: boolean;
 }
 
 interface GlobalPickupPoint {
@@ -27,6 +28,7 @@ interface GlobalPickupPoint {
   lon: number;
   primary_image_url?: string | null;
   material_offers: GlobalPickupPointMaterial[];
+  is_active: boolean;
   is_ready: boolean;
 }
 
@@ -53,8 +55,18 @@ const getRenderablePoints = (pickupPoints: GlobalPickupPoint[]) =>
     (point) => isValidCoordinate(point.lat) && isValidCoordinate(point.lon),
   );
 
+const hasAvailableMaterialOffer = (point: GlobalPickupPoint) =>
+  point.material_offers.some(
+    (offer) =>
+      offer.is_free === true ||
+      (offer.price !== null &&
+        offer.price !== undefined &&
+        Number(offer.price) >= 0),
+  );
+
 const isPointReady = (point: GlobalPickupPoint) =>
-  point.is_ready === true;
+  point.is_active === true &&
+  (point.is_ready === true || hasAvailableMaterialOffer(point));
 
 const calculateDistanceKm = (
   lat1: number,
@@ -405,10 +417,10 @@ export default function GlobalMapScreen() {
     pointMarkerRefs.current = [];
 
     pointMarkerRefs.current = visiblePoints.map((point) => {
-      const isReady = isPointReady(point);
+      const isActive = point.is_active === true;
       const element = document.createElement("button");
       element.type = "button";
-      element.className = `global-pickup-marker global-pickup-marker--${isReady ? "ready" : "muted"}${point.id === selectedPoint?.id ? " global-pickup-marker--selected" : ""}`;
+      element.className = `global-pickup-marker global-pickup-marker--${isActive ? "ready" : "muted"}${point.id === selectedPoint?.id ? " global-pickup-marker--selected" : ""}`;
       const label = document.createElement("span");
       label.className = "global-pickup-marker__label";
       label.textContent = point.short_name || point.name;

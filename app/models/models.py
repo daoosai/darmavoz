@@ -15,6 +15,7 @@ from sqlalchemy import (
     Integer,
     Index,
     Numeric,
+    SmallInteger,
     String,
     Table,
     Text,
@@ -176,6 +177,14 @@ class Driver(Base):
     )
     is_auto_dispatch_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     dispatch_priority: Mapped[int] = mapped_column(Integer, default=100, nullable=False)
+    rating: Mapped[float] = mapped_column(Numeric(2, 1), default=5.0, nullable=False, server_default="5.0")
+    is_dispatch_eligible: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False, server_default=text("true")
+    )
+    dispatch_admission_score: Mapped[int] = mapped_column(
+        SmallInteger, default=100, nullable=False, server_default="100"
+    )
+    dispatch_admission_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     temporary_penalty_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     last_offer_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     moderation_status: Mapped[str] = mapped_column(
@@ -287,7 +296,7 @@ class Material(Base):
     image_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     is_free: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default=text("false"))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False, index=True)
 
     category: Mapped[Optional["Category"]] = relationship("Category", back_populates="materials")
     quarry_links: Mapped[List["QuarryMaterial"]] = relationship(
@@ -310,6 +319,13 @@ class PickupPointType(str, Enum):
     accumulator = "accumulator"
     warehouse = "warehouse"
     supplier = "supplier"
+
+
+class CrmStatus(str, Enum):
+    parsed = "parsed"
+    active = "active"
+    rejected = "rejected"
+    invite_sent = "invite_sent"
 
 
 class Quarry(Base):
@@ -374,6 +390,18 @@ class Quarry(Base):
     owner_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         ForeignKey("users.id"), nullable=True, index=True
     )
+    twogis_id: Mapped[Optional[str]] = mapped_column(
+        String(128), nullable=True, unique=True, index=True
+    )
+    crm_status: Mapped[str] = mapped_column(
+        SQLEnum("parsed", "active", "rejected", "invite_sent", name="crm_status"),
+        nullable=False,
+        default=CrmStatus.active.value,
+        server_default=CrmStatus.active.value,
+        index=True,
+    )
+    crm_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    parsed_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     moderation_status: Mapped[str] = mapped_column(
         SQLEnum(
             "incomplete",
@@ -523,14 +551,15 @@ class MediaFile(Base):
 class WaterPointType(str, Enum):
     free = "free"
     paid = "paid"
+    unknown = "unknown"
 
 
 class WaterPoint(Base):
     __tablename__ = "water_points"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    owner_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
-    water_type: Mapped[str] = mapped_column(SQLEnum("free", "paid", name="water_point_type"), nullable=False)
+    owner_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    water_type: Mapped[str] = mapped_column(SQLEnum("free", "paid", "unknown", name="water_point_type"), nullable=False)
     name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     source: Mapped[str] = mapped_column(String(255), nullable=False)
     address: Mapped[str] = mapped_column(Text, nullable=False)
@@ -546,6 +575,18 @@ class WaterPoint(Base):
     pending_changes: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     moderated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     moderated_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    twogis_id: Mapped[Optional[str]] = mapped_column(
+        String(128), nullable=True, unique=True, index=True
+    )
+    crm_status: Mapped[str] = mapped_column(
+        SQLEnum("parsed", "active", "rejected", "invite_sent", name="crm_status"),
+        nullable=False,
+        default=CrmStatus.active.value,
+        server_default=CrmStatus.active.value,
+        index=True,
+    )
+    crm_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    parsed_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("true"))
     is_deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -610,7 +651,7 @@ class SpecialEquipmentType(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     slug: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
-    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -676,6 +717,12 @@ class SpecialEquipmentListing(Base):
     placement_status_changed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     placement_hidden_reason: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    expiration_notice_sent: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        server_default=text("false"),
+    )
     price_from: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
@@ -1138,6 +1185,57 @@ class OrderOffer(Base):
 
     order: Mapped["Order"] = relationship("Order", back_populates="offers", foreign_keys=[order_id])
     driver: Mapped["Driver"] = relationship("Driver", back_populates="offers")
+
+
+class OrderDistributionHistory(Base):
+    """Immutable snapshot of a Smart Matching calculation for an order."""
+
+    __tablename__ = "order_distribution_history"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orders.id"), nullable=False, index=True)
+    calculated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), index=True
+    )
+    trigger_source: Mapped[str] = mapped_column(String(32), nullable=False)
+    algorithm_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    input_snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    candidates_snapshot: Mapped[list] = mapped_column(JSONB, nullable=False)
+    recommended_driver_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("drivers.id"), nullable=True
+    )
+    selected_driver_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("drivers.id"), nullable=True
+    )
+    distance_source: Mapped[str] = mapped_column(String(32), nullable=False)
+    twogis_status: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    order: Mapped["Order"] = relationship("Order", foreign_keys=[order_id])
+
+
+class PointAuditLog(Base):
+    __tablename__ = "point_audit_log"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    point_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    point_kind: Mapped[str] = mapped_column(
+        SQLEnum("quarry", "water", name="point_audit_point_kind"),
+        nullable=False,
+    )
+    admin_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    old_status: Mapped[Optional[str]] = mapped_column(
+        SQLEnum("parsed", "active", "rejected", "invite_sent", name="crm_status"), nullable=True
+    )
+    new_status: Mapped[str] = mapped_column(
+        SQLEnum("parsed", "active", "rejected", "invite_sent", name="crm_status"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_point_audit_log_point_created", "point_kind", "point_id", "created_at"),
+    )
 
 
 class IntegrationEvent(Base):

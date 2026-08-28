@@ -184,7 +184,11 @@ export const useAuthStore = create<AuthState>()(
 
 interface AddressState {
   selectedAddress: string;
-  setSelectedAddress: (address: string) => void;
+  selectedAddressCoordinates: { lat: number; lon: number } | null;
+  setSelectedAddress: (
+    address: string,
+    coordinates?: { lat: number; lon: number } | null,
+  ) => void;
   clearSelectedAddress: () => void;
 }
 
@@ -192,8 +196,13 @@ export const useAddressStore = create<AddressState>()(
   persist(
     (set) => ({
       selectedAddress: "",
-      setSelectedAddress: (address: string) => set({ selectedAddress: address }),
-      clearSelectedAddress: () => set({ selectedAddress: "" }),
+      selectedAddressCoordinates: null,
+      setSelectedAddress: (
+        address: string,
+        coordinates: { lat: number; lon: number } | null = null,
+      ) => set({ selectedAddress: address, selectedAddressCoordinates: coordinates }),
+      clearSelectedAddress: () =>
+        set({ selectedAddress: "", selectedAddressCoordinates: null }),
     }),
     {
       name: "address-storage",

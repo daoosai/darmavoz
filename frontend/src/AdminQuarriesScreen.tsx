@@ -12,6 +12,9 @@ import { useAuthStore, usePlacementStore } from "./store";
 import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
 import { PlacementBadge, PlacementDates, type PlacementFields, type PlacementStatus } from "./placement";
 import MapWebGLFallback, { tryCreate2GisMap } from "./components/MapWebGLFallback";
+import AdminQuarriesMap from "./components/admin/AdminQuarriesMap";
+import CrmPanel from "./components/admin/CrmPanel";
+import ParserRunPanel from "./components/admin/ParserRunPanel";
 
 export interface Quarry extends PlacementFields {
   id?: string;
@@ -37,6 +40,9 @@ export interface Quarry extends PlacementFields {
   materials?: any[];
   owner_name?: string | null;
   owner_phone?: string | null;
+  twogis_id?: string | null;
+  crm_comment?: string | null;
+  parsed_data?: Record<string, unknown> | null;
   primary_image_url?: string | null;
   media_files?: {
     id: string;
@@ -173,6 +179,29 @@ const parseCoordinate = (value?: string | number | null) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+const flyToMapCoordinates = (
+  map: any,
+  center: [number, number],
+  zoom?: number,
+  duration = 500,
+) => {
+  if (!map) return;
+
+  if (typeof map.flyTo === "function") {
+    map.flyTo({
+      center,
+      ...(zoom === undefined ? {} : { zoom }),
+      duration,
+    });
+    return;
+  }
+
+  map.setCenter(center, { easing: "easeOutCubic", duration });
+  if (zoom !== undefined && typeof map.setZoom === "function") {
+    map.setZoom(zoom, { easing: "easeOutCubic", duration });
+  }
+};
+
 const buildQuarryFormData = (quarry: Quarry): QuarryFormData => ({
   ...quarry,
   point_type: normalizeEditablePointType(quarry.point_type),
@@ -233,6 +262,7 @@ export default function AdminQuarriesScreen({
   const [deletingPointId, setDeletingPointId] = useState<string | null>(null);
   const [rejectPointId, setRejectPointId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [parserCenter, setParserCenter] = useState({ lat: 57.1522, lon: 65.5272 });
   const { policy, loadPolicy, loadSummary } = usePlacementStore();
   const normalizedStatusFilter = ALLOWED_MODERATION_FILTERS.has(statusFilter)
     ? statusFilter
@@ -425,6 +455,10 @@ export default function AdminQuarriesScreen({
     setIsModalOpen(true);
   };
 
+  const handleParserCoordinatesChange = (coordinates: { lat: number; lon: number }) => {
+    setParserCenter(coordinates);
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -453,6 +487,13 @@ export default function AdminQuarriesScreen({
         </button>
       </div>
 
+      <ParserRunPanel
+        target="material"
+        token={token}
+        onCoordinatesChange={handleParserCoordinatesChange}
+        onCompleted={fetchQuarries}
+      />
+
       <div className="grid grid-cols-2 gap-3 bg-white p-3 rounded-2xl border border-slate-100">
         <select value={normalizedStatusFilter} onChange={(event) => onStatusFilterChange(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
           <option value="">Все статусы</option>
@@ -480,18 +521,39 @@ export default function AdminQuarriesScreen({
         </select>
       </div>
 
+      <section className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
+        <div className="mb-3 flex items-center justify-between gap-3 px-1">
+          <div>
+            <h3 className="text-base font-bold text-slate-800">Карта точек</h3>
+          </div>
+          <div className="flex shrink-0 items-center gap-3 text-xs font-semibold text-slate-500">
+            <span className="flex items-center gap-1.5">
+              <span className="h-3 w-3 rounded-full bg-green-600" /> Готовы к работе
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-3 w-3 rounded-full bg-slate-500" /> Не готовы
+            </span>
+          </div>
+        </div>
+        <AdminQuarriesMap
+          points={quarries}
+          center={parserCenter}
+          onPointClick={(point) => handleOpenModal(point as Quarry)}
+        />
+      </section>
+
       {/* Desktop View */}
       <div className="hidden overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm md:block">
-        <div className="w-full">
-          <table className="w-full border-collapse text-left">
+        <div className="w-full overflow-x-auto">
+          <table className="min-w-[1180px] w-full border-collapse text-left">
             <thead>
               <tr className="bg-slate-50/80 text-slate-500 text-xs uppercase tracking-wider font-bold">
                 <th className="p-4 border-b border-slate-100">Тип</th>
                 <th className="p-4 border-b border-slate-100">Название</th>
                 <th className="p-4 border-b border-slate-100">Адрес</th>
                 <th className="p-4 border-b border-slate-100">Статус</th>
-                <th className="p-4 border-b border-slate-100">Модерация</th>
-                <th className="w-[340px] min-w-[340px] whitespace-nowrap border-b border-slate-100 p-4 pr-6">Действия</th>
+                <th className="min-w-[120px] whitespace-nowrap border-b border-slate-100 p-4">Модерация</th>
+                <th className="sticky right-0 z-20 w-[340px] min-w-[340px] whitespace-nowrap border-b border-slate-100 bg-slate-50/95 p-4 pr-6 shadow-[-10px_0_10px_-10px_rgba(0,0,0,0.1)]">Действия</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -505,7 +567,7 @@ export default function AdminQuarriesScreen({
                 quarries.map((quarry) => (
                   <tr
                     key={quarry.id}
-                    className="hover:bg-slate-50/50 transition-colors"
+                    className="group hover:bg-slate-50/50 transition-colors"
                   >
                     <td className="p-4">
                       <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
@@ -542,12 +604,12 @@ export default function AdminQuarriesScreen({
                       </div>
                       <PlacementDates item={quarry} />
                     </td>
-                    <td className="p-4">
+                    <td className="min-w-[120px] whitespace-nowrap p-4">
                       <span className={`inline-flex items-center rounded-lg px-2 py-1 text-xs font-bold ${moderationBadge(quarry.moderation_status).className}`}>
                         {moderationBadge(quarry.moderation_status).label}
                       </span>
                     </td>
-                    <td className="w-[340px] min-w-[340px] align-top p-4 pr-6">
+                    <td className="sticky right-0 z-10 w-[340px] min-w-[340px] align-top bg-white p-4 pr-6 shadow-[-10px_0_10px_-10px_rgba(0,0,0,0.1)] group-hover:bg-slate-50/50">
                       <div className="flex max-w-full flex-wrap items-center justify-end gap-2">
                         <button
                           onClick={() => handleOpenModal(quarry)}
@@ -840,7 +902,7 @@ function EditQuarryModal({
     if (!mapRef.current || !mapgl || !coordinates) return;
 
     const point: [number, number] = [coordinates.lon, coordinates.lat];
-    mapRef.current.setCenter(point);
+    flyToMapCoordinates(mapRef.current, point, undefined, 500);
 
     if (markerRef.current) {
       markerRef.current.setCoordinates(point);
@@ -953,6 +1015,7 @@ function EditQuarryModal({
 
     if (typeof suggestion.lat === "number" && typeof suggestion.lon === "number") {
       lastGeocodedAddressRef.current = address.toLowerCase();
+      flyToMapCoordinates(mapRef.current, [suggestion.lon, suggestion.lat], 10, 500);
       setFormData((prev) => ({
         ...prev,
         address,
@@ -966,6 +1029,7 @@ function EditQuarryModal({
     if (!coords) return;
 
     lastGeocodedAddressRef.current = address.toLowerCase();
+    flyToMapCoordinates(mapRef.current, [coords.lon, coords.lat], 10, 500);
     setFormData((prev) => ({
       ...prev,
       address,
@@ -1738,7 +1802,7 @@ function EnhancedEditQuarryModal({
     if (!mapRef.current || !mapgl || !coordinates) return;
 
     const point: [number, number] = [coordinates.lon, coordinates.lat];
-    mapRef.current.setCenter(point);
+    flyToMapCoordinates(mapRef.current, point, undefined, 500);
     if (markerRef.current) {
       markerRef.current.setCoordinates(point);
       return;
@@ -1837,6 +1901,7 @@ function EnhancedEditQuarryModal({
 
     if (typeof suggestion.lat === "number" && typeof suggestion.lon === "number") {
       lastGeocodedAddressRef.current = address.toLowerCase();
+      flyToMapCoordinates(mapRef.current, [suggestion.lon, suggestion.lat], 10, 500);
       setFormData((current) => ({
         ...current,
         lat: stringifyCoordinate(suggestion.lat),
@@ -1848,6 +1913,7 @@ function EnhancedEditQuarryModal({
     try {
       const coords = await geocodeAddress(address);
       lastGeocodedAddressRef.current = address.toLowerCase();
+      flyToMapCoordinates(mapRef.current, [coords.lon, coords.lat], 10, 500);
       setFormData((current) => ({
         ...current,
         lat: stringifyCoordinate(coords.lat),
@@ -2499,6 +2565,14 @@ function EnhancedEditQuarryModal({
               <span className="ml-3 text-sm font-medium text-slate-700">Активен</span>
             </label>
           </div>
+
+          {formData.id ? <CrmPanel
+            token={token}
+            pointKind="quarry"
+            pointId={formData.id}
+            initialComment={formData.crm_comment}
+            initialOwnerId={formData.owner_user_id}
+          /> : null}
 
           <div className="mt-4 flex gap-3">
             <button

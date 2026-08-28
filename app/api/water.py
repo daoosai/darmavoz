@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
-from app.models.models import MediaFile, User, WaterPoint
+from app.models.models import CrmStatus, MediaFile, User, WaterPoint
 from app.schemas.sprint19 import WaterPointIn, WaterPointOut
 from app.security.auth import get_current_logist_user, get_current_water_septic_partner_user
 from app.services.notifications import create_operator_notifications
@@ -19,8 +19,21 @@ water_septic_partner_router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def _is_water_point_ready(point: WaterPoint) -> bool:
+    if point.crm_status != CrmStatus.active.value:
+        return False
+    if point.water_type == "free":
+        return True
+    return point.water_type == "paid" and point.price is not None
+
+
 def _public_stmt():
-    return select(WaterPoint).where(WaterPoint.moderation_status == "approved", WaterPoint.is_active.is_(True), WaterPoint.is_deleted.is_(False))
+    return select(WaterPoint).where(
+        WaterPoint.crm_status == CrmStatus.active.value,
+        WaterPoint.moderation_status == "approved",
+        WaterPoint.is_active.is_(True),
+        WaterPoint.is_deleted.is_(False),
+    )
 
 
 async def _serialize_point(point: WaterPoint, db: AsyncSession) -> WaterPointOut:
@@ -39,7 +52,10 @@ async def _serialize_point(point: WaterPoint, db: AsyncSession) -> WaterPointOut
         .limit(1)
     )
     return WaterPointOut.model_validate(point).model_copy(
-        update={"primary_image_url": primary_image_url}
+        update={
+            "primary_image_url": primary_image_url,
+            "is_ready": _is_water_point_ready(point),
+        }
     )
 
 
@@ -86,6 +102,28 @@ async def _hard_delete_water_point(point: WaterPoint, db: AsyncSession) -> None:
 async def list_water_points(water_type: str | None = None, db: AsyncSession = Depends(get_db)):
     stmt = _public_stmt()
     if water_type in {"free", "paid"}:
+        stmt = stmt.where(WaterPoint.water_type == water_type)
+    points = (await db.execute(stmt.order_by(WaterPoint.created_at.desc()))).scalars().all()
+    return await _serialize_points(list(points), db)
+
+
+@router.get("/water-points/map", response_model=list[WaterPointOut])
+async def list_water_points_for_map(
+    water_type: str | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    stmt = select(WaterPoint).where(
+        WaterPoint.is_deleted.is_(False),
+        WaterPoint.crm_status.in_(
+            [
+                CrmStatus.active.value,
+                CrmStatus.parsed.value,
+                CrmStatus.rejected.value,
+                CrmStatus.invite_sent.value,
+            ]
+        ),
+    )
+    if water_type in {"free", "paid", "unknown"}:
         stmt = stmt.where(WaterPoint.water_type == water_type)
     points = (await db.execute(stmt.order_by(WaterPoint.created_at.desc()))).scalars().all()
     return await _serialize_points(list(points), db)

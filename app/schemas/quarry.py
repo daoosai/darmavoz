@@ -264,6 +264,11 @@ class QuarryOut(QuarryBase):
     moderation_comment: Optional[str] = None
     pending_changes: dict | None = None
     owner_user_id: Optional[UUID] = None
+    twogis_id: Optional[str] = None
+    crm_status: Literal["parsed", "active", "rejected", "invite_sent"] = "active"
+    is_ready: bool = False
+    crm_comment: Optional[str] = None
+    parsed_data: dict | None = None
     material_ids: list[UUID] = Field(default_factory=list)
     materials: list[QuarryMaterialRef] = Field(default_factory=list)
     material_offers: list[QuarryMaterialOfferOut] = Field(default_factory=list)
@@ -317,6 +322,9 @@ class GlobalPickupPointOut(BaseModel):
     lon: float
     primary_image_url: Optional[str] = None
     material_offers: list[GlobalPickupPointMaterialOut] = Field(default_factory=list)
+    crm_status: Literal["parsed", "active", "rejected", "invite_sent"] = "active"
+    is_ready: bool = False
+    parsed_data: dict | None = None
 
 
 class ModerationDecision(BaseModel):

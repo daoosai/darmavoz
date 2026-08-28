@@ -110,6 +110,40 @@ interface AdminDriver {
   };
 }
 
+interface DriverRecommendation {
+  driver_id: string;
+  driver_name: string;
+  vehicle_title?: string | null;
+  vehicle_volume_min?: number | null;
+  vehicle_volume_max?: number | null;
+  position?: number | null;
+  score?: number | null;
+  driver_to_pickup_km?: number | null;
+  pickup_to_client_km?: number | null;
+  total_distance_km?: number | null;
+  distance_source?: string | null;
+  distance_accuracy?: string | null;
+  fixed_rate?: number | null;
+  rate_mode?: string | null;
+  rating?: number | null;
+  is_dispatch_eligible: boolean;
+  dispatch_admission_score?: number | null;
+  dispatch_admission_comment?: string | null;
+  reasons: string[];
+  exclusion_reasons: string[];
+}
+
+interface DriverRecommendationsResponse {
+  calculated_at: string;
+  recommended_driver_id?: string | null;
+  selected_driver_id?: string | null;
+  distance_source: string;
+  twogis_status: string;
+  message?: string | null;
+  candidates: DriverRecommendation[];
+  not_recommended: DriverRecommendation[];
+}
+
 const manualAssignableStatuses = new Set([
   "created",
   "searching_driver",
@@ -131,6 +165,32 @@ const getFleetDriverStatus = (status: string | null | undefined) => {
   if (status === "available" || status === "free") return "available";
   if (status === "busy") return "busy";
   return "offline";
+};
+
+const recommendationReasonLabel = (reason: string) => {
+  if (reason.startsWith("distance_driver_to_pickup_km:")) {
+    return `До точки забора: ${reason.split(":")[1]} км`;
+  }
+  if (reason.startsWith("rating:")) return `Рейтинг ${reason.split(":")[1]}`;
+  if (reason.startsWith("fixed_rate:")) return `Фиксированная ставка: ${reason.split(":")[1]} ₽`;
+  if (reason === "vehicle_volume_match") return "Подходящая кубатура";
+  if (reason === "rate_not_compared_per_ton_km") return "Тариф за тонно-км не сравнивается";
+  const labels: Record<string, string> = {
+    location_missing: "Нет геопозиции",
+    location_stale: "Геопозиция устарела",
+    shift_off: "Не на смене",
+    driver_inactive: "Водитель неактивен",
+    dispatch_admission_denied: "Нет допуска к распределению",
+    auto_dispatch_disabled: "Автораспределение отключено",
+    volume_mismatch: "Не подходит кубатура",
+    already_attempted: "Уже получал оффер",
+    already_rejected_or_expired: "Оффер отклонён или истёк",
+    temporary_penalty: "Временное ограничение",
+    order_coordinates_missing: "У заказа нет координат маршрута",
+    vehicle_missing: "Нет транспорта",
+    vehicle_inactive: "Транспорт неактивен",
+  };
+  return labels[reason] || reason.replaceAll("_", " ");
 };
 
 const isDriverCompatibleWithOrder = (
@@ -200,6 +260,8 @@ export default function LogistDashboardScreen({
   const [selectedDriverId, setSelectedDriverId] = useState("");
   const [isManualAssignSaving, setIsManualAssignSaving] = useState(false);
   const [isDriverDropdownOpen, setIsDriverDropdownOpen] = useState(false);
+  const [driverRecommendations, setDriverRecommendations] = useState<DriverRecommendationsResponse | null>(null);
+  const [isLoadingRecommendations, setIsLoadingRecommendations] = useState(false);
 
   // Create Order State
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -221,12 +283,14 @@ export default function LogistDashboardScreen({
 
   const [historyOrderId, setHistoryOrderId] = useState<string | null>(null);
   const [dispatchHistory, setDispatchHistory] = useState<DispatchAttempt[]>([]);
+  const [historyRecommendations, setHistoryRecommendations] = useState<DriverRecommendationsResponse | null>(null);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
   const handleOpenHistory = async (orderId: string) => {
     setHistoryOrderId(orderId);
     setIsLoadingHistory(true);
     setDispatchHistory([]);
+    setHistoryRecommendations(null);
     try {
       const res = await fetch(
         `${baseURL}/logist/orders/${orderId}/dispatch-history`,
@@ -237,6 +301,7 @@ export default function LogistDashboardScreen({
       if (res.ok) {
         const data = await res.json();
         setDispatchHistory(data?.attempts || data || []);
+        setHistoryRecommendations(data?.latest_recommendation || null);
       } else {
         toast.error("Не удалось загрузить историю");
       }
@@ -503,12 +568,40 @@ export default function LogistDashboardScreen({
     }
   };
 
+  const loadDriverRecommendations = async (orderId: string, refresh = false) => {
+    try {
+      setIsLoadingRecommendations(true);
+      const url = refresh
+        ? `${baseURL}/logist/orders/${orderId}/driver-recommendations?refresh=true`
+        : `${baseURL}/logist/orders/${orderId}/driver-recommendations/latest`;
+      let response = await fetch(url, {
+        method: refresh ? "POST" : "GET",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok && !refresh && response.status === 404) {
+        response = await fetch(`${baseURL}/logist/orders/${orderId}/driver-recommendations`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      }
+      if (!response.ok) throw new Error("Не удалось рассчитать рекомендации");
+      setDriverRecommendations(await response.json());
+    } catch (error) {
+      setDriverRecommendations(null);
+      toast.error(handleApiError(error, "Не удалось загрузить рекомендации водителей"));
+    } finally {
+      setIsLoadingRecommendations(false);
+    }
+  };
+
   const openManualAssignModal = async (order: AdminOrder) => {
     setManualAssignOrder(order);
     setSelectedDriverId("");
+    setDriverRecommendations(null);
     if (drivers.length === 0) {
       await fetchDrivers();
     }
+    await loadDriverRecommendations(order.id);
   };
 
   const closeManualAssignModal = () => {
@@ -517,6 +610,7 @@ export default function LogistDashboardScreen({
     }
     setManualAssignOrder(null);
     setSelectedDriverId("");
+    setDriverRecommendations(null);
   };
 
   const handleManualAssign = async () => {
@@ -1452,6 +1546,81 @@ export default function LogistDashboardScreen({
                 </p>
               </div>
 
+              <div className="rounded-2xl border border-sky-100 bg-sky-50/60 p-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-bold text-slate-800">Рекомендуемый кандидат</p>
+                    {driverRecommendations && (
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {driverRecommendations.distance_source === "2gis_truck"
+                          ? "Маршрут 2ГИС Truck"
+                          : "Предварительно по прямой"}
+                        {" · "}
+                        {new Date(driverRecommendations.calculated_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isLoadingRecommendations}
+                    onClick={() => manualAssignOrder && loadDriverRecommendations(manualAssignOrder.id, true)}
+                    className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-50 disabled:opacity-60"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${isLoadingRecommendations ? "animate-spin" : ""}`} />
+                    Пересчитать
+                  </button>
+                </div>
+
+                {isLoadingRecommendations && !driverRecommendations ? (
+                  <div className="flex items-center gap-2 py-3 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" />Считаем маршрут и Score…</div>
+                ) : driverRecommendations?.message ? (
+                  <p className="text-sm text-amber-800">{driverRecommendations.message}</p>
+                ) : driverRecommendations?.candidates.length ? (
+                  <div className="space-y-2">
+                    {driverRecommendations.candidates.map((candidate, index) => (
+                      <button
+                        key={candidate.driver_id}
+                        type="button"
+                        onClick={() => setSelectedDriverId(candidate.driver_id)}
+                        className={`w-full rounded-xl border p-3 text-left transition-colors ${selectedDriverId === candidate.driver_id ? "border-sky-500 bg-sky-100" : index === 0 ? "border-sky-200 bg-white hover:border-sky-400" : "border-slate-200 bg-white hover:border-slate-300"}`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-bold text-slate-800">{index === 0 ? "Рекомендуем: " : "Альтернатива: "}{candidate.driver_name}</p>
+                            <p className="mt-0.5 text-xs text-slate-500">{candidate.vehicle_title || "Транспорт не указан"}</p>
+                          </div>
+                          <span className="rounded-lg bg-slate-900 px-2 py-1 text-xs font-bold text-white">Score {candidate.score ?? "—"}</span>
+                        </div>
+                        <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-slate-600">
+                          <span>До забора: {candidate.driver_to_pickup_km?.toFixed(1) ?? "—"} км</span>
+                          <span>Клиент: {candidate.pickup_to_client_km?.toFixed(1) ?? "—"} км</span>
+                          <span>Плечо: {candidate.total_distance_km?.toFixed(1) ?? "—"} км</span>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {candidate.reasons.map((reason) => <span key={reason} className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">{recommendationReasonLabel(reason)}</span>)}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500">Нет водителей с актуальной геопозицией для автоматической рекомендации.</p>
+                )}
+
+                {!!driverRecommendations?.not_recommended.length && (
+                  <details className="rounded-xl border border-amber-100 bg-white p-3">
+                    <summary className="cursor-pointer text-sm font-semibold text-amber-800">Не рекомендованы ({driverRecommendations.not_recommended.length})</summary>
+                    <div className="mt-2 space-y-2">
+                      {driverRecommendations.not_recommended.map((candidate) => (
+                        <button key={candidate.driver_id} type="button" onClick={() => setSelectedDriverId(candidate.driver_id)} className={`w-full rounded-lg border p-2 text-left text-sm ${selectedDriverId === candidate.driver_id ? "border-amber-500 bg-amber-50" : "border-slate-200 hover:bg-slate-50"}`}>
+                          <span className="font-semibold text-slate-800">{candidate.driver_name}</span>
+                          <span className="ml-2 text-xs text-slate-500">{candidate.exclusion_reasons.map(recommendationReasonLabel).join(" · ")}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </details>
+                )}
+              </div>
+
               <div className="relative z-50">
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                   Водитель
@@ -1626,6 +1795,27 @@ export default function LogistDashboardScreen({
                               timeStyle: "short",
                             })}
                           </p>
+                        </div>
+                      )}
+
+                      {historyRecommendations && (
+                        <div className="relative rounded-xl border border-sky-100 bg-sky-50 p-3.5 shadow-sm">
+                          <div className="absolute -left-[33px] top-4 h-4 w-4 rounded-full border-[3px] border-white bg-sky-500 shadow-sm" />
+                          <p className="text-sm font-bold text-slate-800">Снимок рекомендаций</p>
+                          <p className="mt-1 text-xs text-slate-600">
+                            {historyRecommendations.distance_source === "2gis_truck" ? "Маршрут 2ГИС Truck" : "Предварительно по прямой"}
+                            {" · "}{new Date(historyRecommendations.calculated_at).toLocaleString([], { dateStyle: "short", timeStyle: "short" })}
+                          </p>
+                          <div className="mt-2 space-y-1 text-xs text-slate-700">
+                            {historyRecommendations.recommended_driver_id && <p>Рекомендован: {historyRecommendations.candidates.find((item) => item.driver_id === historyRecommendations.recommended_driver_id)?.driver_name || "водитель"}</p>}
+                            {historyRecommendations.selected_driver_id && <p className="font-semibold">{historyRecommendations.selected_driver_id === historyRecommendations.recommended_driver_id ? "Рекомендация принята" : `Логист выбрал альтернативу: ${historyRecommendations.candidates.concat(historyRecommendations.not_recommended).find((item) => item.driver_id === historyRecommendations.selected_driver_id)?.driver_name || "водителя"}`}</p>}
+                          </div>
+                          <details className="mt-2 text-xs text-slate-600">
+                            <summary className="cursor-pointer font-semibold text-sky-700">Показать кандидатов</summary>
+                            <div className="mt-1 space-y-1">
+                              {historyRecommendations.candidates.map((candidate) => <p key={candidate.driver_id}>#{candidate.position} {candidate.driver_name} · Score {candidate.score ?? "—"} · {candidate.total_distance_km?.toFixed(1) ?? "—"} км</p>)}
+                            </div>
+                          </details>
                         </div>
                       )}
 

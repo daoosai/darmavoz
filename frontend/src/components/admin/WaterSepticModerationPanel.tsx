@@ -17,6 +17,9 @@ import {
 import toast from "react-hot-toast";
 
 import AddressMapPicker from "../AddressMapPicker";
+import CrmPanel from "./CrmPanel";
+import ParserRunPanel from "./ParserRunPanel";
+import { getCrmStatusLabel, type CrmStatus } from "../../crmStatus";
 import {
   baseURL,
   extractApiErrorMessage,
@@ -53,6 +56,12 @@ interface WaterPoint {
   moderation_status: string;
   moderation_comment?: string | null;
   is_active: boolean;
+  owner_user_id?: string | null;
+  twogis_id?: string | null;
+  crm_status?: CrmStatus;
+  is_ready?: boolean;
+  crm_comment?: string | null;
+  parsed_data?: Record<string, unknown> | null;
 }
 
 interface SepticProfile {
@@ -524,6 +533,8 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
         </button>
       </div>
 
+      {tab === "water" ? <div className="mt-4"><ParserRunPanel target="water" token={token} onCompleted={load} /></div> : null}
+
       <label className="mt-4 block text-sm font-bold text-slate-700">
         Статус
         <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as StatusFilter)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-3 font-normal outline-none focus:border-sky-400">
@@ -541,8 +552,9 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
           const isApproved = status === "approved";
           const isArchived = status === "suspended" || status === "archived";
           return <article key={point.id} className="overflow-hidden rounded-2xl border border-slate-100 bg-white">
-            {point.primary_image_url ? <img src={resolveMediaUrl(point.primary_image_url)} alt={point.name || point.source} className="h-40 w-full object-cover" /> : null}
-            <div className="space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div><h3 className="font-bold text-slate-900">{point.name || point.source}</h3><p className="text-sm text-slate-500">Источник: {point.source}</p></div><div className="flex flex-col items-end gap-1"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${statusClass(status)}`}>{statusLabel[status] || point.moderation_status}</span><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${point.water_type === "free" ? "bg-blue-100 text-blue-800" : "bg-green-100 text-green-800"}`}>{point.water_type === "free" ? "Бесплатная" : "Платная"}</span></div></div><p className="flex gap-2 text-sm text-slate-600"><MapPin className="h-4 w-4 shrink-0" />{point.address}</p>{point.phone ? <p className="flex gap-2 text-sm text-slate-600"><Phone className="h-4 w-4 shrink-0" />{point.phone}</p> : null}{point.description ? <p className="text-sm text-slate-600">{point.description}</p> : null}{point.water_type === "paid" && point.price != null && point.price_unit ? <p className="text-right text-lg font-black text-slate-900">{Number(point.price).toLocaleString("ru-RU")} ₽/{point.price_unit}</p> : null}{point.moderation_comment ? <p className="rounded-xl bg-red-50 p-2 text-sm text-red-700">{point.moderation_comment}</p> : null}{isPending ? <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-3"><button type="button" disabled={actionId === point.id} onClick={() => openReject("water", point.id, point.name || point.source)} className="flex items-center justify-center gap-2 rounded-xl border border-rose-200 py-2.5 text-sm font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50"><XCircle className="h-4 w-4" />Отклонить</button><button type="button" disabled={actionId === point.id} onClick={() => void requestAction("water", point.id, "approve")} className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 py-2.5 text-sm font-bold text-white hover:bg-emerald-600 disabled:opacity-50">{actionId === point.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}Одобрить</button></div> : (isApproved || isArchived) ? <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-3"><button type="button" onClick={() => openWaterEdit(point)} className="flex items-center justify-center rounded-xl bg-slate-100 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-200">Редактировать</button><button type="button" disabled={actionId === point.id} onClick={() => void requestAction("water", point.id, isArchived ? "restore" : "suspend")} className={`flex items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-bold disabled:opacity-50 ${isArchived ? "border-emerald-200 text-emerald-700 hover:bg-emerald-50" : "border-amber-200 text-amber-700 hover:bg-amber-50"}`}>{actionId === point.id ? <Loader2 className="h-4 w-4 animate-spin" /> : isArchived ? <RefreshCw className="h-4 w-4" /> : <Archive className="h-4 w-4" />}{isArchived ? "Восстановить" : "В архив"}</button></div> : null}</div>
+            {point.primary_image_url ? <img src={resolveMediaUrl(point.primary_image_url)} alt={point.name || "Точка воды"} className="h-40 w-full object-cover" /> : null}
+            <div className="space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div><h3 className="font-bold text-slate-900">{point.name || "Точка воды"}</h3></div><div className="flex flex-col items-end gap-1"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${statusClass(status)}`}>{statusLabel[status] || point.moderation_status}</span><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${point.water_type === "free" ? "bg-blue-100 text-blue-800" : "bg-green-100 text-green-800"}`}>{point.water_type === "free" ? "Бесплатная" : "Платная"}</span></div></div><p className="flex gap-2 text-sm text-slate-600"><MapPin className="h-4 w-4 shrink-0" />{point.address}</p>{point.phone ? <p className="flex gap-2 text-sm text-slate-600"><Phone className="h-4 w-4 shrink-0" />{point.phone}</p> : null}{point.description ? <p className="text-sm text-slate-600">{point.description}</p> : null}{point.water_type === "paid" && point.price != null && point.price_unit ? <p className="text-right text-lg font-black text-slate-900">{Number(point.price).toLocaleString("ru-RU")} ₽/{point.price_unit}</p> : null}{point.moderation_comment ? <p className="rounded-xl bg-red-50 p-2 text-sm text-red-700">{point.moderation_comment}</p> : null}{isPending ? <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-3"><button type="button" disabled={actionId === point.id} onClick={() => openReject("water", point.id, point.name || "Точка воды")} className="flex items-center justify-center gap-2 rounded-xl border border-rose-200 py-2.5 text-sm font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50"><XCircle className="h-4 w-4" />Отклонить</button><button type="button" disabled={actionId === point.id} onClick={() => void requestAction("water", point.id, "approve")} className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 py-2.5 text-sm font-bold text-white hover:bg-emerald-600 disabled:opacity-50">{actionId === point.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}Одобрить</button></div> : (isApproved || isArchived) ? <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-3"><button type="button" onClick={() => openWaterEdit(point)} className="flex items-center justify-center rounded-xl bg-slate-100 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-200">Редактировать</button><button type="button" disabled={actionId === point.id} onClick={() => void requestAction("water", point.id, isArchived ? "restore" : "suspend")} className={`flex items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-bold disabled:opacity-50 ${isArchived ? "border-emerald-200 text-emerald-700 hover:bg-emerald-50" : "border-amber-200 text-amber-700 hover:bg-amber-50"}`}>{actionId === point.id ? <Loader2 className="h-4 w-4 animate-spin" /> : isArchived ? <RefreshCw className="h-4 w-4" /> : <Archive className="h-4 w-4" />}{isArchived ? "Восстановить" : "В архив"}</button></div> : null}</div>
+            <div className="flex gap-2 border-t border-slate-100 px-4 pb-4 pt-3 text-xs font-bold text-slate-600"><span className={`rounded-full px-2 py-1 ${point.crm_status === "active" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"}`}>CRM: {getCrmStatusLabel(point.crm_status)}</span></div>
           </article>;
         }) : septicProfiles.map((profile) => {
           const status = normalizeStatus(profile.moderation_status);
@@ -573,7 +585,7 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
             {modalKind === "water" ? (
               <div className="mt-4 space-y-3">
                 <label className="block text-sm font-bold">Тип воды
-                  <select value={waterEditForm.water_type} onChange={(event) => setWaterEditForm((current) => ({ ...current, water_type: event.target.value as "free" | "paid" }))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal">
+                  <select value={waterEditForm.water_type} onChange={(event) => setWaterEditForm((current) => ({ ...current, water_type: event.target.value as "free" | "paid" | "unknown" }))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal">
                     <option value="free">Бесплатная</option>
                     <option value="paid">Платная</option>
                   </select>
@@ -638,6 +650,15 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
                 </div>
               </div>
             )}
+
+            {modalKind === "water" && editTarget ? <CrmPanel
+              token={token}
+              pointKind="water"
+              pointId={editTarget.data.id}
+              initialComment={(editTarget.data as WaterPoint).crm_comment}
+              initialOwnerId={(editTarget.data as WaterPoint).owner_user_id}
+              onUpdated={load}
+            /> : null}
 
             <div className="mt-5 grid grid-cols-2 gap-3">
               <button type="button" onClick={closeEdit} className="rounded-xl bg-slate-100 py-3 font-bold text-slate-700">Отмена</button>

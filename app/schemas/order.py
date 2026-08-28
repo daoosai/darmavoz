@@ -445,6 +445,45 @@ class DispatchHistoryAttemptOut(BaseModel):
     expires_at: datetime | None = None
     responded_at: datetime | None = None
     decision_reason: str | None = None
+    priority_snapshot: dict | None = None
+
+
+class DriverRecommendationOut(BaseModel):
+    driver_id: UUID
+    driver_name: str
+    driver_phone: str
+    vehicle_title: str | None = None
+    vehicle_volume_min: float | None = None
+    vehicle_volume_max: float | None = None
+    position: int | None = None
+    score: float | None = None
+    driver_to_pickup_km: float | None = None
+    pickup_to_client_km: float | None = None
+    total_distance_km: float | None = None
+    distance_source: str | None = None
+    distance_accuracy: str | None = None
+    fixed_rate: float | None = None
+    rate_mode: str | None = None
+    rating: float | None = None
+    is_dispatch_eligible: bool
+    dispatch_admission_score: int | None = None
+    dispatch_admission_comment: str | None = None
+    reasons: list[str] = Field(default_factory=list)
+    exclusion_reasons: list[str] = Field(default_factory=list)
+
+
+class DriverRecommendationsOut(BaseModel):
+    order_id: UUID
+    calculated_at: datetime
+    trigger_source: str
+    algorithm_version: str
+    recommended_driver_id: UUID | None = None
+    selected_driver_id: UUID | None = None
+    distance_source: str
+    twogis_status: str
+    message: str | None = None
+    candidates: list[DriverRecommendationOut] = Field(default_factory=list)
+    not_recommended: list[DriverRecommendationOut] = Field(default_factory=list)
 
 
 class DispatchHistoryOut(BaseModel):
@@ -452,6 +491,7 @@ class DispatchHistoryOut(BaseModel):
     status: str
     assigned_driver_id: UUID | None = None
     attempts: list[DispatchHistoryAttemptOut] = Field(default_factory=list)
+    latest_recommendation: DriverRecommendationsOut | None = None
 
 
 class OrderHistoryEventOut(BaseModel):

@@ -27,6 +27,7 @@ interface GlobalPickupPoint {
   lon: number;
   primary_image_url?: string | null;
   material_offers: GlobalPickupPointMaterial[];
+  is_ready: boolean;
 }
 
 interface UserLocation {
@@ -51,6 +52,9 @@ const getRenderablePoints = (pickupPoints: GlobalPickupPoint[]) =>
   pickupPoints.filter(
     (point) => isValidCoordinate(point.lat) && isValidCoordinate(point.lon),
   );
+
+const isPointReady = (point: GlobalPickupPoint) =>
+  point.is_ready === true;
 
 const calculateDistanceKm = (
   lat1: number,
@@ -401,9 +405,10 @@ export default function GlobalMapScreen() {
     pointMarkerRefs.current = [];
 
     pointMarkerRefs.current = visiblePoints.map((point) => {
+      const isReady = isPointReady(point);
       const element = document.createElement("button");
       element.type = "button";
-      element.className = `global-pickup-marker${point.id === selectedPoint?.id ? " global-pickup-marker--active" : ""}`;
+      element.className = `global-pickup-marker global-pickup-marker--${isReady ? "ready" : "muted"}${point.id === selectedPoint?.id ? " global-pickup-marker--selected" : ""}`;
       const label = document.createElement("span");
       label.className = "global-pickup-marker__label";
       label.textContent = point.short_name || point.name;
@@ -501,8 +506,16 @@ export default function GlobalMapScreen() {
           place-items: center;
           cursor: pointer;
         }
-        .global-pickup-marker--active {
-          background: #0ea5e9;
+        .global-pickup-marker--ready {
+          background: #16a34a;
+          color: #ffffff;
+        }
+        .global-pickup-marker--muted {
+          background: #94a3b8;
+          color: #ffffff;
+          opacity: 0.82;
+        }
+        .global-pickup-marker--selected {
           color: #ffffff;
           transform: scale(1.06);
         }
@@ -514,14 +527,14 @@ export default function GlobalMapScreen() {
         .global-pickup-marker__label {
           position: absolute; bottom: 48px; max-width: 160px; overflow: hidden;
           white-space: nowrap; text-overflow: ellipsis; border-radius: 8px;
-          background: #0ea5e9; color: #fff; padding: 3px 7px;
+          background: #334155; color: #fff; padding: 3px 7px;
           font-size: 11px; font-weight: 700; pointer-events: none;
         }
         .global-pickup-marker__label-tail {
           position: absolute; left: 50%; bottom: 42px;
           width: 0; height: 0; transform: translateX(-50%);
           border-left: 6px solid transparent; border-right: 6px solid transparent;
-          border-top: 6px solid #0ea5e9;
+          border-top: 6px solid #334155;
         }
         .global-pickup-marker__icon svg {
           width: 100%;
@@ -638,6 +651,14 @@ export default function GlobalMapScreen() {
                   </div>
                 </div>
 
+                {!isPointReady(selectedPoint) ? (
+                  <div className="flex-1 overflow-y-auto px-4 py-4">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-sm font-bold text-slate-900">Временно без доставки</p>
+                      <p className="mt-1 text-sm text-slate-600">Точка ещё не готова принимать заказы.</p>
+                    </div>
+                  </div>
+                ) : (
                 <div className="flex-1 overflow-y-auto px-4 py-4">
                   <div className="grid gap-4 sm:grid-cols-[160px,1fr]">
                     <div className="mt-2 overflow-hidden rounded-2xl bg-slate-100">
@@ -702,8 +723,9 @@ export default function GlobalMapScreen() {
                     </div>
                   </div>
                 </div>
+                )}
 
-                <div className="shrink-0 border-t border-slate-100 bg-white px-4 pb-4 pt-3">
+                {isPointReady(selectedPoint) ? <div className="shrink-0 border-t border-slate-100 bg-white px-4 pb-4 pt-3">
                   <button
                     type="button"
                     onClick={() =>
@@ -719,7 +741,7 @@ export default function GlobalMapScreen() {
                     <Route className="h-5 w-5" />
                     Построить маршрут
                   </button>
-                </div>
+                </div> : null}
               </div>
             </div>
           </>

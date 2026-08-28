@@ -11,6 +11,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.models import (
+    CrmStatus,
     DeliveryOption,
     Material,
     MediaFile,
@@ -38,7 +39,7 @@ DEFAULT_MIN_DELIVERY_PRICE = {
 
 
 def public_pickup_point_filters():
-    return public_placement_filters(Quarry)
+    return (*public_placement_filters(Quarry), Quarry.crm_status == CrmStatus.active.value)
 
 
 def is_pickup_point_publicly_available(
@@ -46,7 +47,16 @@ def is_pickup_point_publicly_available(
     *,
     now: datetime | None = None,
 ) -> bool:
-    return is_publicly_available(point, now=now)
+    return point.crm_status == CrmStatus.active.value and is_publicly_available(point, now=now)
+
+
+def has_priced_material_offers(material_offers: Iterable[dict]) -> bool:
+    return any(
+        offer.get("is_active")
+        and offer.get("price") is not None
+        and float(offer["price"]) >= 0
+        for offer in material_offers
+    )
 
 
 def default_min_delivery_price(point_type: str) -> Decimal | None:
@@ -252,6 +262,18 @@ async def pickup_point_payload(
             option.media_files[0].public_url if option.media_files else option.image_url
         )
 
+    material_offers = [
+        {
+            "material_id": row.material_id,
+            "material_name": row.name,
+            "unit": row.unit,
+            "price": row.price,
+            "is_free": row.is_free,
+            "is_active": row.is_active,
+        }
+        for row in offer_rows
+    ]
+
     payload = {
         "id": point.id,
         "name": point.name,
@@ -272,19 +294,14 @@ async def pickup_point_payload(
         "moderation_comment": point.moderation_comment,
         "pending_changes": serialize_moderation_value(point.pending_changes) if include_pending_changes else None,
         "owner_user_id": point.owner_user_id,
+        "twogis_id": point.twogis_id,
+        "crm_status": point.crm_status,
+        "crm_comment": point.crm_comment,
+        "is_ready": point.owner_user_id is not None and point.is_active,
+        "parsed_data": point.parsed_data,
         "material_ids": list(material_by_id),
         "materials": list(material_by_id.values()),
-        "material_offers": [
-            {
-                "material_id": row.material_id,
-                "material_name": row.name,
-                "unit": row.unit,
-                "price": row.price,
-                "is_free": row.is_free,
-                "is_active": row.is_active,
-            }
-            for row in offer_rows
-        ],
+        "material_offers": material_offers,
         "delivery_option_ids": [option.id for option in delivery_options],
         "delivery_options": delivery_options,
         "media_files": media_files,
@@ -310,11 +327,7 @@ async def validate_point_can_be_approved(
     payload = await pickup_point_payload(db, point)
     missing: list[str] = []
     if require_materials and (
-        not payload["material_offers"]
-        or not any(
-            offer["is_active"] and offer["price"] is not None and float(offer["price"]) >= 0
-            for offer in payload["material_offers"]
-        )
+        not has_priced_material_offers(payload["material_offers"])
     ):
         missing.append("хотя бы один активный материал с ценой")
     if require_media and not payload["media_files"]:

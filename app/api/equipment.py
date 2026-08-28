@@ -492,7 +492,7 @@ async def list_public_equipment_types(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(SpecialEquipmentType)
         .where(SpecialEquipmentType.is_active.is_(True))
-        .order_by(SpecialEquipmentType.sort_order.asc(), SpecialEquipmentType.name.asc())
+        .order_by(SpecialEquipmentType.sort_order.asc(), SpecialEquipmentType.id.asc())
     )
     return list(result.scalars().all())
 
@@ -584,7 +584,7 @@ async def list_admin_equipment_types(
     del current_admin
     result = await db.execute(
         select(SpecialEquipmentType).order_by(
-            SpecialEquipmentType.sort_order.asc(), SpecialEquipmentType.name.asc()
+            SpecialEquipmentType.sort_order.asc(), SpecialEquipmentType.id.asc()
         )
     )
     return list(result.scalars().all())

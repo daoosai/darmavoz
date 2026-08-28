@@ -85,7 +85,7 @@ async def get_materials(
     if category_id is not None:
         stmt = stmt.where(Material.category_id == category_id)
 
-    result = await db.execute(stmt.order_by(Material.sort_order.asc(), Material.name.asc()))
+    result = await db.execute(stmt.order_by(Material.sort_order.asc(), Material.id.asc()))
     materials = list(result.scalars().all())
     delivery_options = await _get_active_delivery_options(db)
     await _attach_media(db, materials, delivery_options)

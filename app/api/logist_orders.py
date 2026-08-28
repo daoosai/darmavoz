@@ -3,7 +3,7 @@ import logging
 from datetime import date as date_type
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
@@ -14,6 +14,7 @@ from app.schemas.order import (
     ClarificationRequest,
     ClarificationResolveRequest,
     DispatchHistoryOut,
+    DriverRecommendationsOut,
     LogistOrderCreate,
     OrderDeleteOut,
     OrderHistoryOut,
@@ -35,6 +36,7 @@ from app.services.dispatch_service import (
     restart_dispatch_for_order,
     update_order_by_logist,
 )
+from app.services.smart_matching import smart_matching_service
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -151,6 +153,38 @@ async def get_dispatch_history(
 ) -> DispatchHistoryOut:
     del current_user
     return await build_dispatch_history(db, order_id)
+
+
+@router.post("/orders/{order_id}/driver-recommendations", response_model=DriverRecommendationsOut)
+async def refresh_driver_recommendations(
+    order_id: UUID,
+    refresh: bool = False,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_logist_user),
+) -> DriverRecommendationsOut:
+    del current_user
+    order = await get_order_by_id(db, order_id)
+    recommendation = await smart_matching_service.calculate(
+        db,
+        order,
+        trigger_source="logist_refresh" if refresh else "logist_open",
+    )
+    await db.commit()
+    return DriverRecommendationsOut.model_validate(recommendation)
+
+
+@router.get("/orders/{order_id}/driver-recommendations/latest", response_model=DriverRecommendationsOut)
+async def get_latest_driver_recommendations(
+    order_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_logist_user),
+) -> DriverRecommendationsOut:
+    del current_user
+    await get_order_by_id(db, order_id)
+    recommendation = await smart_matching_service.latest(db, order_id)
+    if recommendation is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No saved driver recommendations")
+    return DriverRecommendationsOut.model_validate(recommendation)
 
 
 @router.get("/orders/{order_id}/history", response_model=OrderHistoryOut)

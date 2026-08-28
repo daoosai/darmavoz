@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useAdminModerationStore, useAuthStore } from "./store";
 import { baseURL, extractApiErrorMessage, handleApiError } from "./utils";
 import {
+  ArrowDown,
+  ArrowUp,
   LogOut,
   Lock,
   Plus,
@@ -58,6 +60,10 @@ interface AdminCategory {
   slug: string;
   sort_order: number;
   is_active: boolean;
+  rating?: number;
+  is_dispatch_eligible?: boolean;
+  dispatch_admission_score?: number;
+  dispatch_admission_comment?: string | null;
 }
 
 interface AdminMediaFile {
@@ -77,6 +83,7 @@ interface AdminMaterial {
   min_volume: number;
   is_free?: boolean;
   is_active: boolean;
+  sort_order: number;
   media_files?: AdminMediaFile[];
   primary_image_url?: string;
   image_url?: string;
@@ -210,6 +217,7 @@ export default function AdminDashboardScreen({
     }`;
 
   const [materials, setMaterials] = useState<AdminMaterial[]>([]);
+  const [isReorderingMaterials, setIsReorderingMaterials] = useState(false);
   const [deliveryOptions, setDeliveryOptions] = useState<AdminDeliveryOption[]>(
     [],
   );
@@ -750,6 +758,42 @@ export default function AdminDashboardScreen({
     }
   };
 
+  const reorderMaterials = async (index: number, direction: -1 | 1) => {
+    const targetIndex = index + direction;
+    if (!token || targetIndex < 0 || targetIndex >= materials.length || isReorderingMaterials) {
+      return;
+    }
+
+    const previousMaterials = materials;
+    const reordered = [...materials];
+    [reordered[index], reordered[targetIndex]] = [reordered[targetIndex], reordered[index]];
+    const normalized = reordered.map((item, sort_order) => ({ ...item, sort_order }));
+    setMaterials(normalized);
+    setIsReorderingMaterials(true);
+
+    try {
+      const response = await fetch(`${baseURL}/admin/catalog/reorder`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          entity_type: "materials",
+          items: normalized.map((item) => ({ id: item.id, sort_order: item.sort_order })),
+        }),
+      });
+      if (!response.ok) throw new Error("reorder");
+      toast.success("Порядок материалов обновлён");
+    } catch {
+      setMaterials(previousMaterials);
+      toast.error("Не удалось изменить порядок материалов");
+      await fetchMaterials(true);
+    } finally {
+      setIsReorderingMaterials(false);
+    }
+  };
+
   const fetchDeliveryOptions = async (silent = false) => {
     if (!token) return;
     if (!silent) setIsLoading(true);
@@ -1083,6 +1127,7 @@ export default function AdminDashboardScreen({
         min_volume: Number(editingMaterial.min_volume || 1),
         is_active: editingMaterial.is_active ?? true,
         category_id: editingMaterial.category_id || null,
+        sort_order: Number(editingMaterial.sort_order ?? 0),
       };
 
       if (false && !payload.category_id) {
@@ -1289,6 +1334,10 @@ export default function AdminDashboardScreen({
         tonnage_max: parseNumber(editingDriver.tonnage_max),
         vehicle_brand: editingDriver.vehicle_brand,
         vehicle_plate_number: editingDriver.vehicle_plate_number,
+        rating: Number(editingDriver.rating ?? 5),
+        is_dispatch_eligible: editingDriver.is_dispatch_eligible ?? true,
+        dispatch_admission_score: Number(editingDriver.dispatch_admission_score ?? 100),
+        dispatch_admission_comment: editingDriver.dispatch_admission_comment || null,
       };
 
       if (!isEdit && payload.is_active) {
@@ -1516,6 +1565,7 @@ export default function AdminDashboardScreen({
         price: 0,
         is_free: false,
         category_id: categories[0]?.id,
+        sort_order: 0,
       });
       setIsMaterialModalOpen(true);
     }
@@ -1951,7 +2001,7 @@ export default function AdminDashboardScreen({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100/80">
-                        {materials.map((m) => {
+                        {materials.map((m, index) => {
                           const imgUrl =
                             m.primary_image_url ||
                             m.image_url ||
@@ -1997,7 +2047,28 @@ export default function AdminDashboardScreen({
                                   </span>
                                 )}
                               </td>
-                              <td className="px-6 py-4 text-right flex justify-end gap-2">
+                              <td className="px-6 py-4 text-right">
+                                <div className="flex justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => void reorderMaterials(index, -1)}
+                                  disabled={isReorderingMaterials || index === 0}
+                                  title="Переместить выше"
+                                  aria-label={`Переместить материал «${m.name}» выше`}
+                                  className="rounded-lg border border-transparent bg-slate-50 p-2 text-slate-400 transition-colors hover:bg-sky-50 hover:text-[#2DB0E6] disabled:cursor-not-allowed disabled:opacity-30"
+                                >
+                                  <ArrowUp className="h-4 w-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void reorderMaterials(index, 1)}
+                                  disabled={isReorderingMaterials || index === materials.length - 1}
+                                  title="Переместить ниже"
+                                  aria-label={`Переместить материал «${m.name}» ниже`}
+                                  className="rounded-lg border border-transparent bg-slate-50 p-2 text-slate-400 transition-colors hover:bg-sky-50 hover:text-[#2DB0E6] disabled:cursor-not-allowed disabled:opacity-30"
+                                >
+                                  <ArrowDown className="h-4 w-4" />
+                                </button>
                                 <button
                                   onClick={() => openMaterialModal(m)}
                                   className="p-2 text-slate-400 hover:text-[#2DB0E6] bg-slate-50 hover:bg-[#2DB0E6]/10 rounded-lg transition-colors border border-transparent"
@@ -2015,6 +2086,7 @@ export default function AdminDashboardScreen({
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </button>
+                                </div>
                               </td>
                             </tr>
                           );
@@ -2024,7 +2096,7 @@ export default function AdminDashboardScreen({
                   </div>
 
                   <div className="grid grid-cols-1 gap-4 md:hidden">
-                    {materials.map((m) => {
+                    {materials.map((m, index) => {
                       const imgUrl =
                         m.primary_image_url ||
                         m.image_url ||
@@ -2039,6 +2111,26 @@ export default function AdminDashboardScreen({
                               ID: {m.id.substring(0, 8)}
                             </span>
                             <div className="flex gap-2 -mt-2 -mr-2">
+                              <button
+                                type="button"
+                                onClick={() => void reorderMaterials(index, -1)}
+                                disabled={isReorderingMaterials || index === 0}
+                                title="Переместить выше"
+                                aria-label={`Переместить материал «${m.name}» выше`}
+                                className="rounded-lg border border-transparent bg-slate-50 p-2 text-slate-400 transition-colors hover:bg-sky-50 hover:text-[#2DB0E6] disabled:cursor-not-allowed disabled:opacity-30"
+                              >
+                                <ArrowUp className="h-4 w-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void reorderMaterials(index, 1)}
+                                disabled={isReorderingMaterials || index === materials.length - 1}
+                                title="Переместить ниже"
+                                aria-label={`Переместить материал «${m.name}» ниже`}
+                                className="rounded-lg border border-transparent bg-slate-50 p-2 text-slate-400 transition-colors hover:bg-sky-50 hover:text-[#2DB0E6] disabled:cursor-not-allowed disabled:opacity-30"
+                              >
+                                <ArrowDown className="h-4 w-4" />
+                              </button>
                               <button
                                 onClick={() => openMaterialModal(m)}
                                 className="p-2 text-slate-400 hover:text-[#2DB0E6] bg-slate-50 hover:bg-[#2DB0E6]/10 rounded-lg transition-colors border border-transparent"
@@ -3595,6 +3687,51 @@ export default function AdminDashboardScreen({
                     Для загрузки фотографий сначала сохраните материал.
                   </div>
                 )}
+              </div>
+
+              <div className="rounded-xl border border-slate-200 p-4 space-y-3">
+                <p className="text-sm font-bold text-slate-800">Скоринг и допуск к распределению</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="text-xs font-semibold text-slate-600">
+                    Рейтинг (1–5)
+                    <input
+                      type="number"
+                      min="1"
+                      max="5"
+                      step="0.1"
+                      value={editingDriver.rating ?? 5}
+                      onChange={(e) => setEditingDriver({ ...editingDriver, rating: Number(e.target.value) })}
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="text-xs font-semibold text-slate-600">
+                    Оценка допуска (0–100)
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={editingDriver.dispatch_admission_score ?? 100}
+                      onChange={(e) => setEditingDriver({ ...editingDriver, dispatch_admission_score: Number(e.target.value) })}
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                    />
+                  </label>
+                </div>
+                <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={editingDriver.is_dispatch_eligible !== false}
+                    onChange={(e) => setEditingDriver({ ...editingDriver, is_dispatch_eligible: e.target.checked })}
+                    className="h-4 w-4 rounded border-slate-300 text-[#2DB0E6]"
+                  />
+                  Допущен к автоматическому распределению
+                </label>
+                <textarea
+                  value={editingDriver.dispatch_admission_comment || ""}
+                  onChange={(e) => setEditingDriver({ ...editingDriver, dispatch_admission_comment: e.target.value })}
+                  placeholder="Комментарий к допуску (необязательно)"
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                  rows={2}
+                />
               </div>
 
               <label className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer">

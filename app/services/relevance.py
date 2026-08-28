@@ -267,6 +267,8 @@ async def extend_placement(
     current_time = now or utcnow()
     base_time = max(current_time, entity.placement_ends_at or current_time)
     entity.placement_ends_at = base_time + timedelta(days=settings.PLACEMENT_EXTENSION_DAYS)
+    if isinstance(entity, SpecialEquipmentListing):
+        entity.expiration_notice_sent = False
     entity.moderation_status = ModerationStatus.approved.value
     entity.moderation_comment = None
     entity.moderated_at = current_time
@@ -304,6 +306,8 @@ async def apply_manual_placement_end_date(
         and entity.placement_hidden_reason == MANUAL_HIDDEN_REASON
     )
     entity.placement_ends_at = ends_at
+    if isinstance(entity, SpecialEquipmentListing):
+        entity.expiration_notice_sent = False
     if isinstance(entity, Quarry):
         entity.subscription_end_date = ends_at
     if entity.placement_started_at is None:

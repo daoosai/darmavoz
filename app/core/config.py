@@ -57,6 +57,8 @@ class Settings(BaseSettings):
     PLACEMENT_CONFIRMATION_GRACE_DAYS: int = 3
     PLACEMENT_WORKER_INTERVAL_SECONDS: int = 300
     PLACEMENT_WORKER_BATCH_SIZE: int = 200
+    EXPIRATION_NOTIFICATION_INTERVAL_SECONDS: int = 86400
+    EXPIRATION_NOTIFICATION_BATCH_SIZE: int = 200
     DRIVER_TEST_USERNAME: str = "driver1"
     DRIVER_TEST_PASSWORD: str = "driver123"
     ANDROID_VERSION: str = "2.9.0"
@@ -77,6 +79,14 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("TWOGIS_API_KEY", "VITE_2GIS_KEY"),
     )
+    TWOGIS_TRUCK_DIRECTIONS_BASE_URL: str | None = None
+    TWOGIS_TRUCK_DIRECTIONS_CACHE_TTL_SECONDS: int = Field(default=300, ge=1)
+    TWOGIS_TRUCK_DIRECTIONS_TOP_N: int = Field(default=3, ge=1, le=10)
+    TWOGIS_TRUCK_DIRECTIONS_TIMEOUT_SECONDS: float = Field(default=8.0, gt=0)
+    TWOGIS_PLACES_BASE_URL: str = "https://catalog.api.2gis.com/3.0/items"
+    TWOGIS_PLACES_TIMEOUT_SECONDS: float = Field(default=15.0, gt=0)
+    TWOGIS_PLACES_MAX_RETRIES: int = Field(default=3, ge=1, le=5)
+    TWOGIS_PLACES_MAX_RESULTS: int = Field(default=1000, ge=50, le=5000)
     YANDEX_GEOCODER_API_KEY: str | None = None
     YANDEX_ROUTER_API_KEY: str | None = None
 

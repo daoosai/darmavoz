@@ -8,7 +8,7 @@ import MapWebGLFallback, {
 import SwipeableBottomSheet from "./SwipeableBottomSheet";
 import { baseURL, formatPhoneNumber, resolveMediaUrl } from "./utils";
 
-type WaterType = "free" | "paid";
+type WaterType = "free" | "paid" | "unknown";
 
 interface WaterPoint {
   id: string;
@@ -24,12 +24,17 @@ interface WaterPoint {
   price_unit?: string | null;
   description?: string | null;
   primary_image_url?: string | null;
+  crm_status: "parsed" | "active" | "rejected" | "invite_sent";
+  is_ready: boolean;
 }
 
 const DEFAULT_CENTER: [number, number] = [65.534328, 57.152286];
 
 const isFreePoint = (point: WaterPoint) =>
   point.is_free === true || point.water_type === "free" || Number(point.price) === 0;
+
+const isPointReady = (point: WaterPoint) =>
+  point.crm_status === "active" && point.is_ready === true;
 
 export default function WaterMapScreen() {
   const [points, setPoints] = useState<WaterPoint[]>([]);
@@ -62,7 +67,7 @@ export default function WaterMapScreen() {
   useEffect(() => {
     let disposed = false;
     setLoading(true);
-    void fetch(`${baseURL}/water-points${filter ? `?water_type=${filter}` : ""}`)
+    void fetch(`${baseURL}/water-points/map${filter ? `?water_type=${filter}` : ""}`)
       .then(async (response) => {
         if (!response.ok) throw new Error("Не удалось загрузить точки воды");
         return response.json() as Promise<WaterPoint[]>;
@@ -125,7 +130,8 @@ export default function WaterMapScreen() {
       .map((point) => {
         const element = document.createElement("button");
         element.type = "button";
-        element.className = "water-map-marker";
+        const isReady = isPointReady(point);
+        element.className = `water-map-marker water-map-marker--${isReady ? "crm-active" : "crm-muted"}`;
         element.setAttribute("aria-label", point.name || point.source);
 
         const label = document.createElement("span");
@@ -138,7 +144,7 @@ export default function WaterMapScreen() {
         element.appendChild(labelTail);
 
         const pin = document.createElement("span");
-        pin.className = `water-map-marker__pin water-map-marker__pin--${point.water_type}`;
+        pin.className = `water-map-marker__pin water-map-marker__pin--${isReady ? point.water_type : "muted"}`;
         pin.textContent = "💧";
         element.appendChild(pin);
         element.addEventListener("click", () => setSelectedId(point.id));
@@ -168,7 +174,7 @@ export default function WaterMapScreen() {
         <div className="min-w-0 flex-1">
           <h2 className="font-black text-slate-900">{point.name || point.source}</h2>
           <p className="mt-1 flex gap-1 text-sm text-slate-600"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" /><span className="line-clamp-2">{point.address}</span></p>
-          <p className="mt-2 text-sm font-bold text-emerald-600">{isFreePoint(point) ? "Бесплатно" : `${Number(point.price).toLocaleString("ru-RU")} ₽/${point.price_unit || "ед."}`}</p>
+          <p className="mt-2 text-sm font-bold text-emerald-600">{!isPointReady(point) ? "Временно без доставки" : isFreePoint(point) ? "Бесплатно" : `${Number(point.price).toLocaleString("ru-RU")} ₽/${point.price_unit || "ед."}`}</p>
         </div>
       </div>
     </button>
@@ -232,12 +238,12 @@ export default function WaterMapScreen() {
         {selectedPoint ? (
           <div className="hide-scrollbar max-h-[72dvh] overflow-y-auto px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
             <div className="flex items-start justify-between gap-3 pb-4">
-              <div className="min-w-0">
+              <div className={`min-w-0 ${isPointReady(selectedPoint) ? "" : "water-map-card--muted"}`}>
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-xl font-black text-slate-900">{selectedPoint.name || selectedPoint.source}</h2>
-                  <span className={`rounded-full px-3 py-1 text-xs font-bold ${isFreePoint(selectedPoint) ? "bg-emerald-100 text-emerald-800" : "bg-sky-100 text-sky-800"}`}>
+                  {isPointReady(selectedPoint) ? <span className={`rounded-full px-3 py-1 text-xs font-bold ${isFreePoint(selectedPoint) ? "bg-emerald-100 text-emerald-800" : "bg-sky-100 text-sky-800"}`}>
                     {isFreePoint(selectedPoint) ? "Бесплатно" : "Платная вода"}
-                  </span>
+                  </span> : null}
                 </div>
                 <p className="mt-1 text-sm text-slate-500">Источник: {selectedPoint.source}</p>
               </div>
@@ -246,6 +252,14 @@ export default function WaterMapScreen() {
               </button>
             </div>
 
+            {!isPointReady(selectedPoint) ? (
+              <div className="mt-4 space-y-4">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="font-black text-slate-900">Временно без доставки</p>
+                  <p className="mt-1 text-sm text-slate-600">Точка ещё не готова принимать заказы.</p>
+                </div>
+              </div>
+            ) : <>
             <div className="overflow-hidden rounded-2xl bg-slate-100">
               {selectedPoint.primary_image_url ? (
                 <img src={resolveMediaUrl(selectedPoint.primary_image_url)} alt={selectedPoint.name || selectedPoint.source} className="aspect-[16/9] w-full object-cover" />
@@ -260,6 +274,7 @@ export default function WaterMapScreen() {
               {selectedPoint.description ? <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-600">{selectedPoint.description}</p> : null}
               {selectedPoint.phone ? <a className="flex items-center gap-2 rounded-2xl bg-sky-50 px-4 py-3 text-sm font-bold text-sky-700" href={`tel:${selectedPoint.phone}`}><Phone className="h-4 w-4" />{formatPhoneNumber(selectedPoint.phone)}</a> : null}
             </div>
+            </>}
           </div>
         ) : null}
       </SwipeableBottomSheet>

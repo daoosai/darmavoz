@@ -2,18 +2,49 @@ const DGIS_KEY = import.meta.env.VITE_2GIS_KEY;
 const TYUMEN_CITY = "Тюмень";
 const TYUMEN_LOCATION = "65.534328,57.152286";
 
-export const get2gisSuggestionLabel = (item: any): string =>
-  item?.search_attributes?.suggested_text ||
-  item?.full_name ||
-  item?.address_name ||
-  item?.name ||
-  "";
+const getText = (value: unknown): string =>
+  typeof value === "string" ? value.trim() : "";
 
-export const get2gisSuggestionAddress = (item: any): string =>
-  item?.full_name ||
-  item?.address_name ||
-  item?.name ||
-  get2gisSuggestionLabel(item);
+const getAdministrativeNames = (item: any): string[] => {
+  const divisions = Array.isArray(item?.adm_div)
+    ? item.adm_div
+    : item?.adm_div
+      ? [item.adm_div]
+      : [];
+
+  return divisions
+    .map((division: any) => getText(division?.name || division?.caption))
+    .filter(Boolean);
+};
+
+const appendUniqueParts = (address: string, parts: string[]): string => {
+  const normalizedAddress = address.toLocaleLowerCase();
+  const uniqueParts = parts.filter((part, index) => {
+    const normalizedPart = part.toLocaleLowerCase();
+    return (
+      parts.findIndex(
+        (candidate) => candidate.toLocaleLowerCase() === normalizedPart,
+      ) === index && !normalizedAddress.includes(normalizedPart)
+    );
+  });
+
+  return [address, ...uniqueParts].filter(Boolean).join(", ");
+};
+
+export const get2gisSuggestionAddress = (item: any): string => {
+  const baseAddress =
+    getText(item?.full_address_name) ||
+    getText(item?.full_name) ||
+    getText(item?.address_name) ||
+    getText(item?.address?.name) ||
+    getText(item?.name) ||
+    getText(item?.search_attributes?.suggested_text);
+
+  return appendUniqueParts(baseAddress, getAdministrativeNames(item));
+};
+
+export const get2gisSuggestionLabel = (item: any): string =>
+  get2gisSuggestionAddress(item);
 
 export const get2gisSuggestionCoordinates = (
   item: any,
@@ -54,7 +85,7 @@ export const withTyumenBias = (address: string): string => {
 export const fetch2gisAddressSuggestions = async (
   query: string,
 ): Promise<any[]> => {
-  const normalized = withTyumenBias(query);
+  const normalized = query.trim();
   if (normalized.length < 3 || !DGIS_KEY) {
     return [];
   }
@@ -64,9 +95,10 @@ export const fetch2gisAddressSuggestions = async (
       q: normalized,
       suggest_type: "address",
       key: DGIS_KEY,
+      type: "adm_div.settlement,building,street",
+      fields: "items.point,items.address,items.adm_div,items.full_address_name",
       location: TYUMEN_LOCATION,
-      radius: "40000",
-      fields: "items.point",
+      page_size: "20",
       locale: "ru_RU",
     });
     const response = await fetch(

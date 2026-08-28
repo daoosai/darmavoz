@@ -1,5 +1,16 @@
 import React, { useEffect, useState } from "react";
-import { Crown, Edit2, ImageIcon, Plus, Star, Trash2, UploadCloud, X } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  Crown,
+  Edit2,
+  ImageIcon,
+  Plus,
+  Star,
+  Trash2,
+  UploadCloud,
+  X,
+} from "lucide-react";
 import toast from "react-hot-toast";
 
 import ReasonModal from "./components/admin/ReasonModal";
@@ -100,6 +111,7 @@ export default function AdminEquipmentScreen({
   const [showListingForm, setShowListingForm] = useState(false);
   const [listingForm, setListingForm] = useState<ListingForm>({ ...emptyListing });
   const [newTypeName, setNewTypeName] = useState("");
+  const [isReorderingTypes, setIsReorderingTypes] = useState(false);
   const [rejectingListing, setRejectingListing] = useState<EquipmentListing | null>(null);
   const [listingRejectReason, setListingRejectReason] = useState("");
   const [isRejectingListing, setIsRejectingListing] = useState(false);
@@ -207,6 +219,37 @@ export default function AdminEquipmentScreen({
       return;
     }
     await load();
+  };
+
+  const reorderTypes = async (index: number, direction: -1 | 1) => {
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= types.length || isReorderingTypes) return;
+
+    const previousTypes = types;
+    const reordered = [...types];
+    [reordered[index], reordered[targetIndex]] = [reordered[targetIndex], reordered[index]];
+    const normalized = reordered.map((item, sort_order) => ({ ...item, sort_order }));
+    setTypes(normalized);
+    setIsReorderingTypes(true);
+
+    try {
+      const response = await fetch(`${baseURL}/admin/catalog/reorder`, {
+        method: "PATCH",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          entity_type: "equipment_types",
+          items: normalized.map((item) => ({ id: item.id, sort_order: item.sort_order })),
+        }),
+      });
+      if (!response.ok) throw new Error("reorder");
+      toast.success("Порядок типов обновлён");
+    } catch {
+      setTypes(previousTypes);
+      toast.error("Не удалось изменить порядок типов");
+      await load();
+    } finally {
+      setIsReorderingTypes(false);
+    }
   };
 
   const deleteType = async (id: string) => {
@@ -495,7 +538,7 @@ export default function AdminEquipmentScreen({
             </button>
           </div>
           <div className="mt-4 divide-y">
-            {types.map((item) => (
+            {types.map((item, index) => (
               <div key={item.id} className="flex items-center gap-3 py-3">
                 <input
                   defaultValue={item.name}
@@ -506,6 +549,26 @@ export default function AdminEquipmentScreen({
                   }}
                   className="min-w-0 flex-1 bg-transparent font-bold"
                 />
+                <button
+                  type="button"
+                  onClick={() => void reorderTypes(index, -1)}
+                  disabled={isReorderingTypes || index === 0}
+                  title="Переместить выше"
+                  aria-label={`Переместить тип «${item.name}» выше`}
+                  className="rounded-lg bg-slate-50 p-2 text-slate-400 transition-colors hover:bg-sky-50 hover:text-sky-600 disabled:cursor-not-allowed disabled:opacity-30"
+                >
+                  <ArrowUp className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void reorderTypes(index, 1)}
+                  disabled={isReorderingTypes || index === types.length - 1}
+                  title="Переместить ниже"
+                  aria-label={`Переместить тип «${item.name}» ниже`}
+                  className="rounded-lg bg-slate-50 p-2 text-slate-400 transition-colors hover:bg-sky-50 hover:text-sky-600 disabled:cursor-not-allowed disabled:opacity-30"
+                >
+                  <ArrowDown className="h-4 w-4" />
+                </button>
                 <button
                   onClick={() => void updateType(item, { is_active: !item.is_active })}
                   className={`rounded-full px-3 py-1 text-xs font-bold ${

@@ -2,14 +2,14 @@ import uuid
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Header
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.database import get_db
-from app.models.models import CartItem, Material, Quarry, quarry_materials
+from app.models.models import CartItem, CrmStatus, Material, Quarry, quarry_materials
 from app.schemas.catalog import CartItemCreate, CartItemUpdate, CartItemOut
-from app.services.relevance import is_publicly_available
+from app.services.pickup_points import is_pickup_point_publicly_available
 
 router = APIRouter()
 
@@ -22,7 +22,14 @@ async def get_cart_items(
     """Returns a list of cart items for a given session_key."""
     stmt = (
         select(CartItem)
+        .outerjoin(Quarry, CartItem.quarry_id == Quarry.id)
         .where(CartItem.session_key == session_key)
+        .where(
+            or_(
+                CartItem.quarry_id.is_(None),
+                Quarry.crm_status == CrmStatus.active.value,
+            )
+        )
         .options(selectinload(CartItem.material), selectinload(CartItem.quarry))
     )
     result = await db.execute(stmt)
@@ -48,7 +55,7 @@ async def add_cart_item(
         quarry = await db.get(Quarry, item.quarry_id)
         if (
             quarry is None
-            or not is_publicly_available(quarry)
+            or not is_pickup_point_publicly_available(quarry)
         ):
             raise HTTPException(status_code=409, detail="POINT_NOT_AVAILABLE")
         unit_price = await db.scalar(
@@ -108,6 +115,12 @@ async def update_cart_item(
     )
     if not cart_item:
         raise HTTPException(status_code=404, detail="Cart item not found")
+
+    if cart_item.quarry_id is not None and (
+        cart_item.quarry is None
+        or not is_pickup_point_publicly_available(cart_item.quarry)
+    ):
+        raise HTTPException(status_code=409, detail="POINT_NOT_AVAILABLE")
 
     material = cart_item.material
     if item_update.volume < material.min_volume:

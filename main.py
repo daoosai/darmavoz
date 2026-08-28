@@ -10,13 +10,17 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api import admin, admin_moderation, admin_quarries, auth, catalog, client_addresses, client_auth, client_orders, clients, driver_dispatch, drivers, equipment, equipment_owner_auth, equipment_owner_profile, geo, logist_orders, media, orders, pickup_points, placements, sprint19, supplier_auth, supplier_points, support, system, telemetry, water, water_septic_partner_auth, water_septic_partner_profile, webhooks
+from app.api import admin, admin_moderation, admin_parser, admin_quarries, auth, catalog, client_addresses, client_auth, client_orders, clients, driver_dispatch, drivers, equipment, equipment_owner_auth, equipment_owner_profile, geo, logist_orders, media, orders, pickup_points, placements, sprint19, supplier_auth, supplier_points, support, system, telemetry, water, water_septic_partner_auth, water_septic_partner_profile, webhooks
 from app.core.config import settings
 from app.core.error_handling import register_exception_handlers
 from app.db.seed import seed_data
 from app.services.storage import StorageNotConfiguredError, get_storage_service
 from app.services.dispatch_worker import start_dispatch_worker, stop_dispatch_worker
 from app.services.relevance_worker import start_relevance_worker, stop_relevance_worker
+from app.services.expiration_notification_worker import (
+    start_expiration_notification_worker,
+    stop_expiration_notification_worker,
+)
 from app.services.redis_client import close_redis
 
 logger = logging.getLogger(__name__)
@@ -46,9 +50,11 @@ async def lifespan(app: FastAPI):
         logger.exception("Failed to initialize S3 storage during startup")
     stop_event, task = await start_dispatch_worker()
     relevance_stop_event, relevance_task = await start_relevance_worker()
+    expiration_stop_event, expiration_task = await start_expiration_notification_worker()
     try:
         yield
     finally:
+        await stop_expiration_notification_worker(expiration_stop_event, expiration_task)
         await stop_relevance_worker(relevance_stop_event, relevance_task)
         await stop_dispatch_worker(stop_event, task)
         await close_redis()
@@ -135,6 +141,7 @@ app.include_router(client_addresses.router, prefix="/api/v1")
 app.include_router(client_orders.router, prefix="/api/v1", tags=["client-orders"])
 app.include_router(admin.router, prefix="/api/v1/admin", tags=["admin"])
 app.include_router(admin_moderation.router, prefix="/api/v1/admin", tags=["admin-moderation"])
+app.include_router(admin_parser.router, prefix="/api/v1/admin", tags=["admin-parser"])
 app.include_router(admin_quarries.router, prefix="/api/v1/admin", tags=["admin-quarries"])
 app.include_router(catalog.router, prefix="/api/v1/catalog", tags=["catalog"])
 app.include_router(pickup_points.router, prefix="/api/v1/catalog/pickup-points", tags=["pickup-points"])

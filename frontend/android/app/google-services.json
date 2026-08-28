@@ -23,6 +23,44 @@
           "other_platform_oauth_client": []
         }
       }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:559008540227:android:638a95ebb11d434892d6f6",
+        "android_client_info": {
+          "package_name": "com.darmavoz.app.test"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDwszkWab9wvJpZNZvS6FP0eC2iLXbcqps"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:559008540227:android:95bcea5c5fa56fce92d6f6",
+        "android_client_info": {
+          "package_name": "ru.darmavoz.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDwszkWab9wvJpZNZvS6FP0eC2iLXbcqps"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
     }
   ],
   "configuration_version": "1"

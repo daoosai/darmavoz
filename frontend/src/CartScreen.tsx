@@ -132,11 +132,17 @@ export default function CartScreen({
   } = useCartStore();
   const { role, token } = useAuthStore();
   const setOrders = useClientOrdersStore((state) => state.setOrders);
-  const { selectedAddress, setSelectedAddress } = useAddressStore();
+  const {
+    selectedAddress,
+    selectedAddressCoordinates,
+    setSelectedAddress,
+  } = useAddressStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [globalAddress, setGlobalAddress] = useState(selectedAddress);
   const [calcResults, setCalcResults] = useState<Record<string, CalculationResult>>({});
-  const [deliveryCoords, setDeliveryCoords] = useState<{ lat: number; lon: number } | null>(null);
+  const [deliveryCoords, setDeliveryCoords] = useState<{ lat: number; lon: number } | null>(
+    selectedAddressCoordinates,
+  );
   const [isCalculating, setIsCalculating] = useState(false);
   const [preferredPointIds, setPreferredPointIds] = useState<Record<string, string>>({});
   const [manualCalculationRevision, setManualCalculationRevision] = useState(0);
@@ -154,7 +160,8 @@ export default function CartScreen({
 
   useEffect(() => {
     setGlobalAddress(selectedAddress);
-  }, [selectedAddress]);
+    setDeliveryCoords(selectedAddressCoordinates);
+  }, [selectedAddress, selectedAddressCoordinates]);
 
   useEffect(() => {
     setDraftVolumes((current) => {
@@ -228,25 +235,41 @@ export default function CartScreen({
 
       setIsCalculating(true);
       try {
-        // Geocode address first
-        const geoRes = await fetch(
-          `${baseURL}/geo/geocode?address=${encodeURIComponent(globalAddress)}`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-            signal: controller.signal,
-          },
-        );
+        let lat: number;
+        let lon: number;
+        const storedCoordinates =
+          globalAddress === selectedAddress &&
+          selectedAddressCoordinates &&
+          Number.isFinite(Number(selectedAddressCoordinates.lat)) &&
+          Number.isFinite(Number(selectedAddressCoordinates.lon))
+            ? selectedAddressCoordinates
+            : null;
 
-        if (!geoRes.ok) {
-          const errorText = await parseErrorResponse(
-            geoRes,
-            "Не удалось определить координаты адреса доставки.",
+        if (storedCoordinates) {
+          lat = Number(storedCoordinates.lat);
+          lon = Number(storedCoordinates.lon);
+        } else {
+          const geoRes = await fetch(
+            `${baseURL}/geo/geocode?address=${encodeURIComponent(globalAddress)}`,
+            {
+              headers: { Authorization: `Bearer ${token}` },
+              signal: controller.signal,
+            },
           );
-          throw new Error(errorText);
+
+          if (!geoRes.ok) {
+            const errorText = await parseErrorResponse(
+              geoRes,
+              "Не удалось определить координаты адреса доставки.",
+            );
+            throw new Error(errorText);
+          }
+
+          const geoData = await geoRes.json();
+          lat = Number(geoData.lat);
+          lon = Number(geoData.lon);
         }
 
-        const geoData = await geoRes.json();
-        const { lat, lon } = geoData;
         if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lon))) {
           throw new Error("Не удалось определить координаты адреса доставки.");
         }
@@ -317,6 +340,8 @@ export default function CartScreen({
     };
   }, [
     globalAddress,
+    selectedAddress,
+    selectedAddressCoordinates,
     cartItems,
     token,
     role,
@@ -327,6 +352,7 @@ export default function CartScreen({
   const handleAddressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setGlobalAddress(e.target.value);
     setSelectedAddress(e.target.value);
+    setDeliveryCoords(null);
   };
 
   const selectPickupPoint = (itemId: string, quarryId: string) => {

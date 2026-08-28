@@ -24,7 +24,7 @@ from app.services.redis_client import get_redis
 
 logger = logging.getLogger(__name__)
 MARKETPLACE_POINT_TYPES = ("quarry", "accumulator", "warehouse", "supplier")
-ROUTE_BUILD_ERROR_MESSAGE = "Не удалось построить маршрут до вашего адреса."
+ROUTE_BUILD_ERROR_MESSAGE = "Не удалось построить грузовой маршрут до этой точки."
 CALCULATION_DATA_ERROR_MESSAGE = "Не удалось рассчитать маршрут. Проверьте адрес доставки."
 ROUTE_CACHE_TTL_SECONDS = 86_400
 ROUTE_REQUEST_ATTEMPTS = 3
@@ -168,8 +168,6 @@ async def get_2gis_route_distance(
     lon_a: float,
     lat_b: float,
     lon_b: float,
-    *,
-    strict: bool = False,
 ) -> float:
     cache_key = build_2gis_route_cache_key(lat_a, lon_a, lat_b, lon_b)
     log_context = {
@@ -177,7 +175,6 @@ async def get_2gis_route_distance(
         "lon_a": lon_a,
         "lat_b": lat_b,
         "lon_b": lon_b,
-        "strict": strict,
         "cache_key": cache_key,
     }
     cached_distance = await get_cached_2gis_route_distance(
@@ -424,7 +421,6 @@ async def calculate_client_order_options(
                 quarry.lon,
                 delivery_lat,
                 delivery_lon,
-                strict=quarry_id is not None,
             )
         )
         if index < len(priced_rows) - 1:

@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import {
   fetch2gisAddressSuggestions,
+  get2gisSuggestionAddress,
+  get2gisSuggestionCoordinates,
   get2gisSuggestionLabel,
   withTyumenBias,
 } from "./addressSearch";
@@ -30,6 +32,13 @@ interface Address {
   lon?: number;
   comment?: string;
   is_default?: boolean;
+}
+
+interface AddressSuggestion {
+  label: string;
+  address: string;
+  lat?: number;
+  lon?: number;
 }
 
 interface ClientAddressBottomSheetProps {
@@ -70,7 +79,7 @@ export default function ClientAddressBottomSheet({
   const [localSelectedId, setLocalSelectedId] = useState<string | null>(null);
   const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
 
-  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
@@ -182,7 +191,19 @@ export default function ClientAddressBottomSheet({
 
   const fetch2GISSuggests = async (query: string) => {
     const items = await fetch2gisAddressSuggestions(query);
-    return items.map((item: any) => get2gisSuggestionLabel(item));
+    return items
+      .map((item: any): AddressSuggestion => {
+        const address = get2gisSuggestionAddress(item);
+        const { lat: suggestionLat, lon: suggestionLon } =
+          get2gisSuggestionCoordinates(item);
+        return {
+          label: get2gisSuggestionLabel(item) || address,
+          address,
+          lat: suggestionLat,
+          lon: suggestionLon,
+        };
+      })
+      .filter((item) => Boolean(item.address));
   };
 
   const handleAddressChange = async (
@@ -190,13 +211,25 @@ export default function ClientAddressBottomSheet({
   ) => {
     const val = e.target.value;
     setNewAddress(val);
+    setLat(null);
+    setLon(null);
     const suggests = await fetch2GISSuggests(val);
     setSuggestions(suggests.filter(Boolean));
   };
 
-  const selectSuggestion = async (address: string) => {
+  const selectSuggestion = async (suggestion: AddressSuggestion) => {
+    const address = suggestion.address.trim() || suggestion.label.trim();
     setNewAddress(address);
     setSuggestions([]);
+
+    if (
+      typeof suggestion.lat === "number" &&
+      typeof suggestion.lon === "number"
+    ) {
+      setLat(suggestion.lat);
+      setLon(suggestion.lon);
+      return;
+    }
 
     try {
       const response = await fetch(
@@ -254,7 +287,14 @@ export default function ClientAddressBottomSheet({
     if (localSelectedId) {
       const selectedAddr = addresses.find((a) => a.id === localSelectedId);
       if (selectedAddr) {
-        setSelectedAddress(selectedAddr.full_address);
+        const savedLat = Number(selectedAddr.lat);
+        const savedLon = Number(selectedAddr.lon);
+        setSelectedAddress(
+          selectedAddr.full_address,
+          Number.isFinite(savedLat) && Number.isFinite(savedLon)
+            ? { lat: savedLat, lon: savedLon }
+            : null,
+        );
         onAddressConfirmed?.({
           address: selectedAddr.full_address,
           lat: selectedAddr.lat ?? null,
@@ -295,8 +335,12 @@ export default function ClientAddressBottomSheet({
 
   const handleEditAddress = (addr: Address, e: React.MouseEvent) => {
     e.stopPropagation();
+    const addressLat = Number(addr.lat);
+    const addressLon = Number(addr.lon);
     setNewAddress(addr.full_address || addr.address || "");
     setNewComment(addr.comment || "");
+    setLat(Number.isFinite(addressLat) ? addressLat : null);
+    setLon(Number.isFinite(addressLon) ? addressLon : null);
     setEditingAddressId(addr.id || null);
     setIsAdding(true);
   };
@@ -307,7 +351,10 @@ export default function ClientAddressBottomSheet({
     setIsSubmitting(true);
     try {
       if (!token || role !== "client") {
-        setSelectedAddress(addressToSave);
+        setSelectedAddress(
+          addressToSave,
+          lat != null && lon != null ? { lat, lon } : null,
+        );
         onAddressConfirmed?.({
           address: addressToSave,
           lat,
@@ -344,7 +391,10 @@ export default function ClientAddressBottomSheet({
 
       if (res.ok) {
         toast.success(editingAddressId ? "Адрес обновлен!" : "Адрес добавлен!");
-        setSelectedAddress(addressToSave);
+        setSelectedAddress(
+          addressToSave,
+          lat != null && lon != null ? { lat, lon } : null,
+        );
         onAddressConfirmed?.({
           address: addressToSave,
           lat,
@@ -432,13 +482,13 @@ export default function ClientAddressBottomSheet({
                     />
                     {suggestions.length > 0 && (
                       <ul className="absolute z-[9999] top-full mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-2xl max-h-48 overflow-y-auto">
-                        {suggestions.map((addr, idx) => (
+                        {suggestions.map((suggestion, idx) => (
                           <li
                             key={idx}
-                            onClick={() => selectSuggestion(addr)}
+                            onClick={() => selectSuggestion(suggestion)}
                             className="px-4 py-3 hover:bg-slate-50 cursor-pointer border-b border-gray-100 last:border-0 text-sm"
                           >
-                            {addr}
+                            {suggestion.label}
                           </li>
                         ))}
                       </ul>

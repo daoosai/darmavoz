@@ -1,18 +1,50 @@
 const DGIS_KEY = import.meta.env.VITE_2GIS_KEY;
 const TYUMEN_CITY = "Тюмень";
+const TYUMEN_LOCATION = "65.534328,57.152286";
+
+const getText = (value: unknown): string =>
+  typeof value === "string" ? value.trim() : "";
+
+const getAdministrativeNames = (item: any): string[] => {
+  const divisions = Array.isArray(item?.adm_div)
+    ? item.adm_div
+    : item?.adm_div
+      ? [item.adm_div]
+      : [];
+
+  return divisions
+    .map((division: any) => getText(division?.name || division?.caption))
+    .filter(Boolean);
+};
+
+const appendUniqueParts = (address: string, parts: string[]): string => {
+  const normalizedAddress = address.toLocaleLowerCase();
+  const uniqueParts = parts.filter((part, index) => {
+    const normalizedPart = part.toLocaleLowerCase();
+    return (
+      parts.findIndex(
+        (candidate) => candidate.toLocaleLowerCase() === normalizedPart,
+      ) === index && !normalizedAddress.includes(normalizedPart)
+    );
+  });
+
+  return [address, ...uniqueParts].filter(Boolean).join(", ");
+};
+
+export const get2gisSuggestionAddress = (item: any): string => {
+  const baseAddress =
+    getText(item?.full_address_name) ||
+    getText(item?.full_name) ||
+    getText(item?.address_name) ||
+    getText(item?.address?.name) ||
+    getText(item?.name) ||
+    getText(item?.search_attributes?.suggested_text);
+
+  return appendUniqueParts(baseAddress, getAdministrativeNames(item));
+};
 
 export const get2gisSuggestionLabel = (item: any): string =>
-  item?.search_attributes?.suggested_text ||
-  item?.full_name ||
-  item?.address_name ||
-  item?.name ||
-  "";
-
-export const get2gisSuggestionAddress = (item: any): string =>
-  item?.full_name ||
-  item?.address_name ||
-  item?.name ||
-  get2gisSuggestionLabel(item);
+  get2gisSuggestionAddress(item);
 
 export const get2gisSuggestionCoordinates = (
   item: any,
@@ -61,9 +93,12 @@ export const fetch2gisAddressSuggestions = async (
   try {
     const params = new URLSearchParams({
       q: normalized,
-      suggest_type: "city_selector",
+      suggest_type: "address",
       key: DGIS_KEY,
-      fields: "items.point",
+      type: "adm_div.settlement,building,street",
+      fields: "items.point,items.address,items.adm_div,items.full_address_name",
+      location: TYUMEN_LOCATION,
+      page_size: "20",
       locale: "ru_RU",
     });
     const response = await fetch(

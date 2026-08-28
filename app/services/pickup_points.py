@@ -303,7 +303,11 @@ async def pickup_point_payload(
         "twogis_id": point.twogis_id,
         "crm_status": point.crm_status,
         "crm_comment": point.crm_comment,
-        "is_ready": point.is_active and has_priced_material_offers(material_offers),
+        # The admin activation toggle is the source of truth for map availability.
+        # An administrator can operate a point directly without linking a supplier,
+        # so neither owner_user_id nor the current price-list completeness may turn
+        # an active point into a "temporarily unavailable" map marker.
+        "is_ready": point.is_active,
         "parsed_data": point.parsed_data,
         "material_ids": list(material_by_id),
         "materials": list(material_by_id.values()),

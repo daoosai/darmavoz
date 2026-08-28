@@ -33,9 +33,7 @@ const DEFAULT_CENTER: [number, number] = [65.534328, 57.152286];
 const isFreePoint = (point: WaterPoint) =>
   point.is_free === true || point.water_type === "free" || Number(point.price) === 0;
 
-const isPointReady = (point: WaterPoint) =>
-  point.is_active === true &&
-  (point.is_ready === true || isFreePoint(point) || point.price !== null);
+const isPointReady = (point: WaterPoint) => point.is_active === true;
 
 export default function WaterMapScreen() {
   const [points, setPoints] = useState<WaterPoint[]>([]);
@@ -68,7 +66,9 @@ export default function WaterMapScreen() {
   useEffect(() => {
     let disposed = false;
     setLoading(true);
-    void fetch(`${baseURL}/water-points/map${filter ? `?water_type=${filter}` : ""}`)
+    void fetch(`${baseURL}/water-points/map${filter ? `?water_type=${filter}` : ""}`, {
+      cache: "no-store",
+    })
       .then(async (response) => {
         if (!response.ok) throw new Error("Не удалось загрузить точки воды");
         return response.json() as Promise<WaterPoint[]>;

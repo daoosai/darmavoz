@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +22,11 @@ from app.services.pickup_points import (
 router = APIRouter()
 
 
+def _disable_map_cache(response: Response) -> None:
+    """Map availability must reflect the admin activation toggle immediately."""
+    response.headers["Cache-Control"] = "no-store, max-age=0"
+
+
 def _parse_bbox(value: str | None) -> tuple[float, float, float, float] | None:
     if value is None:
         return None
@@ -36,12 +41,14 @@ def _parse_bbox(value: str | None) -> tuple[float, float, float, float] | None:
 
 @router.get("", response_model=list[PickupPointMarkerOut])
 async def list_pickup_points(
+    response: Response,
     material_id: UUID,
     bbox: str | None = None,
     point_type: str | None = None,
     limit: int = Query(default=300, ge=1, le=1000),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict]:
+    _disable_map_cache(response)
     primary_image = (
         select(MediaFile.public_url)
         .where(MediaFile.entity_type == "quarry", MediaFile.entity_id == Quarry.id)
@@ -109,8 +116,10 @@ async def list_pickup_points(
 
 @router.get("/global", response_model=list[GlobalPickupPointOut])
 async def list_global_pickup_points(
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> list[dict]:
+    _disable_map_cache(response)
     result = await db.execute(
         select(Quarry)
         .where(

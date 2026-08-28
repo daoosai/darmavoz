@@ -55,18 +55,7 @@ const getRenderablePoints = (pickupPoints: GlobalPickupPoint[]) =>
     (point) => isValidCoordinate(point.lat) && isValidCoordinate(point.lon),
   );
 
-const hasAvailableMaterialOffer = (point: GlobalPickupPoint) =>
-  point.material_offers.some(
-    (offer) =>
-      offer.is_free === true ||
-      (offer.price !== null &&
-        offer.price !== undefined &&
-        Number(offer.price) >= 0),
-  );
-
-const isPointReady = (point: GlobalPickupPoint) =>
-  point.is_active === true &&
-  (point.is_ready === true || hasAvailableMaterialOffer(point));
+const isPointReady = (point: GlobalPickupPoint) => point.is_active === true;
 
 const calculateDistanceKm = (
   lat1: number,
@@ -283,7 +272,9 @@ export default function GlobalMapScreen() {
       setError(null);
 
       try {
-        const response = await fetch(`${baseURL}/catalog/pickup-points/global`);
+        const response = await fetch(`${baseURL}/catalog/pickup-points/global`, {
+          cache: "no-store",
+        });
         if (!response.ok) {
           throw new Error("Не удалось загрузить точки на карте");
         }

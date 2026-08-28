@@ -4,7 +4,7 @@ def appVersionCode = (System.getenv("DARMAVOZ_VERSION_CODE") ?: "261").toInteger
 def appVersionName = System.getenv("DARMAVOZ_VERSION_NAME") ?: "2.6.1"
 
 android {
-    namespace = "com.darmavoz.app"
+    namespace = "ru.darmavoz.app"
     compileSdk = rootProject.ext.compileSdkVersion
     signingConfigs {
         debug {
@@ -21,7 +21,7 @@ android {
         }
     }
     defaultConfig {
-        applicationId "com.darmavoz.app"
+        applicationId "ru.darmavoz.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode appVersionCode

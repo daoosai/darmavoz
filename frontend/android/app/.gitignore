@@ -1,2 +1,6 @@
 /build/*
 !/build/.npmkeep
+
+# Release signing material
+darmavoz-release.keystore
+keystore_base64.txt

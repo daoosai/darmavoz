@@ -3,7 +3,7 @@ import logging
 from uuid import UUID
 
 from botocore.exceptions import ClientError
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,11 +20,10 @@ logger = logging.getLogger(__name__)
 
 
 def _is_water_point_ready(point: WaterPoint) -> bool:
-    if not point.is_active:
-        return False
-    if point.is_free or point.water_type == "free":
-        return True
-    return point.water_type == "paid" and point.price is not None and point.price >= 0
+    # The admin activation toggle is authoritative for the client map.  A point
+    # can be managed directly and therefore must not require an owner or price
+    # before it is shown as available.
+    return point.is_active
 
 
 def _public_stmt():
@@ -109,9 +108,11 @@ async def list_water_points(water_type: str | None = None, db: AsyncSession = De
 
 @router.get("/water-points/map", response_model=list[WaterPointOut])
 async def list_water_points_for_map(
+    response: Response,
     water_type: str | None = None,
     db: AsyncSession = Depends(get_db),
 ):
+    response.headers["Cache-Control"] = "no-store, max-age=0"
     stmt = select(WaterPoint).where(
         WaterPoint.is_deleted.is_(False),
         WaterPoint.crm_status.in_(

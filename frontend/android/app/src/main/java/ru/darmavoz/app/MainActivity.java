@@ -1,4 +1,4 @@
-package com.darmavoz.app;
+package ru.darmavoz.app;
 
 import com.getcapacitor.BridgeActivity;
 

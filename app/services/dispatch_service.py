@@ -579,7 +579,7 @@ async def create_checkout_order(
                 )
             )
             unit_price = float(offer_price if offer_price is not None else material.price or 0)
-            if unit_price <= 0:
+            if unit_price < 0:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail="MATERIAL_NOT_AVAILABLE_AT_POINT",

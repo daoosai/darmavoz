@@ -52,6 +52,19 @@ def has_valid_coordinates(lat: float | None, lon: float | None) -> bool:
     )
 
 
+def resolve_material_offer_price(
+    offer_price: float | None,
+    material: Material,
+) -> float | None:
+    if offer_price is not None:
+        return float(offer_price)
+    if material.is_free:
+        return 0.0
+    if material.price is not None:
+        return float(material.price)
+    return None
+
+
 def build_2gis_route_stop(lat: float, lon: float) -> dict[str, float | str]:
     """Build a Truck Directions point using the required longitude/latitude axes."""
     return {
@@ -386,18 +399,18 @@ async def calculate_client_order_options(
         session,
         [quarry.id for quarry, _price in quarry_rows],
     )
-    priced_rows = [
-        (
-            quarry,
-            float(price if price is not None else material.price or 0),
-            media_by_point.get(quarry.id, []),
-        )
-        for quarry, price in quarry_rows
+    priced_rows = []
+    for quarry, price in quarry_rows:
+        resolved_price = resolve_material_offer_price(price, material)
         if (
-            float(price if price is not None else material.price or 0) > 0
-            and has_valid_coordinates(quarry.lat, quarry.lon)
+            resolved_price is None
+            or resolved_price < 0
+            or not has_valid_coordinates(quarry.lat, quarry.lon)
+        ):
+            continue
+        priced_rows.append(
+            (quarry, resolved_price, media_by_point.get(quarry.id, []))
         )
-    ]
     if not priced_rows:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST

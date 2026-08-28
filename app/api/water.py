@@ -20,11 +20,11 @@ logger = logging.getLogger(__name__)
 
 
 def _is_water_point_ready(point: WaterPoint) -> bool:
-    if point.crm_status != CrmStatus.active.value:
+    if not point.is_active:
         return False
-    if point.water_type == "free":
+    if point.is_free or point.water_type == "free":
         return True
-    return point.water_type == "paid" and point.price is not None
+    return point.water_type == "paid" and point.price is not None and point.price >= 0
 
 
 def _public_stmt():

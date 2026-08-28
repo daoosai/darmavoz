@@ -53,8 +53,13 @@ def is_pickup_point_publicly_available(
 def has_priced_material_offers(material_offers: Iterable[dict]) -> bool:
     return any(
         offer.get("is_active")
-        and offer.get("price") is not None
-        and float(offer["price"]) >= 0
+        and (
+            offer.get("is_free") is True
+            or (
+                offer.get("price") is not None
+                and float(offer["price"]) >= 0
+            )
+        )
         for offer in material_offers
     )
 
@@ -102,11 +107,12 @@ async def sync_material_offers(
         normalized_offers = [
             QuarryMaterialOfferIn(
                 material_id=material.id,
-                price=float(material.price),
+                price=float(material.price or 0),
                 is_active=True,
             )
             for material in materials
-            if material.price is not None and float(material.price) > 0
+            if material.is_free
+            or (material.price is not None and float(material.price) >= 0)
         ]
 
     material_ids = [offer.material_id for offer in normalized_offers]
@@ -297,7 +303,7 @@ async def pickup_point_payload(
         "twogis_id": point.twogis_id,
         "crm_status": point.crm_status,
         "crm_comment": point.crm_comment,
-        "is_ready": point.owner_user_id is not None and point.is_active,
+        "is_ready": point.is_active and has_priced_material_offers(material_offers),
         "parsed_data": point.parsed_data,
         "material_ids": list(material_by_id),
         "materials": list(material_by_id.values()),

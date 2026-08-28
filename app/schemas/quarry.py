@@ -323,6 +323,7 @@ class GlobalPickupPointOut(BaseModel):
     primary_image_url: Optional[str] = None
     material_offers: list[GlobalPickupPointMaterialOut] = Field(default_factory=list)
     crm_status: Literal["parsed", "active", "rejected", "invite_sent"] = "active"
+    is_active: bool = False
     is_ready: bool = False
     parsed_data: dict | None = None
 

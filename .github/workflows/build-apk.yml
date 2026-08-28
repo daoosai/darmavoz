@@ -96,9 +96,9 @@ jobs:
         working-directory: frontend/android
         env:
           KEYSTORE_FILE: ${{ github.workspace }}/frontend/android/app/darmavoz-release.keystore
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEYSTORE_PASSWORD: darmavoz2026
+          KEY_ALIAS: darmavoz
+          KEY_PASSWORD: darmavoz2026
           DARMAVOZ_VERSION_NAME: ${{ env.RELEASE_VERSION }}
           DARMAVOZ_VERSION_CODE: ${{ env.RELEASE_VERSION_CODE }}
         run: |

@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useAdminModerationStore, useAuthStore } from "./store";
 import { baseURL, extractApiErrorMessage, handleApiError } from "./utils";
 import {
+  ArrowDown,
+  ArrowUp,
   LogOut,
   Lock,
   Plus,
@@ -81,6 +83,7 @@ interface AdminMaterial {
   min_volume: number;
   is_free?: boolean;
   is_active: boolean;
+  sort_order: number;
   media_files?: AdminMediaFile[];
   primary_image_url?: string;
   image_url?: string;
@@ -214,6 +217,7 @@ export default function AdminDashboardScreen({
     }`;
 
   const [materials, setMaterials] = useState<AdminMaterial[]>([]);
+  const [isReorderingMaterials, setIsReorderingMaterials] = useState(false);
   const [deliveryOptions, setDeliveryOptions] = useState<AdminDeliveryOption[]>(
     [],
   );
@@ -754,6 +758,42 @@ export default function AdminDashboardScreen({
     }
   };
 
+  const reorderMaterials = async (index: number, direction: -1 | 1) => {
+    const targetIndex = index + direction;
+    if (!token || targetIndex < 0 || targetIndex >= materials.length || isReorderingMaterials) {
+      return;
+    }
+
+    const previousMaterials = materials;
+    const reordered = [...materials];
+    [reordered[index], reordered[targetIndex]] = [reordered[targetIndex], reordered[index]];
+    const normalized = reordered.map((item, sort_order) => ({ ...item, sort_order }));
+    setMaterials(normalized);
+    setIsReorderingMaterials(true);
+
+    try {
+      const response = await fetch(`${baseURL}/admin/catalog/reorder`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          entity_type: "materials",
+          items: normalized.map((item) => ({ id: item.id, sort_order: item.sort_order })),
+        }),
+      });
+      if (!response.ok) throw new Error("reorder");
+      toast.success("Порядок материалов обновлён");
+    } catch {
+      setMaterials(previousMaterials);
+      toast.error("Не удалось изменить порядок материалов");
+      await fetchMaterials(true);
+    } finally {
+      setIsReorderingMaterials(false);
+    }
+  };
+
   const fetchDeliveryOptions = async (silent = false) => {
     if (!token) return;
     if (!silent) setIsLoading(true);
@@ -1087,6 +1127,7 @@ export default function AdminDashboardScreen({
         min_volume: Number(editingMaterial.min_volume || 1),
         is_active: editingMaterial.is_active ?? true,
         category_id: editingMaterial.category_id || null,
+        sort_order: Number(editingMaterial.sort_order ?? 0),
       };
 
       if (false && !payload.category_id) {
@@ -1524,6 +1565,7 @@ export default function AdminDashboardScreen({
         price: 0,
         is_free: false,
         category_id: categories[0]?.id,
+        sort_order: 0,
       });
       setIsMaterialModalOpen(true);
     }
@@ -1959,7 +2001,7 @@ export default function AdminDashboardScreen({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100/80">
-                        {materials.map((m) => {
+                        {materials.map((m, index) => {
                           const imgUrl =
                             m.primary_image_url ||
                             m.image_url ||
@@ -2005,7 +2047,28 @@ export default function AdminDashboardScreen({
                                   </span>
                                 )}
                               </td>
-                              <td className="px-6 py-4 text-right flex justify-end gap-2">
+                              <td className="px-6 py-4 text-right">
+                                <div className="flex justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => void reorderMaterials(index, -1)}
+                                  disabled={isReorderingMaterials || index === 0}
+                                  title="Переместить выше"
+                                  aria-label={`Переместить материал «${m.name}» выше`}
+                                  className="rounded-lg border border-transparent bg-slate-50 p-2 text-slate-400 transition-colors hover:bg-sky-50 hover:text-[#2DB0E6] disabled:cursor-not-allowed disabled:opacity-30"
+                                >
+                                  <ArrowUp className="h-4 w-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void reorderMaterials(index, 1)}
+                                  disabled={isReorderingMaterials || index === materials.length - 1}
+                                  title="Переместить ниже"
+                                  aria-label={`Переместить материал «${m.name}» ниже`}
+                                  className="rounded-lg border border-transparent bg-slate-50 p-2 text-slate-400 transition-colors hover:bg-sky-50 hover:text-[#2DB0E6] disabled:cursor-not-allowed disabled:opacity-30"
+                                >
+                                  <ArrowDown className="h-4 w-4" />
+                                </button>
                                 <button
                                   onClick={() => openMaterialModal(m)}
                                   className="p-2 text-slate-400 hover:text-[#2DB0E6] bg-slate-50 hover:bg-[#2DB0E6]/10 rounded-lg transition-colors border border-transparent"
@@ -2023,6 +2086,7 @@ export default function AdminDashboardScreen({
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </button>
+                                </div>
                               </td>
                             </tr>
                           );
@@ -2032,7 +2096,7 @@ export default function AdminDashboardScreen({
                   </div>
 
                   <div className="grid grid-cols-1 gap-4 md:hidden">
-                    {materials.map((m) => {
+                    {materials.map((m, index) => {
                       const imgUrl =
                         m.primary_image_url ||
                         m.image_url ||
@@ -2047,6 +2111,26 @@ export default function AdminDashboardScreen({
                               ID: {m.id.substring(0, 8)}
                             </span>
                             <div className="flex gap-2 -mt-2 -mr-2">
+                              <button
+                                type="button"
+                                onClick={() => void reorderMaterials(index, -1)}
+                                disabled={isReorderingMaterials || index === 0}
+                                title="Переместить выше"
+                                aria-label={`Переместить материал «${m.name}» выше`}
+                                className="rounded-lg border border-transparent bg-slate-50 p-2 text-slate-400 transition-colors hover:bg-sky-50 hover:text-[#2DB0E6] disabled:cursor-not-allowed disabled:opacity-30"
+                              >
+                                <ArrowUp className="h-4 w-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void reorderMaterials(index, 1)}
+                                disabled={isReorderingMaterials || index === materials.length - 1}
+                                title="Переместить ниже"
+                                aria-label={`Переместить материал «${m.name}» ниже`}
+                                className="rounded-lg border border-transparent bg-slate-50 p-2 text-slate-400 transition-colors hover:bg-sky-50 hover:text-[#2DB0E6] disabled:cursor-not-allowed disabled:opacity-30"
+                              >
+                                <ArrowDown className="h-4 w-4" />
+                              </button>
                               <button
                                 onClick={() => openMaterialModal(m)}
                                 className="p-2 text-slate-400 hover:text-[#2DB0E6] bg-slate-50 hover:bg-[#2DB0E6]/10 rounded-lg transition-colors border border-transparent"

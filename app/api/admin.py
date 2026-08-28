@@ -1,10 +1,11 @@
 from datetime import date as date_type
 from datetime import datetime, UTC
 import re
+from typing import Literal
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import delete, exists, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,6 +33,7 @@ from app.models.models import (
     Role,
     Quarry,
     SpecialEquipmentListing,
+    SpecialEquipmentType,
     SepticProviderProfile,
     SupportMessage,
     SupportTicket,
@@ -85,6 +87,16 @@ MODERATION_PENDING_STATUSES = (
     ModerationStatus.pending_moderation.value,
     ModerationStatus.has_pending_changes.value,
 )
+
+
+class CatalogReorderItem(BaseModel):
+    id: UUID
+    sort_order: int
+
+
+class CatalogReorderPayload(BaseModel):
+    entity_type: Literal["materials", "equipment_types"] = "materials"
+    items: list[CatalogReorderItem] = Field(min_length=1)
 
 
 def _error_detail(code: str, message: str) -> dict[str, str]:
@@ -1863,13 +1875,44 @@ async def delete_category(
     return DeleteResult(action="deleted", detail="Category deleted")
 
 
+@router.patch("/catalog/reorder")
+async def reorder_catalog(
+    payload: CatalogReorderPayload,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+):
+    del current_admin
+    item_ids = [item.id for item in payload.items]
+    if len(set(item_ids)) != len(item_ids):
+        raise HTTPException(status_code=422, detail="Catalog item IDs must be unique")
+
+    model = Material if payload.entity_type == "materials" else SpecialEquipmentType
+    result = await db.execute(
+        select(model).where(model.id.in_(item_ids)).with_for_update()
+    )
+    items_by_id = {item.id: item for item in result.scalars().all()}
+    missing_ids = [item_id for item_id in item_ids if item_id not in items_by_id]
+    if missing_ids:
+        raise HTTPException(status_code=404, detail="One or more catalog items were not found")
+
+    for item in payload.items:
+        items_by_id[item.id].sort_order = item.sort_order
+
+    await db.commit()
+    return {
+        "ok": True,
+        "entity_type": payload.entity_type,
+        "items": [item.model_dump(mode="json") for item in payload.items],
+    }
+
+
 @router.get("/materials/", response_model=list[MaterialOut])
 async def get_all_materials(
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin_user),
 ):
     del current_admin
-    result = await db.execute(select(Material).order_by(Material.sort_order.asc(), Material.name.asc()))
+    result = await db.execute(select(Material).order_by(Material.sort_order.asc(), Material.id.asc()))
     materials = list(result.scalars().all())
     return await _attach_material_media(db, materials)
 

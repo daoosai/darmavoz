@@ -95,7 +95,7 @@ export const fetch2gisAddressSuggestions = async (
       q: normalized,
       suggest_type: "address",
       key: DGIS_KEY,
-      type: "adm_div.settlement,building,street",
+      type: "building,street,adm_div.district,adm_div.settlement,adm_div.place",
       fields: "items.point,items.address,items.adm_div,items.full_address_name",
       location: TYUMEN_LOCATION,
       page_size: "20",

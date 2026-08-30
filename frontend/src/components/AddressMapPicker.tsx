@@ -32,6 +32,7 @@ interface Props extends LocationValue {
   token: string | null;
   inputId: string;
   onChange: (value: LocationValue) => void;
+  addressRequired?: boolean;
 }
 
 const DEFAULT_CENTER: [number, number] = [65.534328, 57.152286];
@@ -47,7 +48,15 @@ const parseCoordinates = (lat: string, lon: string) => {
     : null;
 };
 
-export default function AddressMapPicker({ address, lat, lon, token, inputId, onChange }: Props) {
+export default function AddressMapPicker({
+  address,
+  lat,
+  lon,
+  token,
+  inputId,
+  onChange,
+  addressRequired = true,
+}: Props) {
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
@@ -170,7 +179,7 @@ export default function AddressMapPicker({ address, lat, lon, token, inputId, on
   };
 
   const handleAddressChange = async (nextAddress: string) => {
-    onChange({ address: nextAddress, lat, lon });
+    onChange({ address: nextAddress, lat: "", lon: "" });
     setShowSuggestions(true);
     const requestId = ++requestIdRef.current;
     if (!nextAddress.trim()) {
@@ -214,18 +223,32 @@ export default function AddressMapPicker({ address, lat, lon, token, inputId, on
     }
   };
 
+  const handleAddressBlur = async () => {
+    const nextAddress = address.trim();
+    if (!nextAddress || coordinates) return;
+    const result = await geocodeAddress(nextAddress);
+    if (result) {
+      onChange({
+        address: nextAddress,
+        lat: stringifyCoordinate(result.lat),
+        lon: stringifyCoordinate(result.lon),
+      });
+    }
+  };
+
   return (
     <section className="space-y-2">
       <label className="block text-sm font-bold text-slate-800" htmlFor={inputId}>
-        Адрес <span className="text-red-500">*</span>
+        Адрес {addressRequired ? <span className="text-red-500">*</span> : <span className="font-normal text-slate-400">(необязательно, если указаны координаты)</span>}
       </label>
       <div ref={addressContainerRef} className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
         <input
           id={inputId}
-          required
+          required={addressRequired && !coordinates}
           value={address}
           onFocus={() => setShowSuggestions(true)}
+          onBlur={() => void handleAddressBlur()}
           onChange={(event) => void handleAddressChange(event.target.value)}
           placeholder="Начните вводить адрес"
           className="w-full rounded-xl border border-slate-200 py-3 pl-10 pr-3 outline-none focus:border-sky-500"
@@ -248,6 +271,36 @@ export default function AddressMapPicker({ address, lat, lon, token, inputId, on
             ))}
           </div>
         ) : null}
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <label className="block text-sm font-bold text-slate-800">
+          Широта
+          <input
+            type="number"
+            min="-90"
+            max="90"
+            step="any"
+            required={addressRequired || !address.trim()}
+            value={lat}
+            onChange={(event) => onChange({ address, lat: event.target.value, lon })}
+            placeholder="Например, 57.152286"
+            className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal outline-none focus:border-sky-500"
+          />
+        </label>
+        <label className="block text-sm font-bold text-slate-800">
+          Долгота
+          <input
+            type="number"
+            min="-180"
+            max="180"
+            step="any"
+            required={addressRequired || !address.trim()}
+            value={lon}
+            onChange={(event) => onChange({ address, lat, lon: event.target.value })}
+            placeholder="Например, 65.534328"
+            className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal outline-none focus:border-sky-500"
+          />
+        </label>
       </div>
       <div className="overflow-hidden rounded-xl border border-slate-200">
         {mapUnavailable ? <MapWebGLFallback className="h-52" /> : <div ref={mapContainerRef} className="h-52 w-full" />}

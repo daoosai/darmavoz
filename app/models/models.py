@@ -562,7 +562,7 @@ class WaterPoint(Base):
     water_type: Mapped[str] = mapped_column(SQLEnum("free", "paid", "unknown", name="water_point_type"), nullable=False)
     name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     source: Mapped[str] = mapped_column(String(255), nullable=False)
-    address: Mapped[str] = mapped_column(Text, nullable=False)
+    address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     lat: Mapped[float] = mapped_column(Float, nullable=False)
     lon: Mapped[float] = mapped_column(Float, nullable=False)
     phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)

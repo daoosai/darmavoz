@@ -534,14 +534,14 @@ export default function GlobalMapScreen() {
         .global-pickup-marker__label {
           position: absolute; bottom: 48px; max-width: 160px; overflow: hidden;
           white-space: nowrap; text-overflow: ellipsis; border-radius: 8px;
-          background: #334155; color: #fff; padding: 3px 7px;
+          background: #0ea5e9; color: #fff; padding: 3px 7px;
           font-size: 11px; font-weight: 700; pointer-events: none;
         }
         .global-pickup-marker__label-tail {
           position: absolute; left: 50%; bottom: 42px;
           width: 0; height: 0; transform: translateX(-50%);
           border-left: 6px solid transparent; border-right: 6px solid transparent;
-          border-top: 6px solid #334155;
+          border-top: 6px solid #0ea5e9;
         }
         .global-pickup-marker__icon svg {
           width: 100%;

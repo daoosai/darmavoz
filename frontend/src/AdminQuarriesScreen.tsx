@@ -16,6 +16,7 @@ import MapWebGLFallback, { tryCreate2GisMap } from "./components/MapWebGLFallbac
 import AdminQuarriesMap from "./components/admin/AdminQuarriesMap";
 import CrmPanel from "./components/admin/CrmPanel";
 import ParserRunPanel from "./components/admin/ParserRunPanel";
+import { savePointCrm } from "./components/admin/savePointCrm";
 
 export interface Quarry extends PlacementFields {
   id?: string;
@@ -2218,6 +2219,28 @@ function EnhancedEditQuarryModal({
         }
       }
 
+      if (formData.id && savedPoint.id) {
+        const crmData = await savePointCrm({
+          token,
+          pointKind: "quarry",
+          pointId: savedPoint.id,
+          status: formData.crm_status || "parsed",
+          comment: formData.crm_comment || "",
+          ownerId: formData.owner_user_id || "",
+          initialStatus: quarry.crm_status || "parsed",
+          initialComment: quarry.crm_comment || "",
+          initialOwnerId: quarry.owner_user_id || "",
+        });
+        if (crmData) {
+          savedPoint = {
+            ...savedPoint,
+            crm_status: crmData.crm_status,
+            crm_comment: crmData.crm_comment,
+            owner_user_id: crmData.owner_user_id,
+          };
+        }
+      }
+
       toast.success("Карьер сохранен");
       onSave(savedPoint);
     } catch (error) {
@@ -2581,9 +2604,12 @@ function EnhancedEditQuarryModal({
             token={token}
             pointKind="quarry"
             pointId={formData.id}
-            initialStatus={formData.crm_status}
-            initialComment={formData.crm_comment}
-            initialOwnerId={formData.owner_user_id}
+            status={formData.crm_status || "parsed"}
+            comment={formData.crm_comment || ""}
+            ownerId={formData.owner_user_id || ""}
+            onStatusChange={(status) => setFormData((current) => ({ ...current, crm_status: status }))}
+            onCommentChange={(comment) => setFormData((current) => ({ ...current, crm_comment: comment }))}
+            onOwnerChange={(ownerId) => setFormData((current) => ({ ...current, owner_user_id: ownerId || null }))}
           /> : null}
 
           <div className="mt-4 flex gap-3">

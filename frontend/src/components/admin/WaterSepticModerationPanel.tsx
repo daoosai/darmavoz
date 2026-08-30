@@ -19,6 +19,7 @@ import toast from "react-hot-toast";
 import AddressMapPicker from "../AddressMapPicker";
 import CrmPanel from "./CrmPanel";
 import ParserRunPanel from "./ParserRunPanel";
+import { savePointCrm } from "./savePointCrm";
 import { getCrmStatusClass, getCrmStatusLabel, type CrmStatus } from "../../crmStatus";
 import {
   baseURL,
@@ -90,6 +91,15 @@ interface EditTarget {
   data: WaterPoint | SepticProfile;
 }
 
+interface WaterCrmForm {
+  status: CrmStatus;
+  comment: string;
+  ownerId: string;
+  initialStatus: CrmStatus;
+  initialComment: string;
+  initialOwnerId: string;
+}
+
 const statusLabel: Record<string, string> = {
   pending_moderation: "На модерации",
   approved: "Одобрено",
@@ -157,6 +167,14 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
   const [waterEditForm, setWaterEditForm] = useState(() => createWaterEditForm({
     id: "", water_type: "free", source: "", address: "", lat: 0, lon: 0, moderation_status: "", is_active: true,
   }));
+  const [waterCrmForm, setWaterCrmForm] = useState<WaterCrmForm>({
+    status: "parsed",
+    comment: "",
+    ownerId: "",
+    initialStatus: "parsed",
+    initialComment: "",
+    initialOwnerId: "",
+  });
   const [septicEditForm, setSepticEditForm] = useState(() => createSepticEditForm({
     id: "", phone: "", address: "", lat: 0, lon: 0, tank_volume_m3: "", service_price: "", moderation_status: "", is_active: true,
   }));
@@ -284,6 +302,14 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
 
   const openWaterEdit = (point: WaterPoint) => {
     setWaterEditForm(createWaterEditForm(point));
+    setWaterCrmForm({
+      status: point.crm_status || "parsed",
+      comment: point.crm_comment || "",
+      ownerId: point.owner_user_id || "",
+      initialStatus: point.crm_status || "parsed",
+      initialComment: point.crm_comment || "",
+      initialOwnerId: point.owner_user_id || "",
+    });
     setEditMedia(point.media_files || []);
     setEditTarget({ kind: "water", data: point });
   };
@@ -298,6 +324,14 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
     setCreateTarget(kind);
     setEditMedia([]);
     if (kind === "water") {
+      setWaterCrmForm({
+        status: "parsed",
+        comment: "",
+        ownerId: "",
+        initialStatus: "parsed",
+        initialComment: "",
+        initialOwnerId: "",
+      });
       setWaterEditForm(createWaterEditForm({
         id: "", water_type: "paid", source: "", address: "", lat: 0, lon: 0,
         moderation_status: "", is_active: true, is_free: false,
@@ -514,6 +548,19 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось сохранить изменения"));
+      if (!isCreating && isWater && editTarget?.data.id) {
+        await savePointCrm({
+          token,
+          pointKind: "water",
+          pointId: editTarget.data.id,
+          status: waterCrmForm.status,
+          comment: waterCrmForm.comment,
+          ownerId: waterCrmForm.ownerId,
+          initialStatus: waterCrmForm.initialStatus,
+          initialComment: waterCrmForm.initialComment,
+          initialOwnerId: waterCrmForm.initialOwnerId,
+        });
+      }
       if (isCreating) setStatusFilter("all");
       closeEdit();
       toast.success("Изменения сохранены");
@@ -675,10 +722,12 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
               token={token}
               pointKind="water"
               pointId={editTarget.data.id}
-              initialStatus={(editTarget.data as WaterPoint).crm_status}
-              initialComment={(editTarget.data as WaterPoint).crm_comment}
-              initialOwnerId={(editTarget.data as WaterPoint).owner_user_id}
-              onUpdated={load}
+              status={waterCrmForm.status}
+              comment={waterCrmForm.comment}
+              ownerId={waterCrmForm.ownerId}
+              onStatusChange={(status) => setWaterCrmForm((current) => ({ ...current, status }))}
+              onCommentChange={(comment) => setWaterCrmForm((current) => ({ ...current, comment }))}
+              onOwnerChange={(ownerId) => setWaterCrmForm((current) => ({ ...current, ownerId }))}
             /> : null}
 
             <div className="mt-5 grid grid-cols-2 gap-3">

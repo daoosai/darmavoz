@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
-import { Link2, Loader2, Save } from "lucide-react";
-import toast from "react-hot-toast";
 
 import { CRM_STATUS_LABELS, type CrmStatus } from "../../crmStatus";
-import { baseURL, extractApiErrorMessage } from "../../utils";
+import { baseURL } from "../../utils";
 
 type PointKind = "quarry" | "water";
 type Owner = { id: string; display_name?: string | null; username?: string | null; phone?: string | null };
@@ -13,32 +11,26 @@ export default function CrmPanel({
   token,
   pointKind,
   pointId,
-  initialStatus,
-  initialComment,
-  initialOwnerId,
-  onUpdated,
+  status,
+  comment,
+  ownerId,
+  onStatusChange,
+  onCommentChange,
+  onOwnerChange,
 }: {
   token: string | null;
   pointKind: PointKind;
   pointId?: string;
-  initialStatus?: CrmStatus | null;
-  initialComment?: string | null;
-  initialOwnerId?: string | null;
-  onUpdated?: () => void | Promise<void>;
+  status: CrmStatus;
+  comment: string;
+  ownerId: string;
+  onStatusChange: (status: CrmStatus) => void;
+  onCommentChange: (comment: string) => void;
+  onOwnerChange: (ownerId: string) => void;
 }) {
-  const [crmStatus, setCrmStatus] = useState<CrmStatus>(initialStatus || "parsed");
-  const [crmComment, setCrmComment] = useState(initialComment || "");
-  const [ownerId, setOwnerId] = useState(initialOwnerId || "");
   const [owners, setOwners] = useState<Owner[]>([]);
-  const [loading, setLoading] = useState(false);
 
   const headers = token ? { Authorization: `Bearer ${token}` } : {};
-
-  useEffect(() => {
-    setCrmStatus(initialStatus || "parsed");
-    setCrmComment(initialComment || "");
-    setOwnerId(initialOwnerId || "");
-  }, [initialComment, initialOwnerId, initialStatus, pointId]);
 
   useEffect(() => {
     if (!token || !pointId) return;
@@ -50,73 +42,27 @@ export default function CrmPanel({
 
   if (!pointId) return null;
 
-  const saveCrm = async () => {
-    if (!token) return;
-    setLoading(true);
-    try {
-      const response = await fetch(`${baseURL}/admin/crm/${pointKind}/${pointId}`, {
-        method: "PATCH",
-        headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify({ crm_status: crmStatus, crm_comment: crmComment || null }),
-      });
-      const responseData = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(extractApiErrorMessage(responseData ?? response, "Не удалось сохранить статус"));
-      toast.success("Статус сохранён");
-      await onUpdated?.();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось сохранить статус");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const bindOwner = async () => {
-    if (!token || !ownerId) return;
-    setLoading(true);
-    try {
-      const response = await fetch(`${baseURL}/admin/crm/${pointKind}/${pointId}/owner`, {
-        method: "POST",
-        headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify({ owner_user_id: ownerId }),
-      });
-      if (!response.ok) throw new Error(await extractApiErrorMessage(response, "Не удалось привязать владельца"));
-      toast.success("Владелец привязан, статус — «Согласовано»");
-      setCrmStatus("agreed");
-      await onUpdated?.();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось привязать владельца");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <section className="mt-5 space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
       <h4 className="font-black text-slate-900">Статус, комментарий и владелец</h4>
       <label className="block text-sm font-bold">Статус
-        <select value={crmStatus} onChange={(event) => {
+        <select value={status} onChange={(event) => {
           const nextStatus = event.target.value as CrmStatus;
-          if (CRM_STATUS_KEYS.includes(nextStatus)) setCrmStatus(nextStatus);
+          if (CRM_STATUS_KEYS.includes(nextStatus)) onStatusChange(nextStatus);
         }} className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-3 font-normal">
           {CRM_STATUS_KEYS.map((status) => <option key={status} value={status}>{CRM_STATUS_LABELS[status]}</option>)}
         </select>
       </label>
       <label className="block text-sm font-bold">Комментарий
-        <textarea value={crmComment} onChange={(event) => setCrmComment(event.target.value)} className="mt-1 min-h-20 w-full rounded-xl border border-slate-200 bg-white p-3 font-normal" />
+        <textarea value={comment} onChange={(event) => onCommentChange(event.target.value)} className="mt-1 min-h-20 w-full rounded-xl border border-slate-200 bg-white p-3 font-normal" />
       </label>
-      <button type="button" disabled={loading || !token} onClick={() => void saveCrm()} className="flex items-center justify-center gap-2 rounded-xl bg-slate-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
-        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Сохранить статус
-      </button>
       <div className="border-t border-slate-200 pt-4">
         <label className="block text-sm font-bold">Привязать владельца
-          <select value={ownerId} onChange={(event) => setOwnerId(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-3 font-normal">
+          <select value={ownerId} onChange={(event) => onOwnerChange(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-3 font-normal">
             <option value="">Выберите существующий аккаунт</option>
             {owners.map((owner) => <option key={owner.id} value={owner.id}>{owner.display_name || owner.username || owner.phone || owner.id}</option>)}
           </select>
         </label>
-        <button type="button" disabled={loading || !ownerId || !token} onClick={() => void bindOwner()} className="mt-2 flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />} Привязать владельца
-        </button>
       </div>
     </section>
   );

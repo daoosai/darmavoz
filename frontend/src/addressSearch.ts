@@ -2,6 +2,7 @@ const DGIS_KEY = import.meta.env.VITE_2GIS_KEY;
 const TYUMEN_CITY = "Тюмень";
 const TYUMEN_LOCATION = "65.534328,57.152286";
 const TWOGIS_SUGGEST_TYPES = [
+  "branch",
   "building",
   "street",
   "adm_div",
@@ -17,10 +18,16 @@ const TWOGIS_SUGGEST_TYPES = [
   "adm_div.amana",
   "attraction",
   "crossroad",
+  "user_queries",
+  "rubric",
+  "meta_rubric",
+  "attribute",
   "route",
   "route_type",
   "road",
+  "road.touristic",
   "parking",
+  "org",
   "station",
   "station.metro",
   "station_entrance",
@@ -29,6 +36,14 @@ const TWOGIS_SUGGEST_TYPES = [
   "gate",
   "coordinates",
   "coordinates_additional",
+  "special",
+  "market.category",
+  "market.suggestor_category",
+  "market.attribute",
+  "market.brand",
+  "brand",
+  "friend",
+  "directory",
 ].join(",");
 
 const getText = (value: unknown): string =>

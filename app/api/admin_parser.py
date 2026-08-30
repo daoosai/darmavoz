@@ -50,8 +50,6 @@ async def run_parser(payload: ParserRunRequest, db: AsyncSession = Depends(get_d
 @router.patch("/crm/{point_kind}/{point_id}", response_model=CrmPointOut)
 async def update_point_crm(point_kind: PointKind, point_id: UUID, payload: CrmUpdateRequest, db: AsyncSession = Depends(get_db), current_admin: User = Depends(get_current_admin_user)) -> CrmPointOut:
     point = await _get_point_or_404(db, point_kind, point_id)
-    if payload.crm_status == CrmStatus.agreed.value and point.owner_user_id is None:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="An owner must be linked before CRM activation")
     if point_kind == "water" and payload.crm_status == CrmStatus.agreed.value and point.water_type == "unknown":
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Select a water type before CRM activation")
     old_status = point.crm_status

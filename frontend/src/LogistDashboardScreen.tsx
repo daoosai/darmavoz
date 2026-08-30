@@ -692,7 +692,7 @@ export default function LogistDashboardScreen({
   return (
     <div className="flex flex-col h-screen bg-slate-50 relative overflow-hidden">
       {/* Header */}
-      <header className="sticky top-0 z-10 bg-white border-b border-slate-100 pb-4 pt-[max(env(safe-area-inset-top),2.5rem)] shadow-sm">
+      <header className="sticky top-0 z-[99998] bg-white border-b border-slate-100 pb-4 pt-[max(env(safe-area-inset-top),2.5rem)] shadow-sm">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
         <div className="flex items-center justify-between sm:justify-start gap-6">
           <div>

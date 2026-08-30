@@ -232,12 +232,12 @@ export default function WaterMapScreen() {
       <SwipeableBottomSheet
         isOpen={Boolean(selectedPoint)}
         onClose={() => setSelectedId(null)}
-        containerClassName="pointer-events-none absolute inset-0 z-20 flex items-end justify-center"
-        sheetClassName="pointer-events-auto max-h-[85vh] w-full max-w-md overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:mb-4 sm:rounded-2xl"
+        containerClassName="pointer-events-none absolute inset-0 z-[9999] flex items-end justify-center"
+        sheetClassName="pointer-events-auto z-[9999] max-h-[70vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:mb-4 sm:rounded-2xl"
         showOverlay={false}
       >
         {selectedPoint ? (
-          <div className="hide-scrollbar max-h-[72dvh] overflow-y-auto px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+          <div className="hide-scrollbar max-h-[70vh] overflow-y-auto px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
             <div className="flex items-start justify-between gap-3 pb-4">
               <div className={`min-w-0 ${isPointReady(selectedPoint) ? "" : "water-map-card--muted"}`}>
                 <div className="flex flex-wrap items-center gap-2">

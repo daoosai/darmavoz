@@ -39,7 +39,7 @@ DEFAULT_MIN_DELIVERY_PRICE = {
 
 
 def public_pickup_point_filters():
-    return (*public_placement_filters(Quarry), Quarry.crm_status == CrmStatus.active.value)
+    return (*public_placement_filters(Quarry), Quarry.crm_status == CrmStatus.agreed.value)
 
 
 def is_pickup_point_publicly_available(
@@ -47,7 +47,7 @@ def is_pickup_point_publicly_available(
     *,
     now: datetime | None = None,
 ) -> bool:
-    return point.crm_status == CrmStatus.active.value and is_publicly_available(point, now=now)
+    return point.crm_status == CrmStatus.agreed.value and is_publicly_available(point, now=now)
 
 
 def has_priced_material_offers(material_offers: Iterable[dict]) -> bool:

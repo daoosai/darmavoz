@@ -10,11 +10,13 @@ import {
 } from "./addressSearch";
 import { useAuthStore, usePlacementStore } from "./store";
 import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
+import { getCrmStatusClass, getCrmStatusLabel, type CrmStatus } from "./crmStatus";
 import { PlacementBadge, PlacementDates, type PlacementFields, type PlacementStatus } from "./placement";
 import MapWebGLFallback, { tryCreate2GisMap } from "./components/MapWebGLFallback";
 import AdminQuarriesMap from "./components/admin/AdminQuarriesMap";
 import CrmPanel from "./components/admin/CrmPanel";
 import ParserRunPanel from "./components/admin/ParserRunPanel";
+import { savePointCrm } from "./components/admin/savePointCrm";
 
 export interface Quarry extends PlacementFields {
   id?: string;
@@ -34,6 +36,7 @@ export interface Quarry extends PlacementFields {
   pending_changes?: Record<string, unknown> | null;
   is_active: boolean;
   owner_user_id?: string | null;
+  crm_status?: CrmStatus;
   material_ids?: string[];
   material_offers?: { material_id: string; price: number; is_active: boolean }[];
   delivery_option_ids?: string[];
@@ -528,10 +531,13 @@ export default function AdminQuarriesScreen({
           </div>
           <div className="flex shrink-0 items-center gap-3 text-xs font-semibold text-slate-500">
             <span className="flex items-center gap-1.5">
-              <span className="h-3 w-3 rounded-full bg-green-600" /> Готовы к работе
+              <span className="h-3 w-3 rounded-full bg-yellow-400" /> Новая
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="h-3 w-3 rounded-full bg-slate-500" /> Не готовы
+              <span className="h-3 w-3 rounded-full bg-slate-400" /> В работе
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-3 w-3 rounded-full bg-green-600" /> Согласовано
             </span>
           </div>
         </div>
@@ -588,6 +594,9 @@ export default function AdminQuarriesScreen({
                     </td>
                     <td className="p-4">
                       <div className="mb-2 flex flex-wrap gap-1">
+                        <span className={`inline-flex items-center rounded-lg px-2 py-1 text-xs font-bold ${getCrmStatusClass(quarry.crm_status)}`}>
+                          {getCrmStatusLabel(quarry.crm_status)}
+                        </span>
                         <PlacementBadge status={quarry.placement_status} />
                         
                         {quarry.is_vip ? (
@@ -675,6 +684,9 @@ export default function AdminQuarriesScreen({
               )}
               <div className="mt-1 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div className="mb-2 flex flex-wrap gap-1">
+                  <span className={`inline-flex items-center rounded-lg px-2 py-1 text-xs font-bold ${getCrmStatusClass(quarry.crm_status)}`}>
+                    {getCrmStatusLabel(quarry.crm_status)}
+                  </span>
                   <PlacementBadge status={quarry.placement_status} />
                   
                   <span className={`inline-flex items-center rounded-lg px-2 py-1 text-xs font-bold ${moderationBadge(quarry.moderation_status).className}`}>
@@ -2207,6 +2219,28 @@ function EnhancedEditQuarryModal({
         }
       }
 
+      if (formData.id && savedPoint.id) {
+        const crmData = await savePointCrm({
+          token,
+          pointKind: "quarry",
+          pointId: savedPoint.id,
+          status: formData.crm_status || "parsed",
+          comment: formData.crm_comment || "",
+          ownerId: formData.owner_user_id || "",
+          initialStatus: quarry.crm_status || "parsed",
+          initialComment: quarry.crm_comment || "",
+          initialOwnerId: quarry.owner_user_id || "",
+        });
+        if (crmData) {
+          savedPoint = {
+            ...savedPoint,
+            crm_status: crmData.crm_status,
+            crm_comment: crmData.crm_comment,
+            owner_user_id: crmData.owner_user_id,
+          };
+        }
+      }
+
       toast.success("Карьер сохранен");
       onSave(savedPoint);
     } catch (error) {
@@ -2570,8 +2604,12 @@ function EnhancedEditQuarryModal({
             token={token}
             pointKind="quarry"
             pointId={formData.id}
-            initialComment={formData.crm_comment}
-            initialOwnerId={formData.owner_user_id}
+            status={formData.crm_status || "parsed"}
+            comment={formData.crm_comment || ""}
+            ownerId={formData.owner_user_id || ""}
+            onStatusChange={(status) => setFormData((current) => ({ ...current, crm_status: status }))}
+            onCommentChange={(comment) => setFormData((current) => ({ ...current, crm_comment: comment }))}
+            onOwnerChange={(ownerId) => setFormData((current) => ({ ...current, owner_user_id: ownerId || null }))}
           /> : null}
 
           <div className="mt-4 flex gap-3">

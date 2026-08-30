@@ -19,7 +19,8 @@ import toast from "react-hot-toast";
 import AddressMapPicker from "../AddressMapPicker";
 import CrmPanel from "./CrmPanel";
 import ParserRunPanel from "./ParserRunPanel";
-import { getCrmStatusLabel, type CrmStatus } from "../../crmStatus";
+import { savePointCrm } from "./savePointCrm";
+import { getCrmStatusClass, getCrmStatusLabel, type CrmStatus } from "../../crmStatus";
 import {
   baseURL,
   extractApiErrorMessage,
@@ -90,6 +91,15 @@ interface EditTarget {
   data: WaterPoint | SepticProfile;
 }
 
+interface WaterCrmForm {
+  status: CrmStatus;
+  comment: string;
+  ownerId: string;
+  initialStatus: CrmStatus;
+  initialComment: string;
+  initialOwnerId: string;
+}
+
 const statusLabel: Record<string, string> = {
   pending_moderation: "На модерации",
   approved: "Одобрено",
@@ -157,6 +167,14 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
   const [waterEditForm, setWaterEditForm] = useState(() => createWaterEditForm({
     id: "", water_type: "free", source: "", address: "", lat: 0, lon: 0, moderation_status: "", is_active: true,
   }));
+  const [waterCrmForm, setWaterCrmForm] = useState<WaterCrmForm>({
+    status: "parsed",
+    comment: "",
+    ownerId: "",
+    initialStatus: "parsed",
+    initialComment: "",
+    initialOwnerId: "",
+  });
   const [septicEditForm, setSepticEditForm] = useState(() => createSepticEditForm({
     id: "", phone: "", address: "", lat: 0, lon: 0, tank_volume_m3: "", service_price: "", moderation_status: "", is_active: true,
   }));
@@ -257,6 +275,26 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
     }
   };
 
+  const deleteWaterPoint = async (point: WaterPoint) => {
+    if (!token || !window.confirm("Удалить точку воды безвозвратно?")) return;
+    setActionId(point.id);
+    try {
+      const response = await fetch(`${baseURL}/admin/water-points/${point.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось удалить точку воды"));
+      closeEdit();
+      toast.success("Точка воды удалена");
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось удалить точку воды");
+    } finally {
+      setActionId(null);
+    }
+  };
+
   const openReject = (kind: ManagementTab, id: string, label: string) => {
     setRejectReason("");
     setRejectTarget({ kind, id, label });
@@ -264,6 +302,14 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
 
   const openWaterEdit = (point: WaterPoint) => {
     setWaterEditForm(createWaterEditForm(point));
+    setWaterCrmForm({
+      status: point.crm_status || "parsed",
+      comment: point.crm_comment || "",
+      ownerId: point.owner_user_id || "",
+      initialStatus: point.crm_status || "parsed",
+      initialComment: point.crm_comment || "",
+      initialOwnerId: point.owner_user_id || "",
+    });
     setEditMedia(point.media_files || []);
     setEditTarget({ kind: "water", data: point });
   };
@@ -278,6 +324,14 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
     setCreateTarget(kind);
     setEditMedia([]);
     if (kind === "water") {
+      setWaterCrmForm({
+        status: "parsed",
+        comment: "",
+        ownerId: "",
+        initialStatus: "parsed",
+        initialComment: "",
+        initialOwnerId: "",
+      });
       setWaterEditForm(createWaterEditForm({
         id: "", water_type: "paid", source: "", address: "", lat: 0, lon: 0,
         moderation_status: "", is_active: true, is_free: false,
@@ -494,6 +548,19 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось сохранить изменения"));
+      if (!isCreating && isWater && editTarget?.data.id) {
+        await savePointCrm({
+          token,
+          pointKind: "water",
+          pointId: editTarget.data.id,
+          status: waterCrmForm.status,
+          comment: waterCrmForm.comment,
+          ownerId: waterCrmForm.ownerId,
+          initialStatus: waterCrmForm.initialStatus,
+          initialComment: waterCrmForm.initialComment,
+          initialOwnerId: waterCrmForm.initialOwnerId,
+        });
+      }
       if (isCreating) setStatusFilter("all");
       closeEdit();
       toast.success("Изменения сохранены");
@@ -554,7 +621,7 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
           return <article key={point.id} className="overflow-hidden rounded-2xl border border-slate-100 bg-white">
             {point.primary_image_url ? <img src={resolveMediaUrl(point.primary_image_url)} alt={point.name || "Точка воды"} className="h-40 w-full object-cover" /> : null}
             <div className="space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div><h3 className="font-bold text-slate-900">{point.name || "Точка воды"}</h3></div><div className="flex flex-col items-end gap-1"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${statusClass(status)}`}>{statusLabel[status] || point.moderation_status}</span><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${point.water_type === "free" ? "bg-blue-100 text-blue-800" : "bg-green-100 text-green-800"}`}>{point.water_type === "free" ? "Бесплатная" : "Платная"}</span></div></div><p className="flex gap-2 text-sm text-slate-600"><MapPin className="h-4 w-4 shrink-0" />{point.address}</p>{point.phone ? <p className="flex gap-2 text-sm text-slate-600"><Phone className="h-4 w-4 shrink-0" />{point.phone}</p> : null}{point.description ? <p className="text-sm text-slate-600">{point.description}</p> : null}{point.water_type === "paid" && point.price != null && point.price_unit ? <p className="text-right text-lg font-black text-slate-900">{Number(point.price).toLocaleString("ru-RU")} ₽/{point.price_unit}</p> : null}{point.moderation_comment ? <p className="rounded-xl bg-red-50 p-2 text-sm text-red-700">{point.moderation_comment}</p> : null}{isPending ? <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-3"><button type="button" disabled={actionId === point.id} onClick={() => openReject("water", point.id, point.name || "Точка воды")} className="flex items-center justify-center gap-2 rounded-xl border border-rose-200 py-2.5 text-sm font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50"><XCircle className="h-4 w-4" />Отклонить</button><button type="button" disabled={actionId === point.id} onClick={() => void requestAction("water", point.id, "approve")} className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 py-2.5 text-sm font-bold text-white hover:bg-emerald-600 disabled:opacity-50">{actionId === point.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}Одобрить</button></div> : (isApproved || isArchived) ? <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-3"><button type="button" onClick={() => openWaterEdit(point)} className="flex items-center justify-center rounded-xl bg-slate-100 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-200">Редактировать</button><button type="button" disabled={actionId === point.id} onClick={() => void requestAction("water", point.id, isArchived ? "restore" : "suspend")} className={`flex items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-bold disabled:opacity-50 ${isArchived ? "border-emerald-200 text-emerald-700 hover:bg-emerald-50" : "border-amber-200 text-amber-700 hover:bg-amber-50"}`}>{actionId === point.id ? <Loader2 className="h-4 w-4 animate-spin" /> : isArchived ? <RefreshCw className="h-4 w-4" /> : <Archive className="h-4 w-4" />}{isArchived ? "Восстановить" : "В архив"}</button></div> : null}</div>
-            <div className="flex gap-2 border-t border-slate-100 px-4 pb-4 pt-3 text-xs font-bold text-slate-600"><span className={`rounded-full px-2 py-1 ${point.crm_status === "active" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"}`}>CRM: {getCrmStatusLabel(point.crm_status)}</span></div>
+             <div className="flex gap-2 border-t border-slate-100 px-4 pb-4 pt-3 text-xs font-bold text-slate-600"><span className={`rounded-full px-2 py-1 ${getCrmStatusClass(point.crm_status)}`}>{getCrmStatusLabel(point.crm_status)}</span><button type="button" disabled={actionId === point.id} onClick={() => void deleteWaterPoint(point)} className="ml-auto rounded-lg p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50" aria-label="Удалить точку воды"><Trash2 className="h-4 w-4" /></button></div>
           </article>;
         }) : septicProfiles.map((profile) => {
           const status = normalizeStatus(profile.moderation_status);
@@ -655,12 +722,16 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
               token={token}
               pointKind="water"
               pointId={editTarget.data.id}
-              initialComment={(editTarget.data as WaterPoint).crm_comment}
-              initialOwnerId={(editTarget.data as WaterPoint).owner_user_id}
-              onUpdated={load}
+              status={waterCrmForm.status}
+              comment={waterCrmForm.comment}
+              ownerId={waterCrmForm.ownerId}
+              onStatusChange={(status) => setWaterCrmForm((current) => ({ ...current, status }))}
+              onCommentChange={(comment) => setWaterCrmForm((current) => ({ ...current, comment }))}
+              onOwnerChange={(ownerId) => setWaterCrmForm((current) => ({ ...current, ownerId }))}
             /> : null}
 
             <div className="mt-5 grid grid-cols-2 gap-3">
+              {modalKind === "water" && editTarget ? <button type="button" disabled={actionId === editTarget.data.id} onClick={() => void deleteWaterPoint(editTarget.data as WaterPoint)} className="col-span-2 flex items-center justify-center gap-2 rounded-xl border border-rose-200 py-3 font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50"><Trash2 className="h-4 w-4" />Удалить точку</button> : null}
               <button type="button" onClick={closeEdit} className="rounded-xl bg-slate-100 py-3 font-bold text-slate-700">Отмена</button>
               <button disabled={actionId === (editTarget?.data.id ?? `create-${modalKind}`)} className="flex items-center justify-center rounded-xl bg-sky-500 py-3 font-bold text-white disabled:opacity-50">
                 {actionId === (editTarget?.data.id ?? `create-${modalKind}`) ? <Loader2 className="h-5 w-5 animate-spin" /> : "Сохранить"}

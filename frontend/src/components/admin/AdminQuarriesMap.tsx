@@ -4,6 +4,7 @@ import MapWebGLFallback, {
   load2GisMapSdk,
   tryCreate2GisMap,
 } from "../MapWebGLFallback";
+import { resolveMediaUrl } from "../../utils";
 
 export interface AdminMapPoint {
   id?: string;
@@ -15,6 +16,8 @@ export interface AdminMapPoint {
   owner_name?: string | null;
   twogis_id?: string | null;
   is_active: boolean;
+  crm_status?: "parsed" | "in_progress" | "agreed" | "hidden";
+  primary_image_url?: string | null;
 }
 
 interface AdminQuarriesMapProps {
@@ -82,7 +85,13 @@ const createMarkerElement = (
   marker.style.height = "30px";
   marker.style.borderRadius = "9999px";
   marker.style.border = "3px solid white";
-  marker.style.backgroundColor = point.is_active === true ? "#16a34a" : "#64748b";
+  marker.style.backgroundColor = point.crm_status === "parsed"
+    ? "#facc15"
+    : point.crm_status === "in_progress"
+      ? "#94a3b8"
+      : point.crm_status === "agreed"
+        ? "#16a34a"
+        : "#475569";
   marker.style.boxShadow = "0 2px 8px rgba(15, 23, 42, 0.35)";
   marker.style.cursor = "pointer";
   marker.addEventListener("click", (event) => {
@@ -116,6 +125,34 @@ const createMarkerElement = (
     header.style.justifyContent = "space-between";
     header.style.gap = "8px";
 
+    const summary = document.createElement("div");
+    summary.style.display = "flex";
+    summary.style.minWidth = "0";
+    summary.style.alignItems = "center";
+    summary.style.gap = "10px";
+
+    const photo = document.createElement("div");
+    photo.style.display = "grid";
+    photo.style.width = "64px";
+    photo.style.height = "64px";
+    photo.style.flexShrink = "0";
+    photo.style.placeItems = "center";
+    photo.style.overflow = "hidden";
+    photo.style.borderRadius = "6px";
+    photo.style.background = "#e2e8f0";
+    photo.style.color = "#94a3b8";
+    if (point.primary_image_url) {
+      const image = document.createElement("img");
+      image.src = resolveMediaUrl(point.primary_image_url) || point.primary_image_url;
+      image.alt = `Фото точки: ${point.name}`;
+      image.style.width = "100%";
+      image.style.height = "100%";
+      image.style.objectFit = "cover";
+      photo.appendChild(image);
+    } else {
+      photo.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m4 17 4.5-4 3 2.5 2-2 6.5 5.5"/></svg>';
+    }
+
     const title = document.createElement("div");
     title.textContent = point.name;
     title.style.minWidth = "0";
@@ -145,7 +182,8 @@ const createMarkerElement = (
       event.stopPropagation();
       onClose();
     });
-    header.append(title, closeButton);
+    summary.append(photo, title);
+    header.append(summary, closeButton);
     card.appendChild(header);
 
     const details = document.createElement("div");
@@ -254,7 +292,7 @@ export default function AdminQuarriesMap({
     if (!isMapReady || !mapRef.current || !mapgl?.HtmlMarker) return;
 
     markerRefs.current.forEach((marker) => marker.destroy?.());
-    markerRefs.current = points.filter(isRenderablePoint).map((point) => {
+    markerRefs.current = points.filter((point) => point.crm_status !== "hidden").filter(isRenderablePoint).map((point) => {
       const pointKey = getPointKey(point);
       const element = createMarkerElement(
         point,

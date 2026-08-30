@@ -28,6 +28,7 @@ interface GlobalPickupPoint {
   lon: number;
   primary_image_url?: string | null;
   material_offers: GlobalPickupPointMaterial[];
+  crm_status: "parsed" | "in_progress" | "agreed" | "hidden";
   is_active: boolean;
   is_ready: boolean;
 }
@@ -55,7 +56,10 @@ const getRenderablePoints = (pickupPoints: GlobalPickupPoint[]) =>
     (point) => isValidCoordinate(point.lat) && isValidCoordinate(point.lon),
   );
 
-const isPointReady = (point: GlobalPickupPoint) => point.is_active === true;
+const isPointReady = (point: GlobalPickupPoint) => point.crm_status === "agreed";
+
+const getCrmMarkerStatus = (point: GlobalPickupPoint) =>
+  point.crm_status === "agreed" ? "agreed" : "in-progress";
 
 const calculateDistanceKm = (
   lat1: number,
@@ -408,10 +412,10 @@ export default function GlobalMapScreen() {
     pointMarkerRefs.current = [];
 
     pointMarkerRefs.current = visiblePoints.map((point) => {
-      const isActive = point.is_active === true;
+      const markerStatus = getCrmMarkerStatus(point);
       const element = document.createElement("button");
       element.type = "button";
-      element.className = `global-pickup-marker global-pickup-marker--${isActive ? "ready" : "muted"}${point.id === selectedPoint?.id ? " global-pickup-marker--selected" : ""}`;
+      element.className = `global-pickup-marker global-pickup-marker--${markerStatus}${point.id === selectedPoint?.id ? " global-pickup-marker--selected" : ""}`;
       const label = document.createElement("span");
       label.className = "global-pickup-marker__label";
       label.textContent = point.short_name || point.name;
@@ -509,11 +513,11 @@ export default function GlobalMapScreen() {
           place-items: center;
           cursor: pointer;
         }
-        .global-pickup-marker--ready {
+        .global-pickup-marker--agreed {
           background: #16a34a;
           color: #ffffff;
         }
-        .global-pickup-marker--muted {
+        .global-pickup-marker--in-progress {
           background: #94a3b8;
           color: #ffffff;
           opacity: 0.82;
@@ -530,14 +534,14 @@ export default function GlobalMapScreen() {
         .global-pickup-marker__label {
           position: absolute; bottom: 48px; max-width: 160px; overflow: hidden;
           white-space: nowrap; text-overflow: ellipsis; border-radius: 8px;
-          background: #334155; color: #fff; padding: 3px 7px;
+          background: #0ea5e9; color: #fff; padding: 3px 7px;
           font-size: 11px; font-weight: 700; pointer-events: none;
         }
         .global-pickup-marker__label-tail {
           position: absolute; left: 50%; bottom: 42px;
           width: 0; height: 0; transform: translateX(-50%);
           border-left: 6px solid transparent; border-right: 6px solid transparent;
-          border-top: 6px solid #334155;
+          border-top: 6px solid #0ea5e9;
         }
         .global-pickup-marker__icon svg {
           width: 100%;

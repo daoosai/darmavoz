@@ -245,6 +245,13 @@ async def get_route_distance(
         "type": "truck_jam",
         "output": "detailed",
         "locale": "ru",
+        # 2GIS expects truck mass and axle load in tonnes, not kilograms.
+        "truck_params": {
+            "max_perm_mass": 30,
+            "mass": 30,
+            "axle_load": 8,
+            "height": 3.5,
+        },
     }
 
     try:

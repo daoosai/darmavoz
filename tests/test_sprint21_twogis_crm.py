@@ -130,7 +130,7 @@ async def test_parser_upsert_keeps_crm_fields_and_only_updates_parsed_data(clien
             lon=65.53,
             contact_phone="+79990000001",
             owner_user_id=admin.id,
-            crm_status=CrmStatus.rejected.value,
+            crm_status=CrmStatus.hidden.value,
             crm_comment="Manual CRM decision",
             twogis_id="2gis-existing",
             parsed_data={"phones": ["old"]},
@@ -166,6 +166,6 @@ async def test_parser_upsert_keeps_crm_fields_and_only_updates_parsed_data(clien
     assert updated.name == "Manual quarry name"
     assert updated.address == "Manual address"
     assert updated.owner_user_id is not None
-    assert updated.crm_status == CrmStatus.rejected.value
+    assert updated.crm_status == CrmStatus.hidden.value
     assert updated.crm_comment == "Manual CRM decision"
     assert updated.parsed_data["phones"] == ["+79990000002"]

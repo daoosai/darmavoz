@@ -15,7 +15,7 @@ interface WaterPoint {
   water_type: WaterType;
   name?: string | null;
   source: string;
-  address: string;
+  address: string | null;
   lat: number;
   lon: number;
   phone?: string | null;
@@ -174,7 +174,7 @@ export default function WaterMapScreen() {
         <span className={`rounded-xl p-2.5 ${point.water_type === "free" ? "bg-sky-100 text-sky-600" : "bg-emerald-100 text-emerald-600"}`}><Droplets className="h-5 w-5" /></span>
         <div className="min-w-0 flex-1">
           <h2 className="font-black text-slate-900">{point.name || point.source}</h2>
-          <p className="mt-1 flex gap-1 text-sm text-slate-600"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" /><span className="line-clamp-2">{point.address}</span></p>
+          <p className="mt-1 flex gap-1 text-sm text-slate-600"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" /><span className="line-clamp-2">{point.address || "Адрес не указан — точка задана координатами"}</span></p>
           <p className="mt-2 text-sm font-bold text-emerald-600">{!isPointReady(point) ? "Временно без доставки" : isFreePoint(point) ? "Бесплатно" : `${Number(point.price).toLocaleString("ru-RU")} ₽/${point.price_unit || "ед."}`}</p>
         </div>
       </div>
@@ -233,7 +233,7 @@ export default function WaterMapScreen() {
         isOpen={Boolean(selectedPoint)}
         onClose={() => setSelectedId(null)}
         containerClassName="pointer-events-none absolute inset-0 z-20 flex items-end justify-center"
-        sheetClassName="pointer-events-auto w-full max-w-md overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:mb-4 sm:rounded-2xl"
+        sheetClassName="pointer-events-auto max-h-[85vh] w-full max-w-md overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:mb-4 sm:rounded-2xl"
         showOverlay={false}
       >
         {selectedPoint ? (
@@ -270,7 +270,7 @@ export default function WaterMapScreen() {
             </div>
 
             <div className="mt-4 space-y-3">
-              <p className="flex gap-2 text-sm leading-relaxed text-slate-600"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" />{selectedPoint.address}</p>
+            <p className="flex gap-2 text-sm leading-relaxed text-slate-600"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" />{selectedPoint.address || "Адрес не указан — точка задана координатами"}</p>
               {isFreePoint(selectedPoint) ? <p className="text-lg font-black text-emerald-600">Бесплатно</p> : selectedPoint.price !== null && selectedPoint.price !== undefined ? <p className="text-lg font-black text-slate-900">{Number(selectedPoint.price).toLocaleString("ru-RU")} ₽/{selectedPoint.price_unit || "ед."}</p> : null}
               {selectedPoint.description ? <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-600">{selectedPoint.description}</p> : null}
               {selectedPoint.phone ? <a className="flex items-center gap-2 rounded-2xl bg-sky-50 px-4 py-3 text-sm font-bold text-sky-700" href={`tel:${selectedPoint.phone}`}><Phone className="h-4 w-4" />{formatPhoneNumber(selectedPoint.phone)}</a> : null}

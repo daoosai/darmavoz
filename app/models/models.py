@@ -328,6 +328,9 @@ class CrmStatus(str, Enum):
     hidden = "hidden"
 
 
+CRM_STATUS_VALUES = tuple(status.value for status in CrmStatus)
+
+
 class Quarry(Base):
     __tablename__ = "quarries"
 
@@ -394,7 +397,7 @@ class Quarry(Base):
         String(128), nullable=True, unique=True, index=True
     )
     crm_status: Mapped[str] = mapped_column(
-        SQLEnum("parsed", "in_progress", "agreed", "hidden", name="crm_status"),
+        SQLEnum(*CRM_STATUS_VALUES, name="crm_status"),
         nullable=False,
         default=CrmStatus.agreed.value,
         server_default=CrmStatus.agreed.value,
@@ -562,7 +565,7 @@ class WaterPoint(Base):
     water_type: Mapped[str] = mapped_column(SQLEnum("free", "paid", "unknown", name="water_point_type"), nullable=False)
     name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     source: Mapped[str] = mapped_column(String(255), nullable=False)
-    address: Mapped[str] = mapped_column(Text, nullable=False)
+    address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     lat: Mapped[float] = mapped_column(Float, nullable=False)
     lon: Mapped[float] = mapped_column(Float, nullable=False)
     phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
@@ -579,7 +582,7 @@ class WaterPoint(Base):
         String(128), nullable=True, unique=True, index=True
     )
     crm_status: Mapped[str] = mapped_column(
-        SQLEnum("parsed", "in_progress", "agreed", "hidden", name="crm_status"),
+        SQLEnum(*CRM_STATUS_VALUES, name="crm_status"),
         nullable=False,
         default=CrmStatus.agreed.value,
         server_default=CrmStatus.agreed.value,
@@ -1224,10 +1227,10 @@ class PointAuditLog(Base):
     )
     admin_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"), nullable=True)
     old_status: Mapped[Optional[str]] = mapped_column(
-        SQLEnum("parsed", "in_progress", "agreed", "hidden", name="crm_status"), nullable=True
+        SQLEnum(*CRM_STATUS_VALUES, name="crm_status"), nullable=True
     )
     new_status: Mapped[str] = mapped_column(
-        SQLEnum("parsed", "in_progress", "agreed", "hidden", name="crm_status"), nullable=False
+        SQLEnum(*CRM_STATUS_VALUES, name="crm_status"), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

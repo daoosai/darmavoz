@@ -58,7 +58,7 @@ class WaterPointIn(BaseModel):
     water_type: Literal["free", "paid", "unknown"]
     name: str | None = Field(default=None, max_length=255)
     source: str = Field(min_length=1, max_length=255)
-    address: str = Field(min_length=1, max_length=2000)
+    address: str | None = Field(default=None, max_length=2000)
     lat: float = Field(ge=-90, le=90)
     lon: float = Field(ge=-180, le=180)
     phone: str | None = Field(default=None, max_length=20)
@@ -66,6 +66,14 @@ class WaterPointIn(BaseModel):
     is_free: bool = False
     price_unit: str | None = Field(default=None, max_length=50)
     description: str | None = Field(default=None, max_length=5000)
+
+    @field_validator("address", mode="before")
+    @classmethod
+    def normalize_address(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = str(value).strip()
+        return normalized or None
 
     @model_validator(mode="after")
     def validate_type(self):

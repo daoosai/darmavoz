@@ -20,7 +20,7 @@ interface WaterPoint {
   water_type: WaterType;
   name?: string | null;
   source: string;
-  address: string;
+  address: string | null;
   lat: number;
   lon: number;
   phone?: string | null;
@@ -412,7 +412,7 @@ export default function SupplierWaterPointsScreen({
       price_unit: point.price_unit || EMPTY_FORM.price_unit,
       description: point.description || "",
     });
-    lastGeocodedAddressRef.current = point.address.trim().toLowerCase();
+    lastGeocodedAddressRef.current = point.address?.trim().toLowerCase() || "";
     setPendingFiles([]);
     setPrimaryPhotoIndex(0);
     setShowForm(true);
@@ -455,7 +455,7 @@ export default function SupplierWaterPointsScreen({
   const handleAddressChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const address = event.target.value;
     lastGeocodedAddressRef.current = "";
-    setForm((current) => ({ ...current, address }));
+    setForm((current) => ({ ...current, address, lat: "", lon: "" }));
     setShowSuggestions(true);
 
     if (!address.trim()) {
@@ -500,6 +500,19 @@ export default function SupplierWaterPointsScreen({
     setForm((current) => ({
       ...current,
       address,
+      lat: stringifyCoordinate(coordinates.lat),
+      lon: stringifyCoordinate(coordinates.lon),
+    }));
+  };
+
+  const handleAddressBlur = async () => {
+    const address = form.address.trim();
+    if (!address || parsedCoordinates) return;
+    const coordinates = await getCoordsFromBackend(address);
+    if (!coordinates) return;
+    lastGeocodedAddressRef.current = address.toLowerCase();
+    setForm((current) => ({
+      ...current,
       lat: stringifyCoordinate(coordinates.lat),
       lon: stringifyCoordinate(coordinates.lon),
     }));
@@ -583,8 +596,12 @@ export default function SupplierWaterPointsScreen({
     let lat = parseCoordinate(form.lat);
     let lon = parseCoordinate(form.lon);
 
-    if (!address) {
-      toast.error("Укажите адрес точки воды.");
+    if ((lat === null) !== (lon === null)) {
+      toast.error("Укажите обе координаты точки воды.");
+      return;
+    }
+    if (!address && (lat === null || lon === null)) {
+      toast.error("Укажите адрес или обе координаты точки воды.");
       return;
     }
     if (lat === null || lon === null) {
@@ -607,6 +624,10 @@ export default function SupplierWaterPointsScreen({
       toast.error("Выберите адрес из подсказок или укажите точку на карте.");
       return;
     }
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+      toast.error("Укажите корректные широту и долготу точки воды.");
+      return;
+    }
     if (isPaid && (!phone || !form.price || !form.price_unit.trim())) {
       toast.error("Для платной воды заполните телефон, цену и единицу измерения.");
       return;
@@ -619,7 +640,7 @@ export default function SupplierWaterPointsScreen({
         water_type: form.water_type,
         name: form.name.trim() || null,
         source: form.source.trim(),
-        address,
+        address: address || null,
         lat,
         lon,
         phone: phone || null,
@@ -736,11 +757,15 @@ export default function SupplierWaterPointsScreen({
         <label className="block text-sm font-bold">Телефон {isPaid ? <span className="text-red-500">*</span> : <span className="font-normal text-slate-400">(необязательно)</span>}<input required={isPaid} type="tel" inputMode="tel" autoComplete="tel" maxLength={18} value={form.phone} onChange={(event) => update("phone", event.target.value)} placeholder="+7 (999) 999-99-99" className="mt-1 w-full rounded-xl border border-slate-200 p-3" /></label>
 
         <div className="space-y-2">
-          <label className="block text-sm font-bold" htmlFor="water-point-address">Адрес <span className="text-red-500">*</span></label>
+          <label className="block text-sm font-bold" htmlFor="water-point-address">Адрес <span className="font-normal text-slate-400">(необязательно, если указаны координаты)</span></label>
           <div ref={addressContainerRef} className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-            <input id="water-point-address" required value={form.address} onFocus={() => setShowSuggestions(true)} onChange={handleAddressChange} placeholder="Начните вводить адрес" className="w-full rounded-xl border border-slate-200 py-3 pl-10 pr-3" />
+            <input id="water-point-address" required={!parsedCoordinates} value={form.address} onFocus={() => setShowSuggestions(true)} onBlur={() => void handleAddressBlur()} onChange={handleAddressChange} placeholder="Начните вводить адрес" className="w-full rounded-xl border border-slate-200 py-3 pl-10 pr-3" />
             {showSuggestions && suggestions.length > 0 ? <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg">{suggestions.map((suggestion, index) => <button key={`${suggestion.address}-${index}`} type="button" onMouseDown={(event) => { event.preventDefault(); void selectSuggestion(suggestion); }} className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-sky-500" /><span>{suggestion.label}</span></button>)}</div> : null}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block text-sm font-bold">Широта<input type="number" min="-90" max="90" step="any" required={!form.address.trim()} value={form.lat} onChange={(event) => update("lat", event.target.value)} placeholder="Например, 57.152286" className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal" /></label>
+            <label className="block text-sm font-bold">Долгота<input type="number" min="-180" max="180" step="any" required={!form.address.trim()} value={form.lon} onChange={(event) => update("lon", event.target.value)} placeholder="Например, 65.534328" className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal" /></label>
           </div>
           <div className="overflow-hidden rounded-xl border border-slate-200">
             {isMapUnavailable ? <MapWebGLFallback className="h-52" /> : <div ref={mapContainerRef} className="h-52 w-full" />}
@@ -800,7 +825,7 @@ export default function SupplierWaterPointsScreen({
                   <span className={`rounded-full px-2 py-1 text-xs font-bold ${waterType === "free" ? "bg-blue-100 text-blue-800" : "bg-green-100 text-green-800"}`}>{waterType === "free" ? "Бесплатная вода" : "Платная вода"}</span>
                 </div>
               </div>
-              <p className="flex gap-2 text-sm text-slate-600"><MapPin className="h-4 w-4 shrink-0" />{point.address}</p>
+              <p className="flex gap-2 text-sm text-slate-600"><MapPin className="h-4 w-4 shrink-0" />{point.address || "Адрес не указан — точка задана координатами"}</p>
               {point.phone ? <p className="flex gap-2 text-sm text-slate-600"><Phone className="h-4 w-4" />{point.phone}</p> : null}
               {point.moderation_comment ? <p className="rounded-xl bg-red-50 p-2 text-sm text-red-700">{point.moderation_comment}</p> : null}
               {isPaidPoint && point.price !== null && point.price !== undefined && point.price_unit ? <p className="text-right text-lg font-black text-slate-900">{Number(point.price).toLocaleString("ru-RU")} ₽/{point.price_unit}</p> : null}

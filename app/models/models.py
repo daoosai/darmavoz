@@ -328,6 +328,9 @@ class CrmStatus(str, Enum):
     hidden = "hidden"
 
 
+CRM_STATUS_VALUES = tuple(status.value for status in CrmStatus)
+
+
 class Quarry(Base):
     __tablename__ = "quarries"
 
@@ -394,7 +397,7 @@ class Quarry(Base):
         String(128), nullable=True, unique=True, index=True
     )
     crm_status: Mapped[str] = mapped_column(
-        SQLEnum("parsed", "in_progress", "agreed", "hidden", name="crm_status"),
+        SQLEnum(*CRM_STATUS_VALUES, name="crm_status"),
         nullable=False,
         default=CrmStatus.agreed.value,
         server_default=CrmStatus.agreed.value,
@@ -579,7 +582,7 @@ class WaterPoint(Base):
         String(128), nullable=True, unique=True, index=True
     )
     crm_status: Mapped[str] = mapped_column(
-        SQLEnum("parsed", "in_progress", "agreed", "hidden", name="crm_status"),
+        SQLEnum(*CRM_STATUS_VALUES, name="crm_status"),
         nullable=False,
         default=CrmStatus.agreed.value,
         server_default=CrmStatus.agreed.value,
@@ -1224,10 +1227,10 @@ class PointAuditLog(Base):
     )
     admin_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"), nullable=True)
     old_status: Mapped[Optional[str]] = mapped_column(
-        SQLEnum("parsed", "in_progress", "agreed", "hidden", name="crm_status"), nullable=True
+        SQLEnum(*CRM_STATUS_VALUES, name="crm_status"), nullable=True
     )
     new_status: Mapped[str] = mapped_column(
-        SQLEnum("parsed", "in_progress", "agreed", "hidden", name="crm_status"), nullable=False
+        SQLEnum(*CRM_STATUS_VALUES, name="crm_status"), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

@@ -474,19 +474,11 @@ async def hide_pickup_point(
 ) -> DeleteResult:
     del current_admin
     point = await _get_point_or_404(db, point_id)
-    has_related_orders = await db.scalar(
-        select(Order.id).where(Order.quarry_id == point.id).limit(1)
-    )
-    if has_related_orders:
-        point.is_active = False
-        await db.commit()
-        return DeleteResult(
-            action="hidden",
-            detail="Pickup point was hidden because related orders exist",
-        )
-
     await db.execute(
         update(CartItem).where(CartItem.quarry_id == point.id).values(quarry_id=None)
+    )
+    await db.execute(
+        update(Order).where(Order.quarry_id == point.id).values(quarry_id=None)
     )
     await db.execute(
         delete(quarry_materials).where(quarry_materials.c.quarry_id == point.id)

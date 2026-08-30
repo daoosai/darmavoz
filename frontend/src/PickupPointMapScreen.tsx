@@ -33,6 +33,7 @@ export interface PickupPointMarker {
   is_free?: boolean;
   unit: string;
   min_delivery_price: number;
+  crm_status: "parsed" | "in_progress" | "agreed" | "hidden";
   primary_image_url?: string | null;
 }
 
@@ -99,6 +100,9 @@ function formatDistance(distance: number) {
 
 const isFreeOffer = (isFree: boolean | undefined, price: number | null | undefined) =>
   isFree === true || Number(price) === 0;
+
+const isPointReady = (point: PickupPointMarker | PickupPointSelection) =>
+  point.crm_status === "agreed";
 
 const TYPE_LABELS: Record<string, string> = {
   quarry: "Карьер",
@@ -395,7 +399,7 @@ export default function PickupPointMapScreen({
     markerRefs.current = visible.map((point) => {
       const element = document.createElement("button");
       element.type = "button";
-      element.className = `pickup-point-marker${point.id === activePointId ? " pickup-point-marker--active" : ""}`;
+      element.className = `pickup-point-marker pickup-point-marker--${point.crm_status}${point.id === activePointId ? " pickup-point-marker--active" : ""}`;
       element.setAttribute("aria-label", `Выбрать точку ${point.short_name || point.name}`);
 
       const icon = document.createElement("span");
@@ -698,6 +702,7 @@ export default function PickupPointMapScreen({
           >
             <ChevronDown className="h-5 w-5" />
           </button>
+          {isPointReady(selected) ? <>
           <div className="relative overflow-hidden rounded-2xl bg-gray-100">
             {selectedImageUrls.length > 0 ? (
               <div className="hide-scrollbar flex snap-x snap-mandatory overflow-x-auto">
@@ -804,6 +809,12 @@ export default function PickupPointMapScreen({
           >
             {getSelectPointButtonLabel(selected.point_type)}
           </button>
+          </> : (
+            <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="font-black text-slate-900">Временно без доставки</p>
+              <p className="mt-1 text-sm text-slate-600">Точка ещё не готова принимать заказы.</p>
+            </div>
+          )}
         </div>
         </SwipeableBottomSheet>
       )}

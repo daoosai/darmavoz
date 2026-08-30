@@ -145,6 +145,7 @@ app.include_router(admin_parser.router, prefix="/api/v1/admin", tags=["admin-par
 app.include_router(admin_quarries.router, prefix="/api/v1/admin", tags=["admin-quarries"])
 app.include_router(catalog.router, prefix="/api/v1/catalog", tags=["catalog"])
 app.include_router(pickup_points.router, prefix="/api/v1/catalog/pickup-points", tags=["pickup-points"])
+app.include_router(pickup_points.router, prefix="/api/v1/pickup-points", tags=["pickup-points-compat"])
 app.include_router(equipment.router, prefix="/api/v1", tags=["special-equipment"])
 app.include_router(equipment.supplier_router, prefix="/api/v1/supplier", tags=["supplier-equipment"])
 app.include_router(equipment.equipment_owner_router, prefix="/api/v1/equipment-owner", tags=["equipment-owner-equipment"])

@@ -50,15 +50,15 @@ async def run_parser(payload: ParserRunRequest, db: AsyncSession = Depends(get_d
 @router.patch("/crm/{point_kind}/{point_id}", response_model=CrmPointOut)
 async def update_point_crm(point_kind: PointKind, point_id: UUID, payload: CrmUpdateRequest, db: AsyncSession = Depends(get_db), current_admin: User = Depends(get_current_admin_user)) -> CrmPointOut:
     point = await _get_point_or_404(db, point_kind, point_id)
-    if payload.crm_status == CrmStatus.active.value and point.owner_user_id is None:
+    if payload.crm_status == CrmStatus.agreed.value and point.owner_user_id is None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="An owner must be linked before CRM activation")
-    if point_kind == "water" and payload.crm_status == CrmStatus.active.value and point.water_type == "unknown":
+    if point_kind == "water" and payload.crm_status == CrmStatus.agreed.value and point.water_type == "unknown":
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Select a water type before CRM activation")
     old_status = point.crm_status
     if payload.crm_status is not None:
         point.crm_status = payload.crm_status
     point.crm_comment = payload.crm_comment
-    if payload.crm_status == CrmStatus.active.value:
+    if payload.crm_status == CrmStatus.agreed.value:
         point.is_active = True
     if payload.crm_status is not None:
         await _add_status_audit_log(db, point=point, point_kind=point_kind, admin_id=current_admin.id, old_status=old_status, new_status=payload.crm_status)
@@ -78,9 +78,9 @@ async def bind_point_owner(point_kind: PointKind, point_id: UUID, payload: Point
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Select a water type before linking an active owner")
     old_status = point.crm_status
     point.owner_user_id = owner.id
-    point.crm_status = CrmStatus.active.value
+    point.crm_status = CrmStatus.agreed.value
     point.is_active = True
-    await _add_status_audit_log(db, point=point, point_kind=point_kind, admin_id=current_admin.id, old_status=old_status, new_status=CrmStatus.active.value)
+    await _add_status_audit_log(db, point=point, point_kind=point_kind, admin_id=current_admin.id, old_status=old_status, new_status=CrmStatus.agreed.value)
     await db.commit()
     await db.refresh(point)
     return _serialize_crm_point(point, point_kind)

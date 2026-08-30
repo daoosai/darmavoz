@@ -28,7 +28,7 @@ def _is_water_point_ready(point: WaterPoint) -> bool:
 
 def _public_stmt():
     return select(WaterPoint).where(
-        WaterPoint.crm_status == CrmStatus.active.value,
+        WaterPoint.crm_status == CrmStatus.agreed.value,
         WaterPoint.moderation_status == "approved",
         WaterPoint.is_active.is_(True),
         WaterPoint.is_deleted.is_(False),
@@ -117,10 +117,8 @@ async def list_water_points_for_map(
         WaterPoint.is_deleted.is_(False),
         WaterPoint.crm_status.in_(
             [
-                CrmStatus.active.value,
-                CrmStatus.parsed.value,
-                CrmStatus.rejected.value,
-                CrmStatus.invite_sent.value,
+                CrmStatus.in_progress.value,
+                CrmStatus.agreed.value,
             ]
         ),
     )
@@ -258,6 +256,7 @@ async def hard_delete_water_point(
     return {"ok": True}
 
 
+@router.delete("/admin/water-points/{point_id}")
 @router.delete("/admin/water-points/{point_id}/hard")
 async def hard_delete_water_point_by_admin(
     point_id: UUID,

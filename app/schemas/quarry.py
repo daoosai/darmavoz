@@ -265,7 +265,7 @@ class QuarryOut(QuarryBase):
     pending_changes: dict | None = None
     owner_user_id: Optional[UUID] = None
     twogis_id: Optional[str] = None
-    crm_status: Literal["parsed", "active", "rejected", "invite_sent"] = "active"
+    crm_status: Literal["parsed", "in_progress", "agreed", "hidden"] = "agreed"
     is_ready: bool = False
     crm_comment: Optional[str] = None
     parsed_data: dict | None = None
@@ -299,6 +299,7 @@ class PickupPointMarkerOut(BaseModel):
     is_free: bool = False
     unit: str
     min_delivery_price: float
+    crm_status: Literal["parsed", "in_progress", "agreed", "hidden"]
     primary_image_url: Optional[str] = None
 
 
@@ -322,7 +323,7 @@ class GlobalPickupPointOut(BaseModel):
     lon: float
     primary_image_url: Optional[str] = None
     material_offers: list[GlobalPickupPointMaterialOut] = Field(default_factory=list)
-    crm_status: Literal["parsed", "active", "rejected", "invite_sent"] = "active"
+    crm_status: Literal["parsed", "in_progress", "agreed", "hidden"] = "agreed"
     is_active: bool = False
     is_ready: bool = False
     parsed_data: dict | None = None

@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from sqlalchemy import or_, select
+from sqlalchemy import and_, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
@@ -39,6 +39,7 @@ def _parse_bbox(value: str | None) -> tuple[float, float, float, float] | None:
     return min_lon, min_lat, max_lon, max_lat
 
 
+@router.get("/map", response_model=list[PickupPointMarkerOut])
 @router.get("", response_model=list[PickupPointMarkerOut])
 async def list_pickup_points(
     response: Response,
@@ -49,6 +50,9 @@ async def list_pickup_points(
     db: AsyncSession = Depends(get_db),
 ) -> list[dict]:
     _disable_map_cache(response)
+    material = await db.get(Material, material_id)
+    if material is None or not material.is_active:
+        return []
     primary_image = (
         select(MediaFile.public_url)
         .where(MediaFile.entity_type == "quarry", MediaFile.entity_id == Quarry.id)
@@ -66,21 +70,33 @@ async def list_pickup_points(
             Quarry.lon,
             Quarry.min_delivery_price,
             quarry_materials.c.price,
-            Material.unit,
-            Material.is_free,
+            literal(material.unit).label("unit"),
+            literal(material.is_free).label("is_free"),
+            Quarry.crm_status,
             primary_image.label("primary_image_url"),
         )
-        .join(quarry_materials, quarry_materials.c.quarry_id == Quarry.id)
-        .join(Material, Material.id == quarry_materials.c.material_id)
-        .where(
-            *public_pickup_point_filters(),
-            quarry_materials.c.material_id == material_id,
-            quarry_materials.c.is_active.is_(True),
-            or_(
-                quarry_materials.c.price.is_not(None),
-                Material.is_free.is_(True),
+        .outerjoin(
+            quarry_materials,
+            and_(
+                quarry_materials.c.quarry_id == Quarry.id,
+                quarry_materials.c.material_id == material_id,
             ),
-            Material.is_active.is_(True),
+        )
+        .where(
+            Quarry.lat.is_not(None),
+            Quarry.lon.is_not(None),
+            or_(
+                and_(
+                    Quarry.crm_status == CrmStatus.agreed.value,
+                    *public_pickup_point_filters(),
+                    quarry_materials.c.is_active.is_(True),
+                    or_(
+                        quarry_materials.c.price.is_not(None),
+                        literal(material.is_free).is_(True),
+                    ),
+                ),
+                Quarry.crm_status == CrmStatus.in_progress.value,
+            ),
         )
         .order_by(Quarry.name.asc())
         .limit(limit)
@@ -108,6 +124,7 @@ async def list_pickup_points(
             "is_free": row.is_free,
             "unit": row.unit,
             "min_delivery_price": row.min_delivery_price or 0,
+            "crm_status": row.crm_status,
             "primary_image_url": row.primary_image_url,
         }
         for row in rows
@@ -125,10 +142,8 @@ async def list_global_pickup_points(
         .where(
             Quarry.crm_status.in_(
                 [
-                    CrmStatus.active.value,
-                    CrmStatus.parsed.value,
-                    CrmStatus.rejected.value,
-                    CrmStatus.invite_sent.value,
+                    CrmStatus.in_progress.value,
+                    CrmStatus.agreed.value,
                 ]
             ),
             Quarry.lat.is_not(None),
@@ -183,7 +198,13 @@ async def get_pickup_point(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     point = await db.get(Quarry, point_id)
-    if point is None or not is_pickup_point_publicly_available(point):
+    if point is None or (
+        point.crm_status == CrmStatus.agreed.value
+        and not is_pickup_point_publicly_available(point)
+    ) or point.crm_status not in {
+        CrmStatus.in_progress.value,
+        CrmStatus.agreed.value,
+    }:
         raise HTTPException(status_code=404, detail="Pickup point not found")
     payload = await pickup_point_payload(db, point)
     active_offers = [offer for offer in payload["material_offers"] if offer["is_active"]]

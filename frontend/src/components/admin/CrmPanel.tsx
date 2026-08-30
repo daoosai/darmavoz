@@ -7,6 +7,7 @@ import { baseURL, extractApiErrorMessage } from "../../utils";
 
 type PointKind = "quarry" | "water";
 type Owner = { id: string; display_name?: string | null; username?: string | null; phone?: string | null };
+const CRM_STATUS_KEYS: CrmStatus[] = ["parsed", "in_progress", "agreed", "hidden"];
 
 export default function CrmPanel({
   token,
@@ -58,11 +59,12 @@ export default function CrmPanel({
         headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify({ crm_status: crmStatus, crm_comment: crmComment || null }),
       });
-      if (!response.ok) throw new Error(await extractApiErrorMessage(response, "Не удалось сохранить CRM-статус"));
-      toast.success("CRM-статус сохранён");
+      const responseData = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(extractApiErrorMessage(responseData ?? response, "Не удалось сохранить статус"));
+      toast.success("Статус сохранён");
       await onUpdated?.();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось сохранить CRM-статус");
+      toast.error(error instanceof Error ? error.message : "Не удалось сохранить статус");
     } finally {
       setLoading(false);
     }
@@ -90,17 +92,20 @@ export default function CrmPanel({
 
   return (
     <section className="mt-5 space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-      <h4 className="font-black text-slate-900">CRM-статус, комментарий и владелец</h4>
-      <label className="block text-sm font-bold">CRM Статус
-        <select value={crmStatus} onChange={(event) => setCrmStatus(event.target.value as CrmStatus)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-3 font-normal">
-          {(Object.keys(CRM_STATUS_LABELS) as CrmStatus[]).map((status) => <option key={status} value={status}>{CRM_STATUS_LABELS[status]}</option>)}
+      <h4 className="font-black text-slate-900">Статус, комментарий и владелец</h4>
+      <label className="block text-sm font-bold">Статус
+        <select value={crmStatus} onChange={(event) => {
+          const nextStatus = event.target.value as CrmStatus;
+          if (CRM_STATUS_KEYS.includes(nextStatus)) setCrmStatus(nextStatus);
+        }} className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-3 font-normal">
+          {CRM_STATUS_KEYS.map((status) => <option key={status} value={status}>{CRM_STATUS_LABELS[status]}</option>)}
         </select>
       </label>
       <label className="block text-sm font-bold">Комментарий
         <textarea value={crmComment} onChange={(event) => setCrmComment(event.target.value)} className="mt-1 min-h-20 w-full rounded-xl border border-slate-200 bg-white p-3 font-normal" />
       </label>
       <button type="button" disabled={loading || !token} onClick={() => void saveCrm()} className="flex items-center justify-center gap-2 rounded-xl bg-slate-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
-        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Сохранить CRM
+        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Сохранить статус
       </button>
       <div className="border-t border-slate-200 pt-4">
         <label className="block text-sm font-bold">Привязать владельца

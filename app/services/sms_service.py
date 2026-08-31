@@ -1,5 +1,6 @@
 import logging
 import secrets
+from typing import NoReturn
 
 import httpx
 from fastapi import HTTPException, status
@@ -7,13 +8,21 @@ from fastapi import HTTPException, status
 from app.core.config import settings
 
 logger = logging.getLogger("uvicorn.error")
-FALLBACK_OTP_CODE = "0000"
+SANDBOX_OTP_CODE = "0000"
 SMSRU_SEND_URL = "https://sms.ru/sms/send"
 SMSRU_SENDER = "DARMAVOZ.RU"
+SMS_DELIVERY_ERROR_DETAIL = "Не удалось отправить SMS-код. Попробуйте ещё раз."
 
 
 def generate_otp_code() -> str:
     return f"{secrets.randbelow(10000):04d}"
+
+
+def raise_sms_delivery_error() -> NoReturn:
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail=SMS_DELIVERY_ERROR_DETAIL,
+    )
 
 
 def normalize_sms_phone(phone_number: str) -> str:
@@ -72,16 +81,16 @@ async def send_auth_sms_code(*, phone_number: str, code: str, log_prefix: str) -
             log_prefix,
             masked_phone,
         )
-        return FALLBACK_OTP_CODE
+        return SANDBOX_OTP_CODE
 
     api_key = settings.SMSRU_API_KEY
     if not api_key:
         logger.warning(
-            "%s_not_configured_fallback normalized_phone=%s",
+            "%s_not_configured normalized_phone=%s",
             log_prefix,
             masked_phone,
         )
-        return FALLBACK_OTP_CODE
+        raise_sms_delivery_error()
 
     payload = {
         "api_id": api_key,
@@ -97,44 +106,44 @@ async def send_auth_sms_code(*, phone_number: str, code: str, log_prefix: str) -
             response.raise_for_status()
     except httpx.HTTPError:
         logger.warning(
-            "%s_request_failed_fallback normalized_phone=%s",
+            "%s_request_failed normalized_phone=%s",
             log_prefix,
             masked_phone,
             exc_info=True,
         )
-        return FALLBACK_OTP_CODE
+        raise_sms_delivery_error()
 
     try:
         response_data = response.json()
     except ValueError:
         logger.warning(
-            "%s_invalid_response_fallback normalized_phone=%s body=%s",
+            "%s_invalid_response normalized_phone=%s body=%s",
             log_prefix,
             masked_phone,
             response.text[:500],
         )
-        return FALLBACK_OTP_CODE
+        raise_sms_delivery_error()
 
     if not isinstance(response_data, dict):
         logger.warning(
-            "%s_invalid_payload_fallback normalized_phone=%s response=%s",
+            "%s_invalid_payload normalized_phone=%s response=%s",
             log_prefix,
             masked_phone,
             response_data,
         )
-        return FALLBACK_OTP_CODE
+        raise_sms_delivery_error()
 
     safe_response = sanitize_smsru_response(response_data, phone_number)
     if response_data.get("status") != "OK":
         logger.warning(
-            "%s_gateway_error_fallback normalized_phone=%s sender=%s smsru_status_code=%s response=%s",
+            "%s_gateway_error normalized_phone=%s sender=%s smsru_status_code=%s response=%s",
             log_prefix,
             masked_phone,
             SMSRU_SENDER,
             response_data.get("status_code"),
             safe_response,
         )
-        return FALLBACK_OTP_CODE
+        raise_sms_delivery_error()
 
     sms_status = (response_data.get("sms") or {}).get(phone_number)
     logger.info(
@@ -148,7 +157,7 @@ async def send_auth_sms_code(*, phone_number: str, code: str, log_prefix: str) -
     )
     if not isinstance(sms_status, dict) or str(sms_status.get("status")) != "OK":
         logger.warning(
-            "%s_delivery_status_fallback normalized_phone=%s sender=%s smsru_status_code=%s sms_id=%s response=%s",
+            "%s_delivery_status normalized_phone=%s sender=%s smsru_status_code=%s sms_id=%s response=%s",
             log_prefix,
             masked_phone,
             SMSRU_SENDER,
@@ -156,6 +165,6 @@ async def send_auth_sms_code(*, phone_number: str, code: str, log_prefix: str) -
             (sms_status or {}).get("sms_id"),
             safe_response,
         )
-        return FALLBACK_OTP_CODE
+        raise_sms_delivery_error()
 
     return code

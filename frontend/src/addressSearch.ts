@@ -1,50 +1,33 @@
 const DGIS_KEY = import.meta.env.VITE_2GIS_KEY;
 const TYUMEN_CITY = "Тюмень";
 const TYUMEN_LOCATION = "65.534328,57.152286";
-const TWOGIS_SUGGEST_TYPES = [
-  "branch",
+const TWOGIS_SUGGEST_URL = "https://catalog.api.2gis.com/3.0/suggests";
+const TWOGIS_ADDRESS_SUGGEST_TYPES = [
   "building",
   "street",
-  "adm_div",
-  "adm_div.country",
-  "adm_div.region",
-  "adm_div.city",
-  "adm_div.district",
-  "adm_div.district_area",
   "adm_div.settlement",
   "adm_div.place",
-  "adm_div.living_area",
-  "adm_div.division",
-  "adm_div.amana",
-  "attraction",
-  "crossroad",
-  "user_queries",
-  "rubric",
-  "meta_rubric",
-  "attribute",
-  "route",
-  "route_type",
-  "road",
-  "road.touristic",
-  "parking",
-  "org",
-  "station",
-  "station.metro",
-  "station_entrance",
-  "station_platform",
-  "kilometer_road_sign",
-  "gate",
-  "coordinates",
-  "coordinates_additional",
-  "special",
-  "market.category",
-  "market.suggestor_category",
-  "market.attribute",
-  "market.brand",
-  "brand",
-  "friend",
-  "directory",
 ].join(",");
+
+type SuggestApiError = Error & {
+  response?: {
+    status: number;
+    data: unknown;
+  };
+};
+
+const logSuggestError = (error: unknown) => {
+  console.error(
+    "2GIS Suggest API Error:",
+    (error as SuggestApiError).response?.data || error,
+  );
+};
+
+const getRequestUrlForLog = (requestUrl: URL) => {
+  const safeUrl = new URL(requestUrl);
+  safeUrl.searchParams.set("key", "<redacted>");
+  return safeUrl.toString();
+};
 
 const getText = (value: unknown): string =>
   typeof value === "string" ? value.trim() : "";
@@ -130,27 +113,53 @@ export const fetch2gisAddressSuggestions = async (
   query: string,
 ): Promise<any[]> => {
   const normalized = query.trim();
-  if (normalized.length < 3 || !DGIS_KEY) {
+  if (normalized.length < 3) {
     return [];
   }
 
+  if (!DGIS_KEY) {
+    logSuggestError(new Error("VITE_2GIS_KEY is not configured at build time"));
+    return [];
+  }
+
+  const requestUrl = new URL(TWOGIS_SUGGEST_URL);
+  requestUrl.search = new URLSearchParams({
+    q: normalized,
+    suggest_type: "address",
+    key: DGIS_KEY,
+    type: TWOGIS_ADDRESS_SUGGEST_TYPES,
+    fields: "items.point,items.address,items.adm_div,items.full_address_name",
+    location: TYUMEN_LOCATION,
+    page_size: "20",
+    locale: "ru_RU",
+  }).toString();
+
   try {
-    const params = new URLSearchParams({
-      q: normalized,
-      suggest_type: "address",
-      key: DGIS_KEY,
-      type: TWOGIS_SUGGEST_TYPES,
-      fields: "items.point,items.address,items.adm_div,items.full_address_name",
-      location: TYUMEN_LOCATION,
-      page_size: "20",
-      locale: "ru_RU",
-    });
-    const response = await fetch(
-      `https://catalog.api.2gis.com/3.0/suggests?${params.toString()}`,
-    );
+    const response = await fetch(requestUrl);
     const data = await response.json();
-    return data.result?.items || [];
-  } catch {
+
+    if (!response.ok) {
+      const error = Object.assign(
+        new Error(`2GIS Suggest API responded with ${response.status}`),
+        { response: { status: response.status, data } },
+      );
+      logSuggestError(error);
+      return [];
+    }
+
+    const items = Array.isArray(data?.result?.items) ? data.result.items : [];
+    if (items.length === 0) {
+      console.warn(
+        "2GIS returned empty result for query:",
+        normalized,
+        "URL:",
+        getRequestUrlForLog(requestUrl),
+      );
+    }
+
+    return items;
+  } catch (error) {
+    logSuggestError(error);
     return [];
   }
 };

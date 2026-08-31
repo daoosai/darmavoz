@@ -13,6 +13,7 @@ import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
 import { getCrmStatusClass, getCrmStatusLabel, type CrmStatus } from "./crmStatus";
 import { PlacementBadge, PlacementDates, type PlacementFields, type PlacementStatus } from "./placement";
 import MapWebGLFallback, { tryCreate2GisMap } from "./components/MapWebGLFallback";
+import AddressSuggestDropdown from "./components/AddressSuggestDropdown";
 import AdminQuarriesMap from "./components/admin/AdminQuarriesMap";
 import CrmPanel from "./components/admin/CrmPanel";
 import ParserRunPanel from "./components/admin/ParserRunPanel";
@@ -822,6 +823,7 @@ function EditQuarryModal({
 
   const mapContainerRef = React.useRef<HTMLDivElement | null>(null);
   const addressContainerRef = React.useRef<HTMLDivElement | null>(null);
+  const addressInputRef = React.useRef<HTMLInputElement | null>(null);
   const mapRef = React.useRef<any>(null);
   const markerRef = React.useRef<any>(null);
   const lastGeocodedAddressRef = React.useRef(
@@ -1476,28 +1478,33 @@ function EditQuarryModal({
             </div>
           </div>
 
-          <div className="relative z-30 flex flex-col gap-1.5">
+          <div ref={addressContainerRef} className="relative z-30 flex flex-col gap-1.5">
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
               Адрес
             </label>
             <input
+              ref={addressInputRef}
               type="text"
               value={formData.address}
               onChange={handleAddressChange}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
             />
             {suggestions.length > 0 && (
-              <ul className="absolute z-[100000] top-full mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-2xl max-h-48 overflow-y-auto">
+              <AddressSuggestDropdown anchorRef={addressInputRef} isOpen={suggestions.length > 0}>
                 {suggestions.map((addr, idx) => (
                   <li
                     key={idx}
-                    onClick={() => selectSuggestion(addr)}
+                    role="option"
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      void selectSuggestion(addr);
+                    }}
                     className="px-4 py-3 hover:bg-slate-50 cursor-pointer border-b border-gray-100 last:border-0 text-sm"
                   >
                     {addr}
                   </li>
                 ))}
-              </ul>
+              </AddressSuggestDropdown>
             )}
           </div>
 
@@ -1719,6 +1726,7 @@ function EnhancedEditQuarryModal({
 
   const mapContainerRef = React.useRef<HTMLDivElement | null>(null);
   const addressContainerRef = React.useRef<HTMLDivElement | null>(null);
+  const addressInputRef = React.useRef<HTMLInputElement | null>(null);
   const mapRef = React.useRef<any>(null);
   const markerRef = React.useRef<any>(null);
   const blurTimeoutRef = React.useRef<number | null>(null);
@@ -2349,6 +2357,7 @@ function EnhancedEditQuarryModal({
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Адрес</label>
             <div className="relative">
               <input
+                ref={addressInputRef}
                 type="text"
                 value={formData.address}
                 onChange={handleAddressChange}
@@ -2367,7 +2376,7 @@ function EnhancedEditQuarryModal({
               ) : null}
             </div>
             {showSuggestions && suggestions.length > 0 ? (
-              <ul className="absolute z-[100000] top-full mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-2xl max-h-48 overflow-y-auto">
+              <AddressSuggestDropdown anchorRef={addressInputRef} isOpen={showSuggestions && suggestions.length > 0}>
                 {suggestions.map((suggestion, index) => (
                   <li
                     key={`${suggestion.label}-${index}`}
@@ -2384,7 +2393,7 @@ function EnhancedEditQuarryModal({
                     {suggestion.label}
                   </li>
                 ))}
-              </ul>
+              </AddressSuggestDropdown>
             ) : null}
             <p className="text-xs text-slate-500">
               Адрес и карта синхронизируются по подсказкам 2ГИС и введенным координатам.

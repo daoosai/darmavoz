@@ -40,8 +40,8 @@ from app.security.auth import get_password_hash, verify_password
 from app.security.jwt import create_access_token
 from app.services.auth_email_service import send_auth_email_code
 from app.services.redis_client import get_redis
-from app.services.sms_service import generate_otp_code, normalize_sms_phone, send_auth_sms_code
-from app.utils.phones import normalize_phone, normalize_phone_like_username
+from app.services.sms_service import generate_otp_code, normalize_sms_phone, send_auth_sms_code, verify_sms_otp_code
+from app.utils.phones import normalize_otp_phone, normalize_phone, normalize_phone_like_username
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -89,19 +89,19 @@ async def _get_or_create_driver_role(db: AsyncSession) -> Role:
 
 
 def _driver_login_code_key(phone: str) -> str:
-    return f"{DRIVER_LOGIN_CODE_KEY_PREFIX}:{phone}"
+    return f"{DRIVER_LOGIN_CODE_KEY_PREFIX}:{normalize_otp_phone(phone)}"
 
 
 def _driver_login_pending_key(phone: str) -> str:
-    return f"{DRIVER_LOGIN_PENDING_KEY_PREFIX}:{phone}"
+    return f"{DRIVER_LOGIN_PENDING_KEY_PREFIX}:{normalize_otp_phone(phone)}"
 
 
 def _driver_register_code_key(phone: str) -> str:
-    return f"{DRIVER_REGISTER_CODE_KEY_PREFIX}:{phone}"
+    return f"{DRIVER_REGISTER_CODE_KEY_PREFIX}:{normalize_otp_phone(phone)}"
 
 
 def _driver_register_pending_key(phone: str) -> str:
-    return f"{DRIVER_REGISTER_PENDING_KEY_PREFIX}:{phone}"
+    return f"{DRIVER_REGISTER_PENDING_KEY_PREFIX}:{normalize_otp_phone(phone)}"
 
 
 def _email_auth_code_key(scope: str, email: str) -> str:
@@ -113,7 +113,7 @@ def _password_reset_code_key(email: str) -> str:
 
 
 def _phone_password_reset_otp_key(phone: str) -> str:
-    return f"{PHONE_PASSWORD_RESET_OTP_PREFIX}:{phone}"
+    return f"{PHONE_PASSWORD_RESET_OTP_PREFIX}:{normalize_otp_phone(phone)}"
 
 
 def _phone_password_reset_token_key(reset_token: str) -> str:
@@ -219,7 +219,7 @@ async def verify_phone_password_reset(
     redis = get_redis()
     code = await redis.get(_phone_password_reset_otp_key(phone))
     user = await _get_user_by_phone(db, phone)
-    if code is None or not secrets.compare_digest(payload.code, code) or not _can_reset_password_by_phone(user):
+    if code is None or not verify_sms_otp_code(submitted_code=payload.code, stored_code=code) or not _can_reset_password_by_phone(user):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неверный или истёкший код")
 
     reset_token = secrets.token_urlsafe(32)
@@ -612,7 +612,7 @@ async def verify_driver_login(
 
     if saved_code is None or pending_user_id is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Код истек или не запрашивался")
-    if payload.code.strip() != saved_code:
+    if not verify_sms_otp_code(submitted_code=payload.code.strip(), stored_code=saved_code):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неверный код")
 
     result = await db.execute(
@@ -658,7 +658,7 @@ async def verify_driver_register(
 
     if saved_code is None or pending_payload_raw is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Код истек или не запрашивался")
-    if payload.code.strip() != saved_code:
+    if not verify_sms_otp_code(submitted_code=payload.code.strip(), stored_code=saved_code):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неверный код")
 
     try:

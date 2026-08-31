@@ -15,8 +15,8 @@ from app.schemas.client import (
 )
 from app.security.jwt import create_access_token
 from app.services.redis_client import get_redis
-from app.services.sms_service import generate_otp_code, normalize_sms_phone, send_auth_sms_code
-from app.utils.phones import normalize_phone
+from app.services.sms_service import generate_otp_code, normalize_sms_phone, send_auth_sms_code, verify_sms_otp_code
+from app.utils.phones import normalize_otp_phone, normalize_phone
 
 router = APIRouter(prefix="/client")
 logger = logging.getLogger("uvicorn.error")
@@ -40,7 +40,7 @@ def _normalize_phone_number(phone_number: str) -> str:
 
 
 def _code_key(phone_number: str) -> str:
-    return f"otp:client:{phone_number}"
+    return f"otp:client:{normalize_otp_phone(phone_number)}"
 
 
 def _default_client_name(phone_number: str) -> str:
@@ -124,7 +124,7 @@ async def verify_code(
 
     if saved_code is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Код истек или не запрашивался")
-    if code != saved_code:
+    if not verify_sms_otp_code(submitted_code=code, stored_code=saved_code):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неверный код")
 
     client = await db.scalar(select(Client).where(Client.phone == normalized_phone))

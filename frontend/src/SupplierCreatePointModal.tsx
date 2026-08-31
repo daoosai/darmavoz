@@ -3,6 +3,7 @@ import { ImagePlus, Loader2, MapPin, Search, X } from "lucide-react";
 import toast from "react-hot-toast";
 import type { PlacementFields } from "./placement";
 import MapWebGLFallback, { load2GisMapSdk, tryCreate2GisMap } from "./components/MapWebGLFallback";
+import AddressSuggestDropdown from "./components/AddressSuggestDropdown";
 
 import {
   fetch2gisAddressSuggestions,
@@ -186,6 +187,7 @@ export default function SupplierCreatePointModal({
   const [pendingFilePreviews, setPendingFilePreviews] = useState<string[]>([]);
   const [isCompressingFiles, setIsCompressingFiles] = useState(false);
   const addressContainerRef = useRef<HTMLDivElement | null>(null);
+  const addressInputRef = useRef<HTMLInputElement | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
@@ -668,7 +670,7 @@ export default function SupplierCreatePointModal({
   const existingMedia = point?.media_files || [];
 
   return (
-    <div className="fixed inset-0 z-[60] overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-sm md:p-0">
+    <div className="fixed inset-0 z-[99999] overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-sm md:p-0">
       <div className="mb-16 max-h-[calc(100vh-6rem)] w-full overflow-y-auto bg-slate-50 sm:mx-auto sm:my-6 sm:max-w-xl sm:rounded-3xl md:mb-0 md:max-h-[calc(100vh-3rem)]">
         <header className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white/95 px-5 pb-4 pt-[max(env(safe-area-inset-top),2.5rem)] backdrop-blur sm:rounded-t-3xl">
           <div>
@@ -719,11 +721,12 @@ export default function SupplierCreatePointModal({
               />
             </div>
 
-            <div ref={addressContainerRef} className="relative">
+            <div ref={addressContainerRef} className="relative z-30">
               <label className="text-sm font-bold text-slate-900">Адрес</label>
               <div className="relative mt-2">
                 <Search className="absolute left-3 top-3.5 h-5 w-5 text-slate-400" />
                 <input
+                  ref={addressInputRef}
                   value={form.address}
                   onFocus={() => setShowSuggestions(true)}
                   onChange={handleAddressChange}
@@ -731,22 +734,21 @@ export default function SupplierCreatePointModal({
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-3 text-slate-900 outline-none focus:border-sky-500"
                 />
                 {showSuggestions && suggestions.length > 0 ? (
-                  <div className="absolute z-30 mt-2 max-h-56 w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1 shadow-xl">
+                  <AddressSuggestDropdown anchorRef={addressInputRef} isOpen={showSuggestions && suggestions.length > 0}>
                     {suggestions.map((item, index) => (
-                      <button
+                      <li
                         key={`${item.address}-${index}`}
-                        type="button"
                         onMouseDown={(event) => {
                           event.preventDefault();
                           void selectSuggestion(item);
                         }}
-                        className="flex w-full items-start gap-2 rounded-xl px-3 py-3 text-left text-sm text-slate-700 hover:bg-sky-50"
+                        className="flex w-full cursor-pointer items-start gap-2 rounded-xl px-3 py-3 text-left text-sm text-slate-700 hover:bg-sky-50"
                       >
                         <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-sky-500" />
                         {item.label}
-                      </button>
+                      </li>
                     ))}
-                  </div>
+                  </AddressSuggestDropdown>
                 ) : null}
               </div>
               <p className="mt-2 text-xs text-slate-500">

@@ -13,6 +13,7 @@ import MapWebGLFallback, {
   load2GisMapSdk,
   tryCreate2GisMap,
 } from "./MapWebGLFallback";
+import AddressSuggestDropdown from "./AddressSuggestDropdown";
 import { baseURL, extractApiErrorMessage } from "../utils";
 
 interface LocationValue {
@@ -62,6 +63,7 @@ export default function AddressMapPicker({
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [mapUnavailable, setMapUnavailable] = useState(false);
   const addressContainerRef = useRef<HTMLDivElement>(null);
+  const addressInputRef = useRef<HTMLInputElement>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
@@ -241,9 +243,10 @@ export default function AddressMapPicker({
       <label className="block text-sm font-bold text-slate-800" htmlFor={inputId}>
         Адрес {addressRequired ? <span className="text-red-500">*</span> : <span className="font-normal text-slate-400">(необязательно, если указаны координаты)</span>}
       </label>
-      <div ref={addressContainerRef} className="relative">
+      <div ref={addressContainerRef} className="relative z-30">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
         <input
+          ref={addressInputRef}
           id={inputId}
           required={addressRequired && !coordinates}
           value={address}
@@ -254,22 +257,21 @@ export default function AddressMapPicker({
           className="w-full rounded-xl border border-slate-200 py-3 pl-10 pr-3 outline-none focus:border-sky-500"
         />
         {showSuggestions && suggestions.length > 0 ? (
-          <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+          <AddressSuggestDropdown anchorRef={addressInputRef} isOpen={showSuggestions && suggestions.length > 0}>
             {suggestions.map((suggestion, index) => (
-              <button
+              <li
                 key={`${suggestion.address}-${index}`}
-                type="button"
                 onMouseDown={(event) => {
                   event.preventDefault();
                   void selectSuggestion(suggestion);
                 }}
-                className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-sky-50"
+                className="flex w-full cursor-pointer items-start gap-2 px-3 py-2 text-left text-sm hover:bg-sky-50"
               >
                 <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-sky-500" />
                 <span>{suggestion.label}</span>
-              </button>
+              </li>
             ))}
-          </div>
+          </AddressSuggestDropdown>
         ) : null}
       </div>
       <div className="grid grid-cols-2 gap-3">

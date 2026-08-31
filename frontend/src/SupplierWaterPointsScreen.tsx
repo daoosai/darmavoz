@@ -10,6 +10,7 @@ import {
   withTyumenBias,
 } from "./addressSearch";
 import MapWebGLFallback, { load2GisMapSdk, tryCreate2GisMap } from "./components/MapWebGLFallback";
+import AddressSuggestDropdown from "./components/AddressSuggestDropdown";
 import { useAuthStore } from "./store";
 import { baseURL, extractApiErrorMessage, formatPhoneNumber, resolveMediaUrl } from "./utils";
 
@@ -182,6 +183,7 @@ export default function SupplierWaterPointsScreen({
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [isMapUnavailable, setIsMapUnavailable] = useState(false);
   const addressContainerRef = useRef<HTMLDivElement | null>(null);
+  const addressInputRef = useRef<HTMLInputElement | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
@@ -758,10 +760,10 @@ export default function SupplierWaterPointsScreen({
 
         <div className="space-y-2">
           <label className="block text-sm font-bold" htmlFor="water-point-address">Адрес <span className="font-normal text-slate-400">(необязательно, если указаны координаты)</span></label>
-          <div ref={addressContainerRef} className="relative">
+          <div ref={addressContainerRef} className="relative z-30">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-            <input id="water-point-address" required={!parsedCoordinates} value={form.address} onFocus={() => setShowSuggestions(true)} onBlur={() => void handleAddressBlur()} onChange={handleAddressChange} placeholder="Начните вводить адрес" className="w-full rounded-xl border border-slate-200 py-3 pl-10 pr-3" />
-            {showSuggestions && suggestions.length > 0 ? <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg">{suggestions.map((suggestion, index) => <button key={`${suggestion.address}-${index}`} type="button" onMouseDown={(event) => { event.preventDefault(); void selectSuggestion(suggestion); }} className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-sky-500" /><span>{suggestion.label}</span></button>)}</div> : null}
+            <input ref={addressInputRef} id="water-point-address" required={!parsedCoordinates} value={form.address} onFocus={() => setShowSuggestions(true)} onBlur={() => void handleAddressBlur()} onChange={handleAddressChange} placeholder="Начните вводить адрес" className="w-full rounded-xl border border-slate-200 py-3 pl-10 pr-3" />
+            {showSuggestions && suggestions.length > 0 ? <AddressSuggestDropdown anchorRef={addressInputRef} isOpen={showSuggestions && suggestions.length > 0}>{suggestions.map((suggestion, index) => <li key={`${suggestion.address}-${index}`} role="option" onMouseDown={(event) => { event.preventDefault(); void selectSuggestion(suggestion); }} className="flex w-full cursor-pointer items-start gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-sky-500" /><span>{suggestion.label}</span></li>)}</AddressSuggestDropdown> : null}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <label className="block text-sm font-bold">Широта<input type="number" min="-90" max="90" step="any" required={!form.address.trim()} value={form.lat} onChange={(event) => update("lat", event.target.value)} placeholder="Например, 57.152286" className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal" /></label>

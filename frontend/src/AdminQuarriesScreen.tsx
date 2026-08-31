@@ -1476,7 +1476,7 @@ function EditQuarryModal({
             </div>
           </div>
 
-          <div className="flex flex-col gap-1.5 relative">
+          <div className="relative z-30 flex flex-col gap-1.5">
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
               Адрес
             </label>
@@ -1487,7 +1487,7 @@ function EditQuarryModal({
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
             />
             {suggestions.length > 0 && (
-              <ul className="absolute z-[9999] top-full mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-2xl max-h-48 overflow-y-auto">
+              <ul className="absolute z-[100000] top-full mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-2xl max-h-48 overflow-y-auto">
                 {suggestions.map((addr, idx) => (
                   <li
                     key={idx}
@@ -2345,7 +2345,7 @@ function EnhancedEditQuarryModal({
             />
           </div>
 
-          <div ref={addressContainerRef} className="flex flex-col gap-1.5 relative">
+          <div ref={addressContainerRef} className="relative z-30 flex flex-col gap-1.5">
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Адрес</label>
             <div className="relative">
               <input
@@ -2367,7 +2367,7 @@ function EnhancedEditQuarryModal({
               ) : null}
             </div>
             {showSuggestions && suggestions.length > 0 ? (
-              <ul className="absolute z-[9999] top-full mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-2xl max-h-48 overflow-y-auto">
+              <ul className="absolute z-[100000] top-full mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-2xl max-h-48 overflow-y-auto">
                 {suggestions.map((suggestion, index) => (
                   <li
                     key={`${suggestion.label}-${index}`}

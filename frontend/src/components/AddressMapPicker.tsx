@@ -241,7 +241,7 @@ export default function AddressMapPicker({
       <label className="block text-sm font-bold text-slate-800" htmlFor={inputId}>
         Адрес {addressRequired ? <span className="text-red-500">*</span> : <span className="font-normal text-slate-400">(необязательно, если указаны координаты)</span>}
       </label>
-      <div ref={addressContainerRef} className="relative">
+      <div ref={addressContainerRef} className="relative z-30">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
         <input
           id={inputId}
@@ -254,7 +254,7 @@ export default function AddressMapPicker({
           className="w-full rounded-xl border border-slate-200 py-3 pl-10 pr-3 outline-none focus:border-sky-500"
         />
         {showSuggestions && suggestions.length > 0 ? (
-          <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+          <div className="absolute z-[100000] mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
             {suggestions.map((suggestion, index) => (
               <button
                 key={`${suggestion.address}-${index}`}

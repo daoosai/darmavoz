@@ -668,7 +668,7 @@ export default function SupplierCreatePointModal({
   const existingMedia = point?.media_files || [];
 
   return (
-    <div className="fixed inset-0 z-[60] overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-sm md:p-0">
+    <div className="fixed inset-0 z-[99999] overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-sm md:p-0">
       <div className="mb-16 max-h-[calc(100vh-6rem)] w-full overflow-y-auto bg-slate-50 sm:mx-auto sm:my-6 sm:max-w-xl sm:rounded-3xl md:mb-0 md:max-h-[calc(100vh-3rem)]">
         <header className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white/95 px-5 pb-4 pt-[max(env(safe-area-inset-top),2.5rem)] backdrop-blur sm:rounded-t-3xl">
           <div>
@@ -719,7 +719,7 @@ export default function SupplierCreatePointModal({
               />
             </div>
 
-            <div ref={addressContainerRef} className="relative">
+            <div ref={addressContainerRef} className="relative z-30">
               <label className="text-sm font-bold text-slate-900">Адрес</label>
               <div className="relative mt-2">
                 <Search className="absolute left-3 top-3.5 h-5 w-5 text-slate-400" />
@@ -731,7 +731,7 @@ export default function SupplierCreatePointModal({
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-3 text-slate-900 outline-none focus:border-sky-500"
                 />
                 {showSuggestions && suggestions.length > 0 ? (
-                  <div className="absolute z-30 mt-2 max-h-56 w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1 shadow-xl">
+                  <div className="absolute z-[100000] mt-2 max-h-56 w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1 shadow-xl">
                     {suggestions.map((item, index) => (
                       <button
                         key={`${item.address}-${index}`}

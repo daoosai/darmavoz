@@ -695,7 +695,7 @@ export default function SepticProviderProfileScreen({
 
       {showForm ? (
         <div className="fixed inset-0 z-[99999] flex items-end justify-center bg-slate-900/50 sm:items-center sm:p-4" role="dialog" aria-modal="true">
-        <form onSubmit={submit} className="max-h-[100dvh] w-full overflow-y-auto rounded-t-3xl bg-white p-5 pb-[max(env(safe-area-inset-bottom),1.25rem)] pt-[max(env(safe-area-inset-top),1.25rem)] shadow-2xl sm:max-h-[90dvh] sm:max-w-2xl sm:rounded-3xl">
+        <form onSubmit={submit} className="max-h-[90dvh] w-full space-y-4 overflow-y-auto rounded-t-3xl bg-white px-4 py-5 pb-[max(env(safe-area-inset-bottom),1.25rem)] pt-[max(env(safe-area-inset-top),1.25rem)] shadow-2xl sm:max-h-[90dvh] sm:max-w-2xl sm:rounded-3xl sm:p-5">
           <div className="flex items-center justify-between gap-3">
             <h2 className="font-black text-slate-900">{editingProfile ? "Редактирование септика" : "Новый септик"}</h2>
             <button type="button" onClick={closeForm} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800" aria-label="Закрыть форму" title="Закрыть">

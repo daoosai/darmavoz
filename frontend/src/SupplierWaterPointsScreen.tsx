@@ -149,18 +149,6 @@ const readWaterPointDraft = (storageKey: string): typeof EMPTY_FORM | null => {
   }
 };
 
-const hasWaterPointDraftContent = (form: typeof EMPTY_FORM) =>
-  form.water_type !== EMPTY_FORM.water_type ||
-  optionalText(form.name).trim() !== "" ||
-  optionalText(form.source).trim() !== "" ||
-  optionalText(form.address).trim() !== "" ||
-  optionalText(form.lat).trim() !== "" ||
-  optionalText(form.lon).trim() !== "" ||
-  optionalText(form.phone).trim() !== "" ||
-  optionalText(form.price).trim() !== "" ||
-  form.price_unit !== EMPTY_FORM.price_unit ||
-  optionalText(form.description).trim() !== "";
-
 const extractProfilePhone = (profile?: { phone?: unknown; phone_number?: unknown } | null) => {
   for (const value of [profile?.phone, profile?.phone_number]) {
     if (typeof value === "string" && value.trim()) return value.trim();
@@ -228,8 +216,8 @@ export default function SupplierWaterPointsScreen({
     if (savedDraft) {
       hasSavedDraftRef.current = true;
       setForm(savedDraft);
-      setShowForm(hasWaterPointDraftContent(savedDraft));
     }
+    setShowForm(false);
     setIsDraftLoaded(true);
   }, [draftStorageKey]);
 
@@ -767,7 +755,7 @@ export default function SupplierWaterPointsScreen({
       </div>
 
       {showForm ? <div className="fixed inset-0 z-[99999] flex items-end justify-center bg-slate-900/50 sm:items-center sm:p-4" role="dialog" aria-modal="true">
-        <form onSubmit={submit} className="max-h-[100dvh] w-full overflow-y-auto rounded-t-3xl bg-white p-5 pb-[max(env(safe-area-inset-bottom),1.25rem)] pt-[max(env(safe-area-inset-top),1.25rem)] shadow-2xl sm:max-h-[90dvh] sm:max-w-2xl sm:rounded-3xl">
+        <form onSubmit={submit} className="max-h-[90dvh] w-full space-y-4 overflow-y-auto rounded-t-3xl bg-white px-4 py-5 pb-[max(env(safe-area-inset-bottom),1.25rem)] pt-[max(env(safe-area-inset-top),1.25rem)] shadow-2xl sm:max-h-[90dvh] sm:max-w-2xl sm:rounded-3xl sm:p-5">
         <div className="flex items-center justify-between gap-3">
           <h2 className="font-black">{isEditing ? "Редактирование точки воды" : "Новая точка воды"}</h2>
           <button type="button" onClick={closeForm} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800" aria-label="Закрыть форму точки воды" title="Закрыть">
@@ -825,7 +813,7 @@ export default function SupplierWaterPointsScreen({
             </div>
           ) : <div className="mt-4 rounded-xl border border-dashed border-slate-300 px-3 py-5 text-center text-sm text-slate-500">Фото пока не добавлены</div>}
         </section>
-        <button disabled={saving} className="flex w-full items-center justify-center rounded-xl bg-sky-500 py-3 font-bold text-white disabled:opacity-50">{saving ? <Loader2 className="animate-spin" /> : isEditing ? "Сохранить и отправить на модерацию" : "Отправить на модерацию"}</button>
+        <button disabled={saving} className="flex w-full items-center justify-center rounded-xl bg-sky-500 py-3 font-bold text-white disabled:opacity-50">{saving ? <Loader2 className="animate-spin" /> : "Отправить на модерацию"}</button>
         </form>
       </div> : null}
 

@@ -115,6 +115,17 @@ const statusClass = (status?: string | null) => {
 const stringifyCoordinate = (value?: number | null) =>
   typeof value === "number" && Number.isFinite(value) ? String(value) : "";
 
+const optionalText = (value: unknown): string => typeof value === "string" ? value : "";
+
+const normalizeSepticProfile = (profile: SepticProfile): SepticProfile => ({
+  ...profile,
+  phone: optionalText(profile.phone),
+  address: optionalText(profile.address),
+  moderation_comment: optionalText(profile.moderation_comment) || null,
+  primary_image_url: optionalText(profile.primary_image_url) || null,
+  media_files: Array.isArray(profile.media_files) ? profile.media_files : [],
+});
+
 const parseCoordinate = (value: string) => {
   const parsed = Number(value.trim().replace(",", "."));
   return Number.isFinite(parsed) ? parsed : null;
@@ -181,7 +192,7 @@ export default function SepticProviderProfileScreen({
     if (!response.ok) {
       throw new Error(extractApiErrorMessage(data, "Не удалось загрузить объявления септиков"));
     }
-    setProfiles(Array.isArray(data) ? data : []);
+    setProfiles(Array.isArray(data) ? data.map((profile) => normalizeSepticProfile(profile as SepticProfile)) : []);
   };
 
   useEffect(() => {
@@ -342,8 +353,8 @@ export default function SepticProviderProfileScreen({
   const openEditForm = (profile: SepticProfile) => {
     setEditingProfile(profile);
     setForm({
-      phone: formatPhoneNumber(profile.phone),
-      address: profile.address,
+      phone: formatPhoneNumber(optionalText(profile.phone)),
+      address: optionalText(profile.address),
       lat: stringifyCoordinate(profile.lat),
       lon: stringifyCoordinate(profile.lon),
       tank_volume_m3: String(profile.tank_volume_m3 ?? ""),
@@ -353,7 +364,7 @@ export default function SepticProviderProfileScreen({
     setPendingFiles([]);
     setPrimaryPendingPhotoIndex(0);
     setIsMapUnavailable(false);
-    lastGeocodedAddressRef.current = profile.address.trim().toLowerCase();
+    lastGeocodedAddressRef.current = optionalText(profile.address).trim().toLowerCase();
     setShowForm(true);
   };
 
@@ -538,7 +549,7 @@ export default function SepticProviderProfileScreen({
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const address = form.address.trim();
+    const address = optionalText(form.address).trim();
     const phone = normalizePhoneForApi(form.phone);
     let lat = parseCoordinate(form.lat);
     let lon = parseCoordinate(form.lon);
@@ -600,7 +611,14 @@ export default function SepticProviderProfileScreen({
       );
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось сохранить объявление"));
-      savedProfile = data as SepticProfile;
+      const normalizedProfile = normalizeSepticProfile(data as SepticProfile);
+      savedProfile = normalizedProfile;
+      setProfiles((current) => {
+        const withoutSavedProfile = current.filter((profile) => profile.id !== normalizedProfile.id);
+        return profileBeingEdited
+          ? current.map((profile) => profile.id === normalizedProfile.id ? normalizedProfile : profile)
+          : [normalizedProfile, ...withoutSavedProfile];
+      });
 
       const uploadedMedia: SepticMedia[] = [];
       for (const [index, file] of pendingFiles.entries()) {

@@ -98,6 +98,19 @@ const formatWaterPointPhone = (value?: string | null) => {
   return formatPhoneNumber(value);
 };
 
+const optionalText = (value: unknown): string => typeof value === "string" ? value : "";
+
+const normalizeWaterPoint = (point: WaterPoint): WaterPoint => ({
+  ...point,
+  name: optionalText(point.name) || null,
+  source: optionalText(point.source),
+  address: optionalText(point.address) || null,
+  phone: optionalText(point.phone) || null,
+  price_unit: optionalText(point.price_unit) || null,
+  description: optionalText(point.description) || null,
+  moderation_comment: optionalText(point.moderation_comment) || null,
+});
+
 const normalizePhoneForApi = (value: string) => {
   let digits = value.replace(/\D/g, "");
   if (!digits) return "";
@@ -138,15 +151,15 @@ const readWaterPointDraft = (storageKey: string): typeof EMPTY_FORM | null => {
 
 const hasWaterPointDraftContent = (form: typeof EMPTY_FORM) =>
   form.water_type !== EMPTY_FORM.water_type ||
-  form.name.trim() !== "" ||
-  form.source.trim() !== "" ||
-  form.address.trim() !== "" ||
-  form.lat.trim() !== "" ||
-  form.lon.trim() !== "" ||
-  form.phone.trim() !== "" ||
-  form.price.trim() !== "" ||
+  optionalText(form.name).trim() !== "" ||
+  optionalText(form.source).trim() !== "" ||
+  optionalText(form.address).trim() !== "" ||
+  optionalText(form.lat).trim() !== "" ||
+  optionalText(form.lon).trim() !== "" ||
+  optionalText(form.phone).trim() !== "" ||
+  optionalText(form.price).trim() !== "" ||
   form.price_unit !== EMPTY_FORM.price_unit ||
-  form.description.trim() !== "";
+  optionalText(form.description).trim() !== "";
 
 const extractProfilePhone = (profile?: { phone?: unknown; phone_number?: unknown } | null) => {
   for (const value of [profile?.phone, profile?.phone_number]) {
@@ -201,7 +214,7 @@ export default function SupplierWaterPointsScreen({
     });
     const data = await response.json().catch(() => []);
     if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось загрузить точки воды"));
-    setPoints(Array.isArray(data) ? data : []);
+    setPoints(Array.isArray(data) ? data.map((point) => normalizeWaterPoint(point as WaterPoint)) : []);
   };
 
   useEffect(() => {
@@ -258,7 +271,7 @@ export default function SupplierWaterPointsScreen({
         const formattedPhone = formatWaterPointPhone(phone);
         setProfilePhone(formattedPhone);
         if (formattedPhone && !hasSavedDraftRef.current && !phoneWasEditedRef.current) {
-          setForm((current) => (current.phone.trim() ? current : { ...current, phone: formattedPhone }));
+          setForm((current) => (optionalText(current.phone).trim() ? current : { ...current, phone: formattedPhone }));
         }
         setCurrentUser({
           id: currentUser?.id || apiPrefix,
@@ -404,15 +417,15 @@ export default function SupplierWaterPointsScreen({
     setEditingPoint(point);
     setForm({
       water_type: point.water_type === "paid" ? "paid" : "free",
-      name: point.name || "",
-      source: point.source,
-      address: point.address,
+      name: optionalText(point.name),
+      source: optionalText(point.source),
+      address: optionalText(point.address),
       lat: stringifyCoordinate(point.lat),
       lon: stringifyCoordinate(point.lon),
       phone: formatWaterPointPhone(point.phone),
       price: point.price === null || point.price === undefined ? "" : String(point.price),
       price_unit: point.price_unit || EMPTY_FORM.price_unit,
-      description: point.description || "",
+      description: optionalText(point.description),
     });
     lastGeocodedAddressRef.current = point.address?.trim().toLowerCase() || "";
     setPendingFiles([]);
@@ -508,7 +521,7 @@ export default function SupplierWaterPointsScreen({
   };
 
   const handleAddressBlur = async () => {
-    const address = form.address.trim();
+    const address = optionalText(form.address).trim();
     if (!address || parsedCoordinates) return;
     const coordinates = await getCoordsFromBackend(address);
     if (!coordinates) return;
@@ -593,7 +606,7 @@ export default function SupplierWaterPointsScreen({
     event.preventDefault();
     const pointBeingEdited = editingPoint;
     const isPaid = form.water_type === "paid";
-    const address = form.address.trim();
+    const address = optionalText(form.address).trim();
     const phone = normalizePhoneForApi(form.phone);
     let lat = parseCoordinate(form.lat);
     let lon = parseCoordinate(form.lon);
@@ -630,7 +643,7 @@ export default function SupplierWaterPointsScreen({
       toast.error("Укажите корректные широту и долготу точки воды.");
       return;
     }
-    if (isPaid && (!phone || !form.price || !form.price_unit.trim())) {
+    if (isPaid && (!phone || !form.price || !optionalText(form.price_unit).trim())) {
       toast.error("Для платной воды заполните телефон, цену и единицу измерения.");
       return;
     }
@@ -640,15 +653,15 @@ export default function SupplierWaterPointsScreen({
     try {
       const payload = {
         water_type: form.water_type,
-        name: form.name.trim() || null,
-        source: form.source.trim(),
+        name: optionalText(form.name).trim() || null,
+        source: optionalText(form.source).trim(),
         address: address || null,
         lat,
         lon,
         phone: phone || null,
         price: isPaid ? Number(form.price) : null,
-        price_unit: isPaid ? form.price_unit.trim() : null,
-        description: isPaid ? form.description.trim() || null : null,
+        price_unit: isPaid ? optionalText(form.price_unit).trim() : null,
+        description: isPaid ? optionalText(form.description).trim() || null : null,
       };
       const response = await fetch(
         pointBeingEdited
@@ -662,7 +675,14 @@ export default function SupplierWaterPointsScreen({
       );
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось сохранить точку воды"));
-      createdPoint = data as WaterPoint;
+      const savedPoint = normalizeWaterPoint(data as WaterPoint);
+      createdPoint = savedPoint;
+      setPoints((current) => {
+        const withoutSavedPoint = current.filter((point) => point.id !== savedPoint.id);
+        return pointBeingEdited
+          ? current.map((point) => point.id === savedPoint.id ? savedPoint : point)
+          : [savedPoint, ...withoutSavedPoint];
+      });
 
       for (const [index, file] of pendingFiles.entries()) {
         await uploadWaterPointPhoto(createdPoint.id, file, index === primaryPhotoIndex, index);
@@ -766,8 +786,8 @@ export default function SupplierWaterPointsScreen({
             {showSuggestions && suggestions.length > 0 ? <AddressSuggestDropdown anchorRef={addressInputRef} isOpen={showSuggestions && suggestions.length > 0}>{suggestions.map((suggestion, index) => <li key={`${suggestion.address}-${index}`} role="option" onMouseDown={(event) => { event.preventDefault(); void selectSuggestion(suggestion); }} className="flex w-full cursor-pointer items-start gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-sky-500" /><span>{suggestion.label}</span></li>)}</AddressSuggestDropdown> : null}
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <label className="block text-sm font-bold">Широта<input type="number" min="-90" max="90" step="any" required={!form.address.trim()} value={form.lat} onChange={(event) => update("lat", event.target.value)} placeholder="Например, 57.152286" className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal" /></label>
-            <label className="block text-sm font-bold">Долгота<input type="number" min="-180" max="180" step="any" required={!form.address.trim()} value={form.lon} onChange={(event) => update("lon", event.target.value)} placeholder="Например, 65.534328" className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal" /></label>
+            <label className="block text-sm font-bold">Широта<input type="number" min="-90" max="90" step="any" required={!optionalText(form.address).trim()} value={form.lat} onChange={(event) => update("lat", event.target.value)} placeholder="Например, 57.152286" className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal" /></label>
+            <label className="block text-sm font-bold">Долгота<input type="number" min="-180" max="180" step="any" required={!optionalText(form.address).trim()} value={form.lon} onChange={(event) => update("lon", event.target.value)} placeholder="Например, 65.534328" className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal" /></label>
           </div>
           <div className="overflow-hidden rounded-xl border border-slate-200">
             {isMapUnavailable ? <MapWebGLFallback className="h-52" /> : <div ref={mapContainerRef} className="h-52 w-full" />}

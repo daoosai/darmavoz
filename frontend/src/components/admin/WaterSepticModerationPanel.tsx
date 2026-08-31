@@ -110,6 +110,23 @@ const statusLabel: Record<string, string> = {
 
 const normalizeStatus = (status?: string | null) => status?.toLowerCase() || "";
 
+const optionalText = (value: unknown): string => typeof value === "string" ? value : "";
+
+const normalizeWaterPoint = (point: WaterPoint): WaterPoint => ({
+  ...point,
+  name: optionalText(point.name) || null,
+  source: optionalText(point.source),
+  address: optionalText(point.address) || null,
+  phone: optionalText(point.phone) || null,
+  description: optionalText(point.description) || null,
+  moderation_comment: optionalText(point.moderation_comment) || null,
+  owner_user_id: optionalText(point.owner_user_id) || null,
+  crm_comment: optionalText(point.crm_comment) || null,
+  parsed_data: point.parsed_data && typeof point.parsed_data === "object" && !Array.isArray(point.parsed_data)
+    ? point.parsed_data
+    : null,
+});
+
 const statusClass = (status?: string | null) => {
   switch (normalizeStatus(status)) {
     case "approved":
@@ -126,16 +143,16 @@ const statusClass = (status?: string | null) => {
 
 const createWaterEditForm = (point: WaterPoint) => ({
   water_type: point.water_type === "paid" ? "paid" : "free",
-  name: point.name || "",
-  source: point.source || "",
-  address: point.address || "",
+  name: optionalText(point.name),
+  source: optionalText(point.source),
+  address: optionalText(point.address),
   lat: String(point.lat ?? ""),
   lon: String(point.lon ?? ""),
   phone: formatPhoneNumber(point.phone || ""),
   price: point.price == null ? "" : String(point.price),
   is_free: Boolean(point.is_free),
   price_unit: point.price_unit || "литр",
-  description: point.description || "",
+  description: optionalText(point.description),
 });
 
 const createSepticEditForm = (profile: SepticProfile) => ({
@@ -207,7 +224,9 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
         );
       }
 
-      const nextWaterPoints = Array.isArray(waterData) ? waterData : [];
+      const nextWaterPoints = Array.isArray(waterData)
+        ? waterData.map((point) => normalizeWaterPoint(point as WaterPoint))
+        : [];
       const nextSepticProfiles = Array.isArray(septicData) ? septicData : [];
       setWaterPoints(nextWaterPoints);
       setSepticProfiles(nextSepticProfiles);
@@ -530,16 +549,16 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
       const payload = isWater
         ? {
             water_type: waterEditForm.water_type,
-            name: waterEditForm.name.trim() || null,
-            source: waterEditForm.source.trim(),
-            address: waterEditForm.address.trim() || null,
+            name: optionalText(waterEditForm.name).trim() || null,
+            source: optionalText(waterEditForm.source).trim(),
+            address: optionalText(waterEditForm.address).trim() || null,
             lat: Number(waterEditForm.lat),
             lon: Number(waterEditForm.lon),
             phone: normalizePhoneForApi(waterEditForm.phone) || null,
             price: waterEditForm.water_type === "paid" ? (waterEditForm.is_free ? 0 : Number(waterEditForm.price)) : null,
             is_free: waterEditForm.is_free,
             price_unit: waterEditForm.water_type === "paid" && !waterEditForm.is_free ? waterEditForm.price_unit.trim() : null,
-            description: waterEditForm.description.trim() || null,
+            description: optionalText(waterEditForm.description).trim() || null,
           }
         : {
             phone: normalizePhoneForApi(septicEditForm.phone),
@@ -556,6 +575,15 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось сохранить изменения"));
+      if (isWater && data && typeof data.id === "string") {
+        const savedPoint = normalizeWaterPoint(data as WaterPoint);
+        setWaterPoints((current) => {
+          const withoutSavedPoint = current.filter((point) => point.id !== savedPoint.id);
+          return isCreating
+            ? [savedPoint, ...withoutSavedPoint]
+            : current.map((point) => point.id === savedPoint.id ? savedPoint : point);
+        });
+      }
       if (!isCreating && isWater && editTarget?.data.id) {
         await savePointCrm({
           token,

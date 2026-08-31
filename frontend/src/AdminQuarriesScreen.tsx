@@ -753,7 +753,7 @@ export default function AdminQuarriesScreen({
       )}
 
       {rejectPointId ? (
-        <div className="fixed inset-0 z-50 bg-black/50">
+        <div className="fixed inset-0 z-[99999] bg-black/50">
           <div className="flex min-h-full items-center justify-center p-4">
             <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl">
               <h3 className="text-xl font-black text-slate-900">Укажите причину отклонения</h3>
@@ -1384,7 +1384,7 @@ function EditQuarryModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
       <div className="mb-16 flex max-h-[calc(100vh-6rem)] w-full max-w-xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl md:mb-0 md:max-h-[90vh]">
         <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
           <h3 className="text-xl font-bold text-slate-800">
@@ -2251,7 +2251,7 @@ function EnhancedEditQuarryModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
       <div className="mb-16 flex max-h-[calc(100vh-6rem)] w-full max-w-xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl md:mb-0 md:max-h-[90vh]">
         <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
           <h3 className="text-xl font-bold text-slate-800">

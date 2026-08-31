@@ -846,7 +846,7 @@ export default function AdminEquipmentScreen({
       )}
 
       {showListingForm && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4">
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-900/50 p-4">
           <form
             onSubmit={saveListing}
             className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 pb-[max(env(safe-area-inset-bottom,16px),2rem)]"

@@ -19,6 +19,17 @@ def normalize_phone(phone: str) -> str:
     return f"+{digits}"
 
 
+def normalize_otp_phone(phone: str) -> str:
+    digits = re.sub(r"\D", "", phone)
+    if len(digits) == 10 and digits.startswith("9"):
+        return f"7{digits}"
+    if len(digits) == 11 and digits.startswith("8"):
+        return f"7{digits[1:]}"
+    if len(digits) == 11 and digits.startswith("7"):
+        return digits
+    raise ValueError("Phone number must be in Russian 7XXXXXXXXXX format")
+
+
 def normalize_phone_like_username(username: str) -> str:
     value = username.strip()
     if not value or not _PHONE_CHARS_RE.match(value):

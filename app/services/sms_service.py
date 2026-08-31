@@ -6,6 +6,7 @@ import httpx
 from fastapi import HTTPException, status
 
 from app.core.config import settings
+from app.utils.phones import normalize_otp_phone
 
 logger = logging.getLogger("uvicorn.error")
 SANDBOX_OTP_CODE = "0000"
@@ -15,7 +16,14 @@ SMS_DELIVERY_ERROR_DETAIL = "Не удалось отправить SMS-код. 
 
 
 def generate_otp_code() -> str:
-    return f"{secrets.randbelow(10000):04d}"
+    minimum_code = 1 if settings.USE_REAL_SMS else 0
+    return f"{secrets.randbelow(10000 - minimum_code) + minimum_code:04d}"
+
+
+def verify_sms_otp_code(*, submitted_code: str, stored_code: str) -> bool:
+    if settings.USE_REAL_SMS and submitted_code == SANDBOX_OTP_CODE:
+        return False
+    return secrets.compare_digest(submitted_code, stored_code)
 
 
 def raise_sms_delivery_error() -> NoReturn:
@@ -26,17 +34,13 @@ def raise_sms_delivery_error() -> NoReturn:
 
 
 def normalize_sms_phone(phone_number: str) -> str:
-    digits = "".join(ch for ch in phone_number if ch.isdigit())
-    if len(digits) == 10 and digits.startswith("9"):
-        return "7" + digits
-    if len(digits) == 11 and digits.startswith("8"):
-        return "7" + digits[1:]
-    if len(digits) == 11 and digits.startswith("7"):
-        return digits
-    raise HTTPException(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        detail="Некорректный номер телефона",
-    )
+    try:
+        return normalize_otp_phone(phone_number)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Некорректный номер телефона",
+        ) from exc
 
 
 def mask_sms_phone(phone_number: str) -> str:

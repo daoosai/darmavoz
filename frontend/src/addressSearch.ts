@@ -5,7 +5,11 @@ const TWOGIS_SUGGEST_URL = "https://catalog.api.2gis.com/3.0/suggests";
 const TWOGIS_ADDRESS_SUGGEST_TYPES = [
   "building",
   "street",
+  "adm_div.city",
   "adm_div.settlement",
+  "adm_div.district",
+  "adm_div.division",
+  "adm_div.living_area",
   "adm_div.place",
 ].join(",");
 
@@ -125,7 +129,6 @@ export const fetch2gisAddressSuggestions = async (
   const requestUrl = new URL(TWOGIS_SUGGEST_URL);
   requestUrl.search = new URLSearchParams({
     q: normalized,
-    suggest_type: "address",
     key: DGIS_KEY,
     type: TWOGIS_ADDRESS_SUGGEST_TYPES,
     fields: "items.point,items.address,items.adm_div,items.full_address_name",

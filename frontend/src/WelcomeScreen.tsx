@@ -6,7 +6,7 @@ export default function WelcomeScreen({
   onSelectEmployee: () => void;
 }) {
   return (
-    <div className="relative flex min-h-screen flex-col items-center overflow-y-auto bg-slate-50 px-6 text-center">
+    <div className="relative flex min-h-[100dvh] flex-col items-center overflow-y-auto bg-slate-50 px-6 text-center">
       <div className="flex w-full flex-1 flex-col items-center justify-center py-8">
         <h1 className="mb-16 text-4xl font-black tracking-tight text-[#2DB0E6]">
           Дармавоз
@@ -29,7 +29,7 @@ export default function WelcomeScreen({
         </div>
       </div>
 
-      <footer className="mb-4 mt-4 flex flex-col items-center gap-3 text-gray-400">
+      <footer className="mt-4 flex flex-col items-center gap-3 pb-[max(env(safe-area-inset-bottom),1.5rem)] text-gray-400">
         <p className="text-base text-gray-500">
           Служба поддержки{" "}
           <a href="tel:+73452900900" className="font-bold text-gray-700">

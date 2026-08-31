@@ -694,7 +694,8 @@ export default function SepticProviderProfileScreen({
       </header>
 
       {showForm ? (
-        <form onSubmit={submit} className="space-y-4 rounded-3xl bg-white p-4 shadow-sm">
+        <div className="fixed inset-0 z-[99999] flex items-end justify-center bg-slate-900/50 sm:items-center sm:p-4" role="dialog" aria-modal="true">
+        <form onSubmit={submit} className="max-h-[100dvh] w-full overflow-y-auto rounded-t-3xl bg-white p-5 pb-[max(env(safe-area-inset-bottom),1.25rem)] pt-[max(env(safe-area-inset-top),1.25rem)] shadow-2xl sm:max-h-[90dvh] sm:max-w-2xl sm:rounded-3xl">
           <div className="flex items-center justify-between gap-3">
             <h2 className="font-black text-slate-900">{editingProfile ? "Редактирование септика" : "Новый септик"}</h2>
             <button type="button" onClick={closeForm} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800" aria-label="Закрыть форму" title="Закрыть">
@@ -780,7 +781,10 @@ export default function SepticProviderProfileScreen({
             {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : editingProfile ? "Сохранить и отправить на модерацию" : "Отправить на модерацию"}
           </button>
         </form>
-      ) : profiles.length === 0 ? (
+        </div>
+      ) : null}
+
+      {profiles.length === 0 ? (
         <div className="rounded-3xl bg-white px-5 py-10 text-center shadow-sm"><Droplets className="mx-auto h-10 w-10 text-sky-400" /><h2 className="mt-3 font-black text-slate-900">Объявлений пока нет</h2><p className="mt-1 text-sm text-slate-500">Добавьте машину для услуг по откачке септиков.</p><button type="button" onClick={openCreateForm} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-sky-500 px-4 py-3 font-bold text-white"><Plus className="h-4 w-4" />Добавить септик</button></div>
       ) : (
         profiles.map((profile) => {

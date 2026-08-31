@@ -766,7 +766,8 @@ export default function SupplierWaterPointsScreen({
         <button type="button" onClick={openCreateForm} className="rounded-xl bg-sky-500 p-3 text-white" aria-label="Добавить точку воды"><Plus /></button>
       </div>
 
-      {showForm ? <form onSubmit={submit} className="space-y-4 rounded-3xl bg-white p-4 shadow-sm">
+      {showForm ? <div className="fixed inset-0 z-[99999] flex items-end justify-center bg-slate-900/50 sm:items-center sm:p-4" role="dialog" aria-modal="true">
+        <form onSubmit={submit} className="max-h-[100dvh] w-full overflow-y-auto rounded-t-3xl bg-white p-5 pb-[max(env(safe-area-inset-bottom),1.25rem)] pt-[max(env(safe-area-inset-top),1.25rem)] shadow-2xl sm:max-h-[90dvh] sm:max-w-2xl sm:rounded-3xl">
         <div className="flex items-center justify-between gap-3">
           <h2 className="font-black">{isEditing ? "Редактирование точки воды" : "Новая точка воды"}</h2>
           <button type="button" onClick={closeForm} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800" aria-label="Закрыть форму точки воды" title="Закрыть">
@@ -825,7 +826,8 @@ export default function SupplierWaterPointsScreen({
           ) : <div className="mt-4 rounded-xl border border-dashed border-slate-300 px-3 py-5 text-center text-sm text-slate-500">Фото пока не добавлены</div>}
         </section>
         <button disabled={saving} className="flex w-full items-center justify-center rounded-xl bg-sky-500 py-3 font-bold text-white disabled:opacity-50">{saving ? <Loader2 className="animate-spin" /> : isEditing ? "Сохранить и отправить на модерацию" : "Отправить на модерацию"}</button>
-      </form> : null}
+        </form>
+      </div> : null}
 
       {points.map((point) => {
         const moderationStatus = normalizeModerationStatus(point.moderation_status);

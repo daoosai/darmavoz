@@ -61,9 +61,9 @@ class Settings(BaseSettings):
     EXPIRATION_NOTIFICATION_BATCH_SIZE: int = 200
     DRIVER_TEST_USERNAME: str = "driver1"
     DRIVER_TEST_PASSWORD: str = "driver123"
-    ANDROID_VERSION: str = "2.9.0"
-    IOS_VERSION: str = "2.9.0"
-    WEB_VERSION: str = "2.9.0"
+    ANDROID_VERSION: str = "3.0.0"
+    IOS_VERSION: str = "3.0.0"
+    WEB_VERSION: str = "3.0.0"
     APK_DOWNLOAD_URL: str = "/static/darmavoz-test.apk"
     APK_FORCE_UPDATE: bool = False
     SMTP_HOST: str | None = None

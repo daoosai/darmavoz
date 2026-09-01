@@ -38,16 +38,7 @@ export default function LoginScreen({
   const [isPasswordResetOpen, setIsPasswordResetOpen] = useState(false);
 
   const handleLoginChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const value = event.target.value;
-    if (/^[\d+()\-\s]*$/.test(value) && value !== "") {
-      if (value === "+") {
-        setUsername("+");
-        return;
-      }
-      setUsername(formatPhoneNumber(value));
-      return;
-    }
-    setUsername(value);
+    setUsername(event.target.value);
   };
 
   const submitLogin = async () => {

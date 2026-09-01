@@ -8,7 +8,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import selectinload
 
 from app.db.database import get_db
@@ -576,10 +576,16 @@ async def login(
 ):
     identifier = form_data.username.strip()
     is_email_login = "@" in identifier
-    normalized_username = identifier.lower() if is_email_login else normalize_phone_like_username(identifier)
+    normalized_email = identifier.lower()
+    normalized_phone = normalize_phone_like_username(identifier)
     query = (
         select(User)
-        .where(func.lower(User.email) == normalized_username if is_email_login else User.username == normalized_username)
+        .where(
+            or_(
+                func.lower(User.email) == normalized_email,
+                User.username == normalized_phone,
+            )
+        )
         .options(selectinload(User.role), selectinload(User.driver_profile))
     )
     result = await db.execute(query)
@@ -607,7 +613,7 @@ async def login(
             background_tasks.add_task(send_auth_email_code, to_email=user.email.lower(), code=code)
             return EmailSendCodeResponse(email=user.email.lower())
         return await _issue_driver_login_code(
-            normalized_phone=normalized_username,
+            normalized_phone=normalized_phone,
             user_id=str(user.id),
         )
 

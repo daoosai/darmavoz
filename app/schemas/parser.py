@@ -54,6 +54,7 @@ class ParserRunRequest(BaseModel):
 
 class ParserRunResult(BaseModel):
     found: int = 0
+    total_found: int = 0
     created: int = 0
     updated: int = 0
     skipped: int = 0

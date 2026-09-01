@@ -7,7 +7,7 @@ from app.models.models import CrmStatus, PointAuditLog, Quarry, Role, User
 from app.security.jwt import create_access_token
 from app.services.pickup_points import is_pickup_point_publicly_available
 from app.schemas.parser import ParserRunRequest
-from app.services.twogis_places import ParsedPlace, _fetch_page, search_places
+from app.services.twogis_places import ParsedPlace, _fetch_page, _normalize_place, search_places
 
 
 def auth_headers(username: str) -> dict[str, str]:
@@ -102,6 +102,112 @@ async def test_places_search_uses_ten_item_pages_until_result_limit(monkeypatch)
     assert requested_pages == [1, 2, 3]
     assert len(places) == 30
     assert truncated is False
+
+
+@pytest.mark.asyncio
+async def test_places_search_stops_after_five_pages(monkeypatch):
+    requested_pages: list[int] = []
+
+    class MockAsyncClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def get(self, _url, *, params):
+            page = int(params["page"])
+            requested_pages.append(page)
+            offset = (page - 1) * 10
+            return httpx.Response(
+                200,
+                json={
+                    "result": {
+                        "total": 100,
+                        "items": [
+                            {
+                                "id": f"2gis-{index}",
+                                "name": f"Place {index}",
+                                "full_address_name": f"Tyumen, Test road, {index}",
+                                "point": {"lat": 57.15, "lon": 65.53},
+                            }
+                            for index in range(offset, offset + 10)
+                        ],
+                    }
+                },
+            )
+
+    monkeypatch.setattr("app.services.twogis_places.httpx.AsyncClient", lambda **_kwargs: MockAsyncClient())
+    monkeypatch.setattr("app.services.twogis_places.settings.TWOGIS_API_KEY", "test-key")
+    monkeypatch.setattr("app.services.twogis_places.settings.TWOGIS_PLACES_MAX_RESULTS", 1000)
+
+    places, truncated = await search_places(
+        ParserRunRequest(city="Tyumen", center_lat=57.15, center_lon=65.53, radius_m=1000, target="material", keyword="sand")
+    )
+
+    assert requested_pages == [1, 2, 3, 4, 5]
+    assert len(places) == 50
+    assert truncated is True
+
+
+@pytest.mark.asyncio
+async def test_places_search_returns_collected_items_when_next_page_is_unavailable(monkeypatch):
+    requested_pages: list[int] = []
+
+    class MockAsyncClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def get(self, _url, *, params):
+            page = int(params["page"])
+            requested_pages.append(page)
+            if page == 2:
+                return httpx.Response(400, json={"detail": "page is out of range"})
+            return httpx.Response(
+                200,
+                json={
+                    "result": {
+                        "total": 20,
+                        "items": [
+                            {
+                                "id": f"2gis-{index}",
+                                "name": f"Place {index}",
+                                "full_address_name": f"Tyumen, Test road, {index}",
+                                "point": {"lat": 57.15, "lon": 65.53},
+                            }
+                            for index in range(10)
+                        ],
+                    }
+                },
+            )
+
+    monkeypatch.setattr("app.services.twogis_places.httpx.AsyncClient", lambda **_kwargs: MockAsyncClient())
+    monkeypatch.setattr("app.services.twogis_places.settings.TWOGIS_API_KEY", "test-key")
+
+    places, truncated = await search_places(
+        ParserRunRequest(city="Tyumen", center_lat=57.15, center_lon=65.53, radius_m=1000, target="material", keyword="sand")
+    )
+
+    assert requested_pages == [1, 2]
+    assert len(places) == 10
+    assert truncated is False
+
+
+def test_places_search_filters_blacklisted_rubrics():
+    place = _normalize_place(
+        {
+            "id": "2gis-university",
+            "name": "Business career institute",
+            "full_address_name": "Tyumen, Test road, 1",
+            "point": {"lat": 57.15, "lon": 65.53},
+            "rubrics": [{"name": "Институт образования"}],
+        }
+    )
+
+    assert place is None
 
 
 async def ensure_role(session, name: str) -> Role:

@@ -18,6 +18,21 @@ from app.schemas.parser import MATERIAL_KEYWORDS, ParserRunRequest, ParserRunRes
 
 logger = logging.getLogger(__name__)
 PHONE_PATTERN = re.compile(r"\+?[\d][\d\s()\-]{4,}[\d]")
+MAX_PLACES_PAGES = 5
+RUBRIC_BLACKLIST = (
+    "институт",
+    "вуз",
+    "школа",
+    "образование",
+    "кадров",
+    "агентство",
+    "персонал",
+    "карьерный",
+    "детск",
+    "сад",
+    "курсы",
+    "обучение",
+)
 PLACES_FIELDS = ",".join(
     (
         "items.point",
@@ -76,8 +91,23 @@ def _extract_contacts(item: dict[str, Any]) -> tuple[list[str], list[str]]:
     return list(dict.fromkeys(phones)), list(dict.fromkeys(websites))
 
 
+def _has_blacklisted_rubric(item: dict[str, Any]) -> bool:
+    rubrics = item.get("rubrics")
+    if not isinstance(rubrics, list):
+        return False
+    for rubric in rubrics:
+        if not isinstance(rubric, dict):
+            continue
+        name = rubric.get("name")
+        if isinstance(name, str) and any(word in name.casefold() for word in RUBRIC_BLACKLIST):
+            return True
+    return False
+
+
 def _normalize_place(item: object) -> ParsedPlace | None:
     if not isinstance(item, dict):
+        return None
+    if _has_blacklisted_rubric(item):
         return None
     item_id = item.get("id")
     name = item.get("name")
@@ -228,6 +258,7 @@ async def search_places(payload: ParserRunRequest) -> tuple[list[ParsedPlace], b
     total: int | None = None
     # The 2GIS Places API accepts at most 10 items per page.
     page_size = min(10, settings.TWOGIS_PLACES_MAX_RESULTS)
+    max_results = min(settings.TWOGIS_PLACES_MAX_RESULTS, page_size * MAX_PLACES_PAGES)
     base_params = {
         "key": settings.TWOGIS_API_KEY,
         "q": f"{payload.keyword}, {payload.city}",
@@ -240,8 +271,19 @@ async def search_places(payload: ParserRunRequest) -> tuple[list[ParsedPlace], b
     }
 
     async with httpx.AsyncClient(timeout=settings.TWOGIS_PLACES_TIMEOUT_SECONDS) as client:
-        while len(collected) < settings.TWOGIS_PLACES_MAX_RESULTS:
-            response_payload = await _fetch_page(client, {**base_params, "page": page})
+        while len(collected) < max_results:
+            if page > MAX_PLACES_PAGES:
+                break
+            try:
+                response_payload = await _fetch_page(client, {**base_params, "page": page})
+            except HTTPException as exc:
+                if exc.status_code in {
+                    status.HTTP_400_BAD_REQUEST,
+                    status.HTTP_404_NOT_FOUND,
+                }:
+                    logger.info("twogis_places_pagination_complete", extra={"page": page, "status_code": exc.status_code})
+                    break
+                raise
             result = response_payload.get("result")
             if not isinstance(result, dict):
                 break
@@ -256,8 +298,8 @@ async def search_places(payload: ParserRunRequest) -> tuple[list[ParsedPlace], b
             page += 1
 
     unique_places = list({place.twogis_id: place for place in collected}.values())
-    truncated = bool(total is not None and total > len(unique_places) and len(unique_places) >= settings.TWOGIS_PLACES_MAX_RESULTS)
-    return unique_places[: settings.TWOGIS_PLACES_MAX_RESULTS], truncated
+    truncated = bool(total is not None and total > len(unique_places) and len(unique_places) >= max_results)
+    return unique_places[:max_results], truncated
 
 
 async def upsert_places(
@@ -268,7 +310,7 @@ async def upsert_places(
     admin_id,
     truncated: bool,
 ) -> ParserRunResult:
-    result = ParserRunResult(found=len(places), truncated=truncated)
+    result = ParserRunResult(found=len(places), total_found=len(places), truncated=truncated)
     destination_model = Quarry if payload.target == "material" else WaterPoint
     other_model = WaterPoint if payload.target == "material" else Quarry
     point_kind = "quarry" if payload.target == "material" else "water"
@@ -329,5 +371,5 @@ async def upsert_places(
         )
         result.created += 1
 
-    result.skipped = result.found - result.created - result.updated - result.cross_target_conflicts
+    result.skipped = result.found - result.created - result.updated
     return result

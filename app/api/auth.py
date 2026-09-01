@@ -552,15 +552,18 @@ async def driver_register(
     return DriverSmsChallengeResponse(status="sms_sent", phone=normalized_phone)
 
 
-@router.post("/login", response_model=Token | DriverSmsChallengeResponse)
+@router.post("/login", response_model=Token | DriverSmsChallengeResponse | EmailSendCodeResponse)
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
+    background_tasks: BackgroundTasks = None,
     db: AsyncSession = Depends(get_db),
 ):
-    normalized_username = normalize_phone_like_username(form_data.username)
+    identifier = form_data.username.strip()
+    is_email_login = "@" in identifier
+    normalized_username = identifier.lower() if is_email_login else normalize_phone_like_username(identifier)
     query = (
         select(User)
-        .where(User.username == normalized_username)
+        .where(func.lower(User.email) == normalized_username if is_email_login else User.username == normalized_username)
         .options(selectinload(User.role), selectinload(User.driver_profile))
     )
     result = await db.execute(query)
@@ -580,6 +583,13 @@ async def login(
 
     role_name = user.role.name if user.role else None
     if role_name == "driver":
+        if is_email_login:
+            if not user.email:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email водителя не настроен")
+            code = generate_otp_code()
+            await get_redis().setex(_email_auth_code_key("user", user.email.lower()), EMAIL_AUTH_CODE_TTL_SECONDS, code)
+            background_tasks.add_task(send_auth_email_code, to_email=user.email.lower(), code=code)
+            return EmailSendCodeResponse(email=user.email.lower())
         return await _issue_driver_login_code(
             normalized_phone=normalized_username,
             user_id=str(user.id),

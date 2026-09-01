@@ -33,6 +33,7 @@ export default function LoginScreen({
   const [isLoading, setIsLoading] = useState(false);
   const [otpStep, setOtpStep] = useState(false);
   const [otpRecipient, setOtpRecipient] = useState("");
+  const [otpByEmail, setOtpByEmail] = useState(false);
   const [otpError, setOtpError] = useState("");
   const [isPasswordResetOpen, setIsPasswordResetOpen] = useState(false);
 
@@ -51,7 +52,7 @@ export default function LoginScreen({
 
   const submitLogin = async () => {
     const formData = new URLSearchParams();
-    formData.append("username", normalizePhoneValue(username));
+    formData.append("username", username.includes("@") ? username.trim().toLowerCase() : normalizePhoneValue(username));
     formData.append("password", password);
 
     const response = await fetch(`${baseURL}/auth/login`, {
@@ -86,6 +87,12 @@ export default function LoginScreen({
         setOtpStep(true);
         return;
       }
+      if (data.status === "email_sent") {
+        setOtpRecipient(data.email || username.trim().toLowerCase());
+        setOtpByEmail(true);
+        setOtpStep(true);
+        return;
+      }
 
       await switchAuthenticatedSession(data.access_token, data.role, data.driver_id);
       onLogin(data.role);
@@ -100,10 +107,10 @@ export default function LoginScreen({
     setIsLoading(true);
     setOtpError("");
     try {
-      const response = await fetch(`${baseURL}/driver/auth/verify-login`, {
+      const response = await fetch(otpByEmail ? `${baseURL}/auth/email/verify` : `${baseURL}/driver/auth/verify-login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: normalizePhoneValue(otpRecipient), code }),
+        body: JSON.stringify(otpByEmail ? { email: otpRecipient, code, auth_scope: "user" } : { phone: normalizePhoneValue(otpRecipient), code }),
       });
       const data = await response.json().catch(() => ({}));
 
@@ -123,7 +130,7 @@ export default function LoginScreen({
 
   const handleResendLoginCode = async () => {
     const data = await submitLogin();
-    if (data.status !== "sms_sent") {
+    if (data.status !== (otpByEmail ? "email_sent" : "sms_sent")) {
       throw new Error("Не удалось отправить код повторно");
     }
   };

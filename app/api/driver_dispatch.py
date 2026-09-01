@@ -384,6 +384,7 @@ async def update_driver_profile(
     current_driver: Driver = Depends(get_current_driver),
 ) -> Driver:
     normalized_phone = normalize_phone(payload.phone) if payload.phone is not None else None
+    normalized_email = payload.email.strip().lower() if payload.email is not None and payload.email.strip() else None
 
     if payload.phone is not None:
         await _validate_unique_driver_phone(
@@ -392,6 +393,10 @@ async def update_driver_profile(
             current_driver_id=current_driver.id,
             current_user_id=current_driver.user_id,
         )
+    if normalized_email is not None:
+        existing_email_user = await db.scalar(select(User).where(func.lower(User.email) == normalized_email, User.id != current_driver.user_id))
+        if existing_email_user is not None:
+            raise HTTPException(status_code=409, detail="Email уже используется")
 
     normalized_payload = payload.model_copy(update={"phone": normalized_phone})
     if _has_driver_critical_changes(current_driver, normalized_payload):
@@ -405,6 +410,10 @@ async def update_driver_profile(
             user = await db.get(User, current_driver.user_id)
             if user is not None:
                 user.username = normalized_phone
+    if payload.email is not None and current_driver.user_id is not None:
+        user = await db.get(User, current_driver.user_id)
+        if user is not None:
+            user.email = normalized_email
 
     await db.commit()
     return await _load_driver_with_vehicle(db, current_driver.id)

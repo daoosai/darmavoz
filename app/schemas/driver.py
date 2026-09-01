@@ -131,6 +131,7 @@ class DriverRegisterRequest(BaseModel):
     phone: str
     password: str
     name: str | None = None
+    email: str | None = None
     vehicle_brand: str | None = None
     vehicle_plate_number: str | None = None
     vehicle_type: str | None = None
@@ -150,6 +151,7 @@ class DriverRegisterRequest(BaseModel):
 class DriverProfileUpdate(BaseModel):
     name: str | None = None
     phone: str | None = None
+    email: str | None = None
 
 
 class DriverVehicleUpdate(BaseModel):

@@ -231,7 +231,7 @@ export default function ParserRunPanel({
       <button type="submit" disabled={loading || !token} className="flex items-center justify-center gap-2 self-end rounded-lg bg-sky-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}Запустить</button>
       </form>
       {isResultModalOpen && parserResult ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 pt-[max(env(safe-area-inset-top),2.5rem)]">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/50 p-4 pt-[max(env(safe-area-inset-top),2.5rem)]">
           <section role="dialog" aria-modal="true" aria-labelledby="parser-result-title" className="max-h-full w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
             <div className="flex items-start justify-between border-b border-slate-100 p-5">
               <div>

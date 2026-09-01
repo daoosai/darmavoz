@@ -33,6 +33,19 @@ RUBRIC_BLACKLIST = (
     "курсы",
     "обучение",
 )
+RETAIL_BLACKLIST = (
+    "водомат",
+    "автомат",
+    "розлив",
+    "магазин",
+    "офис",
+    "павильон",
+    "кулер",
+    "торговый дом",
+    "рыбн",
+    "супермаркет",
+    "гипермаркет",
+)
 PLACES_FIELDS = ",".join(
     (
         "items.point",
@@ -103,17 +116,23 @@ def _extract_contacts(item: dict[str, Any]) -> tuple[list[str], list[str]]:
 
 
 def _blacklisted_rubric_reason(item: dict[str, Any]) -> str | None:
+    names: list[str] = []
+    for key in ("name", "full_name"):
+        value = item.get(key)
+        if isinstance(value, str):
+            names.append(value)
     rubrics = item.get("rubrics")
-    if not isinstance(rubrics, list):
-        return None
-    for rubric in rubrics:
-        if not isinstance(rubric, dict):
-            continue
-        name = rubric.get("name")
-        if isinstance(name, str):
-            for word in RUBRIC_BLACKLIST:
-                if word in name.casefold():
-                    return f"Мусорная рубрика ({word})"
+    if isinstance(rubrics, list):
+        for rubric in rubrics:
+            if isinstance(rubric, dict) and isinstance(rubric.get("name"), str):
+                names.append(rubric["name"])
+    for name in names:
+        normalized_name = name.casefold()
+        if any(word in normalized_name for word in RETAIL_BLACKLIST):
+            return "Мусорный тип (розница/офис)"
+        for word in RUBRIC_BLACKLIST:
+            if word in normalized_name:
+                return f"Мусорная рубрика ({word})"
     return None
 
 

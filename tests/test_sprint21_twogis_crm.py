@@ -7,7 +7,7 @@ from app.models.models import CrmStatus, PointAuditLog, Quarry, Role, User
 from app.security.jwt import create_access_token
 from app.services.pickup_points import is_pickup_point_publicly_available
 from app.schemas.parser import ParserRunRequest
-from app.services.twogis_places import ParsedPlace, _fetch_page, _normalize_place, search_places
+from app.services.twogis_places import ParsedPlace, _fetch_page, _normalize_place, _skip_reason, search_places
 
 
 def auth_headers(username: str) -> dict[str, str]:
@@ -208,6 +208,27 @@ def test_places_search_filters_blacklisted_rubrics():
     )
 
     assert place is None
+
+
+def test_places_search_filters_retail_names_and_rubrics():
+    retail_item = {
+        "id": "2gis-water-vending",
+        "name": "Водомат у дома",
+        "full_address_name": "Tyumen, Test road, 1",
+        "point": {"lat": 57.15, "lon": 65.53},
+        "rubrics": [{"name": "Питьевая вода"}],
+    }
+    office_item = {
+        "id": "2gis-office",
+        "name": "Water delivery",
+        "full_name": "Water delivery",
+        "full_address_name": "Tyumen, Test road, 2",
+        "point": {"lat": 57.15, "lon": 65.53},
+        "rubrics": [{"name": "Офис продаж"}],
+    }
+
+    assert _skip_reason(retail_item) == "Мусорный тип (розница/офис)"
+    assert _skip_reason(office_item) == "Мусорный тип (розница/офис)"
 
 
 def test_parser_allows_custom_keyword():

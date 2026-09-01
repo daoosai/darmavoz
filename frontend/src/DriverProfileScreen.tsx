@@ -671,7 +671,7 @@ export default function DriverProfileScreen({
                     <span className="text-sm font-medium text-slate-500 truncate w-full">
                       {formatPhoneNumber(profile?.phone || "")}
                     </span>
-                    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                    <div className="mt-3 flex w-full flex-col gap-2">
                       <input
                         type="email"
                         value={profile?.email || ""}
@@ -683,13 +683,13 @@ export default function DriverProfileScreen({
                           )
                         }
                         placeholder="Электронная почта"
-                        className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:border-[#2DB0E6] focus:ring-2 focus:ring-[#2DB0E6]/20"
+                        className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:border-[#2DB0E6] focus:ring-2 focus:ring-[#2DB0E6]/20"
                       />
                       <button
                         type="button"
                         onClick={() => void handleSaveEmail()}
                         disabled={isSaving}
-                        className="rounded-lg bg-[#2DB0E6] px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#219bcb] disabled:cursor-not-allowed disabled:opacity-60"
+                        className="mt-2 self-start rounded-lg bg-[#2DB0E6] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#219bcb] disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         Сохранить
                       </button>

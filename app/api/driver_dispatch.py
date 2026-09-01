@@ -4,7 +4,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -402,7 +403,7 @@ async def update_driver_profile(
     if normalized_email is not None:
         existing_email_user = await db.scalar(select(User).where(func.lower(User.email) == normalized_email, User.id != current_driver.user_id))
         if existing_email_user is not None:
-            raise HTTPException(status_code=409, detail="Email уже используется")
+            raise HTTPException(status_code=400, detail="Этот email уже используется")
 
     normalized_payload = payload.model_copy(update={"phone": normalized_phone})
     if _has_driver_critical_changes(current_driver, normalized_payload):
@@ -410,18 +411,24 @@ async def update_driver_profile(
 
     if payload.name is not None:
         current_driver.name = payload.name
+    user = None
+    if current_driver.user_id is not None and (
+        payload.phone is not None or payload.email is not None
+    ):
+        user = await db.get(User, current_driver.user_id)
+
     if payload.phone is not None:
         current_driver.phone = normalized_phone
-        if current_driver.user_id is not None:
-            user = await db.get(User, current_driver.user_id)
-            if user is not None:
-                user.username = normalized_phone
-    if payload.email is not None and current_driver.user_id is not None:
-        user = await db.get(User, current_driver.user_id)
         if user is not None:
-            user.email = normalized_email
+            user.username = normalized_phone
+    if payload.email is not None and user is not None:
+        user.email = normalized_email
 
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail="Этот email уже используется") from exc
     return await _load_driver_with_vehicle(db, current_driver.id)
 
 

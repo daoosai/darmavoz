@@ -28,6 +28,7 @@ from app.schemas.quarry import (
     QuarryUpdate,
     RejectionDecision,
 )
+from app.schemas.bulk import BulkDeleteRequest, BulkDeleteResult
 from app.security.auth import get_current_admin_user, get_current_logist_user
 from app.services.pickup_points import (
     default_delivery_option_ids,
@@ -497,3 +498,21 @@ async def hide_pickup_point(
     await db.delete(point)
     await db.commit()
     return DeleteResult(action="deleted", detail="Pickup point was deleted")
+
+
+@router.post("/pickup-points/bulk-delete", response_model=BulkDeleteResult)
+async def bulk_delete_pickup_points(
+    payload: BulkDeleteRequest,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user),
+) -> BulkDeleteResult:
+    del current_admin
+    point_ids = list(set(payload.point_ids))
+    await db.execute(update(CartItem).where(CartItem.quarry_id.in_(point_ids)).values(quarry_id=None))
+    await db.execute(update(Order).where(Order.quarry_id.in_(point_ids)).values(quarry_id=None))
+    await db.execute(delete(quarry_materials).where(quarry_materials.c.quarry_id.in_(point_ids)))
+    await db.execute(delete(quarry_delivery_options).where(quarry_delivery_options.c.quarry_id.in_(point_ids)))
+    await db.execute(delete(MediaFile).where(MediaFile.entity_type == "quarry", MediaFile.entity_id.in_(point_ids)))
+    deleted = await db.execute(delete(Quarry).where(Quarry.id.in_(point_ids)))
+    await db.commit()
+    return BulkDeleteResult(deleted_count=deleted.rowcount or 0)

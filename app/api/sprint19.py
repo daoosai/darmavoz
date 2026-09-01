@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_db
 from app.models.models import Client, MediaFile, Quarry, Role, SepticProviderProfile, SpecialEquipmentListing, User, UserNotification, WaterPoint
 from app.schemas.sprint19 import ConfirmationRequest, NotificationOut, SepticMediaOut, SepticProfileIn, SepticProfileOut
+from app.schemas.bulk import BulkDeleteRequest, BulkDeleteResult
 from app.security.auth import get_current_client, get_current_logist_user, get_current_user, get_current_water_septic_partner_user, oauth2_scheme
 from app.services.notifications import create_operator_notifications
 from app.services.storage import StorageNotConfiguredError, get_storage_service
@@ -227,6 +228,20 @@ async def hard_delete_septic_profile(
     await _hard_delete_septic_profile(profile, db)
     await db.commit()
     return {"ok": True}
+
+
+@router.post("/admin/septic-providers/bulk-delete", response_model=BulkDeleteResult)
+async def bulk_delete_septic_profiles(
+    payload: BulkDeleteRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_logist_user),
+) -> BulkDeleteResult:
+    del current_user
+    profiles = (await db.execute(select(SepticProviderProfile).where(SepticProviderProfile.id.in_(set(payload.point_ids))))).scalars().all()
+    for profile in profiles:
+        await _hard_delete_septic_profile(profile, db)
+    await db.commit()
+    return BulkDeleteResult(deleted_count=len(profiles))
 
 
 @water_septic_partner_router.get("/septic-profile", response_model=SepticProfileOut)

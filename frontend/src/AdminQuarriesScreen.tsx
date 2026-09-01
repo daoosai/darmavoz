@@ -264,6 +264,7 @@ export default function AdminQuarriesScreen({
   const [editingQuarry, setEditingQuarry] = useState<Quarry | null>(null);
   const [isModerating, setIsModerating] = useState(false);
   const [deletingPointId, setDeletingPointId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [rejectPointId, setRejectPointId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [parserCenter, setParserCenter] = useState({ lat: 57.1522, lon: 65.5272 });
@@ -435,6 +436,29 @@ export default function AdminQuarriesScreen({
     }
   };
 
+  const toggleSelected = (pointId: string) => setSelectedIds((current) => {
+    const next = new Set(current);
+    next.has(pointId) ? next.delete(pointId) : next.add(pointId);
+    return next;
+  });
+
+  const bulkDelete = async () => {
+    const pointIds = [...selectedIds];
+    if (!token || pointIds.length === 0 || !window.confirm(`Вы уверены, что хотите удалить ${pointIds.length} точек?`)) return;
+    setDeletingPointId("bulk");
+    try {
+      const response = await fetch(`${baseURL}/admin/pickup-points/bulk-delete`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ point_ids: pointIds }) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось удалить выбранные точки"));
+      setSelectedIds(new Set());
+      toast.success(`Удалено точек: ${data.deleted_count ?? pointIds.length}`);
+      await fetchQuarries();
+      await onPointsChanged?.();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось удалить выбранные точки");
+    } finally { setDeletingPointId(null); }
+  };
+
   const handleOpenModal = (quarry?: Quarry) => {
     if (quarry) {
       setEditingQuarry(quarry);
@@ -550,11 +574,13 @@ export default function AdminQuarriesScreen({
       </section>
 
       {/* Desktop View */}
+      {selectedIds.size > 0 ? <button type="button" onClick={() => void bulkDelete()} disabled={deletingPointId === "bulk"} className="self-start rounded-xl bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 disabled:opacity-50">Удалить выбранные ({selectedIds.size})</button> : null}
       <div className="hidden overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm md:block">
         <div className="w-full overflow-x-auto">
           <table className="min-w-[1180px] w-full border-collapse text-left">
             <thead>
               <tr className="bg-slate-50/80 text-slate-500 text-xs uppercase tracking-wider font-bold">
+                <th className="w-12 p-4 border-b border-slate-100"><input type="checkbox" aria-label="Выбрать все точки" checked={quarries.length > 0 && selectedIds.size === quarries.filter((point) => point.id).length} onChange={() => setSelectedIds((current) => current.size === quarries.filter((point) => point.id).length ? new Set() : new Set(quarries.flatMap((point) => point.id ? [point.id] : [])))} /></th>
                 <th className="p-4 border-b border-slate-100">Тип</th>
                 <th className="p-4 border-b border-slate-100">Название</th>
                 <th className="p-4 border-b border-slate-100">Адрес</th>
@@ -576,6 +602,7 @@ export default function AdminQuarriesScreen({
                     key={quarry.id}
                     className="group hover:bg-slate-50/50 transition-colors"
                   >
+                    <td className="p-4"><input type="checkbox" aria-label={`Выбрать ${quarry.name}`} checked={Boolean(quarry.id && selectedIds.has(quarry.id))} onChange={() => quarry.id && toggleSelected(quarry.id)} /></td>
                     <td className="p-4">
                       <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
                         {POINT_TYPE_LABELS[quarry.point_type] || quarry.point_type}

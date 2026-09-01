@@ -6,7 +6,8 @@ from sqlalchemy import select
 from app.models.models import CrmStatus, PointAuditLog, Quarry, Role, User
 from app.security.jwt import create_access_token
 from app.services.pickup_points import is_pickup_point_publicly_available
-from app.services.twogis_places import ParsedPlace, _fetch_page
+from app.schemas.parser import ParserRunRequest
+from app.services.twogis_places import ParsedPlace, _fetch_page, search_places
 
 
 def auth_headers(username: str) -> dict[str, str]:
@@ -47,6 +48,60 @@ async def test_places_meta_error_keeps_twogis_message():
 
     assert exc_info.value.status_code == 429
     assert exc_info.value.detail == "Ошибка 2ГИС: Rate limit exceeded"
+
+
+@pytest.mark.asyncio
+async def test_places_search_uses_ten_item_pages_until_result_limit(monkeypatch):
+    requested_pages: list[int] = []
+
+    class MockAsyncClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def get(self, _url, *, params):
+            page = int(params["page"])
+            requested_pages.append(page)
+            assert params["page_size"] == 10
+            offset = (page - 1) * 10
+            return httpx.Response(
+                200,
+                json={
+                    "result": {
+                        "total": 30,
+                        "items": [
+                            {
+                                "id": f"2gis-{index}",
+                                "name": f"Place {index}",
+                                "full_address_name": f"Tyumen, Test road, {index}",
+                                "point": {"lat": 57.15, "lon": 65.53},
+                            }
+                            for index in range(offset, offset + 10)
+                        ],
+                    }
+                },
+            )
+
+    monkeypatch.setattr("app.services.twogis_places.httpx.AsyncClient", lambda **_kwargs: MockAsyncClient())
+    monkeypatch.setattr("app.services.twogis_places.settings.TWOGIS_API_KEY", "test-key")
+    monkeypatch.setattr("app.services.twogis_places.settings.TWOGIS_PLACES_MAX_RESULTS", 30)
+
+    places, truncated = await search_places(
+        ParserRunRequest(
+            city="Tyumen",
+            center_lat=57.15,
+            center_lon=65.53,
+            radius_m=1000,
+            target="material",
+            keyword="sand",
+        )
+    )
+
+    assert requested_pages == [1, 2, 3]
+    assert len(places) == 30
+    assert truncated is False
 
 
 async def ensure_role(session, name: str) -> Role:

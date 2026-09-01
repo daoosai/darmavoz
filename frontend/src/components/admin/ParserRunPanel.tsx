@@ -142,7 +142,8 @@ export default function ParserRunPanel({
       });
       if (!response.ok) {
         const errorPayload = await response.json().catch(() => ({ status: response.status }));
-        throw new Error(extractApiErrorMessage(errorPayload, "Не удалось запустить импорт"));
+        toast.error(extractApiErrorMessage(errorPayload, "Не удалось запустить импорт"));
+        return;
       }
       const result = await response.json() as { created: number; updated: number; skipped: number; cross_target_conflicts: number; truncated: boolean };
       toast.success(`Импорт: создано ${result.created}, обновлено ${result.updated}, пропущено ${result.skipped + result.cross_target_conflicts}${result.truncated ? ". Достигнут лимит" : ""}`);

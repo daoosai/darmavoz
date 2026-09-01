@@ -226,7 +226,8 @@ async def search_places(payload: ParserRunRequest) -> tuple[list[ParsedPlace], b
     collected: list[ParsedPlace] = []
     page = 1
     total: int | None = None
-    page_size = min(50, settings.TWOGIS_PLACES_MAX_RESULTS)
+    # The 2GIS Places API accepts at most 10 items per page.
+    page_size = min(10, settings.TWOGIS_PLACES_MAX_RESULTS)
     base_params = {
         "key": settings.TWOGIS_API_KEY,
         "q": f"{payload.keyword}, {payload.city}",

@@ -7,9 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
 from app.models.models import CrmStatus, PointAuditLog, Quarry, Role, User, WaterPoint
-from app.schemas.parser import CrmPointOut, CrmUpdateRequest, ParserRunRequest, ParserRunResult, PointAuditLogOut, PointKind, PointOwnerBindingRequest
+from app.schemas.parser import CrmPointOut, CrmUpdateRequest, ParserPreviewItem, ParserPreviewResult, ParserRunRequest, ParserRunResult, ParserSaveRequest, PointAuditLogOut, PointKind, PointOwnerBindingRequest
 from app.security.auth import get_current_admin_user
-from app.services.twogis_places import PlacesSearchResult, search_places, upsert_places
+from app.services.twogis_places import ParsedPlace, PlacesSearchResult, search_places, upsert_places
 
 
 router = APIRouter()
@@ -35,8 +35,9 @@ async def _add_status_audit_log(db: AsyncSession, *, point, point_kind: PointKin
         db.add(PointAuditLog(point_id=point.id, point_kind=point_kind, admin_id=admin_id, old_status=old_status, new_status=new_status))
 
 
-@router.post("/parser/run", response_model=ParserRunResult)
-async def run_parser(payload: ParserRunRequest, db: AsyncSession = Depends(get_db), current_admin: User = Depends(get_current_admin_user)) -> ParserRunResult:
+@router.post("/parser/run", response_model=ParserPreviewResult)
+async def run_parser(payload: ParserRunRequest, db: AsyncSession = Depends(get_db), current_admin: User = Depends(get_current_admin_user)) -> ParserPreviewResult:
+    del current_admin
     search_result = await search_places(payload)
     if isinstance(search_result, PlacesSearchResult):
         places, truncated = search_result
@@ -44,15 +45,19 @@ async def run_parser(payload: ParserRunRequest, db: AsyncSession = Depends(get_d
     else:
         places, truncated = search_result
         skipped_items = []
+    model = Quarry if payload.target == "material" else WaterPoint
+    items = []
+    for place in places:
+        is_update = await db.scalar(select(model.id).where(model.twogis_id == place.twogis_id)) is not None
+        items.append(ParserPreviewItem(**place.__dict__, is_update=is_update))
+    return ParserPreviewResult(items=items, skipped_items=skipped_items, truncated=truncated)
+
+
+@router.post("/parser/save", response_model=ParserRunResult)
+async def save_parser_results(payload: ParserSaveRequest, db: AsyncSession = Depends(get_db), current_admin: User = Depends(get_current_admin_user)) -> ParserRunResult:
+    places = [ParsedPlace(**item.model_dump(exclude={"is_update"})) for item in payload.items]
     try:
-        result = await upsert_places(
-            db,
-            payload=payload,
-            places=places,
-            admin_id=current_admin.id,
-            truncated=truncated,
-            skipped_items=skipped_items,
-        )
+        result = await upsert_places(db, payload=payload, places=places, admin_id=current_admin.id, truncated=False)
         await db.commit()
         return result
     except SQLAlchemyError as exc:

@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { Loader2, MapPin, Play } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -24,17 +24,11 @@ type AddressSuggestion = {
 
 type ParserCoordinates = { lat: number; lon: number };
 
-type ParserResultItem = { id: string; name: string };
-type ParserSkippedItem = { name: string; reason: string };
-type ParserRunResult = {
-  total_found: number;
-  created: number;
-  updated: number;
-  skipped: number;
+type ParserPreviewItem = { twogis_id: string; name: string; address: string; lat: number; lon: number; phone?: string | null; parsed_data: Record<string, unknown>; is_update: boolean };
+type ParserPreviewResult = {
+  items: ParserPreviewItem[];
+  skipped_items: { name: string; reason: string }[];
   truncated: boolean;
-  created_items: ParserResultItem[];
-  updated_items: ParserResultItem[];
-  skipped_items: ParserSkippedItem[];
 };
 
 const keywords: Record<ParserTarget, string[]> = {
@@ -62,7 +56,8 @@ export default function ParserRunPanel({
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
-  const [parserResult, setParserResult] = useState<ParserRunResult | null>(null);
+  const [parserResult, setParserResult] = useState<ParserPreviewResult | null>(null);
+  const [selectedPreviewIds, setSelectedPreviewIds] = useState<Set<string>>(new Set());
   const [isResultModalOpen, setIsResultModalOpen] = useState(false);
   const suggestionRequestRef = useRef(0);
 
@@ -161,8 +156,9 @@ export default function ParserRunPanel({
         toast.error(extractApiErrorMessage(errorPayload, "Не удалось запустить импорт"));
         return;
       }
-      const result = await response.json() as ParserRunResult;
+      const result = await response.json() as ParserPreviewResult;
       setParserResult(result);
+      setSelectedPreviewIds(new Set(result.items.map((item) => item.twogis_id)));
       setIsResultModalOpen(true);
       toast.success("Парсинг завершен");
     } catch (error) {
@@ -176,6 +172,21 @@ export default function ParserRunPanel({
     setIsResultModalOpen(false);
     setParserResult(null);
     void onCompleted?.();
+  };
+
+  const saveSelected = async () => {
+    if (!token || !parserResult) return;
+    const items = parserResult.items.filter((item) => selectedPreviewIds.has(item.twogis_id));
+    if (items.length === 0) return;
+    setLoading(true);
+    try {
+      const response = await fetch(`${baseURL}/admin/parser/save`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ city, center_lat: parseCoordinate(lat), center_lon: parseCoordinate(lon), radius_m: Number(radius), target, keyword, items }) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось сохранить точки"));
+      toast.success(`Сохранено: ${data.created + data.updated}`);
+      closeResultModal();
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось сохранить точки"); }
+    finally { setLoading(false); }
   };
 
   return (
@@ -225,27 +236,18 @@ export default function ParserRunPanel({
             <div className="flex items-start justify-between border-b border-slate-100 p-5">
               <div>
                 <h2 id="parser-result-title" className="text-lg font-bold text-slate-900">Результаты парсинга</h2>
-                <p className="mt-1 text-sm text-slate-500">Найдено: {parserResult.total_found}{parserResult.truncated ? ". Достигнут лимит выдачи" : ""}</p>
+                <p className="mt-1 text-sm text-slate-500">Найдено: {parserResult.items.length}{parserResult.truncated ? ". Достигнут лимит выдачи" : ""}</p>
               </div>
               <button type="button" onClick={closeResultModal} className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100">Закрыть</button>
             </div>
-            <div className="max-h-[65vh] space-y-4 overflow-y-auto p-5">
-              <ResultSection title={`✅ Создано (${parserResult.created})`} items={parserResult.created_items.map((item) => <li key={item.id}>{item.name}</li>)} emptyText="Новых объектов нет" />
-              <ResultSection title={`🔄 Обновлено (${parserResult.updated})`} items={parserResult.updated_items.map((item) => <li key={item.id}>{item.name}</li>)} emptyText="Обновлённых объектов нет" />
-              <ResultSection title={`❌ Пропущено (${parserResult.skipped})`} items={parserResult.skipped_items.map((item, index) => <li key={`${item.name}-${index}`}><span className="font-medium text-slate-800">{item.name}</span><span className="block text-xs text-rose-600">{item.reason}</span></li>)} emptyText="Пропущенных объектов нет" />
+            <div className="max-h-[65vh] space-y-3 overflow-y-auto p-5">
+              <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={parserResult.items.length > 0 && selectedPreviewIds.size === parserResult.items.length} onChange={() => setSelectedPreviewIds((current) => current.size === parserResult.items.length ? new Set() : new Set(parserResult.items.map((item) => item.twogis_id)))} />Выбрать всё</label>
+              {parserResult.items.map((item) => <label key={item.twogis_id} className="flex gap-3 rounded-xl bg-slate-50 p-3 text-sm"><input type="checkbox" checked={selectedPreviewIds.has(item.twogis_id)} onChange={() => setSelectedPreviewIds((current) => { const next = new Set(current); next.has(item.twogis_id) ? next.delete(item.twogis_id) : next.add(item.twogis_id); return next; })} /><span><strong>{item.name}</strong><span className="block text-slate-500">{item.address}</span></span></label>)}
             </div>
+            <div className="flex justify-end gap-3 border-t border-slate-100 p-5"><button type="button" onClick={closeResultModal} className="rounded-xl bg-slate-100 px-4 py-2 font-bold text-slate-700">Отмена</button><button type="button" disabled={loading || selectedPreviewIds.size === 0} onClick={() => void saveSelected()} className="rounded-xl bg-sky-600 px-4 py-2 font-bold text-white disabled:opacity-50">Добавить выбранные ({selectedPreviewIds.size})</button></div>
           </section>
         </div>
       ) : null}
     </>
-  );
-}
-
-function ResultSection({ title, items, emptyText }: { title: string; items: ReactNode[]; emptyText: string }) {
-  return (
-    <section>
-      <h3 className="mb-2 text-sm font-bold text-slate-800">{title}</h3>
-      {items.length > 0 ? <ul className="space-y-2 rounded-xl bg-slate-50 p-3 text-sm text-slate-700">{items}</ul> : <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">{emptyText}</p>}
-    </section>
   );
 }

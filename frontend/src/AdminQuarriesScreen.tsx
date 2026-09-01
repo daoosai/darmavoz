@@ -586,7 +586,7 @@ export default function AdminQuarriesScreen({
                 <th className="p-4 border-b border-slate-100">Адрес</th>
                 <th className="p-4 border-b border-slate-100">Статус</th>
                 <th className="min-w-[120px] whitespace-nowrap border-b border-slate-100 p-4">Модерация</th>
-                <th className="sticky right-0 z-20 w-[340px] min-w-[340px] whitespace-nowrap border-b border-slate-100 bg-slate-50/95 p-4 pr-6 shadow-[-10px_0_10px_-10px_rgba(0,0,0,0.1)]">Действия</th>
+                <th className="sticky right-0 z-20 w-[340px] min-w-[340px] whitespace-nowrap border-b border-slate-100 bg-slate-50/95 p-4 pr-6 text-center shadow-[-10px_0_10px_-10px_rgba(0,0,0,0.1)]">Действия</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">

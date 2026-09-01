@@ -55,6 +55,27 @@ class ParserSkippedItem(BaseModel):
     reason: str
 
 
+class ParserPreviewItem(BaseModel):
+    twogis_id: str
+    name: str
+    address: str
+    lat: float
+    lon: float
+    phone: str | None = None
+    parsed_data: dict = Field(default_factory=dict)
+    is_update: bool = False
+
+
+class ParserPreviewResult(BaseModel):
+    items: list[ParserPreviewItem] = Field(default_factory=list)
+    skipped_items: list[ParserSkippedItem] = Field(default_factory=list)
+    truncated: bool = False
+
+
+class ParserSaveRequest(ParserRunRequest):
+    items: list[ParserPreviewItem] = Field(min_length=1, max_length=50)
+
+
 class ParserRunResult(BaseModel):
     found: int = 0
     total_found: int = 0

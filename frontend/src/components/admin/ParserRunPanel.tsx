@@ -63,6 +63,7 @@ export default function ParserRunPanel({
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [parserResult, setParserResult] = useState<ParserRunResult | null>(null);
+  const [isResultModalOpen, setIsResultModalOpen] = useState(false);
   const suggestionRequestRef = useRef(0);
 
   const notifyCoordinates = (nextLat: string, nextLon: string) => {
@@ -141,6 +142,7 @@ export default function ParserRunPanel({
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    event.stopPropagation();
     if (!token) return;
     setLoading(true);
     try {
@@ -161,13 +163,19 @@ export default function ParserRunPanel({
       }
       const result = await response.json() as ParserRunResult;
       setParserResult(result);
+      setIsResultModalOpen(true);
       toast.success("Парсинг завершен");
-      await onCompleted?.();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Не удалось запустить импорт");
     } finally {
       setLoading(false);
     }
+  };
+
+  const closeResultModal = () => {
+    setIsResultModalOpen(false);
+    setParserResult(null);
+    void onCompleted?.();
   };
 
   return (
@@ -211,7 +219,7 @@ export default function ParserRunPanel({
       </label>
       <button type="submit" disabled={loading || !token} className="flex items-center justify-center gap-2 self-end rounded-lg bg-sky-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}Запустить</button>
       </form>
-      {parserResult ? (
+      {isResultModalOpen && parserResult ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 pt-[max(env(safe-area-inset-top),2.5rem)]">
           <section role="dialog" aria-modal="true" aria-labelledby="parser-result-title" className="max-h-full w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
             <div className="flex items-start justify-between border-b border-slate-100 p-5">
@@ -219,7 +227,7 @@ export default function ParserRunPanel({
                 <h2 id="parser-result-title" className="text-lg font-bold text-slate-900">Результаты парсинга</h2>
                 <p className="mt-1 text-sm text-slate-500">Найдено: {parserResult.total_found}{parserResult.truncated ? ". Достигнут лимит выдачи" : ""}</p>
               </div>
-              <button type="button" onClick={() => setParserResult(null)} className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100">Закрыть</button>
+              <button type="button" onClick={closeResultModal} className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100">Закрыть</button>
             </div>
             <div className="max-h-[65vh] space-y-4 overflow-y-auto p-5">
               <ResultSection title={`✅ Создано (${parserResult.created})`} items={parserResult.created_items.map((item) => <li key={item.id}>{item.name}</li>)} emptyText="Новых объектов нет" />

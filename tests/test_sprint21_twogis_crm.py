@@ -210,6 +210,19 @@ def test_places_search_filters_blacklisted_rubrics():
     assert place is None
 
 
+def test_parser_allows_custom_keyword():
+    payload = ParserRunRequest(
+        city="Tyumen",
+        center_lat=57.15,
+        center_lon=65.53,
+        radius_m=1000,
+        target="material",
+        keyword="керамзит",
+    )
+
+    assert payload.keyword == "керамзит"
+
+
 async def ensure_role(session, name: str) -> Role:
     role = await session.scalar(select(Role).where(Role.name == name))
     if role is None:

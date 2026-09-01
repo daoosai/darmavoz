@@ -4,7 +4,7 @@ import asyncio
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Iterator
 
 import httpx
 from fastapi import HTTPException, status
@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.models import CrmStatus, PointAuditLog, Quarry, WaterPoint
-from app.schemas.parser import MATERIAL_KEYWORDS, ParserRunRequest, ParserRunResult
+from app.schemas.parser import MATERIAL_KEYWORDS, ParserResultItem, ParserRunRequest, ParserRunResult, ParserSkippedItem
 
 
 logger = logging.getLogger(__name__)
@@ -55,6 +55,17 @@ class ParsedPlace:
     parsed_data: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class PlacesSearchResult:
+    places: list[ParsedPlace]
+    truncated: bool
+    skipped_items: list[ParserSkippedItem]
+
+    def __iter__(self) -> Iterator[object]:
+        yield self.places
+        yield self.truncated
+
+
 def _contact_value(contact: dict[str, Any]) -> str | None:
     for key in ("value", "text", "url", "number"):
         value = contact.get(key)
@@ -91,23 +102,57 @@ def _extract_contacts(item: dict[str, Any]) -> tuple[list[str], list[str]]:
     return list(dict.fromkeys(phones)), list(dict.fromkeys(websites))
 
 
-def _has_blacklisted_rubric(item: dict[str, Any]) -> bool:
+def _blacklisted_rubric_reason(item: dict[str, Any]) -> str | None:
     rubrics = item.get("rubrics")
     if not isinstance(rubrics, list):
-        return False
+        return None
     for rubric in rubrics:
         if not isinstance(rubric, dict):
             continue
         name = rubric.get("name")
-        if isinstance(name, str) and any(word in name.casefold() for word in RUBRIC_BLACKLIST):
-            return True
-    return False
+        if isinstance(name, str):
+            for word in RUBRIC_BLACKLIST:
+                if word in name.casefold():
+                    return f"Мусорная рубрика ({word})"
+    return None
+
+
+def _item_name(item: object) -> str:
+    if isinstance(item, dict) and isinstance(item.get("name"), str) and item["name"].strip():
+        return item["name"].strip()
+    return "Неизвестный объект"
+
+
+def _skip_reason(item: object) -> str | None:
+    if not isinstance(item, dict):
+        return "Некорректные данные 2ГИС"
+    rubric_reason = _blacklisted_rubric_reason(item)
+    if rubric_reason:
+        return rubric_reason
+    point = item.get("point")
+    if not isinstance(point, dict):
+        return "Нет координат"
+    try:
+        lat = float(point["lat"])
+        lon = float(point["lon"])
+    except (KeyError, TypeError, ValueError):
+        return "Нет координат"
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        return "Некорректные координаты"
+    if not isinstance(item.get("id"), str) or not item["id"].strip():
+        return "Нет идентификатора 2ГИС"
+    if not isinstance(item.get("name"), str) or not item["name"].strip():
+        return "Нет названия"
+    address = item.get("full_address_name") or item.get("address_name")
+    if not isinstance(address, str) or not address.strip():
+        return "Нет адреса"
+    return None
 
 
 def _normalize_place(item: object) -> ParsedPlace | None:
     if not isinstance(item, dict):
         return None
-    if _has_blacklisted_rubric(item):
+    if _skip_reason(item):
         return None
     item_id = item.get("id")
     name = item.get("name")
@@ -246,7 +291,7 @@ async def _fetch_page(client: httpx.AsyncClient, params: dict[str, Any]) -> dict
     return payload
 
 
-async def search_places(payload: ParserRunRequest) -> tuple[list[ParsedPlace], bool]:
+async def search_places(payload: ParserRunRequest) -> PlacesSearchResult:
     if not settings.TWOGIS_API_KEY:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -254,6 +299,7 @@ async def search_places(payload: ParserRunRequest) -> tuple[list[ParsedPlace], b
         )
 
     collected: list[ParsedPlace] = []
+    skipped_items: list[ParserSkippedItem] = []
     page = 1
     total: int | None = None
     # The 2GIS Places API accepts at most 10 items per page.
@@ -292,14 +338,25 @@ async def search_places(payload: ParserRunRequest) -> tuple[list[ParsedPlace], b
                 break
             if isinstance(result.get("total"), int):
                 total = result["total"]
-            collected.extend(place for item in items if (place := _normalize_place(item)) is not None)
+            for item in items:
+                reason = _skip_reason(item)
+                if reason:
+                    skipped_items.append(ParserSkippedItem(name=_item_name(item), reason=reason))
+                    continue
+                place = _normalize_place(item)
+                if place is not None:
+                    collected.append(place)
             if len(items) < page_size:
                 break
             page += 1
 
     unique_places = list({place.twogis_id: place for place in collected}.values())
     truncated = bool(total is not None and total > len(unique_places) and len(unique_places) >= max_results)
-    return unique_places[:max_results], truncated
+    return PlacesSearchResult(
+        places=unique_places[:max_results],
+        truncated=truncated,
+        skipped_items=skipped_items,
+    )
 
 
 async def upsert_places(
@@ -309,8 +366,15 @@ async def upsert_places(
     places: list[ParsedPlace],
     admin_id,
     truncated: bool,
+    skipped_items: list[ParserSkippedItem] | None = None,
 ) -> ParserRunResult:
-    result = ParserRunResult(found=len(places), total_found=len(places), truncated=truncated)
+    result = ParserRunResult(
+        found=len(places),
+        total_found=len(places) + len(skipped_items or []),
+        skipped=len(skipped_items or []),
+        truncated=truncated,
+        skipped_items=list(skipped_items or []),
+    )
     destination_model = Quarry if payload.target == "material" else WaterPoint
     other_model = WaterPoint if payload.target == "material" else Quarry
     point_kind = "quarry" if payload.target == "material" else "water"
@@ -321,11 +385,14 @@ async def upsert_places(
         if existing is not None:
             existing.parsed_data = place.parsed_data
             result.updated += 1
+            result.updated_items.append(ParserResultItem(id=place.twogis_id, name=place.name))
             continue
 
         other_kind_match = await db.scalar(select(other_model.id).where(other_model.twogis_id == place.twogis_id))
         if other_kind_match is not None:
             result.cross_target_conflicts += 1
+            result.skipped += 1
+            result.skipped_items.append(ParserSkippedItem(name=place.name, reason="Уже существует в другом типе точки"))
             continue
 
         if payload.target == "material":
@@ -370,6 +437,6 @@ async def upsert_places(
             )
         )
         result.created += 1
+        result.created_items.append(ParserResultItem(id=place.twogis_id, name=place.name))
 
-    result.skipped = result.found - result.created - result.updated
     return result

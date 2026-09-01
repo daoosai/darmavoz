@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Loader2, MapPin, Play } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -23,6 +23,19 @@ type AddressSuggestion = {
 };
 
 type ParserCoordinates = { lat: number; lon: number };
+
+type ParserResultItem = { id: string; name: string };
+type ParserSkippedItem = { name: string; reason: string };
+type ParserRunResult = {
+  total_found: number;
+  created: number;
+  updated: number;
+  skipped: number;
+  truncated: boolean;
+  created_items: ParserResultItem[];
+  updated_items: ParserResultItem[];
+  skipped_items: ParserSkippedItem[];
+};
 
 const keywords: Record<ParserTarget, string[]> = {
   material: ["карьер", "накопитель", "песок", "щебень", "пгс", "песчано-гравийная смесь"],
@@ -49,6 +62,7 @@ export default function ParserRunPanel({
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
+  const [parserResult, setParserResult] = useState<ParserRunResult | null>(null);
   const suggestionRequestRef = useRef(0);
 
   const notifyCoordinates = (nextLat: string, nextLon: string) => {
@@ -145,8 +159,9 @@ export default function ParserRunPanel({
         toast.error(extractApiErrorMessage(errorPayload, "Не удалось запустить импорт"));
         return;
       }
-      const result = await response.json() as { total_found: number; created: number; updated: number; skipped: number; cross_target_conflicts: number; truncated: boolean };
-      toast.success(`Парсинг завершен! Найдено: ${result.total_found}, Создано: ${result.created}, Обновлено: ${result.updated}, Пропущено: ${result.skipped}${result.truncated ? ". Достигнут лимит" : ""}`);
+      const result = await response.json() as ParserRunResult;
+      setParserResult(result);
+      toast.success("Парсинг завершен");
       await onCompleted?.();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Не удалось запустить импорт");
@@ -156,7 +171,8 @@ export default function ParserRunPanel({
   };
 
   return (
-    <form onSubmit={submit} className="grid gap-3 rounded-2xl border border-sky-100 bg-sky-50 p-4 lg:grid-cols-[1.2fr_repeat(4,minmax(0,1fr))_auto]">
+    <>
+      <form onSubmit={submit} className="grid gap-3 rounded-2xl border border-sky-100 bg-sky-50 p-4 lg:grid-cols-[1.2fr_repeat(4,minmax(0,1fr))_auto]">
       <label className="relative text-xs font-bold text-slate-600">Город или место
         <input
           required
@@ -189,8 +205,39 @@ export default function ParserRunPanel({
       <label className="text-xs font-bold text-slate-600">Широта<input required type="text" inputMode="decimal" value={lat} onChange={(event) => { setLat(event.target.value); notifyCoordinates(event.target.value, lon); }} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" /></label>
       <label className="text-xs font-bold text-slate-600">Долгота<input required type="text" inputMode="decimal" value={lon} onChange={(event) => { setLon(event.target.value); notifyCoordinates(lat, event.target.value); }} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" /></label>
       <label className="text-xs font-bold text-slate-600">Радиус, м<input required type="number" min="100" max="50000" value={radius} onChange={(event) => setRadius(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" /></label>
-      <label className="text-xs font-bold text-slate-600">Ключевое слово<select value={keyword} onChange={(event) => setKeyword(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">{keywords[target].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
+      <label className="text-xs font-bold text-slate-600">Ключевое слово
+        <input required type="text" list={`parser-keywords-${target}`} value={keyword} onChange={(event) => setKeyword(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" />
+        <datalist id={`parser-keywords-${target}`}>{keywords[target].map((value) => <option key={value} value={value} />)}</datalist>
+      </label>
       <button type="submit" disabled={loading || !token} className="flex items-center justify-center gap-2 self-end rounded-lg bg-sky-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}Запустить</button>
-    </form>
+      </form>
+      {parserResult ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 pt-[max(env(safe-area-inset-top),2.5rem)]">
+          <section role="dialog" aria-modal="true" aria-labelledby="parser-result-title" className="max-h-full w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-start justify-between border-b border-slate-100 p-5">
+              <div>
+                <h2 id="parser-result-title" className="text-lg font-bold text-slate-900">Результаты парсинга</h2>
+                <p className="mt-1 text-sm text-slate-500">Найдено: {parserResult.total_found}{parserResult.truncated ? ". Достигнут лимит выдачи" : ""}</p>
+              </div>
+              <button type="button" onClick={() => setParserResult(null)} className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100">Закрыть</button>
+            </div>
+            <div className="max-h-[65vh] space-y-4 overflow-y-auto p-5">
+              <ResultSection title={`✅ Создано (${parserResult.created})`} items={parserResult.created_items.map((item) => <li key={item.id}>{item.name}</li>)} emptyText="Новых объектов нет" />
+              <ResultSection title={`🔄 Обновлено (${parserResult.updated})`} items={parserResult.updated_items.map((item) => <li key={item.id}>{item.name}</li>)} emptyText="Обновлённых объектов нет" />
+              <ResultSection title={`❌ Пропущено (${parserResult.skipped})`} items={parserResult.skipped_items.map((item, index) => <li key={`${item.name}-${index}`}><span className="font-medium text-slate-800">{item.name}</span><span className="block text-xs text-rose-600">{item.reason}</span></li>)} emptyText="Пропущенных объектов нет" />
+            </div>
+          </section>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function ResultSection({ title, items, emptyText }: { title: string; items: ReactNode[]; emptyText: string }) {
+  return (
+    <section>
+      <h3 className="mb-2 text-sm font-bold text-slate-800">{title}</h3>
+      {items.length > 0 ? <ul className="space-y-2 rounded-xl bg-slate-50 p-3 text-sm text-slate-700">{items}</ul> : <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">{emptyText}</p>}
+    </section>
   );
 }

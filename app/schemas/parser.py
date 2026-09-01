@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 ParserTarget = Literal["material", "water"]
@@ -43,13 +43,16 @@ class ParserRunRequest(BaseModel):
     def normalize_keyword(cls, value: str) -> str:
         return normalize_parser_keyword(value)
 
-    @model_validator(mode="after")
-    def validate_target_keyword(self):
-        if self.target == "material" and self.keyword not in MATERIAL_KEYWORDS:
-            raise ValueError("Для материалов разрешены только карьерные ключевые слова")
-        if self.target == "water" and self.keyword not in WATER_KEYWORDS:
-            raise ValueError("Для воды разрешены только ключевые слова воды")
-        return self
+
+
+class ParserResultItem(BaseModel):
+    id: str
+    name: str
+
+
+class ParserSkippedItem(BaseModel):
+    name: str
+    reason: str
 
 
 class ParserRunResult(BaseModel):
@@ -60,6 +63,9 @@ class ParserRunResult(BaseModel):
     skipped: int = 0
     cross_target_conflicts: int = 0
     truncated: bool = False
+    created_items: list[ParserResultItem] = Field(default_factory=list)
+    updated_items: list[ParserResultItem] = Field(default_factory=list)
+    skipped_items: list[ParserSkippedItem] = Field(default_factory=list)
 
 
 class CrmUpdateRequest(BaseModel):

@@ -9,7 +9,7 @@ from app.db.database import get_db
 from app.models.models import CrmStatus, PointAuditLog, Quarry, Role, User, WaterPoint
 from app.schemas.parser import CrmPointOut, CrmUpdateRequest, ParserRunRequest, ParserRunResult, PointAuditLogOut, PointKind, PointOwnerBindingRequest
 from app.security.auth import get_current_admin_user
-from app.services.twogis_places import search_places, upsert_places
+from app.services.twogis_places import PlacesSearchResult, search_places, upsert_places
 
 
 router = APIRouter()
@@ -37,9 +37,22 @@ async def _add_status_audit_log(db: AsyncSession, *, point, point_kind: PointKin
 
 @router.post("/parser/run", response_model=ParserRunResult)
 async def run_parser(payload: ParserRunRequest, db: AsyncSession = Depends(get_db), current_admin: User = Depends(get_current_admin_user)) -> ParserRunResult:
-    places, truncated = await search_places(payload)
+    search_result = await search_places(payload)
+    if isinstance(search_result, PlacesSearchResult):
+        places, truncated = search_result
+        skipped_items = search_result.skipped_items
+    else:
+        places, truncated = search_result
+        skipped_items = []
     try:
-        result = await upsert_places(db, payload=payload, places=places, admin_id=current_admin.id, truncated=truncated)
+        result = await upsert_places(
+            db,
+            payload=payload,
+            places=places,
+            admin_id=current_admin.id,
+            truncated=truncated,
+            skipped_items=skipped_items,
+        )
         await db.commit()
         return result
     except SQLAlchemyError as exc:

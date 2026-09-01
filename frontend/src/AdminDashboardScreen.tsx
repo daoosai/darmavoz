@@ -107,6 +107,7 @@ interface AdminDriver {
   id: string;
   name: string;
   phone: string;
+  email?: string | null;
   delivery_option_id: string;
   is_active: boolean;
   status?: string | null;
@@ -1297,6 +1298,12 @@ export default function AdminDashboardScreen({
       return;
     }
 
+    const normalizedEmail = editingDriver.email?.trim().toLowerCase() || "";
+    if (normalizedEmail && !/^\S+@\S+\.\S+$/.test(normalizedEmail)) {
+      toast.error("Укажите корректный email");
+      return;
+    }
+
     setIsSavingDriver(true);
     try {
       const isEdit = !!editingDriver.id;
@@ -1326,6 +1333,7 @@ export default function AdminDashboardScreen({
       const payload: any = {
         name: editingDriver.name,
         phone: fullPhone,
+        email: normalizedEmail || null,
         is_active: editingDriver.is_active ?? true,
         vehicle_type: editingDriver.vehicle_type,
         cubature_min: parseNumber(editingDriver.cubature_min),
@@ -4025,6 +4033,21 @@ export default function AdminDashboardScreen({
                     setEditingDriver({ ...editingDriver, phone: formatted });
                   }}
                   placeholder="+7 (999) 000-00-00"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Электронная почта (Email)
+                </label>
+                <input
+                  type="email"
+                  value={editingDriver.email || ""}
+                  onChange={(e) =>
+                    setEditingDriver({ ...editingDriver, email: e.target.value })
+                  }
+                  placeholder="name@example.com"
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
                 />
               </div>

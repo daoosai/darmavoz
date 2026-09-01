@@ -1,4 +1,5 @@
 from datetime import datetime
+import re
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -73,6 +74,7 @@ class DriverCreate(BaseModel):
 class AdminDriverCreate(BaseModel):
     name: str
     phone: str
+    email: str | None = None
     password: str
     delivery_option_id: UUID
     status: str = "offline"
@@ -102,6 +104,7 @@ class AdminDriverCreate(BaseModel):
 class AdminDriverUpdate(BaseModel):
     name: str | None = None
     phone: str | None = None
+    email: str | None = None
     password: str | None = None
     delivery_option_id: UUID | None = None
     vehicle_id: UUID | None = None
@@ -131,7 +134,7 @@ class DriverRegisterRequest(BaseModel):
     phone: str
     password: str
     name: str | None = None
-    email: str | None = None
+    email: str
     vehicle_brand: str | None = None
     vehicle_plate_number: str | None = None
     vehicle_type: str | None = None
@@ -146,6 +149,14 @@ class DriverRegisterRequest(BaseModel):
         validated = _validate_password(value)
         assert validated is not None
         return validated
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", normalized):
+            raise ValueError("Укажите корректный email")
+        return normalized
 
 
 class DriverProfileUpdate(BaseModel):
@@ -213,6 +224,7 @@ class DriverResponse(BaseModel):
     id: UUID
     name: str
     phone: str
+    email: str | None = None
     status: str | None = None
     is_on_shift: bool = False
     last_lat: float | None = None

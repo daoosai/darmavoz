@@ -340,6 +340,17 @@ async def _ensure_driver_phone_is_available(db: AsyncSession, normalized_phone: 
         )
 
 
+async def _ensure_driver_email_is_available(db: AsyncSession, email: str) -> str:
+    normalized_email = email.strip().lower()
+    existing_user = await db.scalar(select(User).where(func.lower(User.email) == normalized_email))
+    if existing_user is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_error_detail("DRIVER_EMAIL_ALREADY_EXISTS", "Email уже используется"),
+        )
+    return normalized_email
+
+
 async def _create_driver_from_payload(
     db: AsyncSession,
     *,
@@ -349,6 +360,7 @@ async def _create_driver_from_payload(
     role = await _get_or_create_driver_role(db)
     user = User(
         username=normalized_phone,
+        email=payload.email,
         hashed_password=get_password_hash(payload.password),
         role_id=role.id,
         is_active=True,
@@ -389,7 +401,10 @@ async def _create_driver_from_payload(
 
     result = await db.execute(
         select(Driver)
-        .options(selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option))
+        .options(
+            selectinload(Driver.user),
+            selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option),
+        )
         .where(Driver.id == driver.id)
     )
     persisted_driver = result.scalar_one()
@@ -537,6 +552,7 @@ async def driver_register(
 ):
     normalized_phone = normalize_phone(payload.phone)
     await _ensure_driver_phone_is_available(db, normalized_phone)
+    await _ensure_driver_email_is_available(db, payload.email)
 
     code = generate_otp_code()
     sms_phone = normalize_sms_phone(normalized_phone)
@@ -677,6 +693,7 @@ async def verify_driver_register(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Заявка на регистрацию повреждена") from exc
 
     await _ensure_driver_phone_is_available(db, normalized_phone)
+    await _ensure_driver_email_is_available(db, pending_payload.email)
     try:
         role, driver, user = await _create_driver_from_payload(
             db,

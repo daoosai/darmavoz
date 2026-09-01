@@ -34,6 +34,7 @@ interface DriverProfile {
   id: string;
   name: string;
   phone: string;
+  email?: string | null;
   is_active: boolean;
   dispatch_priority: number;
   moderation_status:
@@ -160,6 +161,39 @@ export default function DriverProfileScreen({
     } catch (e) {
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSaveEmail = async () => {
+    if (!profile) return;
+
+    const email = profile.email?.trim().toLowerCase() || "";
+    if (email && !/^\S+@\S+\.\S+$/.test(email)) {
+      toast.error("Укажите корректный email");
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      const currentToken = useAuthStore.getState().token;
+      const res = await fetch(`${baseURL}/driver/profile`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${currentToken}`,
+        },
+        body: JSON.stringify({ email }),
+      });
+      if (!res.ok) {
+        throw new Error(await extractApiErrorMessage(res));
+      }
+      setProfile(await res.json());
+      toast.success("Email сохранён");
+      onProfileUpdate?.();
+    } catch (error) {
+      toast.error(handleApiError(error, "Не удалось сохранить email"));
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -637,6 +671,29 @@ export default function DriverProfileScreen({
                     <span className="text-sm font-medium text-slate-500 truncate w-full">
                       {formatPhoneNumber(profile?.phone || "")}
                     </span>
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                      <input
+                        type="email"
+                        value={profile?.email || ""}
+                        onChange={(event) =>
+                          setProfile((current) =>
+                            current
+                              ? { ...current, email: event.target.value }
+                              : current,
+                          )
+                        }
+                        placeholder="Электронная почта"
+                        className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:border-[#2DB0E6] focus:ring-2 focus:ring-[#2DB0E6]/20"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void handleSaveEmail()}
+                        disabled={isSaving}
+                        className="rounded-lg bg-[#2DB0E6] px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#219bcb] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Сохранить
+                      </button>
+                    </div>
                   </div>
                 </div>
                 {profile?.moderation_status === "approved" && (

@@ -88,7 +88,10 @@ async def _attach_vehicle_media(db: AsyncSession, vehicle: Vehicle | None) -> No
 async def _load_driver_with_vehicle(db: AsyncSession, driver_id: UUID) -> Driver:
     result = await db.execute(
         select(Driver)
-        .options(selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option))
+        .options(
+            selectinload(Driver.user),
+            selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option),
+        )
         .where(Driver.id == driver_id)
     )
     driver = result.scalar_one()
@@ -363,7 +366,10 @@ async def get_driver_profile(
 ) -> Driver:
     result = await db.execute(
         select(Driver)
-        .options(selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option))
+        .options(
+            selectinload(Driver.user),
+            selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option),
+        )
         .where(Driver.id == current_driver.id)
     )
     return result.scalar_one()

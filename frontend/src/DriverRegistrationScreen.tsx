@@ -23,6 +23,7 @@ export default function DriverRegistrationScreen({
 }: DriverRegistrationScreenProps) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
@@ -44,6 +45,7 @@ export default function DriverRegistrationScreen({
   const buildPayload = () => ({
     name: name.trim(),
     phone: normalizePhoneValue(phone),
+    email: email.trim().toLowerCase(),
     password,
     vehicle_brand: vehicleBrand.trim(),
     vehicle_plate_number: vehiclePlate.trim().toUpperCase(),
@@ -115,6 +117,7 @@ export default function DriverRegistrationScreen({
     if (
       !name.trim() ||
       !phone.trim() ||
+      !/^\S+@\S+\.\S+$/.test(email.trim()) ||
       !password.trim() ||
       !vehicleBrand.trim() ||
       !vehiclePlate.trim()
@@ -235,6 +238,8 @@ export default function DriverRegistrationScreen({
                 maxLength={18}
               />
             </div>
+
+            <div className="flex flex-col gap-1.5"><label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Электронная почта</label><input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 font-medium" placeholder="name@example.com" /></div>
 
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">

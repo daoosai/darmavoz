@@ -1066,33 +1066,6 @@ async def _ensure_unique_driver_phone(
         )
 
 
-async def _ensure_unique_driver_email(
-    db: AsyncSession,
-    email: str | None,
-    *,
-    exclude_user_id: UUID | None = None,
-) -> str | None:
-    if email is None or not email.strip():
-        return None
-
-    normalized_email = email.strip().lower()
-    if not EMAIL_RE.match(normalized_email):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=_error_detail("DRIVER_EMAIL_INVALID", "Укажите корректный email"),
-        )
-
-    stmt = select(User).where(func.lower(User.email) == normalized_email)
-    if exclude_user_id is not None:
-        stmt = stmt.where(User.id != exclude_user_id)
-    if await db.scalar(stmt) is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=_error_detail("DRIVER_EMAIL_ALREADY_EXISTS", "Email уже используется"),
-        )
-    return normalized_email
-
-
 async def _find_free_vehicle(db: AsyncSession, delivery_option_id: UUID) -> Vehicle | None:
     result = await db.execute(
         select(Vehicle)
@@ -1369,12 +1342,10 @@ async def create_admin_driver(
 ):
     normalized_phone = normalize_phone(payload.phone)
     await _ensure_unique_driver_phone(db, normalized_phone)
-    normalized_email = await _ensure_unique_driver_email(db, payload.email)
 
     role = await _get_driver_role(db)
     user = User(
         username=normalized_phone,
-        email=normalized_email,
         hashed_password=get_password_hash(payload.password),
         role_id=role.id,
         is_active=True,
@@ -1453,16 +1424,6 @@ async def update_admin_driver(
         exclude_driver_id=driver.id,
         exclude_user_id=driver.user_id,
     )
-    normalized_email = (
-        await _ensure_unique_driver_email(
-            db,
-            payload.email,
-            exclude_user_id=driver.user_id,
-        )
-        if "email" in payload.model_fields_set
-        else None
-    )
-
     if payload.vehicle_id is not None:
         vehicle = await _get_vehicle_or_404(db, payload.vehicle_id)
         await _ensure_vehicle_is_free(db, vehicle.id, exclude_driver_id=driver.id)
@@ -1530,8 +1491,6 @@ async def update_admin_driver(
             )
     if payload.phone is not None:
         driver.phone = next_phone
-    if "email" in payload.model_fields_set and driver.user is not None:
-        driver.user.email = normalized_email
     if payload.status is not None:
         driver.status = payload.status
     if payload.is_active is not None:

@@ -717,7 +717,12 @@ function MainContent({
             />
           )}
 
-          {activeTab === "map" && <GlobalMapScreen />}
+          {activeTab === "map" && (
+            <GlobalMapScreen
+              isAuthenticated={Boolean(token)}
+              onOpenAuth={() => setShowAuthSheet(true)}
+            />
+          )}
           {activeTab === "water" && <WaterMapScreen />}
           {activeTab === "septic" && <SepticCatalogScreen />}
 

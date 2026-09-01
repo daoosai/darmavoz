@@ -4,8 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import ValidationError
-from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -89,10 +88,7 @@ async def _attach_vehicle_media(db: AsyncSession, vehicle: Vehicle | None) -> No
 async def _load_driver_with_vehicle(db: AsyncSession, driver_id: UUID) -> Driver:
     result = await db.execute(
         select(Driver)
-        .options(
-            selectinload(Driver.user),
-            selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option),
-        )
+        .options(selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option))
         .where(Driver.id == driver_id)
     )
     driver = result.scalar_one()
@@ -367,10 +363,7 @@ async def get_driver_profile(
 ) -> Driver:
     result = await db.execute(
         select(Driver)
-        .options(
-            selectinload(Driver.user),
-            selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option),
-        )
+        .options(selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option))
         .where(Driver.id == current_driver.id)
     )
     return result.scalar_one()
@@ -391,7 +384,6 @@ async def update_driver_profile(
     current_driver: Driver = Depends(get_current_driver),
 ) -> Driver:
     normalized_phone = normalize_phone(payload.phone) if payload.phone is not None else None
-    normalized_email = payload.email.strip().lower() if payload.email is not None and payload.email.strip() else None
 
     if payload.phone is not None:
         await _validate_unique_driver_phone(
@@ -400,35 +392,20 @@ async def update_driver_profile(
             current_driver_id=current_driver.id,
             current_user_id=current_driver.user_id,
         )
-    if normalized_email is not None:
-        existing_email_user = await db.scalar(select(User).where(func.lower(User.email) == normalized_email, User.id != current_driver.user_id))
-        if existing_email_user is not None:
-            raise HTTPException(status_code=400, detail="Этот email уже используется")
-
     normalized_payload = payload.model_copy(update={"phone": normalized_phone})
     if _has_driver_critical_changes(current_driver, normalized_payload):
         _sync_driver_vehicle_moderation(current_driver, current_driver.vehicle, getattr(current_driver.vehicle, "media_files", []))
 
     if payload.name is not None:
         current_driver.name = payload.name
-    user = None
-    if current_driver.user_id is not None and (
-        payload.phone is not None or payload.email is not None
-    ):
-        user = await db.get(User, current_driver.user_id)
-
     if payload.phone is not None:
         current_driver.phone = normalized_phone
-        if user is not None:
-            user.username = normalized_phone
-    if payload.email is not None and user is not None:
-        user.email = normalized_email
+        if current_driver.user_id is not None:
+            user = await db.get(User, current_driver.user_id)
+            if user is not None:
+                user.username = normalized_phone
 
-    try:
-        await db.commit()
-    except IntegrityError as exc:
-        await db.rollback()
-        raise HTTPException(status_code=400, detail="Этот email уже используется") from exc
+    await db.commit()
     return await _load_driver_with_vehicle(db, current_driver.id)
 
 

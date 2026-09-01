@@ -213,10 +213,6 @@ class Driver(Base):
     orders: Mapped[List["Order"]] = relationship("Order", back_populates="driver")
     offers: Mapped[List["OrderOffer"]] = relationship("OrderOffer", back_populates="driver")
 
-    @property
-    def email(self) -> str | None:
-        return self.user.email if self.user is not None else None
-
 
 class Vehicle(Base):
     __tablename__ = "vehicles"

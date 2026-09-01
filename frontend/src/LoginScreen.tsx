@@ -33,17 +33,25 @@ export default function LoginScreen({
   const [isLoading, setIsLoading] = useState(false);
   const [otpStep, setOtpStep] = useState(false);
   const [otpRecipient, setOtpRecipient] = useState("");
-  const [otpByEmail, setOtpByEmail] = useState(false);
   const [otpError, setOtpError] = useState("");
   const [isPasswordResetOpen, setIsPasswordResetOpen] = useState(false);
 
   const handleLoginChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setUsername(event.target.value);
+    const value = event.target.value;
+    if (/^[\d+()\-\s]*$/.test(value) && value !== "") {
+      if (value === "+") {
+        setUsername("+");
+        return;
+      }
+      setUsername(formatPhoneNumber(value));
+      return;
+    }
+    setUsername(value);
   };
 
   const submitLogin = async () => {
     const formData = new URLSearchParams();
-    formData.append("username", username.includes("@") ? username.trim().toLowerCase() : normalizePhoneValue(username));
+    formData.append("username", normalizePhoneValue(username));
     formData.append("password", password);
 
     const response = await fetch(`${baseURL}/auth/login`, {
@@ -78,13 +86,6 @@ export default function LoginScreen({
         setOtpStep(true);
         return;
       }
-      if (data.status === "email_sent") {
-        setOtpRecipient(data.email || username.trim().toLowerCase());
-        setOtpByEmail(true);
-        setOtpStep(true);
-        return;
-      }
-
       await switchAuthenticatedSession(data.access_token, data.role, data.driver_id);
       onLogin(data.role);
     } catch (error) {
@@ -98,10 +99,10 @@ export default function LoginScreen({
     setIsLoading(true);
     setOtpError("");
     try {
-      const response = await fetch(otpByEmail ? `${baseURL}/auth/email/verify` : `${baseURL}/driver/auth/verify-login`, {
+      const response = await fetch(`${baseURL}/driver/auth/verify-login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(otpByEmail ? { email: otpRecipient, code, auth_scope: "user" } : { phone: normalizePhoneValue(otpRecipient), code }),
+        body: JSON.stringify({ phone: normalizePhoneValue(otpRecipient), code }),
       });
       const data = await response.json().catch(() => ({}));
 
@@ -121,7 +122,7 @@ export default function LoginScreen({
 
   const handleResendLoginCode = async () => {
     const data = await submitLogin();
-    if (data.status !== (otpByEmail ? "email_sent" : "sms_sent")) {
+    if (data.status !== "sms_sent") {
       throw new Error("Не удалось отправить код повторно");
     }
   };
@@ -160,7 +161,7 @@ export default function LoginScreen({
             <form onSubmit={handleLogin} className="flex w-full max-w-sm flex-col gap-4">
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="employee-login" className="text-sm font-medium text-slate-700">
-                  Логин или телефон
+                  Номер телефона
                 </label>
                 <input
                   id="employee-login"
@@ -169,7 +170,7 @@ export default function LoginScreen({
                   value={username}
                   onChange={handleLoginChange}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 transition-all focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/50"
-                  placeholder="Введите логин"
+                  placeholder="Введите номер телефона"
                 />
               </div>
 

@@ -121,7 +121,13 @@ const getBoundsFromPoints = (pickupPoints: GlobalPickupPoint[]) => {
   return bounds;
 };
 
-export default function GlobalMapScreen() {
+export default function GlobalMapScreen({
+  isAuthenticated,
+  onOpenAuth,
+}: {
+  isAuthenticated: boolean;
+  onOpenAuth: () => void;
+}) {
   const [points, setPoints] = useState<GlobalPickupPoint[]>([]);
   const [selectedMaterials, setSelectedMaterials] = useState<string[]>([]);
   const [selectedPoint, setSelectedPoint] = useState<GlobalPickupPoint | null>(null);
@@ -735,14 +741,18 @@ export default function GlobalMapScreen() {
                 {isPointReady(selectedPoint) ? <div className="shrink-0 border-t border-slate-100 bg-white px-4 pb-4 pt-3">
                   <button
                     type="button"
-                    onClick={() =>
+                    onClick={() => {
+                      if (!isAuthenticated) {
+                        onOpenAuth();
+                        return;
+                      }
                       handleOpenNavigator({
                         lat: selectedPoint.lat,
                         lon: selectedPoint.lon,
                         label: selectedPoint.short_name || selectedPoint.name,
                         address: selectedPoint.address,
-                      })
-                    }
+                      });
+                    }}
                     className="flex w-full items-center justify-center gap-2 rounded-2xl bg-sky-500 px-5 py-4 font-bold text-white shadow-sm"
                   >
                     <Route className="h-5 w-5" />

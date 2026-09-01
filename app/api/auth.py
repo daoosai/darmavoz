@@ -8,7 +8,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import func, or_
+from sqlalchemy import func
 from sqlalchemy.orm import selectinload
 
 from app.db.database import get_db
@@ -340,17 +340,6 @@ async def _ensure_driver_phone_is_available(db: AsyncSession, normalized_phone: 
         )
 
 
-async def _ensure_driver_email_is_available(db: AsyncSession, email: str) -> str:
-    normalized_email = email.strip().lower()
-    existing_user = await db.scalar(select(User).where(func.lower(User.email) == normalized_email))
-    if existing_user is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=_error_detail("DRIVER_EMAIL_ALREADY_EXISTS", "Email уже используется"),
-        )
-    return normalized_email
-
-
 async def _create_driver_from_payload(
     db: AsyncSession,
     *,
@@ -360,7 +349,6 @@ async def _create_driver_from_payload(
     role = await _get_or_create_driver_role(db)
     user = User(
         username=normalized_phone,
-        email=payload.email,
         hashed_password=get_password_hash(payload.password),
         role_id=role.id,
         is_active=True,
@@ -454,6 +442,8 @@ async def send_email_code(
         user = await _get_user_by_email(db, normalized_email)
         if user is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь с таким email не найден")
+        if user.role is not None and user.role.name == "driver":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Для водителей доступен вход только по номеру телефона")
         _ensure_user_can_authenticate(user)
 
     code = generate_otp_code()
@@ -539,6 +529,8 @@ async def verify_email_code(
     user = await _get_user_by_email(db, normalized_email)
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь с таким email не найден")
+    if user.role is not None and user.role.name == "driver":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Для водителей доступен вход только по номеру телефона")
 
     _ensure_user_can_authenticate(user)
     await redis.delete(_email_auth_code_key(payload.auth_scope, normalized_email))
@@ -552,7 +544,6 @@ async def driver_register(
 ):
     normalized_phone = normalize_phone(payload.phone)
     await _ensure_driver_phone_is_available(db, normalized_phone)
-    await _ensure_driver_email_is_available(db, payload.email)
 
     code = generate_otp_code()
     sms_phone = normalize_sms_phone(normalized_phone)
@@ -568,24 +559,15 @@ async def driver_register(
     return DriverSmsChallengeResponse(status="sms_sent", phone=normalized_phone)
 
 
-@router.post("/login", response_model=Token | DriverSmsChallengeResponse | EmailSendCodeResponse)
+@router.post("/login", response_model=Token | DriverSmsChallengeResponse)
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
-    background_tasks: BackgroundTasks = None,
     db: AsyncSession = Depends(get_db),
 ):
-    identifier = form_data.username.strip()
-    is_email_login = "@" in identifier
-    normalized_email = identifier.lower()
-    normalized_phone = normalize_phone_like_username(identifier)
+    normalized_phone = normalize_phone_like_username(form_data.username)
     query = (
         select(User)
-        .where(
-            or_(
-                func.lower(User.email) == normalized_email,
-                User.username == normalized_phone,
-            )
-        )
+        .where(User.username == normalized_phone)
         .options(selectinload(User.role), selectinload(User.driver_profile))
     )
     result = await db.execute(query)
@@ -605,13 +587,6 @@ async def login(
 
     role_name = user.role.name if user.role else None
     if role_name == "driver":
-        if is_email_login:
-            if not user.email:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email водителя не настроен")
-            code = generate_otp_code()
-            await get_redis().setex(_email_auth_code_key("user", user.email.lower()), EMAIL_AUTH_CODE_TTL_SECONDS, code)
-            background_tasks.add_task(send_auth_email_code, to_email=user.email.lower(), code=code)
-            return EmailSendCodeResponse(email=user.email.lower())
         return await _issue_driver_login_code(
             normalized_phone=normalized_phone,
             user_id=str(user.id),
@@ -699,7 +674,6 @@ async def verify_driver_register(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Заявка на регистрацию повреждена") from exc
 
     await _ensure_driver_phone_is_available(db, normalized_phone)
-    await _ensure_driver_email_is_available(db, pending_payload.email)
     try:
         role, driver, user = await _create_driver_from_payload(
             db,

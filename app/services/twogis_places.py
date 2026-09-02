@@ -19,18 +19,6 @@ from app.schemas.parser import MATERIAL_KEYWORDS, ParserResultItem, ParserRunReq
 logger = logging.getLogger(__name__)
 PHONE_PATTERN = re.compile(r"\+?[\d][\d\s()\-]{4,}[\d]")
 MAX_PLACES_PAGES = 5
-RUBRIC_BLACKLIST = (
-    "институт",
-    "вуз",
-    "школа",
-    "образование",
-    "детск",
-    "сад",
-    "курсы",
-)
-RETAIL_BLACKLIST = (
-    "водомат",
-)
 PLACES_FIELDS = ",".join(
     (
         "items.point",
@@ -100,27 +88,6 @@ def _extract_contacts(item: dict[str, Any]) -> tuple[list[str], list[str]]:
     return list(dict.fromkeys(phones)), list(dict.fromkeys(websites))
 
 
-def _blacklisted_rubric_reason(item: dict[str, Any]) -> str | None:
-    names: list[str] = []
-    for key in ("name", "full_name"):
-        value = item.get(key)
-        if isinstance(value, str):
-            names.append(value)
-    rubrics = item.get("rubrics")
-    if isinstance(rubrics, list):
-        for rubric in rubrics:
-            if isinstance(rubric, dict) and isinstance(rubric.get("name"), str):
-                names.append(rubric["name"])
-    for name in names:
-        normalized_name = name.casefold()
-        if any(word in normalized_name for word in RETAIL_BLACKLIST):
-            return "Нецелевой тип точки"
-        for word in RUBRIC_BLACKLIST:
-            if word in normalized_name:
-                return f"Нецелевая категория ({word})"
-    return None
-
-
 def _item_name(item: object) -> str:
     if isinstance(item, dict) and isinstance(item.get("name"), str) and item["name"].strip():
         return item["name"].strip()
@@ -130,9 +97,6 @@ def _item_name(item: object) -> str:
 def _skip_reason(item: object) -> str | None:
     if not isinstance(item, dict):
         return "Некорректные данные 2ГИС"
-    rubric_reason = _blacklisted_rubric_reason(item)
-    if rubric_reason:
-        return rubric_reason
     point = item.get("point")
     if not isinstance(point, dict):
         return "Нет координат"

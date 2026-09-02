@@ -7,7 +7,7 @@ from app.models.models import CrmStatus, PointAuditLog, Quarry, Role, User
 from app.security.jwt import create_access_token
 from app.services.pickup_points import is_pickup_point_publicly_available
 from app.schemas.parser import ParserRunRequest
-from app.services.twogis_places import RETAIL_BLACKLIST, RUBRIC_BLACKLIST, ParsedPlace, _fetch_page, _normalize_place, _skip_reason, search_places
+from app.services.twogis_places import ParsedPlace, _fetch_page, _normalize_place, _skip_reason, search_places
 
 
 def auth_headers(username: str) -> dict[str, str]:
@@ -196,35 +196,12 @@ async def test_places_search_returns_collected_items_when_next_page_is_unavailab
     assert truncated is False
 
 
-def test_places_search_filters_blacklisted_rubrics():
-    place = _normalize_place(
-        {
-            "id": "2gis-university",
-            "name": "Business career institute",
-            "full_address_name": "Tyumen, Test road, 1",
-            "point": {"lat": 57.15, "lon": 65.53},
-            "rubrics": [{"name": "Институт образования"}],
-        }
-    )
-
-    assert place is None
-
-
-def test_places_search_uses_minimal_blacklist():
-    assert RUBRIC_BLACKLIST == ("институт", "вуз", "школа", "образование", "детск", "сад", "курсы")
-    assert RETAIL_BLACKLIST == ("водомат",)
-
-
-def test_places_search_filters_only_minimal_blacklist():
-    retail_item = {
-        "id": "2gis-water-vending",
-        "name": "Водомат у дома",
-        "full_address_name": "Tyumen, Test road, 1",
-        "point": {"lat": 57.15, "lon": 65.53},
-        "rubrics": [{"name": "Питьевая вода"}],
-    }
-    assert _skip_reason(retail_item) == "Нецелевой тип точки"
+def test_places_search_does_not_filter_by_rubric():
     for rubric_name in (
+        "Институт образования",
+        "Школа",
+        "Товары для сада",
+        "Водомат",
         "Магазин",
         "Офис продаж",
         "Торговый дом",
@@ -250,6 +227,18 @@ def test_places_search_filters_only_minimal_blacklist():
         }
 
         assert _skip_reason(allowed_item) is None
+        assert _normalize_place(allowed_item) is not None
+
+
+def test_places_search_skips_items_with_missing_required_data():
+    invalid_item = {
+        "id": "2gis-without-coordinates",
+        "name": "Товары для сада",
+        "full_address_name": "Tyumen, Test road, 2",
+        "rubrics": [{"name": "Товары для сада"}],
+    }
+
+    assert _skip_reason(invalid_item) == "Нет координат"
 
 
 def test_parser_allows_custom_keyword():

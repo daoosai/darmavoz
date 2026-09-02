@@ -239,18 +239,15 @@ async def test_places_search_returns_collected_items_when_next_page_is_unavailab
     assert truncated is False
 
 
-def test_places_search_does_not_filter_by_rubric():
+def test_places_search_does_not_filter_non_retail_rubrics():
     for rubric_name in (
         "Институт образования",
         "Школа",
         "Товары для сада",
         "Водомат",
-        "Магазин",
         "Офис продаж",
         "Торговый дом",
         "Павильон",
-        "Супермаркет",
-        "Гипермаркет",
         "Кадровое агентство",
         "Персонал",
         "Карьерный сервис",
@@ -258,7 +255,6 @@ def test_places_search_does_not_filter_by_rubric():
         "Автомат",
         "Розлив воды",
         "Кулер",
-        "Рыбный магазин",
         "Логистическая компания",
     ):
         allowed_item = {
@@ -271,6 +267,30 @@ def test_places_search_does_not_filter_by_rubric():
 
         assert _skip_reason(allowed_item) is None
         assert _normalize_place(allowed_item) is not None
+
+
+@pytest.mark.parametrize(
+    ("name", "full_name", "rubric_name"),
+    [
+        ("Лемана ПРО", None, "Строительные материалы"),
+        ("Карьер", "Супермаркет стройматериалов", "Песок"),
+        ("База материалов", None, "Строительный магазин"),
+        ("Пилорама Север", None, "Пиломатериалы"),
+    ],
+)
+def test_places_search_skips_retail_chains_by_name_or_rubric(name, full_name, rubric_name):
+    item = {
+        "id": "2gis-retail",
+        "name": name,
+        "full_address_name": "Tyumen, Test road, 2",
+        "point": {"lat": 57.15, "lon": 65.53},
+        "rubrics": [{"name": rubric_name}],
+    }
+    if full_name:
+        item["full_name"] = full_name
+
+    assert _skip_reason(item) == "B2C розница / Сетевой магазин"
+    assert _normalize_place(item) is None
 
 
 def test_places_search_skips_items_with_missing_required_data():

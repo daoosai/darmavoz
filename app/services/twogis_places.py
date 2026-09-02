@@ -19,6 +19,22 @@ from app.schemas.parser import MATERIAL_KEYWORDS, ParserResultItem, ParserRunReq
 logger = logging.getLogger(__name__)
 PHONE_PATTERN = re.compile(r"\+?[\d][\d\s()\-]{4,}[\d]")
 MAX_PLACES_PAGES = 5
+RETAIL_BLACKLIST = (
+    "магазин",
+    "гипермаркет",
+    "супермаркет",
+    "строительный двор",
+    "лемана",
+    "леруа",
+    "obi",
+    "оби",
+    "касторама",
+    "у михалыча",
+    "пилорама",
+    "дрова",
+    "розница",
+)
+RETAIL_SKIP_REASON = "B2C розница / Сетевой магазин"
 PLACES_FIELDS = ",".join(
     (
         "items.point",
@@ -138,6 +154,17 @@ def _item_name(item: object) -> str:
     return "Неизвестный объект"
 
 
+def _is_retail_item(item: dict[str, Any]) -> bool:
+    name_values = (item.get("name"), item.get("full_name"))
+    text_values = [value for value in name_values if isinstance(value, str)]
+    text_values.extend(_extract_rubric_names(item))
+    return any(
+        stop_word in value.casefold()
+        for value in text_values
+        for stop_word in RETAIL_BLACKLIST
+    )
+
+
 def _skip_reason(item: object) -> str | None:
     if not isinstance(item, dict):
         return "Некорректные данные 2ГИС"
@@ -158,6 +185,8 @@ def _skip_reason(item: object) -> str | None:
     address = item.get("full_address_name") or item.get("address_name")
     if not isinstance(address, str) or not address.strip():
         return "Нет адреса"
+    if _is_retail_item(item):
+        return RETAIL_SKIP_REASON
     return None
 
 

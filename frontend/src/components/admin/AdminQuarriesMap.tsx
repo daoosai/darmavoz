@@ -18,6 +18,7 @@ export interface AdminMapPoint {
   is_active: boolean;
   crm_status?: "parsed" | "in_progress" | "agreed" | "hidden";
   primary_image_url?: string | null;
+  parsed_data?: Record<string, unknown> | null;
 }
 
 interface AdminQuarriesMapProps {
@@ -71,6 +72,10 @@ const createMarkerElement = (
   onClose: () => void,
   onEdit: () => void,
 ) => {
+  const parsedName = point.parsed_data?.name;
+  const pointLabel = point.name.trim()
+    || (typeof parsedName === "string" ? parsedName.trim() : "")
+    || "Без названия";
   const wrapper = document.createElement("div");
   wrapper.style.position = "relative";
   wrapper.style.width = "30px";
@@ -98,6 +103,11 @@ const createMarkerElement = (
     event.stopPropagation();
     onSelect();
   });
+
+  const label = document.createElement("span");
+  label.className = "pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap rounded-md bg-blue-500 px-2 py-1 text-xs text-white shadow-md";
+  label.textContent = pointLabel;
+  wrapper.appendChild(label);
   wrapper.appendChild(marker);
 
   if (isSelected) {

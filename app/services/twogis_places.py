@@ -123,10 +123,10 @@ def _blacklisted_rubric_reason(item: dict[str, Any]) -> str | None:
     for name in names:
         normalized_name = name.casefold()
         if any(word in normalized_name for word in RETAIL_BLACKLIST):
-            return "Мусорный тип точки"
+            return "Нецелевой тип точки"
         for word in RUBRIC_BLACKLIST:
             if word in normalized_name:
-                return f"Мусорная рубрика ({word})"
+                return f"Нецелевая категория ({word})"
     return None
 
 

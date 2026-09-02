@@ -218,7 +218,7 @@ def test_places_search_filters_only_explicit_retail_noise():
         "point": {"lat": 57.15, "lon": 65.53},
         "rubrics": [{"name": "Питьевая вода"}],
     }
-    assert _skip_reason(retail_item) == "Мусорный тип точки"
+    assert _skip_reason(retail_item) == "Нецелевой тип точки"
     for rubric_name in ("Магазин", "Офис продаж", "Торговый дом", "Павильон", "Супермаркет", "Гипермаркет"):
         allowed_item = {
             "id": f"2gis-{rubric_name}",

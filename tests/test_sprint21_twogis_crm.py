@@ -365,7 +365,7 @@ async def test_admin_parser_creates_parsed_quarry_and_audit_log(client, session_
 
 
 @pytest.mark.asyncio
-async def test_parser_upsert_keeps_crm_fields_and_only_updates_parsed_data(client, session_factory, monkeypatch):
+async def test_parser_upsert_keeps_crm_fields_and_fills_missing_contact_phone(client, session_factory, monkeypatch):
     async with session_factory() as session:
         admin_role = await ensure_role(session, "admin")
         admin = await create_user(session, username="sprint21_upsert_admin", role=admin_role)
@@ -376,7 +376,7 @@ async def test_parser_upsert_keeps_crm_fields_and_only_updates_parsed_data(clien
             address="Manual address",
             lat=57.15,
             lon=65.53,
-            contact_phone="+79990000001",
+            contact_phone=None,
             owner_user_id=admin.id,
             crm_status=CrmStatus.refused.value,
             crm_comment="Manual CRM decision",
@@ -416,4 +416,5 @@ async def test_parser_upsert_keeps_crm_fields_and_only_updates_parsed_data(clien
     assert updated.owner_user_id is not None
     assert updated.crm_status == CrmStatus.refused.value
     assert updated.crm_comment == "Manual CRM decision"
+    assert updated.contact_phone == "+79990000002"
     assert updated.parsed_data["phones"] == ["+79990000002"]

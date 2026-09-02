@@ -397,6 +397,11 @@ async def upsert_places(
         existing = await db.scalar(select(destination_model).where(destination_model.twogis_id == place.twogis_id))
         if existing is not None:
             existing.parsed_data = place.parsed_data
+            if place.phone:
+                if payload.target == "material" and not existing.contact_phone:
+                    existing.contact_phone = place.phone
+                elif payload.target == "water" and not existing.phone:
+                    existing.phone = place.phone
             result.updated += 1
             result.updated_items.append(ParserResultItem(id=place.twogis_id, name=place.name))
             continue

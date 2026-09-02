@@ -24,7 +24,7 @@ interface WaterPoint {
   price_unit?: string | null;
   description?: string | null;
   primary_image_url?: string | null;
-  crm_status: "parsed" | "in_progress" | "agreed" | "hidden";
+  crm_status: "auto_added" | "invite_sent" | "response_received" | "interested" | "registered" | "registration_completed" | "activated" | "refused" | "call_later";
   is_active: boolean;
   is_ready: boolean;
 }
@@ -34,7 +34,7 @@ const DEFAULT_CENTER: [number, number] = [65.534328, 57.152286];
 const isFreePoint = (point: WaterPoint) =>
   point.is_free === true || point.water_type === "free" || Number(point.price) === 0;
 
-const isPointReady = (point: WaterPoint) => point.crm_status === "agreed";
+const isPointReady = (point: WaterPoint) => point.crm_status === "activated";
 
 export default function WaterMapScreen() {
   const [points, setPoints] = useState<WaterPoint[]>([]);
@@ -132,7 +132,7 @@ export default function WaterMapScreen() {
       .map((point) => {
         const element = document.createElement("button");
         element.type = "button";
-        element.className = `water-map-marker water-map-marker--crm-${point.crm_status}`;
+        element.className = `water-map-marker water-map-marker--crm-${isPointReady(point) ? "activated" : "muted"}`;
         element.setAttribute("aria-label", point.name || point.source);
 
         const label = document.createElement("span");
@@ -145,7 +145,7 @@ export default function WaterMapScreen() {
         element.appendChild(labelTail);
 
         const pin = document.createElement("span");
-        pin.className = `water-map-marker__pin water-map-marker__pin--${isPointReady(point) ? point.water_type : "muted"}`;
+        pin.className = `water-map-marker__pin water-map-marker__pin--${isPointReady(point) ? "activated" : "muted"}`;
         pin.textContent = "💧";
         element.appendChild(pin);
         element.addEventListener("click", () => setSelectedId(point.id));

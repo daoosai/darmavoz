@@ -28,7 +28,7 @@ interface GlobalPickupPoint {
   lon: number;
   primary_image_url?: string | null;
   material_offers: GlobalPickupPointMaterial[];
-  crm_status: "parsed" | "in_progress" | "agreed" | "hidden";
+  crm_status: "auto_added" | "invite_sent" | "response_received" | "interested" | "registered" | "registration_completed" | "activated" | "refused" | "call_later";
   is_active: boolean;
   is_ready: boolean;
 }
@@ -56,10 +56,10 @@ const getRenderablePoints = (pickupPoints: GlobalPickupPoint[]) =>
     (point) => isValidCoordinate(point.lat) && isValidCoordinate(point.lon),
   );
 
-const isPointReady = (point: GlobalPickupPoint) => point.crm_status === "agreed";
+const isPointReady = (point: GlobalPickupPoint) => point.crm_status === "activated";
 
 const getCrmMarkerStatus = (point: GlobalPickupPoint) =>
-  point.crm_status === "agreed" ? "agreed" : "in-progress";
+  point.crm_status === "activated" ? "activated" : "inactive";
 
 const calculateDistanceKm = (
   lat1: number,
@@ -519,11 +519,11 @@ export default function GlobalMapScreen({
           place-items: center;
           cursor: pointer;
         }
-        .global-pickup-marker--agreed {
+        .global-pickup-marker--activated {
           background: #16a34a;
           color: #ffffff;
         }
-        .global-pickup-marker--in-progress {
+        .global-pickup-marker--inactive {
           background: #94a3b8;
           color: #ffffff;
           opacity: 0.82;

@@ -186,10 +186,10 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
     id: "", water_type: "free", source: "", address: "", lat: 0, lon: 0, moderation_status: "", is_active: true,
   }));
   const [waterCrmForm, setWaterCrmForm] = useState<WaterCrmForm>({
-    status: "parsed",
+    status: "auto_added",
     comment: "",
     ownerId: "",
-    initialStatus: "parsed",
+    initialStatus: "auto_added",
     initialComment: "",
     initialOwnerId: "",
   });
@@ -346,10 +346,10 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
   const openWaterEdit = (point: WaterPoint) => {
     setWaterEditForm(createWaterEditForm(point));
     setWaterCrmForm({
-      status: point.crm_status || "parsed",
+      status: point.crm_status || "auto_added",
       comment: point.crm_comment || "",
       ownerId: point.owner_user_id || "",
-      initialStatus: point.crm_status || "parsed",
+      initialStatus: point.crm_status || "auto_added",
       initialComment: point.crm_comment || "",
       initialOwnerId: point.owner_user_id || "",
     });
@@ -368,10 +368,10 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
     setEditMedia([]);
     if (kind === "water") {
       setWaterCrmForm({
-        status: "parsed",
+        status: "auto_added",
         comment: "",
         ownerId: "",
-        initialStatus: "parsed",
+        initialStatus: "auto_added",
         initialComment: "",
         initialOwnerId: "",
       });

@@ -6,7 +6,17 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 ParserTarget = Literal["material", "water"]
-CrmStatusValue = Literal["parsed", "in_progress", "agreed", "hidden"]
+CrmStatusValue = Literal[
+    "auto_added",
+    "invite_sent",
+    "response_received",
+    "interested",
+    "registered",
+    "registration_completed",
+    "activated",
+    "refused",
+    "call_later",
+]
 PointKind = Literal["quarry", "water"]
 
 MATERIAL_KEYWORDS = {

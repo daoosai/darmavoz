@@ -11,6 +11,7 @@ from app.api.admin import DeleteResult
 from app.db.database import get_db
 from app.models.models import (
     CartItem,
+    CrmStatus,
     MediaFile,
     ModerationStatus,
     PlacementStatus,
@@ -145,6 +146,7 @@ async def _apply_point_changes(
 async def list_pickup_points(
     moderation_status: str | None = None,
     placement_status: PlacementStatus | None = None,
+    crm_status: CrmStatus | None = None,
     point_type: str | None = None,
     material_id: UUID | None = None,
     search: str | None = Query(default=None, max_length=100),
@@ -167,6 +169,8 @@ async def list_pickup_points(
             stmt = stmt.where(Quarry.moderation_status == moderation_status)
     if placement_status is not None:
         stmt = stmt.where(Quarry.placement_status == placement_status.value)
+    if crm_status is not None:
+        stmt = stmt.where(Quarry.crm_status == crm_status.value)
     if point_type:
         stmt = stmt.where(Quarry.point_type == point_type)
     if material_id:

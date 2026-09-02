@@ -375,7 +375,7 @@ async def upsert_places(
                 is_active=False,
                 moderation_status="incomplete",
                 twogis_id=place.twogis_id,
-                crm_status=CrmStatus.parsed.value,
+                crm_status=CrmStatus.auto_added.value,
                 parsed_data=place.parsed_data,
             )
         else:
@@ -390,7 +390,7 @@ async def upsert_places(
                 is_active=False,
                 moderation_status="pending_moderation",
                 twogis_id=place.twogis_id,
-                crm_status=CrmStatus.parsed.value,
+                crm_status=CrmStatus.auto_added.value,
                 parsed_data=place.parsed_data,
             )
         db.add(point)
@@ -401,7 +401,7 @@ async def upsert_places(
                 point_kind=point_kind,
                 admin_id=admin_id,
                 old_status=None,
-                new_status=CrmStatus.parsed.value,
+                new_status=CrmStatus.auto_added.value,
             )
         )
         result.created += 1

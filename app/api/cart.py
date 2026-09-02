@@ -27,7 +27,7 @@ async def get_cart_items(
         .where(
             or_(
                 CartItem.quarry_id.is_(None),
-                Quarry.crm_status == CrmStatus.agreed.value,
+                Quarry.crm_status == CrmStatus.activated.value,
             )
         )
         .options(selectinload(CartItem.material), selectinload(CartItem.quarry))

@@ -33,7 +33,7 @@ export interface PickupPointMarker {
   is_free?: boolean;
   unit: string;
   min_delivery_price: number;
-  crm_status: "parsed" | "in_progress" | "agreed" | "hidden";
+  crm_status: "auto_added" | "invite_sent" | "response_received" | "interested" | "registered" | "registration_completed" | "activated" | "refused" | "call_later";
   primary_image_url?: string | null;
 }
 
@@ -102,7 +102,7 @@ const isFreeOffer = (isFree: boolean | undefined, price: number | null | undefin
   isFree === true || Number(price) === 0;
 
 const isPointReady = (point: PickupPointMarker | PickupPointSelection) =>
-  point.crm_status === "agreed";
+  point.crm_status === "activated";
 
 const TYPE_LABELS: Record<string, string> = {
   quarry: "Карьер",
@@ -399,7 +399,7 @@ export default function PickupPointMapScreen({
     markerRefs.current = visible.map((point) => {
       const element = document.createElement("button");
       element.type = "button";
-      element.className = `pickup-point-marker pickup-point-marker--${point.crm_status}${point.id === activePointId ? " pickup-point-marker--active" : ""}`;
+      element.className = `pickup-point-marker pickup-point-marker--${isPointReady(point) ? "activated" : "inactive"}${point.id === activePointId ? " pickup-point-marker--active" : ""}`;
       element.setAttribute("aria-label", `Выбрать точку ${point.short_name || point.name}`);
 
       const icon = document.createElement("span");

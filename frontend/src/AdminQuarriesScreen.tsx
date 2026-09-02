@@ -10,7 +10,7 @@ import {
 } from "./addressSearch";
 import { useAuthStore, usePlacementStore } from "./store";
 import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
-import { getCrmStatusClass, getCrmStatusLabel, type CrmStatus } from "./crmStatus";
+import { CRM_STATUS_LABELS, getCrmStatusClass, getCrmStatusLabel, type CrmStatus } from "./crmStatus";
 import { PlacementBadge, PlacementDates, type PlacementFields, type PlacementStatus } from "./placement";
 import MapWebGLFallback, { tryCreate2GisMap } from "./components/MapWebGLFallback";
 import AddressSuggestDropdown from "./components/AddressSuggestDropdown";
@@ -267,6 +267,7 @@ export default function AdminQuarriesScreen({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [rejectPointId, setRejectPointId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [crmStatusFilter, setCrmStatusFilter] = useState<CrmStatus | "">("");
   const [parserCenter, setParserCenter] = useState({ lat: 57.1522, lon: 65.5272 });
   const { policy, loadPolicy, loadSummary } = usePlacementStore();
   const normalizedStatusFilter = ALLOWED_MODERATION_FILTERS.has(statusFilter)
@@ -294,6 +295,9 @@ export default function AdminQuarriesScreen({
       }
       if (normalizedTypeFilter) {
         params.set("point_type", normalizedTypeFilter);
+      }
+      if (crmStatusFilter) {
+        params.set("crm_status", crmStatusFilter);
       }
       const query = params.toString();
       const requestUrl = query
@@ -333,7 +337,7 @@ export default function AdminQuarriesScreen({
       return;
     }
     fetchQuarries();
-  }, [token, normalizedStatusFilter, normalizedPlacementFilter, normalizedTypeFilter]);
+  }, [token, normalizedStatusFilter, normalizedPlacementFilter, normalizedTypeFilter, crmStatusFilter]);
 
   useEffect(() => {
     if (!policy) void loadPolicy();
@@ -547,6 +551,10 @@ export default function AdminQuarriesScreen({
           <option value="warehouse">Склады</option>
           <option value="supplier">Поставщики</option>
         </select>
+        <select value={crmStatusFilter} onChange={(event) => setCrmStatusFilter(event.target.value as CrmStatus | "")} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
+          <option value="">Все CRM-статусы</option>
+          {Object.entries(CRM_STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>
       </div>
 
       <section className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
@@ -556,13 +564,13 @@ export default function AdminQuarriesScreen({
           </div>
           <div className="flex shrink-0 items-center gap-3 text-xs font-semibold text-slate-500">
             <span className="flex items-center gap-1.5">
-              <span className="h-3 w-3 rounded-full bg-yellow-400" /> Новая
+              <span className="h-3 w-3 rounded-full bg-yellow-400" /> Добавлена / приглашение
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="h-3 w-3 rounded-full bg-slate-400" /> В работе
+              <span className="h-3 w-3 rounded-full bg-slate-400" /> Воронка CRM
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="h-3 w-3 rounded-full bg-green-600" /> Согласовано
+              <span className="h-3 w-3 rounded-full bg-green-600" /> Активирована
             </span>
           </div>
         </div>
@@ -2259,10 +2267,10 @@ function EnhancedEditQuarryModal({
           token,
           pointKind: "quarry",
           pointId: savedPoint.id,
-          status: formData.crm_status || "parsed",
+          status: formData.crm_status || "auto_added",
           comment: formData.crm_comment || "",
           ownerId: formData.owner_user_id || "",
-          initialStatus: quarry.crm_status || "parsed",
+          initialStatus: quarry.crm_status || "auto_added",
           initialComment: quarry.crm_comment || "",
           initialOwnerId: quarry.owner_user_id || "",
         });
@@ -2640,7 +2648,7 @@ function EnhancedEditQuarryModal({
             token={token}
             pointKind="quarry"
             pointId={formData.id}
-            status={formData.crm_status || "parsed"}
+            status={formData.crm_status || "auto_added"}
             comment={formData.crm_comment || ""}
             ownerId={formData.owner_user_id || ""}
             onStatusChange={(status) => setFormData((current) => ({ ...current, crm_status: status }))}

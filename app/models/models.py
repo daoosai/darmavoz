@@ -322,10 +322,15 @@ class PickupPointType(str, Enum):
 
 
 class CrmStatus(str, Enum):
-    parsed = "parsed"
-    in_progress = "in_progress"
-    agreed = "agreed"
-    hidden = "hidden"
+    auto_added = "auto_added"
+    invite_sent = "invite_sent"
+    response_received = "response_received"
+    interested = "interested"
+    registered = "registered"
+    registration_completed = "registration_completed"
+    activated = "activated"
+    refused = "refused"
+    call_later = "call_later"
 
 
 CRM_STATUS_VALUES = tuple(status.value for status in CrmStatus)
@@ -399,8 +404,8 @@ class Quarry(Base):
     crm_status: Mapped[str] = mapped_column(
         SQLEnum(*CRM_STATUS_VALUES, name="crm_status"),
         nullable=False,
-        default=CrmStatus.agreed.value,
-        server_default=CrmStatus.agreed.value,
+        default=CrmStatus.activated.value,
+        server_default=CrmStatus.activated.value,
         index=True,
     )
     crm_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -584,8 +589,8 @@ class WaterPoint(Base):
     crm_status: Mapped[str] = mapped_column(
         SQLEnum(*CRM_STATUS_VALUES, name="crm_status"),
         nullable=False,
-        default=CrmStatus.agreed.value,
-        server_default=CrmStatus.agreed.value,
+        default=CrmStatus.activated.value,
+        server_default=CrmStatus.activated.value,
         index=True,
     )
     crm_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

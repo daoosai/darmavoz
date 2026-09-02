@@ -5,7 +5,17 @@ import { baseURL } from "../../utils";
 
 type PointKind = "quarry" | "water";
 type Owner = { id: string; display_name?: string | null; username?: string | null; phone?: string | null };
-const CRM_STATUS_KEYS: CrmStatus[] = ["parsed", "in_progress", "agreed", "hidden"];
+const CRM_STATUS_KEYS: CrmStatus[] = [
+  "auto_added",
+  "invite_sent",
+  "response_received",
+  "interested",
+  "registered",
+  "registration_completed",
+  "activated",
+  "refused",
+  "call_later",
+];
 
 export default function CrmPanel({
   token,

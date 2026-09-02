@@ -32,6 +32,41 @@ type ParserPreviewResult = {
   truncated: boolean;
 };
 
+const textValues = (value: unknown): string[] => {
+  if (typeof value === "string") return value.trim() ? [value.trim()] : [];
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => typeof item === "string" && item.trim() ? [item.trim()] : []);
+};
+
+const getRubrics = (parsedData: Record<string, unknown>) => {
+  const rubrics = parsedData.rubrics;
+  if (!Array.isArray(rubrics)) return [];
+  return [...new Set(rubrics.flatMap((rubric) => {
+    if (typeof rubric === "string" && rubric.trim()) return [rubric.trim()];
+    if (rubric && typeof rubric === "object" && "name" in rubric && typeof rubric.name === "string" && rubric.name.trim()) {
+      return [rubric.name.trim()];
+    }
+    return [];
+  }))];
+};
+
+const getWebsiteDomain = (website: string) => {
+  const normalized = website.includes("://") ? website : `https://${website}`;
+  try {
+    return new URL(normalized).hostname.replace(/^www\./i, "");
+  } catch {
+    return website.replace(/^https?:\/\//i, "").split(/[/?#]/, 1)[0];
+  }
+};
+
+const getPreviewDetails = (item: ParserPreviewItem) => {
+  const phone = item.phone?.trim() || textValues(item.parsed_data.phones)[0];
+  const website = textValues(item.parsed_data.websites)[0]
+    || textValues(item.parsed_data.website)[0]
+    || textValues(item.parsed_data.site)[0];
+  return { rubrics: getRubrics(item.parsed_data), phone, website: website ? getWebsiteDomain(website) : null };
+};
+
 const keywords: Record<ParserTarget, string[]> = {
   material: ["карьер", "накопитель", "песок", "щебень", "пгс", "песчано-гравийная смесь"],
   water: ["вода", "питьевая вода", "техническая вода"],
@@ -244,7 +279,21 @@ export default function ParserRunPanel({
             </div>
             <div className="max-h-[65vh] space-y-3 overflow-y-auto p-5">
               <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={parserResult.items.length > 0 && selectedPreviewIds.size === parserResult.items.length} onChange={() => setSelectedPreviewIds((current) => current.size === parserResult.items.length ? new Set() : new Set(parserResult.items.map((item) => item.twogis_id)))} />Выбрать всё</label>
-              {parserResult.items.map((item) => <label key={item.twogis_id} className="flex gap-3 rounded-xl bg-slate-50 p-3 text-sm"><input type="checkbox" checked={selectedPreviewIds.has(item.twogis_id)} onChange={() => setSelectedPreviewIds((current) => { const next = new Set(current); next.has(item.twogis_id) ? next.delete(item.twogis_id) : next.add(item.twogis_id); return next; })} /><span><strong>{item.name}</strong><span className="block text-slate-500">{item.address}</span></span></label>)}
+              {parserResult.items.map((item) => {
+                const details = getPreviewDetails(item);
+                return (
+                  <label key={item.twogis_id} className="flex gap-3 rounded-xl bg-slate-50 p-3 text-sm">
+                    <input type="checkbox" checked={selectedPreviewIds.has(item.twogis_id)} onChange={() => setSelectedPreviewIds((current) => { const next = new Set(current); next.has(item.twogis_id) ? next.delete(item.twogis_id) : next.add(item.twogis_id); return next; })} />
+                    <span>
+                      <strong>{item.name}</strong>
+                      <span className="block text-slate-500">{item.address}</span>
+                      {details.rubrics.length > 0 ? <span className="block text-xs text-gray-500">Рубрики: {details.rubrics.join(", ")}</span> : null}
+                      {details.phone ? <span className="block text-xs text-gray-500">Телефон: {details.phone}</span> : null}
+                      {details.website ? <span className="block text-xs text-gray-500">Сайт: {details.website}</span> : null}
+                    </span>
+                  </label>
+                );
+              })}
               {parserResult.skipped_items.length > 0 ? (
                 <section className="rounded-xl border border-red-100 bg-red-50 p-3" aria-label="Пропущенные объекты">
                   <h3 className="text-sm font-bold text-red-700">❌ Пропущено ({parserResult.skipped_items.length})</h3>

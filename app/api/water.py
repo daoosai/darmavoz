@@ -29,7 +29,7 @@ def _is_water_point_ready(point: WaterPoint) -> bool:
 
 def _public_stmt():
     return select(WaterPoint).where(
-        WaterPoint.crm_status == CrmStatus.agreed.value,
+        WaterPoint.crm_status == CrmStatus.activated.value,
         WaterPoint.moderation_status == "approved",
         WaterPoint.is_active.is_(True),
         WaterPoint.is_deleted.is_(False),
@@ -118,8 +118,8 @@ async def list_water_points_for_map(
         WaterPoint.is_deleted.is_(False),
         WaterPoint.crm_status.in_(
             [
-                CrmStatus.in_progress.value,
-                CrmStatus.agreed.value,
+                CrmStatus.invite_sent.value,
+                CrmStatus.activated.value,
             ]
         ),
     )

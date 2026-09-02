@@ -313,11 +313,11 @@ async def test_admin_parser_creates_parsed_quarry_and_audit_log(client, session_
 
     assert point is not None
     assert point.owner_user_id is None
-    assert point.crm_status == CrmStatus.parsed.value
+    assert point.crm_status == CrmStatus.auto_added.value
     assert point.parsed_data["phones"] == ["+79990000000"]
     assert audit_log is not None
     assert audit_log.old_status is None
-    assert audit_log.new_status == CrmStatus.parsed.value
+    assert audit_log.new_status == CrmStatus.auto_added.value
     assert not is_pickup_point_publicly_available(point)
 
 
@@ -335,7 +335,7 @@ async def test_parser_upsert_keeps_crm_fields_and_only_updates_parsed_data(clien
             lon=65.53,
             contact_phone="+79990000001",
             owner_user_id=admin.id,
-            crm_status=CrmStatus.hidden.value,
+            crm_status=CrmStatus.refused.value,
             crm_comment="Manual CRM decision",
             twogis_id="2gis-existing",
             parsed_data={"phones": ["old"]},
@@ -371,6 +371,6 @@ async def test_parser_upsert_keeps_crm_fields_and_only_updates_parsed_data(clien
     assert updated.name == "Manual quarry name"
     assert updated.address == "Manual address"
     assert updated.owner_user_id is not None
-    assert updated.crm_status == CrmStatus.hidden.value
+    assert updated.crm_status == CrmStatus.refused.value
     assert updated.crm_comment == "Manual CRM decision"
     assert updated.parsed_data["phones"] == ["+79990000002"]

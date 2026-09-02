@@ -105,7 +105,7 @@ class WaterPointOut(WaterPointIn):
     moderation_status: str
     moderation_comment: str | None = None
     twogis_id: str | None = None
-    crm_status: Literal["parsed", "in_progress", "agreed", "hidden"] = "agreed"
+    crm_status: Literal["auto_added", "invite_sent", "response_received", "interested", "registered", "registration_completed", "activated", "refused", "call_later"] = "activated"
     is_ready: bool = False
     crm_comment: str | None = None
     parsed_data: dict | None = None

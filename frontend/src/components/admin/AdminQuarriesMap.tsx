@@ -16,7 +16,7 @@ export interface AdminMapPoint {
   owner_name?: string | null;
   twogis_id?: string | null;
   is_active: boolean;
-  crm_status?: "parsed" | "in_progress" | "agreed" | "hidden";
+  crm_status?: "auto_added" | "invite_sent" | "response_received" | "interested" | "registered" | "registration_completed" | "activated" | "refused" | "call_later";
   primary_image_url?: string | null;
   parsed_data?: Record<string, unknown> | null;
 }
@@ -90,13 +90,11 @@ const createMarkerElement = (
   marker.style.height = "30px";
   marker.style.borderRadius = "9999px";
   marker.style.border = "3px solid white";
-  marker.style.backgroundColor = point.crm_status === "parsed"
-    ? "#facc15"
-    : point.crm_status === "in_progress"
-      ? "#94a3b8"
-      : point.crm_status === "agreed"
-        ? "#16a34a"
-        : "#475569";
+  marker.style.backgroundColor = point.crm_status === "activated"
+    ? "#16a34a"
+    : point.crm_status === "auto_added" || point.crm_status === "invite_sent"
+      ? "#facc15"
+      : "#94a3b8";
   marker.style.boxShadow = "0 2px 8px rgba(15, 23, 42, 0.35)";
   marker.style.cursor = "pointer";
   marker.addEventListener("click", (event) => {
@@ -309,7 +307,7 @@ export default function AdminQuarriesMap({
     if (!isMapReady || !mapRef.current || !mapgl?.HtmlMarker) return;
 
     markerRefs.current.forEach((marker) => marker.destroy?.());
-    markerRefs.current = points.filter((point) => point.crm_status !== "hidden").filter(isRenderablePoint).map((point) => {
+    markerRefs.current = points.filter(isRenderablePoint).map((point) => {
       const pointKey = getPointKey(point);
       const element = createMarkerElement(
         point,

@@ -22,10 +22,12 @@ MAX_PLACES_PAGES = 5
 PLACES_FIELDS = ",".join(
     (
         "items.point",
+        "items.address",
         "items.full_address_name",
         "items.contact_groups",
         "items.schedule",
         "items.rubrics",
+        "items.links",
     )
 )
 
@@ -53,39 +55,81 @@ class PlacesSearchResult:
 
 
 def _contact_value(contact: dict[str, Any]) -> str | None:
-    for key in ("value", "text", "url", "number"):
+    for key in ("value", "text", "url", "href", "number"):
         value = contact.get(key)
         if isinstance(value, str) and value.strip():
             return value.strip()
     return None
 
 
-def _extract_contacts(item: dict[str, Any]) -> tuple[list[str], list[str]]:
-    phones: list[str] = []
-    websites: list[str] = []
+def _contact_bucket(contact_type: str, value: str) -> str:
+    normalized_type = contact_type.casefold()
+    normalized_value = value.casefold()
+    if "vk" in normalized_type or "vkontakte" in normalized_type or "vk.com" in normalized_value:
+        return "vk"
+    if "email" in normalized_type or "e-mail" in normalized_type or "@" in value:
+        return "emails"
+    if (
+        "site" in normalized_type
+        or "web" in normalized_type
+        or "url" in normalized_type
+        or value.startswith(("http://", "https://"))
+    ):
+        return "websites"
+    return "other"
+
+
+def _iter_contact_records(item: dict[str, Any]) -> Iterator[dict[str, Any]]:
     groups = item.get("contact_groups")
-    if not isinstance(groups, list):
-        return phones, websites
-
-    for group in groups:
-        if not isinstance(group, dict):
-            continue
-        contacts = group.get("contacts")
-        if not isinstance(contacts, list):
-            continue
-        for contact in contacts:
-            if not isinstance(contact, dict):
+    if isinstance(groups, list):
+        for group in groups:
+            if not isinstance(group, dict):
                 continue
-            value = _contact_value(contact)
-            if not value:
-                continue
-            contact_type = str(contact.get("type") or "").casefold()
-            if "site" in contact_type or "web" in contact_type or value.startswith(("http://", "https://")):
-                websites.append(value)
-            elif "phone" in contact_type or PHONE_PATTERN.search(value):
-                phones.append(value)
+            contacts = group.get("contacts")
+            if isinstance(contacts, list):
+                yield from (contact for contact in contacts if isinstance(contact, dict))
 
-    return list(dict.fromkeys(phones)), list(dict.fromkeys(websites))
+    links = item.get("links")
+    if isinstance(links, list):
+        yield from (link for link in links if isinstance(link, dict))
+
+
+def _extract_contacts(item: dict[str, Any]) -> tuple[list[str], dict[str, list[str]]]:
+    phones: list[str] = []
+    contacts: dict[str, list[str]] = {
+        "websites": [],
+        "vk": [],
+        "emails": [],
+        "other": [],
+    }
+
+    for contact in _iter_contact_records(item):
+        value = _contact_value(contact)
+        if not value:
+            continue
+        contact_type = str(contact.get("type") or contact.get("kind") or "")
+        if "phone" in contact_type.casefold() or PHONE_PATTERN.search(value):
+            phones.append(value)
+            continue
+        contacts[_contact_bucket(contact_type, value)].append(value)
+
+    return list(dict.fromkeys(phones)), {
+        key: list(dict.fromkeys(values)) for key, values in contacts.items()
+    }
+
+
+def _extract_rubric_names(item: dict[str, Any]) -> list[str]:
+    rubrics = item.get("rubrics")
+    if not isinstance(rubrics, list):
+        return []
+
+    names: list[str] = []
+    for rubric in rubrics:
+        if isinstance(rubric, str) and rubric.strip():
+            names.append(rubric.strip())
+        elif isinstance(rubric, dict) and isinstance(rubric.get("name"), str) and rubric["name"].strip():
+            names.append(rubric["name"].strip())
+    return list(dict.fromkeys(names))
 
 
 def _item_name(item: object) -> str:
@@ -138,13 +182,14 @@ def _normalize_place(item: object) -> ParsedPlace | None:
     if not (-90 <= lat <= 90 and -180 <= lon <= 180):
         return None
 
-    phones, websites = _extract_contacts(item)
+    phones, contacts = _extract_contacts(item)
     parsed_data: dict[str, Any] = {
         "source": "2gis",
         "phones": phones,
-        "websites": websites,
+        "websites": contacts["websites"],
+        "contacts": contacts,
         "schedule": item.get("schedule"),
-        "rubrics": item.get("rubrics"),
+        "rubrics": _extract_rubric_names(item),
         "raw": item,
     }
     return ParsedPlace(

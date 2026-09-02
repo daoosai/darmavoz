@@ -14,6 +14,41 @@ def auth_headers(username: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {create_access_token(data={'sub': username})}"}
 
 
+def test_normalize_place_maps_required_twogis_fields_to_db_payload():
+    place = _normalize_place(
+        {
+            "id": "2gis-required-fields",
+            "name": "Material base",
+            "address_name": "Test street, 1",
+            "point": {"lat": 57.15, "lon": 65.53},
+            "contact_groups": [{"contacts": [
+                {"type": "phone", "value": "+7 999 000-00-01"},
+                {"type": "email", "value": "sale@example.test"},
+            ]}],
+            "links": [
+                {"type": "website", "url": "https://materials.example.test"},
+                {"type": "vkontakte", "url": "https://vk.com/materials"},
+            ],
+            "rubrics": [{"name": "Песок и щебень"}, {"name": "Строительные материалы"}],
+            "schedule": {"Mon": "09:00-18:00"},
+        }
+    )
+
+    assert place is not None
+    assert place.name == "Material base"
+    assert place.address == "Test street, 1"
+    assert (place.lat, place.lon) == (57.15, 65.53)
+    assert place.phone == "+7 999 000-00-01"
+    assert place.parsed_data["rubrics"] == ["Песок и щебень", "Строительные материалы"]
+    assert place.parsed_data["schedule"] == {"Mon": "09:00-18:00"}
+    assert place.parsed_data["contacts"] == {
+        "websites": ["https://materials.example.test"],
+        "vk": ["https://vk.com/materials"],
+        "emails": ["sale@example.test"],
+        "other": [],
+    }
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("response_status", "response_payload"),
@@ -65,6 +100,14 @@ async def test_places_search_uses_ten_item_pages_until_result_limit(monkeypatch)
             page = int(params["page"])
             requested_pages.append(page)
             assert params["page_size"] == 10
+            assert {
+                "items.point",
+                "items.address",
+                "items.contact_groups",
+                "items.rubrics",
+                "items.schedule",
+                "items.links",
+            }.issubset(set(params["fields"].split(",")))
             offset = (page - 1) * 10
             return httpx.Response(
                 200,

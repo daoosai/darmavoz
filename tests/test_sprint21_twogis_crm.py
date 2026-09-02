@@ -7,7 +7,7 @@ from app.models.models import CrmStatus, PointAuditLog, Quarry, Role, User
 from app.security.jwt import create_access_token
 from app.services.pickup_points import is_pickup_point_publicly_available
 from app.schemas.parser import ParserRunRequest
-from app.services.twogis_places import ParsedPlace, _fetch_page, _normalize_place, _skip_reason, search_places
+from app.services.twogis_places import RETAIL_BLACKLIST, RUBRIC_BLACKLIST, ParsedPlace, _fetch_page, _normalize_place, _skip_reason, search_places
 
 
 def auth_headers(username: str) -> dict[str, str]:
@@ -210,7 +210,12 @@ def test_places_search_filters_blacklisted_rubrics():
     assert place is None
 
 
-def test_places_search_filters_only_explicit_retail_noise():
+def test_places_search_uses_minimal_blacklist():
+    assert RUBRIC_BLACKLIST == ("институт", "вуз", "школа", "образование", "детск", "сад", "курсы")
+    assert RETAIL_BLACKLIST == ("водомат",)
+
+
+def test_places_search_filters_only_minimal_blacklist():
     retail_item = {
         "id": "2gis-water-vending",
         "name": "Водомат у дома",
@@ -219,7 +224,23 @@ def test_places_search_filters_only_explicit_retail_noise():
         "rubrics": [{"name": "Питьевая вода"}],
     }
     assert _skip_reason(retail_item) == "Нецелевой тип точки"
-    for rubric_name in ("Магазин", "Офис продаж", "Торговый дом", "Павильон", "Супермаркет", "Гипермаркет"):
+    for rubric_name in (
+        "Магазин",
+        "Офис продаж",
+        "Торговый дом",
+        "Павильон",
+        "Супермаркет",
+        "Гипермаркет",
+        "Кадровое агентство",
+        "Персонал",
+        "Карьерный сервис",
+        "Обучение работе с техникой",
+        "Автомат",
+        "Розлив воды",
+        "Кулер",
+        "Рыбный магазин",
+        "Логистическая компания",
+    ):
         allowed_item = {
             "id": f"2gis-{rubric_name}",
             "name": "Поставщик воды",

@@ -245,6 +245,14 @@ export default function ParserRunPanel({
             <div className="max-h-[65vh] space-y-3 overflow-y-auto p-5">
               <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={parserResult.items.length > 0 && selectedPreviewIds.size === parserResult.items.length} onChange={() => setSelectedPreviewIds((current) => current.size === parserResult.items.length ? new Set() : new Set(parserResult.items.map((item) => item.twogis_id)))} />Выбрать всё</label>
               {parserResult.items.map((item) => <label key={item.twogis_id} className="flex gap-3 rounded-xl bg-slate-50 p-3 text-sm"><input type="checkbox" checked={selectedPreviewIds.has(item.twogis_id)} onChange={() => setSelectedPreviewIds((current) => { const next = new Set(current); next.has(item.twogis_id) ? next.delete(item.twogis_id) : next.add(item.twogis_id); return next; })} /><span><strong>{item.name}</strong><span className="block text-slate-500">{item.address}</span></span></label>)}
+              {parserResult.skipped_items.length > 0 ? (
+                <section className="rounded-xl border border-red-100 bg-red-50 p-3" aria-label="Пропущенные объекты">
+                  <h3 className="text-sm font-bold text-red-700">❌ Пропущено ({parserResult.skipped_items.length})</h3>
+                  <ul className="mt-2 space-y-1 text-sm text-red-600">
+                    {parserResult.skipped_items.map((item, index) => <li key={`${item.name}-${item.reason}-${index}`}><strong>{item.name}</strong>: {item.reason}</li>)}
+                  </ul>
+                </section>
+              ) : null}
             </div>
             <div className="flex justify-end gap-3 border-t border-slate-100 p-5"><button type="button" onClick={closeResultModal} className="rounded-xl bg-slate-100 px-4 py-2 font-bold text-slate-700">Отмена</button><button type="button" disabled={loading || selectedPreviewIds.size === 0} onClick={() => void saveSelected()} className="rounded-xl bg-sky-600 px-4 py-2 font-bold text-white disabled:opacity-50">Добавить выбранные ({selectedPreviewIds.size})</button></div>
             </section>

@@ -37,14 +37,8 @@ RETAIL_BLACKLIST = (
     "водомат",
     "автомат",
     "розлив",
-    "магазин",
-    "офис",
-    "павильон",
     "кулер",
-    "торговый дом",
     "рыбн",
-    "супермаркет",
-    "гипермаркет",
 )
 PLACES_FIELDS = ",".join(
     (
@@ -129,7 +123,7 @@ def _blacklisted_rubric_reason(item: dict[str, Any]) -> str | None:
     for name in names:
         normalized_name = name.casefold()
         if any(word in normalized_name for word in RETAIL_BLACKLIST):
-            return "Мусорный тип (розница/офис)"
+            return "Мусорный тип точки"
         for word in RUBRIC_BLACKLIST:
             if word in normalized_name:
                 return f"Мусорная рубрика ({word})"

@@ -210,7 +210,7 @@ def test_places_search_filters_blacklisted_rubrics():
     assert place is None
 
 
-def test_places_search_filters_retail_names_and_rubrics():
+def test_places_search_filters_only_explicit_retail_noise():
     retail_item = {
         "id": "2gis-water-vending",
         "name": "Водомат у дома",
@@ -218,17 +218,17 @@ def test_places_search_filters_retail_names_and_rubrics():
         "point": {"lat": 57.15, "lon": 65.53},
         "rubrics": [{"name": "Питьевая вода"}],
     }
-    office_item = {
-        "id": "2gis-office",
-        "name": "Water delivery",
-        "full_name": "Water delivery",
-        "full_address_name": "Tyumen, Test road, 2",
-        "point": {"lat": 57.15, "lon": 65.53},
-        "rubrics": [{"name": "Офис продаж"}],
-    }
+    assert _skip_reason(retail_item) == "Мусорный тип точки"
+    for rubric_name in ("Магазин", "Офис продаж", "Торговый дом", "Павильон", "Супермаркет", "Гипермаркет"):
+        allowed_item = {
+            "id": f"2gis-{rubric_name}",
+            "name": "Поставщик воды",
+            "full_address_name": "Tyumen, Test road, 2",
+            "point": {"lat": 57.15, "lon": 65.53},
+            "rubrics": [{"name": rubric_name}],
+        }
 
-    assert _skip_reason(retail_item) == "Мусорный тип (розница/офис)"
-    assert _skip_reason(office_item) == "Мусорный тип (розница/офис)"
+        assert _skip_reason(allowed_item) is None
 
 
 def test_parser_allows_custom_keyword():

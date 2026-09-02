@@ -28,7 +28,7 @@ type ParserCoordinates = { lat: number; lon: number };
 type ParserPreviewItem = { twogis_id: string; name: string; address: string; lat: number; lon: number; phone?: string | null; parsed_data: Record<string, unknown>; is_update: boolean };
 type ParserPreviewResult = {
   items: ParserPreviewItem[];
-  skipped_items: { name: string; reason: string }[];
+  skipped_items: { name: string; reason: string; count?: number }[];
   truncated: boolean;
 };
 
@@ -120,6 +120,7 @@ export default function ParserRunPanel({
   const [selectedPreviewIds, setSelectedPreviewIds] = useState<Set<string>>(new Set());
   const [isResultModalOpen, setIsResultModalOpen] = useState(false);
   const suggestionRequestRef = useRef(0);
+  const skippedItemsCount = parserResult?.skipped_items.reduce((total, item) => total + (item.count || 1), 0) || 0;
 
   const notifyCoordinates = (nextLat: string, nextLon: string) => {
     const parsedLat = parseCoordinate(nextLat);
@@ -320,9 +321,9 @@ export default function ParserRunPanel({
               })}
               {parserResult.skipped_items.length > 0 ? (
                 <section className="rounded-xl border border-red-100 bg-red-50 p-3" aria-label="Пропущенные объекты">
-                  <h3 className="text-sm font-bold text-red-700">❌ Пропущено ({parserResult.skipped_items.length})</h3>
+                  <h3 className="text-sm font-bold text-red-700">❌ Пропущено ({skippedItemsCount})</h3>
                   <ul className="mt-2 space-y-1 text-sm text-red-600">
-                    {parserResult.skipped_items.map((item, index) => <li key={`${item.name}-${item.reason}-${index}`}><strong>{item.name}</strong>: {item.reason}</li>)}
+                    {parserResult.skipped_items.map((item, index) => <li key={`${item.name}-${item.reason}-${index}`}><strong>{item.name}</strong>{(item.count || 1) > 1 ? ` (${item.count} филиалов)` : ""} — Причина: {item.reason}</li>)}
                   </ul>
                 </section>
               ) : null}

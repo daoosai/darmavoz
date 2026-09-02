@@ -18,7 +18,8 @@ from app.schemas.parser import MATERIAL_KEYWORDS, ParserResultItem, ParserRunReq
 
 logger = logging.getLogger(__name__)
 PHONE_PATTERN = re.compile(r"\+?[\d][\d\s()\-]{4,}[\d]")
-MAX_PLACES_PAGES = 5
+MAX_PLACES_PAGES = 20
+MAX_VALID_PLACES = 50
 RETAIL_BLACKLIST = (
     "магазин",
     "гипермаркет",
@@ -152,6 +153,25 @@ def _item_name(item: object) -> str:
     if isinstance(item, dict) and isinstance(item.get("name"), str) and item["name"].strip():
         return item["name"].strip()
     return "Неизвестный объект"
+
+
+def _grouped_skip_name(name: str) -> str:
+    base_name = name.split(",", 1)[0].strip()
+    return base_name or name.strip()
+
+
+def _append_skipped_item(
+    skipped_items: list[ParserSkippedItem],
+    *,
+    name: str,
+    reason: str,
+) -> None:
+    grouped_name = _grouped_skip_name(name)
+    for skipped_item in skipped_items:
+        if skipped_item.name == grouped_name and skipped_item.reason == reason:
+            skipped_item.count += 1
+            return
+    skipped_items.append(ParserSkippedItem(name=grouped_name, reason=reason))
 
 
 def _is_retail_item(item: dict[str, Any]) -> bool:
@@ -340,13 +360,13 @@ async def search_places(payload: ParserRunRequest) -> PlacesSearchResult:
             detail="2GIS Places API key is not configured",
         )
 
-    collected: list[ParsedPlace] = []
+    collected: dict[str, ParsedPlace] = {}
     skipped_items: list[ParserSkippedItem] = []
     page = 1
     total: int | None = None
+    reached_page_limit = False
     # The 2GIS Places API accepts at most 10 items per page.
     page_size = min(10, settings.TWOGIS_PLACES_MAX_RESULTS)
-    max_results = min(settings.TWOGIS_PLACES_MAX_RESULTS, page_size * MAX_PLACES_PAGES)
     base_params = {
         "key": settings.TWOGIS_API_KEY,
         "q": f"{payload.keyword}, {payload.city}",
@@ -359,8 +379,9 @@ async def search_places(payload: ParserRunRequest) -> PlacesSearchResult:
     }
 
     async with httpx.AsyncClient(timeout=settings.TWOGIS_PLACES_TIMEOUT_SECONDS) as client:
-        while len(collected) < max_results:
+        while len(collected) < MAX_VALID_PLACES:
             if page > MAX_PLACES_PAGES:
+                reached_page_limit = True
                 break
             try:
                 response_payload = await _fetch_page(client, {**base_params, "page": page})
@@ -383,19 +404,25 @@ async def search_places(payload: ParserRunRequest) -> PlacesSearchResult:
             for item in items:
                 reason = _skip_reason(item)
                 if reason:
-                    skipped_items.append(ParserSkippedItem(name=_item_name(item), reason=reason))
+                    _append_skipped_item(skipped_items, name=_item_name(item), reason=reason)
                     continue
                 place = _normalize_place(item)
                 if place is not None:
-                    collected.append(place)
-            if len(items) < page_size:
+                    collected[place.twogis_id] = place
+                    if len(collected) >= MAX_VALID_PLACES:
+                        break
+            if (
+                len(collected) >= MAX_VALID_PLACES
+                or len(items) < page_size
+                or (total is not None and page * page_size >= total)
+            ):
                 break
             page += 1
 
-    unique_places = list({place.twogis_id: place for place in collected}.values())
-    truncated = bool(total is not None and total > len(unique_places) and len(unique_places) >= max_results)
+    places = list(collected.values())
+    truncated = len(places) >= MAX_VALID_PLACES or reached_page_limit
     return PlacesSearchResult(
-        places=unique_places[:max_results],
+        places=places,
         truncated=truncated,
         skipped_items=skipped_items,
     )
@@ -412,8 +439,8 @@ async def upsert_places(
 ) -> ParserRunResult:
     result = ParserRunResult(
         found=len(places),
-        total_found=len(places) + len(skipped_items or []),
-        skipped=len(skipped_items or []),
+        total_found=len(places) + sum(item.count for item in skipped_items or []),
+        skipped=sum(item.count for item in skipped_items or []),
         truncated=truncated,
         skipped_items=list(skipped_items or []),
     )
@@ -439,7 +466,11 @@ async def upsert_places(
         if other_kind_match is not None:
             result.cross_target_conflicts += 1
             result.skipped += 1
-            result.skipped_items.append(ParserSkippedItem(name=place.name, reason="Уже существует в другом типе точки"))
+            _append_skipped_item(
+                result.skipped_items,
+                name=place.name,
+                reason="Уже существует в другом типе точки",
+            )
             continue
 
         if payload.target == "material":

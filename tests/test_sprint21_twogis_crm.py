@@ -148,7 +148,7 @@ async def test_places_search_uses_ten_item_pages_until_result_limit(monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_places_search_stops_after_five_pages(monkeypatch):
+async def test_places_search_stops_after_fifty_valid_points(monkeypatch):
     requested_pages: list[int] = []
 
     class MockAsyncClient:
@@ -191,6 +191,55 @@ async def test_places_search_stops_after_five_pages(monkeypatch):
     assert requested_pages == [1, 2, 3, 4, 5]
     assert len(places) == 50
     assert truncated is True
+
+
+@pytest.mark.asyncio
+async def test_places_search_groups_retail_skips_and_stops_after_twenty_pages(monkeypatch):
+    requested_pages: list[int] = []
+
+    class MockAsyncClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def get(self, _url, *, params):
+            page = int(params["page"])
+            requested_pages.append(page)
+            offset = (page - 1) * 10
+            return httpx.Response(
+                200,
+                json={
+                    "result": {
+                        "total": 300,
+                        "items": [
+                            {
+                                "id": f"2gis-retail-{index}",
+                                "name": f"Строительный двор, филиал {index}",
+                                "full_address_name": f"Tyumen, Test road, {index}",
+                                "point": {"lat": 57.15, "lon": 65.53},
+                            }
+                            for index in range(offset, offset + 10)
+                        ],
+                    }
+                },
+            )
+
+    monkeypatch.setattr("app.services.twogis_places.httpx.AsyncClient", lambda **_kwargs: MockAsyncClient())
+    monkeypatch.setattr("app.services.twogis_places.settings.TWOGIS_API_KEY", "test-key")
+
+    result = await search_places(
+        ParserRunRequest(city="Tyumen", center_lat=57.15, center_lon=65.53, radius_m=1000, target="material", keyword="sand")
+    )
+
+    assert requested_pages == list(range(1, 21))
+    assert result.places == []
+    assert result.truncated is True
+    assert len(result.skipped_items) == 1
+    assert result.skipped_items[0].name == "Строительный двор"
+    assert result.skipped_items[0].reason == "B2C розница / Сетевой магазин"
+    assert result.skipped_items[0].count == 200
 
 
 @pytest.mark.asyncio

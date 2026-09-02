@@ -63,6 +63,7 @@ class ParserResultItem(BaseModel):
 class ParserSkippedItem(BaseModel):
     name: str
     reason: str
+    count: int = Field(default=1, ge=1)
 
 
 class ParserPreviewItem(BaseModel):

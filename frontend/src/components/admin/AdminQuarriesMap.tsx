@@ -80,7 +80,7 @@ const createMarkerElement = (
   wrapper.style.position = "relative";
   wrapper.style.width = "30px";
   wrapper.style.height = "30px";
-  wrapper.style.zIndex = isSelected ? "9999" : "1";
+  wrapper.style.zIndex = isSelected ? "999999" : "1";
 
   const marker = document.createElement("button");
   marker.type = "button";
@@ -112,13 +112,14 @@ const createMarkerElement = (
 
   if (isSelected) {
     const card = document.createElement("div");
+    card.className = "relative z-[999999]";
     card.setAttribute("role", "dialog");
     card.setAttribute("aria-label", `Превью точки: ${point.name}`);
     card.style.position = "absolute";
     card.style.left = "50%";
     card.style.bottom = "42px";
     card.style.transform = "translateX(-50%)";
-    card.style.zIndex = "9999";
+    card.style.zIndex = "999999";
     card.style.width = "280px";
     card.style.maxWidth = "calc(100vw - 32px)";
     card.style.padding = "14px";
@@ -248,6 +249,7 @@ export default function AdminQuarriesMap({
 
   useEffect(() => {
     let disposed = false;
+    let closePopupOnMapClick: (() => void) | null = null;
     const key = import.meta.env.VITE_2GIS_KEY;
 
     if (!key || !mapContainerRef.current) {
@@ -272,6 +274,8 @@ export default function AdminQuarriesMap({
           mapInstance.destroy();
           return;
         }
+        closePopupOnMapClick = () => setSelectedPointKey(null);
+        mapInstance.on("click", closePopupOnMapClick);
         mapRef.current = mapInstance;
         setIsMapReady(true);
       })
@@ -283,6 +287,9 @@ export default function AdminQuarriesMap({
       disposed = true;
       markerRefs.current.forEach((marker) => marker.destroy?.());
       markerRefs.current = [];
+      if (closePopupOnMapClick) {
+        mapRef.current?.off?.("click", closePopupOnMapClick);
+      }
       mapRef.current?.destroy?.();
       mapRef.current = null;
       setIsMapReady(false);

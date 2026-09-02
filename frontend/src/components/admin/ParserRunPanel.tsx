@@ -32,6 +32,11 @@ type ParserPreviewResult = {
   truncated: boolean;
 };
 
+const TARGET_RUBRIC_KEYWORDS = [
+  "песок", "щебень", "грунт", "пгс", "щпс", "отсев", "чернозём",
+  "торф", "керамзит", "асфальт", "вода", "септик", "неруд", "сыпуч",
+];
+
 const textValues = (value: unknown): string[] => {
   if (typeof value === "string") return value.trim() ? [value.trim()] : [];
   if (!Array.isArray(value)) return [];
@@ -50,6 +55,21 @@ const getRubrics = (parsedData: Record<string, unknown>) => {
   }))];
 };
 
+const getDisplayedRubrics = (parsedData: Record<string, unknown>) => {
+  const rubrics = getRubrics(parsedData);
+  const targetRubrics = rubrics.filter((rubric) => {
+    const normalizedRubric = rubric.toLocaleLowerCase("ru-RU");
+    return TARGET_RUBRIC_KEYWORDS.some((keyword) => normalizedRubric.includes(keyword));
+  });
+  const displayedRubrics = targetRubrics.length > 0 ? targetRubrics : rubrics.slice(0, 2);
+  const isFallbackTruncated = targetRubrics.length === 0 && rubrics.length > displayedRubrics.length;
+
+  return {
+    fullText: displayedRubrics.join(", "),
+    text: `${displayedRubrics.join(", ")}${isFallbackTruncated ? "..." : ""}`,
+  };
+};
+
 const getWebsiteDomain = (website: string) => {
   const normalized = website.includes("://") ? website : `https://${website}`;
   try {
@@ -64,7 +84,11 @@ const getPreviewDetails = (item: ParserPreviewItem) => {
   const website = textValues(item.parsed_data.websites)[0]
     || textValues(item.parsed_data.website)[0]
     || textValues(item.parsed_data.site)[0];
-  return { rubrics: getRubrics(item.parsed_data), phone, website: website ? getWebsiteDomain(website) : null };
+  return {
+    rubrics: getDisplayedRubrics(item.parsed_data),
+    phone,
+    website: website ? getWebsiteDomain(website) : null,
+  };
 };
 
 const keywords: Record<ParserTarget, string[]> = {
@@ -284,10 +308,10 @@ export default function ParserRunPanel({
                 return (
                   <label key={item.twogis_id} className="flex gap-3 rounded-xl bg-slate-50 p-3 text-sm">
                     <input type="checkbox" checked={selectedPreviewIds.has(item.twogis_id)} onChange={() => setSelectedPreviewIds((current) => { const next = new Set(current); next.has(item.twogis_id) ? next.delete(item.twogis_id) : next.add(item.twogis_id); return next; })} />
-                    <span>
+                    <span className="min-w-0">
                       <strong>{item.name}</strong>
                       <span className="block text-slate-500">{item.address}</span>
-                      {details.rubrics.length > 0 ? <span className="block text-xs text-gray-500">Рубрики: {details.rubrics.join(", ")}</span> : null}
+                      {details.rubrics.text ? <span title={details.rubrics.fullText} className="block truncate text-xs text-gray-500">Рубрики: {details.rubrics.text}</span> : null}
                       {details.phone ? <span className="block text-xs text-gray-500">Телефон: {details.phone}</span> : null}
                       {details.website ? <span className="block text-xs text-gray-500">Сайт: {details.website}</span> : null}
                     </span>

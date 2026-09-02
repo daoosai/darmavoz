@@ -667,7 +667,7 @@ export default function GlobalMapScreen({
                 {!isPointReady(selectedPoint) ? (
                   <div className="flex-1 overflow-y-auto px-4 py-4">
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <p className="text-sm font-bold text-slate-900">Временно без доставки</p>
+                      <p className="text-sm font-bold text-slate-900">Временно нет доставки через Дармавоз</p>
                       <p className="mt-1 text-sm text-slate-600">Точка ещё не готова принимать заказы.</p>
                     </div>
                   </div>

@@ -334,6 +334,9 @@ export default function AdminQuarriesMap({
       return new mapgl.HtmlMarker(mapRef.current, {
         coordinates: [point.lon, point.lat],
         html: element,
+        // HtmlMarker elements are sibling map layers. Raise the selected marker
+        // itself so nearby markers and their labels cannot cover its preview card.
+        zIndex: pointKey === selectedPointKey ? 10_000 : 1,
       });
     });
   }, [isMapReady, points, selectedPointKey]);

@@ -194,7 +194,7 @@ async def test_places_search_stops_after_fifty_valid_points(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_places_search_groups_retail_skips_and_stops_after_twenty_pages(monkeypatch):
+async def test_places_search_groups_non_target_skips_and_stops_after_twenty_pages(monkeypatch):
     requested_pages: list[int] = []
 
     class MockAsyncClient:
@@ -215,8 +215,8 @@ async def test_places_search_groups_retail_skips_and_stops_after_twenty_pages(mo
                         "total": 300,
                         "items": [
                             {
-                                "id": f"2gis-retail-{index}",
-                                "name": f"Строительный двор, филиал {index}",
+                                "id": f"2gis-school-{index}",
+                                "name": f"Школа, филиал {index}",
                                 "full_address_name": f"Tyumen, Test road, {index}",
                                 "point": {"lat": 57.15, "lon": 65.53},
                             }
@@ -237,8 +237,8 @@ async def test_places_search_groups_retail_skips_and_stops_after_twenty_pages(mo
     assert result.places == []
     assert result.truncated is True
     assert len(result.skipped_items) == 1
-    assert result.skipped_items[0].name == "Строительный двор"
-    assert result.skipped_items[0].reason == "B2C розница / Сетевой магазин"
+    assert result.skipped_items[0].name == "Школа"
+    assert result.skipped_items[0].reason == "Нецелевая категория"
     assert result.skipped_items[0].count == 200
 
 
@@ -288,12 +288,13 @@ async def test_places_search_returns_collected_items_when_next_page_is_unavailab
     assert truncated is False
 
 
-def test_places_search_does_not_filter_non_retail_rubrics():
+def test_places_search_does_not_filter_retail_rubrics():
     for rubric_name in (
-        "Институт образования",
-        "Школа",
+        "Строительный магазин",
+        "Гипермаркет",
+        "Пилорама",
+        "Розничная торговля",
         "Товары для сада",
-        "Водомат",
         "Офис продаж",
         "Торговый дом",
         "Павильон",
@@ -327,7 +328,7 @@ def test_places_search_does_not_filter_non_retail_rubrics():
         ("Пилорама Север", None, "Пиломатериалы"),
     ],
 )
-def test_places_search_skips_retail_chains_by_name_or_rubric(name, full_name, rubric_name):
+def test_places_search_allows_retail_chains_by_name_or_rubric(name, full_name, rubric_name):
     item = {
         "id": "2gis-retail",
         "name": name,
@@ -338,7 +339,21 @@ def test_places_search_skips_retail_chains_by_name_or_rubric(name, full_name, ru
     if full_name:
         item["full_name"] = full_name
 
-    assert _skip_reason(item) == "B2C розница / Сетевой магазин"
+    assert _skip_reason(item) is None
+    assert _normalize_place(item) is not None
+
+
+@pytest.mark.parametrize("value", ("Институт образования", "Школа", "Детский сад", "Водомат"))
+def test_places_search_skips_only_non_target_organizations(value):
+    item = {
+        "id": "2gis-non-target",
+        "name": "Проверочная точка",
+        "full_address_name": "Tyumen, Test road, 2",
+        "point": {"lat": 57.15, "lon": 65.53},
+        "rubrics": [{"name": value}],
+    }
+
+    assert _skip_reason(item) == "Нецелевая категория"
     assert _normalize_place(item) is None
 
 

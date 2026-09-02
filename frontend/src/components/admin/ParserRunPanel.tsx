@@ -110,8 +110,8 @@ export default function ParserRunPanel({
   const [city, setCity] = useState("Тюмень");
   const [lat, setLat] = useState("57.1522");
   const [lon, setLon] = useState("65.5272");
-  const [radius, setRadius] = useState("10000");
-  const [keyword, setKeyword] = useState(keywords[target][0]);
+  const [radius, setRadius] = useState("50000");
+  const [keyword, setKeyword] = useState("песок");
   const [loading, setLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);

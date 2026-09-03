@@ -22,6 +22,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -57,10 +58,40 @@ jobs:
           chmod 600 ~/.ssh/github_actions_key
           ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
 
-      - name: Upload frontend bundle
+      - name: Create incremental source bundle
         run: |
           set -euo pipefail
-          scp -i ~/.ssh/github_actions_key frontend-prod.tar "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/tmp/frontend-prod.tar"
+          ssh_opts=(
+            -i ~/.ssh/github_actions_key
+            -o BatchMode=yes
+            -o ConnectTimeout=30
+            -o ServerAliveInterval=15
+            -o ServerAliveCountMax=4
+          )
+          DEPLOY_BASE="$(ssh "${ssh_opts[@]}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" 'git -C /opt/darmavoz rev-parse HEAD')"
+          if ! git merge-base --is-ancestor "${DEPLOY_BASE}" HEAD; then
+            echo "Server source commit is not an ancestor of the deployment commit" >&2
+            exit 1
+          fi
+          git bundle create darmavoz-prod.bundle HEAD "^${DEPLOY_BASE}"
+          git bundle verify darmavoz-prod.bundle
+
+      - name: Upload deployment bundles
+        run: |
+          set -euo pipefail
+          ssh_opts=(
+            -i ~/.ssh/github_actions_key
+            -o BatchMode=yes
+            -o ConnectTimeout=30
+            -o ServerAliveInterval=15
+            -o ServerAliveCountMax=4
+          )
+          cat frontend-prod.tar | ssh "${ssh_opts[@]}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+            "cat > /tmp/frontend-prod.tar"
+          cat darmavoz-prod.bundle | ssh "${ssh_opts[@]}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+            "cat > /tmp/darmavoz-prod.bundle"
+          sha256sum darmavoz-prod.bundle | ssh "${ssh_opts[@]}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+            "cd /tmp && sha256sum -c -"
 
       - name: Deploy backend and frontend to Production
         run: |
@@ -71,17 +102,21 @@ jobs:
           DEPLOY_DIR=/opt/darmavoz_deploy
 
           cd "${SOURCE_DIR}"
-          git fetch origin main
+          git bundle verify /tmp/darmavoz-prod.bundle
+          git fetch --no-tags /tmp/darmavoz-prod.bundle HEAD
+          DEPLOY_REF="$(git rev-parse FETCH_HEAD)"
+          echo "Deploying commit ${DEPLOY_REF}"
 
           # Обновляем Worktree
           git worktree prune || true
           if git worktree list | grep -q "${DEPLOY_DIR}"; then
-            git -C "${DEPLOY_DIR}" fetch origin main
-            git -C "${DEPLOY_DIR}" checkout --detach origin/main
+            git -C "${DEPLOY_DIR}" reset --hard "${DEPLOY_REF}"
+            git -C "${DEPLOY_DIR}" checkout --detach "${DEPLOY_REF}"
           else
-            rm -rf "${DEPLOY_DIR}"
-            git worktree add --detach "${DEPLOY_DIR}" origin/main
+            git worktree add --detach "${DEPLOY_DIR}" "${DEPLOY_REF}"
           fi
+
+          echo "Runtime worktree commit $(git -C "${DEPLOY_DIR}" rev-parse HEAD)"
 
           # Линкуем боевой .env
           if [ -f "${SOURCE_DIR}/.env" ]; then

@@ -591,8 +591,8 @@ export default function AdminQuarriesScreen({
                 <th className="w-12 p-4 border-b border-slate-100"><input type="checkbox" aria-label="Выбрать все точки" checked={quarries.length > 0 && selectedIds.size === quarries.filter((point) => point.id).length} onChange={() => setSelectedIds((current) => current.size === quarries.filter((point) => point.id).length ? new Set() : new Set(quarries.flatMap((point) => point.id ? [point.id] : [])))} /></th>
                 <th className="p-4 border-b border-slate-100">Тип</th>
                 <th className="p-4 border-b border-slate-100">Название</th>
-                <th className="p-4 border-b border-slate-100">Адрес</th>
-                <th className="min-w-[150px] whitespace-nowrap border-b border-slate-100 p-4">Статус</th>
+                <th className="min-w-[250px] border-b border-slate-100 p-4">Адрес</th>
+                <th className="min-w-[200px] whitespace-nowrap border-b border-slate-100 p-4">Статус</th>
                 <th className="min-w-[120px] whitespace-nowrap border-b border-slate-100 p-4">Модерация</th>
                 <th className="sticky right-0 z-20 w-[340px] min-w-[340px] whitespace-nowrap border-b border-slate-100 bg-slate-50/95 p-4 pr-6 text-center shadow-[-10px_0_10px_-10px_rgba(0,0,0,0.1)]">Действия</th>
               </tr>
@@ -600,7 +600,7 @@ export default function AdminQuarriesScreen({
             <tbody className="divide-y divide-slate-50">
               {quarries.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-slate-500">
+                  <td colSpan={7} className="p-8 text-center text-slate-500">
                     Нет точек
                   </td>
                 </tr>
@@ -625,10 +625,10 @@ export default function AdminQuarriesScreen({
                         </div>
                       )}
                     </td>
-                    <td className="p-4 text-sm text-slate-600 max-w-[250px] truncate">
+                    <td className="min-w-[250px] p-4 text-sm text-slate-600">
                       {getQuarryAddress(quarry)}
                     </td>
-                    <td className="min-w-[150px] whitespace-nowrap p-4">
+                    <td className="min-w-[200px] whitespace-nowrap p-4">
                       <div className="flex flex-col items-start gap-1">
                         <div className="flex flex-wrap gap-1">
                           <span className={`inline-flex items-center rounded-lg px-2 py-1 text-xs font-bold ${getCrmStatusClass(quarry.crm_status)}`}>

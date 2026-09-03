@@ -630,9 +630,9 @@ export default function AdminQuarriesScreen({
                 <th className="p-4 border-b border-slate-100">Тип</th>
                 <th className="p-4 border-b border-slate-100">Название</th>
                 <th className="min-w-[250px] border-b border-slate-100 p-4">Адрес</th>
-                <th className="min-w-[200px] whitespace-nowrap border-b border-slate-100 p-4">Статус</th>
+                <th className="min-w-[220px] whitespace-nowrap border-b border-slate-100 p-4">Статус</th>
                 <th className="min-w-[120px] whitespace-nowrap border-b border-slate-100 p-4">Модерация</th>
-                <th className="sticky right-0 z-20 w-[340px] min-w-[340px] whitespace-nowrap border-b border-slate-100 bg-slate-50/95 p-4 pr-6 text-center shadow-[-10px_0_10px_-10px_rgba(0,0,0,0.1)]">Действия</th>
+                <th className="sticky right-0 z-10 w-[100px] bg-white border-b border-slate-100 p-4 text-center shadow-[-10px_0_15px_-5px_rgba(0,0,0,0.05)]">Действия</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -666,7 +666,7 @@ export default function AdminQuarriesScreen({
                     <td className="min-w-[250px] p-4 text-sm text-slate-600">
                       {getQuarryAddress(quarry)}
                     </td>
-                    <td className="min-w-[200px] whitespace-nowrap p-4">
+                    <td className="min-w-[220px] p-4">
                       <div className="flex flex-col items-start gap-1">
                         <div className="flex flex-wrap gap-1">
                           <span className={`inline-flex items-center rounded-lg px-2 py-1 text-xs font-bold ${getCrmStatusClass(quarry.crm_status)}`}>
@@ -693,9 +693,15 @@ export default function AdminQuarriesScreen({
                       <span className={`inline-flex items-center rounded-lg px-2 py-1 text-xs font-bold ${moderationBadge(quarry.moderation_status).className}`}>
                         {moderationBadge(quarry.moderation_status).label}
                       </span>
+                      {["pending_moderation", "has_pending_changes"].includes(quarry.moderation_status || "") && quarry.id && (
+                        <div className="mt-2 flex flex-col gap-2">
+                          <button disabled={isModerating} onClick={() => void moderatePoint(quarry.id!, "approve")} className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50">Одобрить</button>
+                          <button disabled={isModerating} onClick={() => rejectPoint(quarry.id!)} className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-50">Отклонить</button>
+                        </div>
+                      )}
                     </td>
-                    <td className="sticky right-0 z-10 w-[340px] min-w-[340px] whitespace-nowrap align-top bg-white p-4 pr-6 shadow-[-10px_0_10px_-10px_rgba(0,0,0,0.1)] group-hover:bg-slate-50/50">
-                      <div className="flex max-w-full flex-wrap items-center justify-end gap-2">
+                    <td className="sticky right-0 z-10 w-[100px] align-top bg-white p-4 text-center shadow-[-10px_0_15px_-5px_rgba(0,0,0,0.05)]">
+                      <div className="flex items-center justify-center gap-2">
                         <button
                           onClick={() => handleOpenModal(quarry)}
                           className="p-2 text-slate-400 hover:text-[#2DB0E6] hover:bg-[#2DB0E6]/10 rounded-xl transition-all"
@@ -710,12 +716,6 @@ export default function AdminQuarriesScreen({
                         >
                           <Trash2 className="w-5 h-5" />
                         </button>
-                        {["pending_moderation", "has_pending_changes"].includes(quarry.moderation_status || "") && quarry.id && (
-                          <div className="flex max-w-full flex-wrap items-center justify-end gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2">
-                            <button disabled={isModerating} onClick={() => void moderatePoint(quarry.id!, "approve")} className="w-28 shrink-0 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50">Одобрить</button>
-                            <button disabled={isModerating} onClick={() => rejectPoint(quarry.id!)} className="w-28 shrink-0 rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-50">Отклонить</button>
-                          </div>
-                        )}
                       </div>
                     </td>
                   </tr>

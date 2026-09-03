@@ -592,7 +592,7 @@ export default function AdminQuarriesScreen({
                 <th className="p-4 border-b border-slate-100">Тип</th>
                 <th className="p-4 border-b border-slate-100">Название</th>
                 <th className="p-4 border-b border-slate-100">Адрес</th>
-                <th className="p-4 border-b border-slate-100">Статус</th>
+                <th className="min-w-[150px] whitespace-nowrap border-b border-slate-100 p-4">Статус</th>
                 <th className="min-w-[120px] whitespace-nowrap border-b border-slate-100 p-4">Модерация</th>
                 <th className="sticky right-0 z-20 w-[340px] min-w-[340px] whitespace-nowrap border-b border-slate-100 bg-slate-50/95 p-4 pr-6 text-center shadow-[-10px_0_10px_-10px_rgba(0,0,0,0.1)]">Действия</th>
               </tr>
@@ -628,33 +628,35 @@ export default function AdminQuarriesScreen({
                     <td className="p-4 text-sm text-slate-600 max-w-[250px] truncate">
                       {getQuarryAddress(quarry)}
                     </td>
-                    <td className="p-4">
-                      <div className="mb-2 flex flex-wrap gap-1">
-                        <span className={`inline-flex items-center rounded-lg px-2 py-1 text-xs font-bold ${getCrmStatusClass(quarry.crm_status)}`}>
-                          {getCrmStatusLabel(quarry.crm_status)}
-                        </span>
-                        <PlacementBadge status={quarry.placement_status} />
-                        
-                        {quarry.is_vip ? (
-                          <span className="inline-flex items-center gap-1 rounded-lg bg-amber-100 px-2 py-1 text-xs font-black uppercase tracking-wide text-amber-800">
-                            <Crown className="h-3.5 w-3.5" />
-                            VIP
+                    <td className="min-w-[150px] whitespace-nowrap p-4">
+                      <div className="flex flex-col items-start gap-1">
+                        <div className="flex flex-wrap gap-1">
+                          <span className={`inline-flex items-center rounded-lg px-2 py-1 text-xs font-bold ${getCrmStatusClass(quarry.crm_status)}`}>
+                            {getCrmStatusLabel(quarry.crm_status)}
                           </span>
-                        ) : null}
-                        {(quarry.manual_priority || 0) > 0 ? (
-                          <span className="inline-flex items-center rounded-lg bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">
-                            #{quarry.manual_priority}
-                          </span>
-                        ) : null}
+                          <PlacementBadge status={quarry.placement_status} />
+
+                          {quarry.is_vip ? (
+                            <span className="inline-flex items-center gap-1 rounded-lg bg-amber-100 px-2 py-1 text-xs font-black uppercase tracking-wide text-amber-800">
+                              <Crown className="h-3.5 w-3.5" />
+                              VIP
+                            </span>
+                          ) : null}
+                          {(quarry.manual_priority || 0) > 0 ? (
+                            <span className="inline-flex items-center rounded-lg bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">
+                              #{quarry.manual_priority}
+                            </span>
+                          ) : null}
+                        </div>
+                        <PlacementDates item={quarry} />
                       </div>
-                      <PlacementDates item={quarry} />
                     </td>
                     <td className="min-w-[120px] whitespace-nowrap p-4">
                       <span className={`inline-flex items-center rounded-lg px-2 py-1 text-xs font-bold ${moderationBadge(quarry.moderation_status).className}`}>
                         {moderationBadge(quarry.moderation_status).label}
                       </span>
                     </td>
-                    <td className="sticky right-0 z-10 w-[340px] min-w-[340px] align-top bg-white p-4 pr-6 shadow-[-10px_0_10px_-10px_rgba(0,0,0,0.1)] group-hover:bg-slate-50/50">
+                    <td className="sticky right-0 z-10 w-[340px] min-w-[340px] whitespace-nowrap align-top bg-white p-4 pr-6 shadow-[-10px_0_10px_-10px_rgba(0,0,0,0.1)] group-hover:bg-slate-50/50">
                       <div className="flex max-w-full flex-wrap items-center justify-end gap-2">
                         <button
                           onClick={() => handleOpenModal(quarry)}

@@ -264,6 +264,7 @@ export default function AdminQuarriesScreen({
   const [editingQuarry, setEditingQuarry] = useState<Quarry | null>(null);
   const [isModerating, setIsModerating] = useState(false);
   const [deletingPointId, setDeletingPointId] = useState<string | null>(null);
+  const [bulkPlacementAction, setBulkPlacementAction] = useState<"extend" | "hide" | "archive" | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [rejectPointId, setRejectPointId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
@@ -463,6 +464,36 @@ export default function AdminQuarriesScreen({
     } finally { setDeletingPointId(null); }
   };
 
+  const applyBulkPlacementAction = async (action: "extend" | "hide" | "archive") => {
+    const pointIds = [...selectedIds];
+    if (!token || pointIds.length === 0) return;
+
+    setBulkPlacementAction(action);
+    try {
+      await Promise.all(
+        pointIds.map(async (pointId) => {
+          const response = await fetch(`${baseURL}/admin/pickup-points/${pointId}/placement/${action}`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(extractApiErrorMessage(data, "Не удалось обновить размещение"));
+          }
+        }),
+      );
+      setSelectedIds(new Set());
+      toast.success(`Успешно обновлено ${pointIds.length} записей`);
+      await fetchQuarries();
+      await onPointsChanged?.();
+      if (token) await loadSummary(token);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось обновить размещение");
+    } finally {
+      setBulkPlacementAction(null);
+    }
+  };
+
   const handleOpenModal = (quarry?: Quarry) => {
     if (quarry) {
       setEditingQuarry(quarry);
@@ -582,7 +613,14 @@ export default function AdminQuarriesScreen({
       </section>
 
       {/* Desktop View */}
-      {selectedIds.size > 0 ? <button type="button" onClick={() => void bulkDelete()} disabled={deletingPointId === "bulk"} className="self-start rounded-xl bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 disabled:opacity-50">Удалить выбранные ({selectedIds.size})</button> : null}
+      {selectedIds.size > 0 ? (
+        <div className="flex flex-wrap gap-2 self-start">
+          <button type="button" onClick={() => void applyBulkPlacementAction("extend")} disabled={bulkPlacementAction !== null || deletingPointId === "bulk"} className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-bold text-white hover:bg-sky-700 disabled:opacity-50">Продлить ({selectedIds.size})</button>
+          <button type="button" onClick={() => void applyBulkPlacementAction("hide")} disabled={bulkPlacementAction !== null || deletingPointId === "bulk"} className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-200 disabled:opacity-50">Скрыть ({selectedIds.size})</button>
+          <button type="button" onClick={() => void applyBulkPlacementAction("archive")} disabled={bulkPlacementAction !== null || deletingPointId === "bulk"} className="rounded-xl border border-slate-500 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-50">В архив ({selectedIds.size})</button>
+          <button type="button" onClick={() => void bulkDelete()} disabled={deletingPointId === "bulk" || bulkPlacementAction !== null} className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 disabled:opacity-50">Удалить выбранные ({selectedIds.size})</button>
+        </div>
+      ) : null}
       <div className="hidden overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm md:block">
         <div className="w-full overflow-x-auto">
           <table className="min-w-[1180px] w-full border-collapse text-left">
@@ -664,9 +702,6 @@ export default function AdminQuarriesScreen({
                         >
                           <Edit2 className="w-5 h-5" />
                         </button>
-                        {quarry.placement_status !== "archived" ? <button type="button" onClick={() => void placementAction(quarry, "extend")} className="rounded-xl bg-sky-50 px-3 py-2 text-xs font-bold text-sky-700">Продлить</button> : null}
-                        {quarry.placement_status === "hidden" || quarry.placement_status === "archived" ? <button type="button" onClick={() => void placementAction(quarry, "restore")} className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">Восстановить</button> : <button type="button" onClick={() => void placementAction(quarry, "hide")} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">Скрыть</button>}
-                        {quarry.placement_status !== "archived" ? <button type="button" onClick={() => void placementAction(quarry, "archive")} className="rounded-xl bg-gray-100 px-3 py-2 text-xs font-bold text-gray-700">В архив</button> : null}
                         <button
                           type="button"
                           disabled={deletingPointId === quarry.id}

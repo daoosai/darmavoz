@@ -13,10 +13,17 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import DeclarativeBase
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.db.database import AsyncSessionLocal
 from app.models.models import CRM_STATUS_VALUES, CrmStatus, Quarry, WaterPoint

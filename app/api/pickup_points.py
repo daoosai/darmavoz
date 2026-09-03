@@ -87,7 +87,7 @@ async def list_pickup_points(
             Quarry.lon.is_not(None),
             or_(
                 and_(
-                    Quarry.crm_status == CrmStatus.agreed.value,
+                    Quarry.crm_status == CrmStatus.activated.value,
                     *public_pickup_point_filters(),
                     quarry_materials.c.is_active.is_(True),
                     or_(
@@ -95,7 +95,7 @@ async def list_pickup_points(
                         literal(material.is_free).is_(True),
                     ),
                 ),
-                Quarry.crm_status == CrmStatus.in_progress.value,
+                Quarry.crm_status == CrmStatus.invite_sent.value,
             ),
         )
         .order_by(Quarry.name.asc())
@@ -142,8 +142,8 @@ async def list_global_pickup_points(
         .where(
             Quarry.crm_status.in_(
                 [
-                    CrmStatus.in_progress.value,
-                    CrmStatus.agreed.value,
+                    CrmStatus.invite_sent.value,
+                    CrmStatus.activated.value,
                 ]
             ),
             Quarry.lat.is_not(None),
@@ -199,11 +199,11 @@ async def get_pickup_point(
 ) -> dict:
     point = await db.get(Quarry, point_id)
     if point is None or (
-        point.crm_status == CrmStatus.agreed.value
+        point.crm_status == CrmStatus.activated.value
         and not is_pickup_point_publicly_available(point)
     ) or point.crm_status not in {
-        CrmStatus.in_progress.value,
-        CrmStatus.agreed.value,
+        CrmStatus.invite_sent.value,
+        CrmStatus.activated.value,
     }:
         raise HTTPException(status_code=404, detail="Pickup point not found")
     payload = await pickup_point_payload(db, point)

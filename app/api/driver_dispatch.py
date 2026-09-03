@@ -392,7 +392,6 @@ async def update_driver_profile(
             current_driver_id=current_driver.id,
             current_user_id=current_driver.user_id,
         )
-
     normalized_payload = payload.model_copy(update={"phone": normalized_phone})
     if _has_driver_critical_changes(current_driver, normalized_payload):
         _sync_driver_vehicle_moderation(current_driver, current_driver.vehicle, getattr(current_driver.vehicle, "media_files", []))

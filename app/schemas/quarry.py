@@ -265,7 +265,7 @@ class QuarryOut(QuarryBase):
     pending_changes: dict | None = None
     owner_user_id: Optional[UUID] = None
     twogis_id: Optional[str] = None
-    crm_status: Literal["parsed", "in_progress", "agreed", "hidden"] = "agreed"
+    crm_status: Literal["auto_added", "invite_sent", "response_received", "interested", "registered", "registration_completed", "activated", "refused", "call_later"] = "activated"
     is_ready: bool = False
     crm_comment: Optional[str] = None
     parsed_data: dict | None = None
@@ -299,7 +299,7 @@ class PickupPointMarkerOut(BaseModel):
     is_free: bool = False
     unit: str
     min_delivery_price: float
-    crm_status: Literal["parsed", "in_progress", "agreed", "hidden"]
+    crm_status: Literal["auto_added", "invite_sent", "response_received", "interested", "registered", "registration_completed", "activated", "refused", "call_later"]
     primary_image_url: Optional[str] = None
 
 
@@ -323,7 +323,7 @@ class GlobalPickupPointOut(BaseModel):
     lon: float
     primary_image_url: Optional[str] = None
     material_offers: list[GlobalPickupPointMaterialOut] = Field(default_factory=list)
-    crm_status: Literal["parsed", "in_progress", "agreed", "hidden"] = "agreed"
+    crm_status: Literal["auto_added", "invite_sent", "response_received", "interested", "registered", "registration_completed", "activated", "refused", "call_later"] = "activated"
     is_active: bool = False
     is_ready: bool = False
     parsed_data: dict | None = None

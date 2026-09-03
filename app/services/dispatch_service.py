@@ -926,6 +926,7 @@ def hydrate_orders_route_fields(orders: list[Order]) -> list[Order]:
 def order_load_options() -> tuple:
     return (
         selectinload(Order.client),
+        selectinload(Order.driver).selectinload(Driver.user),
         selectinload(Order.driver).selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option),
         selectinload(Order.delivery_option),
         selectinload(Order.quarry),

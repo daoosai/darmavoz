@@ -2,11 +2,21 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 ParserTarget = Literal["material", "water"]
-CrmStatusValue = Literal["parsed", "in_progress", "agreed", "hidden"]
+CrmStatusValue = Literal[
+    "auto_added",
+    "invite_sent",
+    "response_received",
+    "interested",
+    "registered",
+    "registration_completed",
+    "activated",
+    "refused",
+    "call_later",
+]
 PointKind = Literal["quarry", "water"]
 
 MATERIAL_KEYWORDS = {
@@ -43,22 +53,51 @@ class ParserRunRequest(BaseModel):
     def normalize_keyword(cls, value: str) -> str:
         return normalize_parser_keyword(value)
 
-    @model_validator(mode="after")
-    def validate_target_keyword(self):
-        if self.target == "material" and self.keyword not in MATERIAL_KEYWORDS:
-            raise ValueError("Для материалов разрешены только карьерные ключевые слова")
-        if self.target == "water" and self.keyword not in WATER_KEYWORDS:
-            raise ValueError("Для воды разрешены только ключевые слова воды")
-        return self
+
+
+class ParserResultItem(BaseModel):
+    id: str
+    name: str
+
+
+class ParserSkippedItem(BaseModel):
+    name: str
+    reason: str
+    count: int = Field(default=1, ge=1)
+
+
+class ParserPreviewItem(BaseModel):
+    twogis_id: str
+    name: str
+    address: str
+    lat: float
+    lon: float
+    phone: str | None = None
+    parsed_data: dict = Field(default_factory=dict)
+    is_update: bool = False
+
+
+class ParserPreviewResult(BaseModel):
+    items: list[ParserPreviewItem] = Field(default_factory=list)
+    skipped_items: list[ParserSkippedItem] = Field(default_factory=list)
+    truncated: bool = False
+
+
+class ParserSaveRequest(ParserRunRequest):
+    items: list[ParserPreviewItem] = Field(min_length=1, max_length=50)
 
 
 class ParserRunResult(BaseModel):
     found: int = 0
+    total_found: int = 0
     created: int = 0
     updated: int = 0
     skipped: int = 0
     cross_target_conflicts: int = 0
     truncated: bool = False
+    created_items: list[ParserResultItem] = Field(default_factory=list)
+    updated_items: list[ParserResultItem] = Field(default_factory=list)
+    skipped_items: list[ParserSkippedItem] = Field(default_factory=list)
 
 
 class CrmUpdateRequest(BaseModel):

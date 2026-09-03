@@ -13,6 +13,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -55,7 +57,24 @@ jobs:
           EOF
           chmod 600 ~/.ssh/config
 
-      - name: Upload frontend bundle
+      - name: Create incremental source bundle
+        run: |
+          set -euo pipefail
+          ssh_opts=(
+            -o BatchMode=yes
+            -o ConnectTimeout=30
+            -o ServerAliveInterval=15
+            -o ServerAliveCountMax=4
+          )
+          DEPLOY_BASE="$(ssh "${ssh_opts[@]}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" 'git -C /opt/darmavoz_test rev-parse HEAD')"
+          if ! git merge-base --is-ancestor "${DEPLOY_BASE}" "${GITHUB_SHA}"; then
+            echo "Server source commit is not an ancestor of ${GITHUB_SHA}" >&2
+            exit 1
+          fi
+          git bundle create darmavoz-test.bundle HEAD "^${DEPLOY_BASE}"
+          git bundle verify darmavoz-test.bundle
+
+      - name: Upload deployment bundles
         run: |
           set -euo pipefail
           ssh_opts=(
@@ -66,6 +85,10 @@ jobs:
           )
           cat frontend-dist.tar | ssh "${ssh_opts[@]}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
             "cat > /tmp/frontend-dist.tar"
+          cat darmavoz-test.bundle | ssh "${ssh_opts[@]}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+            "cat > /tmp/darmavoz-test.bundle"
+          sha256sum darmavoz-test.bundle | ssh "${ssh_opts[@]}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+            "cd /tmp && sha256sum -c -"
 
       - name: Deploy staging on server
         run: |
@@ -77,14 +100,14 @@ jobs:
           DEPLOY_DIR=/opt/darmavoz_test_deploy
 
           cd "${SOURCE_DIR}"
-          git fetch origin develop
+          git bundle verify /tmp/darmavoz-test.bundle
+          git fetch --no-tags /tmp/darmavoz-test.bundle HEAD
           DEPLOY_REF="$(git rev-parse FETCH_HEAD)"
           echo "Deploying commit ${DEPLOY_REF}"
 
           # САМОИСЦЕЛЕНИЕ GIT WORKTREE (Убиваем зомби-папки)
           git worktree prune || true
           if git worktree list | grep -q "${DEPLOY_DIR}"; then
-            git -C "${DEPLOY_DIR}" fetch origin develop
             if [ -n "$(git -C "${DEPLOY_DIR}" status --porcelain)" ]; then
               git worktree remove --force "${DEPLOY_DIR}" || true
               rm -rf "${DEPLOY_DIR}"

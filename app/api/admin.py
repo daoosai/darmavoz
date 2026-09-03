@@ -1424,7 +1424,6 @@ async def update_admin_driver(
         exclude_driver_id=driver.id,
         exclude_user_id=driver.user_id,
     )
-
     if payload.vehicle_id is not None:
         vehicle = await _get_vehicle_or_404(db, payload.vehicle_id)
         await _ensure_vehicle_is_free(db, vehicle.id, exclude_driver_id=driver.id)

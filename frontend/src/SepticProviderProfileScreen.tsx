@@ -115,6 +115,17 @@ const statusClass = (status?: string | null) => {
 const stringifyCoordinate = (value?: number | null) =>
   typeof value === "number" && Number.isFinite(value) ? String(value) : "";
 
+const optionalText = (value: unknown): string => typeof value === "string" ? value : "";
+
+const normalizeSepticProfile = (profile: SepticProfile): SepticProfile => ({
+  ...profile,
+  phone: optionalText(profile.phone),
+  address: optionalText(profile.address),
+  moderation_comment: optionalText(profile.moderation_comment) || null,
+  primary_image_url: optionalText(profile.primary_image_url) || null,
+  media_files: Array.isArray(profile.media_files) ? profile.media_files : [],
+});
+
 const parseCoordinate = (value: string) => {
   const parsed = Number(value.trim().replace(",", "."));
   return Number.isFinite(parsed) ? parsed : null;
@@ -181,7 +192,7 @@ export default function SepticProviderProfileScreen({
     if (!response.ok) {
       throw new Error(extractApiErrorMessage(data, "Не удалось загрузить объявления септиков"));
     }
-    setProfiles(Array.isArray(data) ? data : []);
+    setProfiles(Array.isArray(data) ? data.map((profile) => normalizeSepticProfile(profile as SepticProfile)) : []);
   };
 
   useEffect(() => {
@@ -342,8 +353,8 @@ export default function SepticProviderProfileScreen({
   const openEditForm = (profile: SepticProfile) => {
     setEditingProfile(profile);
     setForm({
-      phone: formatPhoneNumber(profile.phone),
-      address: profile.address,
+      phone: formatPhoneNumber(optionalText(profile.phone)),
+      address: optionalText(profile.address),
       lat: stringifyCoordinate(profile.lat),
       lon: stringifyCoordinate(profile.lon),
       tank_volume_m3: String(profile.tank_volume_m3 ?? ""),
@@ -353,7 +364,7 @@ export default function SepticProviderProfileScreen({
     setPendingFiles([]);
     setPrimaryPendingPhotoIndex(0);
     setIsMapUnavailable(false);
-    lastGeocodedAddressRef.current = profile.address.trim().toLowerCase();
+    lastGeocodedAddressRef.current = optionalText(profile.address).trim().toLowerCase();
     setShowForm(true);
   };
 
@@ -538,7 +549,7 @@ export default function SepticProviderProfileScreen({
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const address = form.address.trim();
+    const address = optionalText(form.address).trim();
     const phone = normalizePhoneForApi(form.phone);
     let lat = parseCoordinate(form.lat);
     let lon = parseCoordinate(form.lon);
@@ -600,7 +611,14 @@ export default function SepticProviderProfileScreen({
       );
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось сохранить объявление"));
-      savedProfile = data as SepticProfile;
+      const normalizedProfile = normalizeSepticProfile(data as SepticProfile);
+      savedProfile = normalizedProfile;
+      setProfiles((current) => {
+        const withoutSavedProfile = current.filter((profile) => profile.id !== normalizedProfile.id);
+        return profileBeingEdited
+          ? current.map((profile) => profile.id === normalizedProfile.id ? normalizedProfile : profile)
+          : [normalizedProfile, ...withoutSavedProfile];
+      });
 
       const uploadedMedia: SepticMedia[] = [];
       for (const [index, file] of pendingFiles.entries()) {
@@ -676,7 +694,8 @@ export default function SepticProviderProfileScreen({
       </header>
 
       {showForm ? (
-        <form onSubmit={submit} className="space-y-4 rounded-3xl bg-white p-4 shadow-sm">
+        <div className="fixed inset-0 z-[99999] flex items-end justify-center bg-slate-900/50 sm:items-center sm:p-4" role="dialog" aria-modal="true">
+        <form onSubmit={submit} className="max-h-[90dvh] w-full space-y-4 overflow-y-auto rounded-t-3xl bg-white px-4 py-5 pb-[max(env(safe-area-inset-bottom),1.25rem)] pt-[max(env(safe-area-inset-top),1.25rem)] shadow-2xl sm:max-h-[90dvh] sm:max-w-2xl sm:rounded-3xl sm:p-5">
           <div className="flex items-center justify-between gap-3">
             <h2 className="font-black text-slate-900">{editingProfile ? "Редактирование септика" : "Новый септик"}</h2>
             <button type="button" onClick={closeForm} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800" aria-label="Закрыть форму" title="Закрыть">
@@ -762,7 +781,10 @@ export default function SepticProviderProfileScreen({
             {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : editingProfile ? "Сохранить и отправить на модерацию" : "Отправить на модерацию"}
           </button>
         </form>
-      ) : profiles.length === 0 ? (
+        </div>
+      ) : null}
+
+      {profiles.length === 0 ? (
         <div className="rounded-3xl bg-white px-5 py-10 text-center shadow-sm"><Droplets className="mx-auto h-10 w-10 text-sky-400" /><h2 className="mt-3 font-black text-slate-900">Объявлений пока нет</h2><p className="mt-1 text-sm text-slate-500">Добавьте машину для услуг по откачке септиков.</p><button type="button" onClick={openCreateForm} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-sky-500 px-4 py-3 font-bold text-white"><Plus className="h-4 w-4" />Добавить септик</button></div>
       ) : (
         profiles.map((profile) => {

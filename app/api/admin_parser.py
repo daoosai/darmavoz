@@ -7,9 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
 from app.models.models import CrmStatus, PointAuditLog, Quarry, Role, User, WaterPoint
-from app.schemas.parser import CrmPointOut, CrmUpdateRequest, ParserRunRequest, ParserRunResult, PointAuditLogOut, PointKind, PointOwnerBindingRequest
+from app.schemas.parser import CrmPointOut, CrmUpdateRequest, ParserPreviewItem, ParserPreviewResult, ParserRunRequest, ParserRunResult, ParserSaveRequest, PointAuditLogOut, PointKind, PointOwnerBindingRequest
 from app.security.auth import get_current_admin_user
-from app.services.twogis_places import search_places, upsert_places
+from app.services.twogis_places import ParsedPlace, PlacesSearchResult, search_places, upsert_places
 
 
 router = APIRouter()
@@ -35,11 +35,29 @@ async def _add_status_audit_log(db: AsyncSession, *, point, point_kind: PointKin
         db.add(PointAuditLog(point_id=point.id, point_kind=point_kind, admin_id=admin_id, old_status=old_status, new_status=new_status))
 
 
-@router.post("/parser/run", response_model=ParserRunResult)
-async def run_parser(payload: ParserRunRequest, db: AsyncSession = Depends(get_db), current_admin: User = Depends(get_current_admin_user)) -> ParserRunResult:
-    places, truncated = await search_places(payload)
+@router.post("/parser/run", response_model=ParserPreviewResult)
+async def run_parser(payload: ParserRunRequest, db: AsyncSession = Depends(get_db), current_admin: User = Depends(get_current_admin_user)) -> ParserPreviewResult:
+    del current_admin
+    search_result = await search_places(payload)
+    if isinstance(search_result, PlacesSearchResult):
+        places, truncated = search_result
+        skipped_items = search_result.skipped_items
+    else:
+        places, truncated = search_result
+        skipped_items = []
+    model = Quarry if payload.target == "material" else WaterPoint
+    items = []
+    for place in places:
+        is_update = await db.scalar(select(model.id).where(model.twogis_id == place.twogis_id)) is not None
+        items.append(ParserPreviewItem(**place.__dict__, is_update=is_update))
+    return ParserPreviewResult(items=items, skipped_items=skipped_items, truncated=truncated)
+
+
+@router.post("/parser/save", response_model=ParserRunResult)
+async def save_parser_results(payload: ParserSaveRequest, db: AsyncSession = Depends(get_db), current_admin: User = Depends(get_current_admin_user)) -> ParserRunResult:
+    places = [ParsedPlace(**item.model_dump(exclude={"is_update"})) for item in payload.items]
     try:
-        result = await upsert_places(db, payload=payload, places=places, admin_id=current_admin.id, truncated=truncated)
+        result = await upsert_places(db, payload=payload, places=places, admin_id=current_admin.id, truncated=False)
         await db.commit()
         return result
     except SQLAlchemyError as exc:
@@ -50,13 +68,13 @@ async def run_parser(payload: ParserRunRequest, db: AsyncSession = Depends(get_d
 @router.patch("/crm/{point_kind}/{point_id}", response_model=CrmPointOut)
 async def update_point_crm(point_kind: PointKind, point_id: UUID, payload: CrmUpdateRequest, db: AsyncSession = Depends(get_db), current_admin: User = Depends(get_current_admin_user)) -> CrmPointOut:
     point = await _get_point_or_404(db, point_kind, point_id)
-    if point_kind == "water" and payload.crm_status == CrmStatus.agreed.value and point.water_type == "unknown":
+    if point_kind == "water" and payload.crm_status == CrmStatus.activated.value and point.water_type == "unknown":
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Select a water type before CRM activation")
     old_status = point.crm_status
     if payload.crm_status is not None:
         point.crm_status = payload.crm_status
     point.crm_comment = payload.crm_comment
-    if payload.crm_status == CrmStatus.agreed.value:
+    if payload.crm_status == CrmStatus.activated.value:
         point.is_active = True
     if payload.crm_status is not None:
         await _add_status_audit_log(db, point=point, point_kind=point_kind, admin_id=current_admin.id, old_status=old_status, new_status=payload.crm_status)
@@ -76,9 +94,9 @@ async def bind_point_owner(point_kind: PointKind, point_id: UUID, payload: Point
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Select a water type before linking an active owner")
     old_status = point.crm_status
     point.owner_user_id = owner.id
-    point.crm_status = CrmStatus.agreed.value
+    point.crm_status = CrmStatus.activated.value
     point.is_active = True
-    await _add_status_audit_log(db, point=point, point_kind=point_kind, admin_id=current_admin.id, old_status=old_status, new_status=CrmStatus.agreed.value)
+    await _add_status_audit_log(db, point=point, point_kind=point_kind, admin_id=current_admin.id, old_status=old_status, new_status=CrmStatus.activated.value)
     await db.commit()
     await db.refresh(point)
     return _serialize_crm_point(point, point_kind)

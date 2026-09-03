@@ -86,7 +86,6 @@ export default function LoginScreen({
         setOtpStep(true);
         return;
       }
-
       await switchAuthenticatedSession(data.access_token, data.role, data.driver_id);
       onLogin(data.role);
     } catch (error) {
@@ -162,7 +161,7 @@ export default function LoginScreen({
             <form onSubmit={handleLogin} className="flex w-full max-w-sm flex-col gap-4">
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="employee-login" className="text-sm font-medium text-slate-700">
-                  Логин или телефон
+                  Номер телефона
                 </label>
                 <input
                   id="employee-login"
@@ -171,7 +170,7 @@ export default function LoginScreen({
                   value={username}
                   onChange={handleLoginChange}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 transition-all focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/50"
-                  placeholder="Введите логин"
+                  placeholder="Введите номер телефона"
                 />
               </div>
 

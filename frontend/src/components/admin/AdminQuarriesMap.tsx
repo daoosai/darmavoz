@@ -16,8 +16,9 @@ export interface AdminMapPoint {
   owner_name?: string | null;
   twogis_id?: string | null;
   is_active: boolean;
-  crm_status?: "parsed" | "in_progress" | "agreed" | "hidden";
+  crm_status?: "auto_added" | "invite_sent" | "response_received" | "interested" | "registered" | "registration_completed" | "activated" | "refused" | "call_later";
   primary_image_url?: string | null;
+  parsed_data?: Record<string, unknown> | null;
 }
 
 interface AdminQuarriesMapProps {
@@ -71,11 +72,15 @@ const createMarkerElement = (
   onClose: () => void,
   onEdit: () => void,
 ) => {
+  const parsedName = point.parsed_data?.name;
+  const pointLabel = point.name.trim()
+    || (typeof parsedName === "string" ? parsedName.trim() : "")
+    || "Без названия";
   const wrapper = document.createElement("div");
   wrapper.style.position = "relative";
   wrapper.style.width = "30px";
   wrapper.style.height = "30px";
-  wrapper.style.zIndex = isSelected ? "9999" : "1";
+  wrapper.style.zIndex = isSelected ? "999999" : "1";
 
   const marker = document.createElement("button");
   marker.type = "button";
@@ -85,30 +90,34 @@ const createMarkerElement = (
   marker.style.height = "30px";
   marker.style.borderRadius = "9999px";
   marker.style.border = "3px solid white";
-  marker.style.backgroundColor = point.crm_status === "parsed"
-    ? "#facc15"
-    : point.crm_status === "in_progress"
-      ? "#94a3b8"
-      : point.crm_status === "agreed"
-        ? "#16a34a"
-        : "#475569";
+  marker.style.backgroundColor = point.crm_status === "activated"
+    ? "#16a34a"
+    : point.crm_status === "auto_added" || point.crm_status === "invite_sent"
+      ? "#facc15"
+      : "#94a3b8";
   marker.style.boxShadow = "0 2px 8px rgba(15, 23, 42, 0.35)";
   marker.style.cursor = "pointer";
   marker.addEventListener("click", (event) => {
     event.stopPropagation();
     onSelect();
   });
+
+  const label = document.createElement("span");
+  label.className = "pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap rounded-md bg-blue-500 px-2 py-1 text-xs text-white shadow-md";
+  label.textContent = pointLabel;
+  wrapper.appendChild(label);
   wrapper.appendChild(marker);
 
   if (isSelected) {
     const card = document.createElement("div");
+    card.className = "relative z-[999999]";
     card.setAttribute("role", "dialog");
     card.setAttribute("aria-label", `Превью точки: ${point.name}`);
     card.style.position = "absolute";
     card.style.left = "50%";
     card.style.bottom = "42px";
     card.style.transform = "translateX(-50%)";
-    card.style.zIndex = "9999";
+    card.style.zIndex = "999999";
     card.style.width = "280px";
     card.style.maxWidth = "calc(100vw - 32px)";
     card.style.padding = "14px";
@@ -238,6 +247,7 @@ export default function AdminQuarriesMap({
 
   useEffect(() => {
     let disposed = false;
+    let closePopupOnMapClick: (() => void) | null = null;
     const key = import.meta.env.VITE_2GIS_KEY;
 
     if (!key || !mapContainerRef.current) {
@@ -262,6 +272,8 @@ export default function AdminQuarriesMap({
           mapInstance.destroy();
           return;
         }
+        closePopupOnMapClick = () => setSelectedPointKey(null);
+        mapInstance.on("click", closePopupOnMapClick);
         mapRef.current = mapInstance;
         setIsMapReady(true);
       })
@@ -273,6 +285,9 @@ export default function AdminQuarriesMap({
       disposed = true;
       markerRefs.current.forEach((marker) => marker.destroy?.());
       markerRefs.current = [];
+      if (closePopupOnMapClick) {
+        mapRef.current?.off?.("click", closePopupOnMapClick);
+      }
       mapRef.current?.destroy?.();
       mapRef.current = null;
       setIsMapReady(false);
@@ -292,7 +307,7 @@ export default function AdminQuarriesMap({
     if (!isMapReady || !mapRef.current || !mapgl?.HtmlMarker) return;
 
     markerRefs.current.forEach((marker) => marker.destroy?.());
-    markerRefs.current = points.filter((point) => point.crm_status !== "hidden").filter(isRenderablePoint).map((point) => {
+    markerRefs.current = points.filter(isRenderablePoint).map((point) => {
       const pointKey = getPointKey(point);
       const element = createMarkerElement(
         point,
@@ -319,6 +334,9 @@ export default function AdminQuarriesMap({
       return new mapgl.HtmlMarker(mapRef.current, {
         coordinates: [point.lon, point.lat],
         html: element,
+        // HtmlMarker elements are sibling map layers. Raise the selected marker
+        // itself so nearby markers and their labels cannot cover its preview card.
+        zIndex: pointKey === selectedPointKey ? 10_000 : 1,
       });
     });
   }, [isMapReady, points, selectedPointKey]);

@@ -10,7 +10,7 @@ import {
 } from "./addressSearch";
 import { useAuthStore, usePlacementStore } from "./store";
 import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
-import { getCrmStatusClass, getCrmStatusLabel, type CrmStatus } from "./crmStatus";
+import { CRM_STATUS_LABELS, getCrmStatusClass, getCrmStatusLabel, type CrmStatus } from "./crmStatus";
 import { PlacementBadge, PlacementDates, type PlacementFields, type PlacementStatus } from "./placement";
 import MapWebGLFallback, { tryCreate2GisMap } from "./components/MapWebGLFallback";
 import AddressSuggestDropdown from "./components/AddressSuggestDropdown";
@@ -264,8 +264,10 @@ export default function AdminQuarriesScreen({
   const [editingQuarry, setEditingQuarry] = useState<Quarry | null>(null);
   const [isModerating, setIsModerating] = useState(false);
   const [deletingPointId, setDeletingPointId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [rejectPointId, setRejectPointId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [crmStatusFilter, setCrmStatusFilter] = useState<CrmStatus | "">("");
   const [parserCenter, setParserCenter] = useState({ lat: 57.1522, lon: 65.5272 });
   const { policy, loadPolicy, loadSummary } = usePlacementStore();
   const normalizedStatusFilter = ALLOWED_MODERATION_FILTERS.has(statusFilter)
@@ -293,6 +295,9 @@ export default function AdminQuarriesScreen({
       }
       if (normalizedTypeFilter) {
         params.set("point_type", normalizedTypeFilter);
+      }
+      if (crmStatusFilter) {
+        params.set("crm_status", crmStatusFilter);
       }
       const query = params.toString();
       const requestUrl = query
@@ -332,7 +337,7 @@ export default function AdminQuarriesScreen({
       return;
     }
     fetchQuarries();
-  }, [token, normalizedStatusFilter, normalizedPlacementFilter, normalizedTypeFilter]);
+  }, [token, normalizedStatusFilter, normalizedPlacementFilter, normalizedTypeFilter, crmStatusFilter]);
 
   useEffect(() => {
     if (!policy) void loadPolicy();
@@ -435,6 +440,29 @@ export default function AdminQuarriesScreen({
     }
   };
 
+  const toggleSelected = (pointId: string) => setSelectedIds((current) => {
+    const next = new Set(current);
+    next.has(pointId) ? next.delete(pointId) : next.add(pointId);
+    return next;
+  });
+
+  const bulkDelete = async () => {
+    const pointIds = [...selectedIds];
+    if (!token || pointIds.length === 0 || !window.confirm(`Вы уверены, что хотите удалить ${pointIds.length} точек?`)) return;
+    setDeletingPointId("bulk");
+    try {
+      const response = await fetch(`${baseURL}/admin/pickup-points/bulk-delete`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ point_ids: pointIds }) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось удалить выбранные точки"));
+      setSelectedIds(new Set());
+      toast.success(`Удалено точек: ${data.deleted_count ?? pointIds.length}`);
+      await fetchQuarries();
+      await onPointsChanged?.();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось удалить выбранные точки");
+    } finally { setDeletingPointId(null); }
+  };
+
   const handleOpenModal = (quarry?: Quarry) => {
     if (quarry) {
       setEditingQuarry(quarry);
@@ -523,6 +551,10 @@ export default function AdminQuarriesScreen({
           <option value="warehouse">Склады</option>
           <option value="supplier">Поставщики</option>
         </select>
+        <select value={crmStatusFilter} onChange={(event) => setCrmStatusFilter(event.target.value as CrmStatus | "")} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
+          <option value="">Все CRM-статусы</option>
+          {Object.entries(CRM_STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>
       </div>
 
       <section className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
@@ -532,13 +564,13 @@ export default function AdminQuarriesScreen({
           </div>
           <div className="flex shrink-0 items-center gap-3 text-xs font-semibold text-slate-500">
             <span className="flex items-center gap-1.5">
-              <span className="h-3 w-3 rounded-full bg-yellow-400" /> Новая
+              <span className="h-3 w-3 rounded-full bg-yellow-400" /> Добавлена / приглашение
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="h-3 w-3 rounded-full bg-slate-400" /> В работе
+              <span className="h-3 w-3 rounded-full bg-slate-400" /> Воронка CRM
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="h-3 w-3 rounded-full bg-green-600" /> Согласовано
+              <span className="h-3 w-3 rounded-full bg-green-600" /> Активирована
             </span>
           </div>
         </div>
@@ -550,17 +582,19 @@ export default function AdminQuarriesScreen({
       </section>
 
       {/* Desktop View */}
+      {selectedIds.size > 0 ? <button type="button" onClick={() => void bulkDelete()} disabled={deletingPointId === "bulk"} className="self-start rounded-xl bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 disabled:opacity-50">Удалить выбранные ({selectedIds.size})</button> : null}
       <div className="hidden overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm md:block">
         <div className="w-full overflow-x-auto">
           <table className="min-w-[1180px] w-full border-collapse text-left">
             <thead>
               <tr className="bg-slate-50/80 text-slate-500 text-xs uppercase tracking-wider font-bold">
+                <th className="w-12 p-4 border-b border-slate-100"><input type="checkbox" aria-label="Выбрать все точки" checked={quarries.length > 0 && selectedIds.size === quarries.filter((point) => point.id).length} onChange={() => setSelectedIds((current) => current.size === quarries.filter((point) => point.id).length ? new Set() : new Set(quarries.flatMap((point) => point.id ? [point.id] : [])))} /></th>
                 <th className="p-4 border-b border-slate-100">Тип</th>
                 <th className="p-4 border-b border-slate-100">Название</th>
                 <th className="p-4 border-b border-slate-100">Адрес</th>
                 <th className="p-4 border-b border-slate-100">Статус</th>
                 <th className="min-w-[120px] whitespace-nowrap border-b border-slate-100 p-4">Модерация</th>
-                <th className="sticky right-0 z-20 w-[340px] min-w-[340px] whitespace-nowrap border-b border-slate-100 bg-slate-50/95 p-4 pr-6 shadow-[-10px_0_10px_-10px_rgba(0,0,0,0.1)]">Действия</th>
+                <th className="sticky right-0 z-20 w-[340px] min-w-[340px] whitespace-nowrap border-b border-slate-100 bg-slate-50/95 p-4 pr-6 text-center shadow-[-10px_0_10px_-10px_rgba(0,0,0,0.1)]">Действия</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -576,6 +610,7 @@ export default function AdminQuarriesScreen({
                     key={quarry.id}
                     className="group hover:bg-slate-50/50 transition-colors"
                   >
+                    <td className="p-4"><input type="checkbox" aria-label={`Выбрать ${quarry.name}`} checked={Boolean(quarry.id && selectedIds.has(quarry.id))} onChange={() => quarry.id && toggleSelected(quarry.id)} /></td>
                     <td className="p-4">
                       <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
                         {POINT_TYPE_LABELS[quarry.point_type] || quarry.point_type}
@@ -2232,10 +2267,10 @@ function EnhancedEditQuarryModal({
           token,
           pointKind: "quarry",
           pointId: savedPoint.id,
-          status: formData.crm_status || "parsed",
+          status: formData.crm_status || "auto_added",
           comment: formData.crm_comment || "",
           ownerId: formData.owner_user_id || "",
-          initialStatus: quarry.crm_status || "parsed",
+          initialStatus: quarry.crm_status || "auto_added",
           initialComment: quarry.crm_comment || "",
           initialOwnerId: quarry.owner_user_id || "",
         });
@@ -2613,7 +2648,7 @@ function EnhancedEditQuarryModal({
             token={token}
             pointKind="quarry"
             pointId={formData.id}
-            status={formData.crm_status || "parsed"}
+            status={formData.crm_status || "auto_added"}
             comment={formData.crm_comment || ""}
             ownerId={formData.owner_user_id || ""}
             onStatusChange={(status) => setFormData((current) => ({ ...current, crm_status: status }))}

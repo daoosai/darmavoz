@@ -4,7 +4,7 @@ import asyncio
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Iterator
 
 import httpx
 from fastapi import HTTPException, status
@@ -13,18 +13,29 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.models import CrmStatus, PointAuditLog, Quarry, WaterPoint
-from app.schemas.parser import MATERIAL_KEYWORDS, ParserRunRequest, ParserRunResult
+from app.schemas.parser import MATERIAL_KEYWORDS, ParserResultItem, ParserRunRequest, ParserRunResult, ParserSkippedItem
 
 
 logger = logging.getLogger(__name__)
 PHONE_PATTERN = re.compile(r"\+?[\d][\d\s()\-]{4,}[\d]")
+MAX_PLACES_PAGES = 20
+MAX_VALID_PLACES = 50
+NON_TARGET_BLACKLIST = (
+    "институт",
+    "школа",
+    "детский сад",
+    "водомат",
+)
+NON_TARGET_SKIP_REASON = "Нецелевая категория"
 PLACES_FIELDS = ",".join(
     (
         "items.point",
+        "items.address",
         "items.full_address_name",
         "items.contact_groups",
         "items.schedule",
         "items.rubrics",
+        "items.links",
     )
 )
 
@@ -40,44 +51,160 @@ class ParsedPlace:
     parsed_data: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class PlacesSearchResult:
+    places: list[ParsedPlace]
+    truncated: bool
+    skipped_items: list[ParserSkippedItem]
+
+    def __iter__(self) -> Iterator[object]:
+        yield self.places
+        yield self.truncated
+
+
 def _contact_value(contact: dict[str, Any]) -> str | None:
-    for key in ("value", "text", "url", "number"):
+    for key in ("value", "text", "url", "href", "number"):
         value = contact.get(key)
         if isinstance(value, str) and value.strip():
             return value.strip()
     return None
 
 
-def _extract_contacts(item: dict[str, Any]) -> tuple[list[str], list[str]]:
-    phones: list[str] = []
-    websites: list[str] = []
+def _contact_bucket(contact_type: str, value: str) -> str:
+    normalized_type = contact_type.casefold()
+    normalized_value = value.casefold()
+    if "vk" in normalized_type or "vkontakte" in normalized_type or "vk.com" in normalized_value:
+        return "vk"
+    if "email" in normalized_type or "e-mail" in normalized_type or "@" in value:
+        return "emails"
+    if (
+        "site" in normalized_type
+        or "web" in normalized_type
+        or "url" in normalized_type
+        or value.startswith(("http://", "https://"))
+    ):
+        return "websites"
+    return "other"
+
+
+def _iter_contact_records(item: dict[str, Any]) -> Iterator[dict[str, Any]]:
     groups = item.get("contact_groups")
-    if not isinstance(groups, list):
-        return phones, websites
-
-    for group in groups:
-        if not isinstance(group, dict):
-            continue
-        contacts = group.get("contacts")
-        if not isinstance(contacts, list):
-            continue
-        for contact in contacts:
-            if not isinstance(contact, dict):
+    if isinstance(groups, list):
+        for group in groups:
+            if not isinstance(group, dict):
                 continue
-            value = _contact_value(contact)
-            if not value:
-                continue
-            contact_type = str(contact.get("type") or "").casefold()
-            if "site" in contact_type or "web" in contact_type or value.startswith(("http://", "https://")):
-                websites.append(value)
-            elif "phone" in contact_type or PHONE_PATTERN.search(value):
-                phones.append(value)
+            contacts = group.get("contacts")
+            if isinstance(contacts, list):
+                yield from (contact for contact in contacts if isinstance(contact, dict))
 
-    return list(dict.fromkeys(phones)), list(dict.fromkeys(websites))
+    links = item.get("links")
+    if isinstance(links, list):
+        yield from (link for link in links if isinstance(link, dict))
+
+
+def _extract_contacts(item: dict[str, Any]) -> tuple[list[str], dict[str, list[str]]]:
+    phones: list[str] = []
+    contacts: dict[str, list[str]] = {
+        "websites": [],
+        "vk": [],
+        "emails": [],
+        "other": [],
+    }
+
+    for contact in _iter_contact_records(item):
+        value = _contact_value(contact)
+        if not value:
+            continue
+        contact_type = str(contact.get("type") or contact.get("kind") or "")
+        if "phone" in contact_type.casefold() or PHONE_PATTERN.search(value):
+            phones.append(value)
+            continue
+        contacts[_contact_bucket(contact_type, value)].append(value)
+
+    return list(dict.fromkeys(phones)), {
+        key: list(dict.fromkeys(values)) for key, values in contacts.items()
+    }
+
+
+def _extract_rubric_names(item: dict[str, Any]) -> list[str]:
+    rubrics = item.get("rubrics")
+    if not isinstance(rubrics, list):
+        return []
+
+    names: list[str] = []
+    for rubric in rubrics:
+        if isinstance(rubric, str) and rubric.strip():
+            names.append(rubric.strip())
+        elif isinstance(rubric, dict) and isinstance(rubric.get("name"), str) and rubric["name"].strip():
+            names.append(rubric["name"].strip())
+    return list(dict.fromkeys(names))
+
+
+def _item_name(item: object) -> str:
+    if isinstance(item, dict) and isinstance(item.get("name"), str) and item["name"].strip():
+        return item["name"].strip()
+    return "Неизвестный объект"
+
+
+def _grouped_skip_name(name: str) -> str:
+    base_name = name.split(",", 1)[0].strip()
+    return base_name or name.strip()
+
+
+def _append_skipped_item(
+    skipped_items: list[ParserSkippedItem],
+    *,
+    name: str,
+    reason: str,
+) -> None:
+    grouped_name = _grouped_skip_name(name)
+    for skipped_item in skipped_items:
+        if skipped_item.name == grouped_name and skipped_item.reason == reason:
+            skipped_item.count += 1
+            return
+    skipped_items.append(ParserSkippedItem(name=grouped_name, reason=reason))
+
+
+def _is_non_target_item(item: dict[str, Any]) -> bool:
+    name_values = (item.get("name"), item.get("full_name"))
+    text_values = [value for value in name_values if isinstance(value, str)]
+    text_values.extend(_extract_rubric_names(item))
+    return any(
+        stop_word in value.casefold()
+        for value in text_values
+        for stop_word in NON_TARGET_BLACKLIST
+    )
+
+
+def _skip_reason(item: object) -> str | None:
+    if not isinstance(item, dict):
+        return "Некорректные данные 2ГИС"
+    point = item.get("point")
+    if not isinstance(point, dict):
+        return "Нет координат"
+    try:
+        lat = float(point["lat"])
+        lon = float(point["lon"])
+    except (KeyError, TypeError, ValueError):
+        return "Нет координат"
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        return "Некорректные координаты"
+    if not isinstance(item.get("id"), str) or not item["id"].strip():
+        return "Нет идентификатора 2ГИС"
+    if not isinstance(item.get("name"), str) or not item["name"].strip():
+        return "Нет названия"
+    address = item.get("full_address_name") or item.get("address_name")
+    if not isinstance(address, str) or not address.strip():
+        return "Нет адреса"
+    if _is_non_target_item(item):
+        return NON_TARGET_SKIP_REASON
+    return None
 
 
 def _normalize_place(item: object) -> ParsedPlace | None:
     if not isinstance(item, dict):
+        return None
+    if _skip_reason(item):
         return None
     item_id = item.get("id")
     name = item.get("name")
@@ -95,13 +222,14 @@ def _normalize_place(item: object) -> ParsedPlace | None:
     if not (-90 <= lat <= 90 and -180 <= lon <= 180):
         return None
 
-    phones, websites = _extract_contacts(item)
+    phones, contacts = _extract_contacts(item)
     parsed_data: dict[str, Any] = {
         "source": "2gis",
         "phones": phones,
-        "websites": websites,
+        "websites": contacts["websites"],
+        "contacts": contacts,
         "schedule": item.get("schedule"),
-        "rubrics": item.get("rubrics"),
+        "rubrics": _extract_rubric_names(item),
         "raw": item,
     }
     return ParsedPlace(
@@ -216,17 +344,20 @@ async def _fetch_page(client: httpx.AsyncClient, params: dict[str, Any]) -> dict
     return payload
 
 
-async def search_places(payload: ParserRunRequest) -> tuple[list[ParsedPlace], bool]:
+async def search_places(payload: ParserRunRequest) -> PlacesSearchResult:
     if not settings.TWOGIS_API_KEY:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="2GIS Places API key is not configured",
         )
 
-    collected: list[ParsedPlace] = []
+    collected: dict[str, ParsedPlace] = {}
+    skipped_items: list[ParserSkippedItem] = []
     page = 1
     total: int | None = None
-    page_size = min(50, settings.TWOGIS_PLACES_MAX_RESULTS)
+    reached_page_limit = False
+    # The 2GIS Places API accepts at most 10 items per page.
+    page_size = min(10, settings.TWOGIS_PLACES_MAX_RESULTS)
     base_params = {
         "key": settings.TWOGIS_API_KEY,
         "q": f"{payload.keyword}, {payload.city}",
@@ -239,8 +370,20 @@ async def search_places(payload: ParserRunRequest) -> tuple[list[ParsedPlace], b
     }
 
     async with httpx.AsyncClient(timeout=settings.TWOGIS_PLACES_TIMEOUT_SECONDS) as client:
-        while len(collected) < settings.TWOGIS_PLACES_MAX_RESULTS:
-            response_payload = await _fetch_page(client, {**base_params, "page": page})
+        while len(collected) < MAX_VALID_PLACES:
+            if page > MAX_PLACES_PAGES:
+                reached_page_limit = True
+                break
+            try:
+                response_payload = await _fetch_page(client, {**base_params, "page": page})
+            except HTTPException as exc:
+                if exc.status_code in {
+                    status.HTTP_400_BAD_REQUEST,
+                    status.HTTP_404_NOT_FOUND,
+                }:
+                    logger.info("twogis_places_pagination_complete", extra={"page": page, "status_code": exc.status_code})
+                    break
+                raise
             result = response_payload.get("result")
             if not isinstance(result, dict):
                 break
@@ -249,14 +392,31 @@ async def search_places(payload: ParserRunRequest) -> tuple[list[ParsedPlace], b
                 break
             if isinstance(result.get("total"), int):
                 total = result["total"]
-            collected.extend(place for item in items if (place := _normalize_place(item)) is not None)
-            if len(items) < page_size:
+            for item in items:
+                reason = _skip_reason(item)
+                if reason:
+                    _append_skipped_item(skipped_items, name=_item_name(item), reason=reason)
+                    continue
+                place = _normalize_place(item)
+                if place is not None:
+                    collected[place.twogis_id] = place
+                    if len(collected) >= MAX_VALID_PLACES:
+                        break
+            if (
+                len(collected) >= MAX_VALID_PLACES
+                or len(items) < page_size
+                or (total is not None and page * page_size >= total)
+            ):
                 break
             page += 1
 
-    unique_places = list({place.twogis_id: place for place in collected}.values())
-    truncated = bool(total is not None and total > len(unique_places) and len(unique_places) >= settings.TWOGIS_PLACES_MAX_RESULTS)
-    return unique_places[: settings.TWOGIS_PLACES_MAX_RESULTS], truncated
+    places = list(collected.values())
+    truncated = len(places) >= MAX_VALID_PLACES or reached_page_limit
+    return PlacesSearchResult(
+        places=places,
+        truncated=truncated,
+        skipped_items=skipped_items,
+    )
 
 
 async def upsert_places(
@@ -266,8 +426,15 @@ async def upsert_places(
     places: list[ParsedPlace],
     admin_id,
     truncated: bool,
+    skipped_items: list[ParserSkippedItem] | None = None,
 ) -> ParserRunResult:
-    result = ParserRunResult(found=len(places), truncated=truncated)
+    result = ParserRunResult(
+        found=len(places),
+        total_found=len(places) + sum(item.count for item in skipped_items or []),
+        skipped=sum(item.count for item in skipped_items or []),
+        truncated=truncated,
+        skipped_items=list(skipped_items or []),
+    )
     destination_model = Quarry if payload.target == "material" else WaterPoint
     other_model = WaterPoint if payload.target == "material" else Quarry
     point_kind = "quarry" if payload.target == "material" else "water"
@@ -277,12 +444,24 @@ async def upsert_places(
         existing = await db.scalar(select(destination_model).where(destination_model.twogis_id == place.twogis_id))
         if existing is not None:
             existing.parsed_data = place.parsed_data
+            if place.phone:
+                if payload.target == "material" and not existing.contact_phone:
+                    existing.contact_phone = place.phone
+                elif payload.target == "water" and not existing.phone:
+                    existing.phone = place.phone
             result.updated += 1
+            result.updated_items.append(ParserResultItem(id=place.twogis_id, name=place.name))
             continue
 
         other_kind_match = await db.scalar(select(other_model.id).where(other_model.twogis_id == place.twogis_id))
         if other_kind_match is not None:
             result.cross_target_conflicts += 1
+            result.skipped += 1
+            _append_skipped_item(
+                result.skipped_items,
+                name=place.name,
+                reason="Уже существует в другом типе точки",
+            )
             continue
 
         if payload.target == "material":
@@ -297,7 +476,7 @@ async def upsert_places(
                 is_active=False,
                 moderation_status="incomplete",
                 twogis_id=place.twogis_id,
-                crm_status=CrmStatus.parsed.value,
+                crm_status=CrmStatus.auto_added.value,
                 parsed_data=place.parsed_data,
             )
         else:
@@ -312,7 +491,7 @@ async def upsert_places(
                 is_active=False,
                 moderation_status="pending_moderation",
                 twogis_id=place.twogis_id,
-                crm_status=CrmStatus.parsed.value,
+                crm_status=CrmStatus.auto_added.value,
                 parsed_data=place.parsed_data,
             )
         db.add(point)
@@ -323,10 +502,10 @@ async def upsert_places(
                 point_kind=point_kind,
                 admin_id=admin_id,
                 old_status=None,
-                new_status=CrmStatus.parsed.value,
+                new_status=CrmStatus.auto_added.value,
             )
         )
         result.created += 1
+        result.created_items.append(ParserResultItem(id=place.twogis_id, name=place.name))
 
-    result.skipped = result.found - result.created - result.updated - result.cross_target_conflicts
     return result

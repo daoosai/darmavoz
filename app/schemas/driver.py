@@ -146,7 +146,6 @@ class DriverRegisterRequest(BaseModel):
         assert validated is not None
         return validated
 
-
 class DriverProfileUpdate(BaseModel):
     name: str | None = None
     phone: str | None = None

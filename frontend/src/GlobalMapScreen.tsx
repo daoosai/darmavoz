@@ -28,7 +28,7 @@ interface GlobalPickupPoint {
   lon: number;
   primary_image_url?: string | null;
   material_offers: GlobalPickupPointMaterial[];
-  crm_status: "parsed" | "in_progress" | "agreed" | "hidden";
+  crm_status: "auto_added" | "invite_sent" | "response_received" | "interested" | "registered" | "registration_completed" | "activated" | "refused" | "call_later";
   is_active: boolean;
   is_ready: boolean;
 }
@@ -56,10 +56,10 @@ const getRenderablePoints = (pickupPoints: GlobalPickupPoint[]) =>
     (point) => isValidCoordinate(point.lat) && isValidCoordinate(point.lon),
   );
 
-const isPointReady = (point: GlobalPickupPoint) => point.crm_status === "agreed";
+const isPointReady = (point: GlobalPickupPoint) => point.crm_status === "activated";
 
 const getCrmMarkerStatus = (point: GlobalPickupPoint) =>
-  point.crm_status === "agreed" ? "agreed" : "in-progress";
+  point.crm_status === "activated" ? "activated" : "inactive";
 
 const calculateDistanceKm = (
   lat1: number,
@@ -121,7 +121,13 @@ const getBoundsFromPoints = (pickupPoints: GlobalPickupPoint[]) => {
   return bounds;
 };
 
-export default function GlobalMapScreen() {
+export default function GlobalMapScreen({
+  isAuthenticated,
+  onOpenAuth,
+}: {
+  isAuthenticated: boolean;
+  onOpenAuth: () => void;
+}) {
   const [points, setPoints] = useState<GlobalPickupPoint[]>([]);
   const [selectedMaterials, setSelectedMaterials] = useState<string[]>([]);
   const [selectedPoint, setSelectedPoint] = useState<GlobalPickupPoint | null>(null);
@@ -513,11 +519,11 @@ export default function GlobalMapScreen() {
           place-items: center;
           cursor: pointer;
         }
-        .global-pickup-marker--agreed {
+        .global-pickup-marker--activated {
           background: #16a34a;
           color: #ffffff;
         }
-        .global-pickup-marker--in-progress {
+        .global-pickup-marker--inactive {
           background: #94a3b8;
           color: #ffffff;
           opacity: 0.82;
@@ -661,7 +667,7 @@ export default function GlobalMapScreen() {
                 {!isPointReady(selectedPoint) ? (
                   <div className="flex-1 overflow-y-auto px-4 py-4">
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <p className="text-sm font-bold text-slate-900">Временно без доставки</p>
+                      <p className="text-sm font-bold text-slate-900">Временно нет доставки через Дармавоз</p>
                       <p className="mt-1 text-sm text-slate-600">Точка ещё не готова принимать заказы.</p>
                     </div>
                   </div>
@@ -735,14 +741,18 @@ export default function GlobalMapScreen() {
                 {isPointReady(selectedPoint) ? <div className="shrink-0 border-t border-slate-100 bg-white px-4 pb-4 pt-3">
                   <button
                     type="button"
-                    onClick={() =>
+                    onClick={() => {
+                      if (!isAuthenticated) {
+                        onOpenAuth();
+                        return;
+                      }
                       handleOpenNavigator({
                         lat: selectedPoint.lat,
                         lon: selectedPoint.lon,
                         label: selectedPoint.short_name || selectedPoint.name,
                         address: selectedPoint.address,
-                      })
-                    }
+                      });
+                    }}
                     className="flex w-full items-center justify-center gap-2 rounded-2xl bg-sky-500 px-5 py-4 font-bold text-white shadow-sm"
                   >
                     <Route className="h-5 w-5" />

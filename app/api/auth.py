@@ -389,7 +389,10 @@ async def _create_driver_from_payload(
 
     result = await db.execute(
         select(Driver)
-        .options(selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option))
+        .options(
+            selectinload(Driver.user),
+            selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option),
+        )
         .where(Driver.id == driver.id)
     )
     persisted_driver = result.scalar_one()
@@ -439,6 +442,8 @@ async def send_email_code(
         user = await _get_user_by_email(db, normalized_email)
         if user is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь с таким email не найден")
+        if user.role is not None and user.role.name == "driver":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Для водителей доступен вход только по номеру телефона")
         _ensure_user_can_authenticate(user)
 
     code = generate_otp_code()
@@ -524,6 +529,8 @@ async def verify_email_code(
     user = await _get_user_by_email(db, normalized_email)
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь с таким email не найден")
+    if user.role is not None and user.role.name == "driver":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Для водителей доступен вход только по номеру телефона")
 
     _ensure_user_can_authenticate(user)
     await redis.delete(_email_auth_code_key(payload.auth_scope, normalized_email))
@@ -557,10 +564,10 @@ async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db),
 ):
-    normalized_username = normalize_phone_like_username(form_data.username)
+    normalized_phone = normalize_phone_like_username(form_data.username)
     query = (
         select(User)
-        .where(User.username == normalized_username)
+        .where(User.username == normalized_phone)
         .options(selectinload(User.role), selectinload(User.driver_profile))
     )
     result = await db.execute(query)
@@ -581,7 +588,7 @@ async def login(
     role_name = user.role.name if user.role else None
     if role_name == "driver":
         return await _issue_driver_login_code(
-            normalized_phone=normalized_username,
+            normalized_phone=normalized_phone,
             user_id=str(user.id),
         )
 

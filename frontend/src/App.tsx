@@ -59,6 +59,8 @@ import EquipmentOwnerPortalScreen from "./EquipmentOwnerPortalScreen";
 import WaterSepticPartnerPortalScreen from "./WaterSepticPartnerPortalScreen";
 import AdminNotificationToastListener from "./components/shared/AdminNotificationToastListener";
 
+const WATER_PARTNER_BOARD_PATH = "/water-partner-board";
+
 // Reuse Material type as MaterialProps by exporting it from MaterialDetailScreen or type matching
 export default function App() {
   usePushNotifications();
@@ -120,12 +122,26 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [showAuthSheet, setShowAuthSheet] = useState(false);
 
+  const navigateToPath = (nextPath: string, replace = false) => {
+    if (typeof window !== "undefined" && window.location.pathname !== nextPath) {
+      window.history[replace ? "replaceState" : "pushState"]({}, "", nextPath);
+    }
+    setCurrentPath(nextPath);
+  };
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const handlePopState = () => setCurrentPath(window.location.pathname);
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
+
+  useEffect(() => {
+    if (!token || role !== "water_septic_partner" || currentPath === WATER_PARTNER_BOARD_PATH) return;
+    window.history.replaceState({}, "", WATER_PARTNER_BOARD_PATH);
+    setCurrentPath(WATER_PARTNER_BOARD_PATH);
+    setCurrentRoute("water_septic_partner");
+  }, [currentPath, role, token]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -201,8 +217,16 @@ export default function App() {
 
     const renderPartnerLogin = () => (
       <LoginScreen
-        onLogin={(nextRole) => setCurrentRoute(resolveRouteForRole(nextRole))}
-        onBack={() => setCurrentRoute("welcome")}
+        onLogin={(nextRole) => {
+          if (nextRole === "water_septic_partner") {
+            navigateToPath(WATER_PARTNER_BOARD_PATH);
+          }
+          setCurrentRoute(resolveRouteForRole(nextRole));
+        }}
+        onBack={() => {
+          navigateToPath("/");
+          setCurrentRoute("welcome");
+        }}
         onSelectSupplierRegister={() => setCurrentRoute("supplier_register")}
         onSelectEquipmentOwnerRegister={() => setCurrentRoute("equipment_owner_register")}
         onSelectWaterSepticPartnerRegister={() => setCurrentRoute("water_septic_partner_register")}
@@ -241,6 +265,17 @@ export default function App() {
         <AdminStatisticsScreen role="logist" />
       ) : renderPartnerLogin();
     }
+
+    if (currentPath === WATER_PARTNER_BOARD_PATH) {
+      return token && role === "water_septic_partner" ? (
+        <WaterSepticPartnerPortalScreen
+          onBack={() => {
+            navigateToPath("/");
+            setCurrentRoute("login");
+          }}
+        />
+      ) : renderPartnerLogin();
+    }
     if (currentRoute === "welcome") {
       return (
         <WelcomeScreen
@@ -274,10 +309,7 @@ export default function App() {
       return <EquipmentOwnerPortalScreen onBack={() => setCurrentRoute("login")} />;
     }
 
-    if (
-      currentRoute === "water_septic_partner_register" ||
-      currentRoute === "water_septic_partner"
-    ) {
+    if (currentRoute === "water_septic_partner_register") {
       return <WaterSepticPartnerPortalScreen onBack={() => setCurrentRoute("login")} />;
     }
 
@@ -685,7 +717,12 @@ function MainContent({
             />
           )}
 
-          {activeTab === "map" && <GlobalMapScreen />}
+          {activeTab === "map" && (
+            <GlobalMapScreen
+              isAuthenticated={Boolean(token)}
+              onOpenAuth={() => setShowAuthSheet(true)}
+            />
+          )}
           {activeTab === "water" && <WaterMapScreen />}
           {activeTab === "septic" && <SepticCatalogScreen />}
 

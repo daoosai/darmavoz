@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_db
 from app.models.models import CrmStatus, MediaFile, User, WaterPoint
 from app.schemas.sprint19 import WaterPointIn, WaterPointOut
+from app.schemas.bulk import BulkDeleteRequest, BulkDeleteResult
 from app.security.auth import get_current_logist_user, get_current_water_septic_partner_user
 from app.services.notifications import create_operator_notifications
 from app.services.storage import StorageNotConfiguredError, get_storage_service
@@ -28,7 +29,7 @@ def _is_water_point_ready(point: WaterPoint) -> bool:
 
 def _public_stmt():
     return select(WaterPoint).where(
-        WaterPoint.crm_status == CrmStatus.agreed.value,
+        WaterPoint.crm_status == CrmStatus.activated.value,
         WaterPoint.moderation_status == "approved",
         WaterPoint.is_active.is_(True),
         WaterPoint.is_deleted.is_(False),
@@ -117,8 +118,8 @@ async def list_water_points_for_map(
         WaterPoint.is_deleted.is_(False),
         WaterPoint.crm_status.in_(
             [
-                CrmStatus.in_progress.value,
-                CrmStatus.agreed.value,
+                CrmStatus.invite_sent.value,
+                CrmStatus.activated.value,
             ]
         ),
     )
@@ -270,6 +271,20 @@ async def hard_delete_water_point_by_admin(
     await _hard_delete_water_point(point, db)
     await db.commit()
     return {"ok": True}
+
+
+@router.post("/admin/water-points/bulk-delete", response_model=BulkDeleteResult)
+async def bulk_delete_water_points(
+    payload: BulkDeleteRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_logist_user),
+) -> BulkDeleteResult:
+    del current_user
+    points = (await db.execute(select(WaterPoint).where(WaterPoint.id.in_(set(payload.point_ids))))).scalars().all()
+    for point in points:
+        await _hard_delete_water_point(point, db)
+    await db.commit()
+    return BulkDeleteResult(deleted_count=len(points))
 
 
 @router.post("/admin/water-points/{point_id}/approve", response_model=WaterPointOut)

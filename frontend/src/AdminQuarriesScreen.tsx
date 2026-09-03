@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Plus, Edit2, ImagePlus, Star, Trash2, Crown } from "lucide-react";
+import { Plus, Edit2, ImagePlus, Star, Trash2, Crown, MoreVertical, CalendarPlus, EyeOff, Archive, RotateCcw, Check, X } from "lucide-react";
 import toast from "react-hot-toast";
 import {
   fetch2gisAddressSuggestions,
@@ -265,6 +265,7 @@ export default function AdminQuarriesScreen({
   const [isModerating, setIsModerating] = useState(false);
   const [deletingPointId, setDeletingPointId] = useState<string | null>(null);
   const [bulkPlacementAction, setBulkPlacementAction] = useState<"extend" | "hide" | "archive" | null>(null);
+  const [mobileMenuPointId, setMobileMenuPointId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [rejectPointId, setRejectPointId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
@@ -736,15 +737,78 @@ export default function AdminQuarriesScreen({
           quarries.map((quarry) => (
             <div
               key={quarry.id}
-              className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm flex flex-col gap-3"
+              className="relative bg-white border border-gray-100 rounded-xl p-4 shadow-sm flex flex-col gap-3"
             >
               <div className="flex justify-between items-start gap-2">
                 <h3 className="font-semibold text-gray-900 text-lg">
                   {quarry.name}
                 </h3>
-                <span className="text-xs text-gray-400 shrink-0 font-mono">
-                  ID: {quarry.id?.slice(0, 8)}...
-                </span>
+                <div className="flex shrink-0 items-center gap-1">
+                  <span className="text-xs text-gray-400 font-mono">
+                    ID: {quarry.id?.slice(0, 8)}...
+                  </span>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      aria-label={`Открыть действия для точки ${quarry.name}`}
+                      aria-expanded={mobileMenuPointId === quarry.id}
+                      disabled={!quarry.id}
+                      onClick={() => setMobileMenuPointId((current) => current === quarry.id ? null : quarry.id ?? null)}
+                      className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50"
+                    >
+                      <MoreVertical className="h-5 w-5" />
+                    </button>
+                    {quarry.id && mobileMenuPointId === quarry.id ? (
+                      <div role="menu" className="absolute right-0 top-full z-30 mt-2 w-52 rounded-xl border border-slate-200 bg-white p-1 shadow-xl">
+                        <button type="button" role="menuitem" onClick={() => { setMobileMenuPointId(null); handleOpenModal(quarry); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-50">
+                          <Edit2 className="h-4 w-4" />
+                          Редактировать
+                        </button>
+                        {quarry.placement_status !== "archived" ? (
+                          <button type="button" role="menuitem" onClick={() => { setMobileMenuPointId(null); void placementAction(quarry, "extend"); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-sky-700 transition hover:bg-sky-50">
+                            <CalendarPlus className="h-4 w-4" />
+                            Продлить
+                          </button>
+                        ) : null}
+                        {quarry.placement_status === "hidden" || quarry.placement_status === "archived" ? (
+                          <button type="button" role="menuitem" onClick={() => { setMobileMenuPointId(null); void placementAction(quarry, "restore"); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-emerald-700 transition hover:bg-emerald-50">
+                            <RotateCcw className="h-4 w-4" />
+                            Восстановить
+                          </button>
+                        ) : (
+                          <button type="button" role="menuitem" onClick={() => { setMobileMenuPointId(null); void placementAction(quarry, "hide"); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-50">
+                            <EyeOff className="h-4 w-4" />
+                            Скрыть
+                          </button>
+                        )}
+                        {quarry.placement_status !== "archived" ? (
+                          <button type="button" role="menuitem" onClick={() => { setMobileMenuPointId(null); void placementAction(quarry, "archive"); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-50">
+                            <Archive className="h-4 w-4" />
+                            В архив
+                          </button>
+                        ) : null}
+                        {["pending_moderation", "has_pending_changes"].includes(quarry.moderation_status || "") ? (
+                          <>
+                            <div className="my-1 border-t border-slate-100" />
+                            <button type="button" role="menuitem" disabled={isModerating} onClick={() => { setMobileMenuPointId(null); void moderatePoint(quarry.id!, "approve"); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-50">
+                              <Check className="h-4 w-4" />
+                              Одобрить
+                            </button>
+                            <button type="button" role="menuitem" disabled={isModerating} onClick={() => { setMobileMenuPointId(null); void rejectPoint(quarry.id!); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-amber-700 transition hover:bg-amber-50 disabled:opacity-50">
+                              <X className="h-4 w-4" />
+                              Отклонить
+                            </button>
+                          </>
+                        ) : null}
+                        <div className="my-1 border-t border-slate-100" />
+                        <button type="button" role="menuitem" disabled={deletingPointId === quarry.id} onClick={() => { setMobileMenuPointId(null); void deletePoint(quarry); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-rose-600 transition hover:bg-rose-50 disabled:opacity-50">
+                          <Trash2 className="h-4 w-4" />
+                          Удалить
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
               </div>
               <div className="text-sm text-gray-600">
                 {getQuarryAddress(quarry)}
@@ -778,31 +842,6 @@ export default function AdminQuarriesScreen({
                   ) : null}
                 </div>
                 <PlacementDates item={quarry} />
-                <div className="mt-3 flex max-w-full flex-wrap items-center justify-end gap-2 md:mt-0">
-                  <button
-                    onClick={() => handleOpenModal(quarry)}
-                    className="p-2 text-slate-400 hover:text-[#2DB0E6] hover:bg-[#2DB0E6]/10 rounded-xl transition-all"
-                  >
-                    <Edit2 className="w-5 h-5" />
-                  </button>
-                  {quarry.placement_status !== "archived" ? <button type="button" onClick={() => void placementAction(quarry, "extend")} className="rounded-xl bg-sky-50 px-3 py-2 text-xs font-bold text-sky-700">Продлить</button> : null}
-                  {quarry.placement_status === "hidden" || quarry.placement_status === "archived" ? <button type="button" onClick={() => void placementAction(quarry, "restore")} className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">Восстановить</button> : <button type="button" onClick={() => void placementAction(quarry, "hide")} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">Скрыть</button>}
-                  {quarry.placement_status !== "archived" ? <button type="button" onClick={() => void placementAction(quarry, "archive")} className="rounded-xl bg-gray-100 px-3 py-2 text-xs font-bold text-gray-700">В архив</button> : null}
-                  <button
-                    type="button"
-                    disabled={deletingPointId === quarry.id}
-                    onClick={() => void deletePoint(quarry)}
-                    className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all disabled:opacity-50"
-                  >
-                    <Trash2 className="w-5 h-5" />
-                  </button>
-                  {["pending_moderation", "has_pending_changes"].includes(quarry.moderation_status || "") && quarry.id ? (
-                    <div className="flex max-w-full flex-wrap items-center justify-end gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2">
-                      <button disabled={isModerating} onClick={() => void moderatePoint(quarry.id!, "approve")} className="w-28 shrink-0 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 disabled:opacity-50">Одобрить</button>
-                      <button disabled={isModerating} onClick={() => rejectPoint(quarry.id!)} className="w-28 shrink-0 rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 disabled:opacity-50">Отклонить</button>
-                    </div>
-                  ) : null}
-                </div>
               </div>
             </div>
           ))

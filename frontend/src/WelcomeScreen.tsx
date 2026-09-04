@@ -1,3 +1,6 @@
+import { useState } from "react";
+import RequisitesModal from "./RequisitesModal";
+
 export default function WelcomeScreen({
   onSelectClient,
   onSelectEmployee,
@@ -5,6 +8,8 @@ export default function WelcomeScreen({
   onSelectClient: () => void;
   onSelectEmployee: () => void;
 }) {
+  const [isRequisitesOpen, setIsRequisitesOpen] = useState(false);
+
   return (
     <div className="relative flex min-h-[100dvh] flex-col items-center overflow-y-auto bg-slate-50 px-6 text-center">
       <div className="flex w-full flex-1 flex-col items-center justify-center py-8">
@@ -29,20 +34,32 @@ export default function WelcomeScreen({
         </div>
       </div>
 
-      <footer className="mt-4 flex flex-col items-center gap-3 pb-[max(env(safe-area-inset-bottom),1.5rem)] text-gray-400">
-        <p className="text-base text-gray-500">
-          Служба поддержки{" "}
-          <a href="tel:+73452900900" className="font-bold text-gray-700">
+      <footer className="mt-4 flex flex-col items-center gap-2 pb-[max(env(safe-area-inset-bottom),1.5rem)] text-center text-xs text-slate-500">
+        <p>
+          ООО «ДАРМАВОЗ»
+        </p>
+        <p>
+          Служба поддержки: {" "}
+          <a href="tel:+73452900900" className="font-medium text-slate-700 hover:text-slate-900">
             8 (3452) 900 900
           </a>
         </p>
-        <a
-          href="/privacy"
-          className="mt-2 text-xs text-gray-500 underline-offset-2 hover:text-gray-700 hover:underline"
-        >
-          Политика конфиденциальности
-        </a>
+        <p className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setIsRequisitesOpen(true)}
+            className="text-[#218fbf] underline-offset-2 hover:underline"
+          >
+            Реквизиты
+          </button>
+          <span aria-hidden="true">·</span>
+          <a href="/privacy" className="text-[#218fbf] underline-offset-2 hover:underline">
+            Политика конфиденциальности
+          </a>
+        </p>
       </footer>
+
+      <RequisitesModal isOpen={isRequisitesOpen} onClose={() => setIsRequisitesOpen(false)} />
     </div>
   );
 }

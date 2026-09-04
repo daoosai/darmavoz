@@ -39,7 +39,10 @@ export default function WelcomeScreen({
           ООО «ДАРМАВОЗ»
         </p>
         <p>
-          ИНН 7203609778 · ОГРН 1267200009284
+          Служба поддержки: {" "}
+          <a href="tel:+73452900900" className="font-medium text-slate-700 hover:text-slate-900">
+            8 (3452) 900 900
+          </a>
         </p>
         <p className="flex items-center gap-1">
           <button
@@ -52,12 +55,6 @@ export default function WelcomeScreen({
           <span aria-hidden="true">·</span>
           <a href="/privacy" className="text-[#218fbf] underline-offset-2 hover:underline">
             Политика конфиденциальности
-          </a>
-        </p>
-        <p>
-          Служба поддержки: {" "}
-          <a href="tel:+73452900900" className="font-medium text-slate-700 hover:text-slate-900">
-            8 (3452) 900 900
           </a>
         </p>
       </footer>

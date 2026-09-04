@@ -1,3 +1,5 @@
+import { X } from "lucide-react";
+
 interface RequisitesModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -8,7 +10,7 @@ export default function RequisitesModal({ isOpen, onClose }: RequisitesModalProp
 
   return (
     <div
-      className="fixed inset-0 z-[120] flex items-end justify-center bg-slate-950/45 p-4 sm:items-center"
+      className="fixed inset-0 z-[9999] flex items-end justify-center bg-slate-950/45 p-4 sm:items-center"
       role="dialog"
       aria-modal="true"
       aria-labelledby="requisites-title"
@@ -26,30 +28,34 @@ export default function RequisitesModal({ isOpen, onClose }: RequisitesModalProp
             type="button"
             onClick={onClose}
             aria-label="Закрыть"
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-slate-100 text-xl text-slate-500 transition-colors hover:bg-slate-200"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-500 transition-colors hover:bg-slate-200"
           >
-            ×
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="mt-6 space-y-2 text-sm leading-relaxed text-slate-700">
-          <p className="font-bold text-slate-900">ООО «ДАРМАВОЗ»</p>
-          <p>Домен: darmavoz.ru</p>
-          <p>Электронная почта: darmavozrt@mail.ru</p>
-          <p>Телефон: +7 (922) 009-00-20</p>
+        <div className="mt-6 text-sm leading-relaxed text-slate-700">
+          <div className="mb-4">
+            <p className="font-bold text-slate-900">ООО «ДАРМАВОЗ»</p>
+          </div>
+
+          <div className="mb-4">
+            <p>ИНН: 7203609778</p>
+            <p>КПП: 720301001</p>
+            <p>ОГРН: 1267200009284</p>
+          </div>
+
+          <div className="mb-4">
+            <p>Юридический адрес:</p>
+            <p>Тюменская область,  г.Тюмень,</p>
+            <p>ул. Федюнинского , д. 19, кв. 42</p>
+          </div>
+
+          <div>
+            <p>Электронная почта: darmavozrf@gmail.com</p>
+            <p>Телефон: +7 (3452) 900 900</p>
+          </div>
         </div>
-
-        <p className="mt-6 rounded-2xl bg-sky-50 p-4 text-sm italic leading-relaxed text-slate-600">
-          Сервис «Дармавоз» предназначен для оформления заказов на доставку строительных и нерудных материалов.
-        </p>
-
-        <button
-          type="button"
-          onClick={onClose}
-          className="mt-6 w-full rounded-2xl bg-[#2DB0E6] py-3.5 font-bold text-white transition-colors hover:bg-[#209ccf]"
-        >
-          Закрыть
-        </button>
       </div>
     </div>
   );

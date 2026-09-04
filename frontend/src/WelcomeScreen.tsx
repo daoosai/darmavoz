@@ -36,13 +36,9 @@ export default function WelcomeScreen({
 
       <footer className="mt-4 flex flex-col items-center gap-2 pb-[max(env(safe-area-inset-bottom),1.5rem)] text-center text-xs text-slate-500">
         <p>
-          Служба поддержки: {" "}
-          <a href="tel:+73452900900" className="font-semibold text-slate-700 hover:text-slate-900">
-            8 (3452) 900 900
-          </a>
+          ООО «ДАРМАВОЗ»
         </p>
         <p>
-          ООО «Дармавоз»<br />
           ИНН 7203609778 · ОГРН 1267200009284
         </p>
         <p className="flex items-center gap-1">
@@ -56,6 +52,12 @@ export default function WelcomeScreen({
           <span aria-hidden="true">·</span>
           <a href="/privacy" className="text-[#218fbf] underline-offset-2 hover:underline">
             Политика конфиденциальности
+          </a>
+        </p>
+        <p>
+          Служба поддержки: {" "}
+          <a href="tel:+73452900900" className="font-medium text-slate-700 hover:text-slate-900">
+            8 (3452) 900 900
           </a>
         </p>
       </footer>

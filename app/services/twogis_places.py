@@ -13,20 +13,29 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.models import CrmStatus, PointAuditLog, Quarry, WaterPoint
-from app.schemas.parser import MATERIAL_KEYWORDS, ParserResultItem, ParserRunRequest, ParserRunResult, ParserSkippedItem
+from app.schemas.parser import MATERIAL_KEYWORDS, ParserResultItem, ParserRunRequest, ParserRunResult, ParserSkippedItem, ParserTarget, normalize_parser_keyword
 
 
 logger = logging.getLogger(__name__)
 PHONE_PATTERN = re.compile(r"\+?[\d][\d\s()\-]{4,}[\d]")
 MAX_PLACES_PAGES = 20
 MAX_VALID_PLACES = 50
-NON_TARGET_BLACKLIST = (
-    "институт",
-    "школа",
-    "детский сад",
-    "водомат",
+NON_TARGET_PATTERN = re.compile(
+    r"\b(?:институт[а-яё]*|школ[а-яё]*|детск[а-яё]*\s+сад[а-яё]*|водомат[а-яё]*)\b",
+    re.IGNORECASE,
+)
+# Match words and explicit phrases, never short substrings such as «оби» in
+# «мобильный». Generic building materials and sales offices can also be B2B.
+MATERIAL_RETAIL_PATTERN = re.compile(
+    r"\b(?:магазин[а-яё]*|гипермаркет[а-яё]*|супермаркет[а-яё]*|маркет[а-яё]*"
+    r"|розниц[а-яё]*|розничн[а-яё]*|строительн[а-яё]*[\s-]+двор[а-яё]*"
+    r"|лемана|леруа|leroy|obi|оби|касторама|castorama"
+    r"|вуз[а-яё]*|курс(?:ы|ов|ам|ами|ах)?"
+    r"|товары\s+для\s+(?:сада|дачи)|отделочные\s+материалы)\b",
+    re.IGNORECASE,
 )
 NON_TARGET_SKIP_REASON = "Нецелевая категория"
+MATERIAL_SKIP_REASON = "B2C розница / Нецелевая рубрика"
 PLACES_FIELDS = ",".join(
     (
         "items.point",
@@ -165,18 +174,15 @@ def _append_skipped_item(
     skipped_items.append(ParserSkippedItem(name=grouped_name, reason=reason))
 
 
-def _is_non_target_item(item: dict[str, Any]) -> bool:
+def _is_non_target_item(item: dict[str, Any], target: ParserTarget = "material") -> bool:
     name_values = (item.get("name"), item.get("full_name"))
     text_values = [value for value in name_values if isinstance(value, str)]
     text_values.extend(_extract_rubric_names(item))
-    return any(
-        stop_word in value.casefold()
-        for value in text_values
-        for stop_word in NON_TARGET_BLACKLIST
-    )
+    patterns = (NON_TARGET_PATTERN, MATERIAL_RETAIL_PATTERN) if target == "material" else (NON_TARGET_PATTERN,)
+    return any(pattern.search(value) for value in text_values for pattern in patterns)
 
 
-def _skip_reason(item: object) -> str | None:
+def _skip_reason(item: object, target: ParserTarget = "material") -> str | None:
     if not isinstance(item, dict):
         return "Некорректные данные 2ГИС"
     point = item.get("point")
@@ -196,15 +202,15 @@ def _skip_reason(item: object) -> str | None:
     address = item.get("full_address_name") or item.get("address_name")
     if not isinstance(address, str) or not address.strip():
         return "Нет адреса"
-    if _is_non_target_item(item):
-        return NON_TARGET_SKIP_REASON
+    if _is_non_target_item(item, target):
+        return MATERIAL_SKIP_REASON if target == "material" else NON_TARGET_SKIP_REASON
     return None
 
 
-def _normalize_place(item: object) -> ParsedPlace | None:
+def _normalize_place(item: object, target: ParserTarget = "material") -> ParsedPlace | None:
     if not isinstance(item, dict):
         return None
-    if _skip_reason(item):
+    if _skip_reason(item, target):
         return None
     item_id = item.get("id")
     name = item.get("name")
@@ -352,15 +358,17 @@ async def search_places(payload: ParserRunRequest) -> PlacesSearchResult:
         )
 
     collected: dict[str, ParsedPlace] = {}
+    seen_ids: set[str] = set()
     skipped_items: list[ParserSkippedItem] = []
     page = 1
     total: int | None = None
     reached_page_limit = False
-    # The 2GIS Places API accepts at most 10 items per page.
-    page_size = min(10, settings.TWOGIS_PLACES_MAX_RESULTS)
+    reached_result_limit = False
+    # Keep compatibility with demo keys (10 per page); limits count valid places.
+    page_size = max(1, min(10, settings.TWOGIS_PLACES_MAX_RESULTS))
     base_params = {
         "key": settings.TWOGIS_API_KEY,
-        "q": f"{payload.keyword}, {payload.city}",
+        "q": payload.keyword,
         "type": "branch",
         "point": f"{payload.center_lon},{payload.center_lat}",
         "radius": payload.radius_m,
@@ -377,10 +385,10 @@ async def search_places(payload: ParserRunRequest) -> PlacesSearchResult:
             try:
                 response_payload = await _fetch_page(client, {**base_params, "page": page})
             except HTTPException as exc:
-                if exc.status_code in {
-                    status.HTTP_400_BAD_REQUEST,
-                    status.HTTP_404_NOT_FOUND,
-                }:
+                if page > 1 and (
+                    exc.status_code == status.HTTP_404_NOT_FOUND
+                    or (exc.status_code == status.HTTP_400_BAD_REQUEST and "page" in str(exc.detail).casefold())
+                ):
                     logger.info("twogis_places_pagination_complete", extra={"page": page, "status_code": exc.status_code})
                     break
                 raise
@@ -392,15 +400,26 @@ async def search_places(payload: ParserRunRequest) -> PlacesSearchResult:
                 break
             if isinstance(result.get("total"), int):
                 total = result["total"]
-            for item in items:
-                reason = _skip_reason(item)
+            for item_index, item in enumerate(items):
+                item_id = item.get("id") if isinstance(item, dict) else None
+                if isinstance(item_id, str) and item_id.strip():
+                    item_id = item_id.strip()
+                    if item_id in seen_ids:
+                        continue
+                    seen_ids.add(item_id)
+                reason = _skip_reason(item, payload.target)
                 if reason:
                     _append_skipped_item(skipped_items, name=_item_name(item), reason=reason)
                     continue
-                place = _normalize_place(item)
+                place = _normalize_place(item, payload.target)
                 if place is not None:
                     collected[place.twogis_id] = place
                     if len(collected) >= MAX_VALID_PLACES:
+                        reached_result_limit = (
+                            item_index + 1 < len(items)
+                            or (total is not None and page * page_size < total)
+                            or (total is None and len(items) == page_size)
+                        )
                         break
             if (
                 len(collected) >= MAX_VALID_PLACES
@@ -411,7 +430,7 @@ async def search_places(payload: ParserRunRequest) -> PlacesSearchResult:
             page += 1
 
     places = list(collected.values())
-    truncated = len(places) >= MAX_VALID_PLACES or reached_page_limit
+    truncated = reached_result_limit or reached_page_limit
     return PlacesSearchResult(
         places=places,
         truncated=truncated,
@@ -438,7 +457,7 @@ async def upsert_places(
     destination_model = Quarry if payload.target == "material" else WaterPoint
     other_model = WaterPoint if payload.target == "material" else Quarry
     point_kind = "quarry" if payload.target == "material" else "water"
-    point_type = MATERIAL_KEYWORDS.get(payload.keyword, "quarry")
+    point_type = MATERIAL_KEYWORDS.get(normalize_parser_keyword(payload.keyword), "quarry")
 
     for place in places:
         existing = await db.scalar(select(destination_model).where(destination_model.twogis_id == place.twogis_id))

@@ -92,7 +92,7 @@ const getPreviewDetails = (item: ParserPreviewItem) => {
 };
 
 const keywords: Record<ParserTarget, string[]> = {
-  material: ["карьер", "накопитель", "песок", "щебень", "пгс", "песчано-гравийная смесь"],
+  material: ["песок оптом", "щебень оптом", "песчаный карьер", "нерудные материалы", "база нерудных материалов", "карьер", "накопитель", "пгс", "песчано-гравийная смесь"],
   water: ["вода", "питьевая вода", "техническая вода"],
 };
 
@@ -111,7 +111,7 @@ export default function ParserRunPanel({
   const [lat, setLat] = useState("57.1522");
   const [lon, setLon] = useState("65.5272");
   const [radius, setRadius] = useState("50000");
-  const [keyword, setKeyword] = useState("песок");
+  const [keyword, setKeyword] = useState(keywords[target][0]);
   const [loading, setLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -286,8 +286,9 @@ export default function ParserRunPanel({
       <label className="text-xs font-bold text-slate-600">Долгота<input required type="text" inputMode="decimal" value={lon} onChange={(event) => { setLon(event.target.value); notifyCoordinates(lat, event.target.value); }} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" /></label>
       <label className="text-xs font-bold text-slate-600">Радиус, м<input required type="number" min="100" max="50000" value={radius} onChange={(event) => setRadius(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" /></label>
       <label className="text-xs font-bold text-slate-600">Ключевое слово
-        <input required type="text" list={`parser-keywords-${target}`} value={keyword} onChange={(event) => setKeyword(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" />
+        <input required type="text" maxLength={100} list={`parser-keywords-${target}`} value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder={keywords[target][0]} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" />
         <datalist id={`parser-keywords-${target}`}>{keywords[target].map((value) => <option key={value} value={value} />)}</datalist>
+        {target === "material" ? <span className="mt-1 block font-normal">Например: песок оптом. Можно ввести свою фразу.</span> : null}
       </label>
       <button type="submit" disabled={loading || !token} className="flex items-center justify-center gap-2 self-end rounded-lg bg-sky-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}Запустить</button>
       </form>
@@ -303,6 +304,7 @@ export default function ParserRunPanel({
               <button type="button" onClick={closeResultModal} className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100">Закрыть</button>
             </div>
             <div className="max-h-[65vh] space-y-3 overflow-y-auto p-5">
+              {target === "material" ? <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Найдены кандидаты в поставщики. Перед активацией подтвердите продажу навалом, самовывоз, наличие погрузчика и подъезд 30-тонного самосвала. Проверьте, что координаты ведут на площадку погрузки, а не в офис продаж. Новые точки сохраняются неактивными.</p> : null}
               <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={parserResult.items.length > 0 && selectedPreviewIds.size === parserResult.items.length} onChange={() => setSelectedPreviewIds((current) => current.size === parserResult.items.length ? new Set() : new Set(parserResult.items.map((item) => item.twogis_id)))} />Выбрать всё</label>
               {parserResult.items.map((item) => {
                 const details = getPreviewDetails(item);

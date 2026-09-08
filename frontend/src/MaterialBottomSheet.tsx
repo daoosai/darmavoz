@@ -7,10 +7,8 @@ import { getImageUrl, baseURL } from "./utils";
 import toast from "react-hot-toast";
 import { PickupPointSelection } from "./PickupPointMapScreen";
 import SwipeableBottomSheet from "./SwipeableBottomSheet";
-import CalculatorReminder from './CalculatorReminder';
 
 interface MaterialBottomSheetProps {
-  onOpenCalculator?: (materialId: string) => void;
   material: MaterialProps | null;
   onClose: () => void;
   pickupPoint?: PickupPointSelection | null;
@@ -65,7 +63,6 @@ export default function MaterialBottomSheet({
   onClose,
   pickupPoint,
   onSubmitted,
-  onOpenCalculator,
 }: MaterialBottomSheetProps) {
   const [deliveryOptions, setDeliveryOptions] = useState<DeliveryOption[]>([]);
   const [selectedOption, setSelectedOption] = useState<DeliveryOption | null>(
@@ -167,8 +164,6 @@ export default function MaterialBottomSheet({
                 <h2 className="mb-3 text-2xl font-bold text-gray-900">
                   {material?.name}
                 </h2>
-                {material?.calculator_enabled && onOpenCalculator && <button className="mb-3 text-sky-600" onClick={() => onOpenCalculator(material.id)}>Рассчитать объём материала</button>}
-                {material && <CalculatorReminder materialId={material.id} capacity={selectedOption?.capacity_m3} />}
                 <div className="group relative aspect-[4/3] w-full overflow-hidden rounded-2xl bg-gray-100">
                   <div
                     className="flex w-full h-full overflow-x-auto snap-x snap-mandatory hide-scrollbar"

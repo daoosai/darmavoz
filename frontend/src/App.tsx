@@ -880,7 +880,6 @@ function MainContent({
 
         {/* Bottom Sheet */}
         <MaterialBottomSheet
-          onOpenCalculator={openCalculator}
           material={selectedMaterial}
           pickupPoint={selectedPickupPoint}
           onClose={closeMaterialSheet}

@@ -41,6 +41,7 @@ import {
   Droplets,
 } from "lucide-react";
 import AdminProfileScreen from "./AdminProfileScreen";
+import AdminCitiesScreen from "./AdminCitiesScreen";
 import AdminQuarriesScreen from "./AdminQuarriesScreen";
 import AdminSuppliersScreen from "./AdminSuppliersScreen";
 import AdminCategoriesPanel from "./AdminCategoriesPanel";
@@ -186,6 +187,7 @@ type AdminTab =
   | "water_septic"
   | "suppliers"
   | "equipment"
+  | "cities"
   | "driver_map"
   | "support"
   | "profile";
@@ -1929,6 +1931,7 @@ export default function AdminDashboardScreen({
             <p className="px-3 pb-1 text-xs font-bold uppercase tracking-wide text-slate-400">Управление</p>
             <button type="button" onClick={() => openSidebarSection("materials")} className={sidebarButtonClass("materials")}><Layers className="h-5 w-5" />Каталог</button>
             <button type="button" onClick={() => openSidebarSection("quarries")} className={sidebarButtonClass("quarries")}><Map className="h-5 w-5" />Точки</button>
+            <a href="/admin/cities" onClick={() => setIsSidebarOpen(false)} className={sidebarButtonClass("cities")}><MapPin className="h-5 w-5" />Города</a>
             <button type="button" onClick={() => openSidebarSection("delivery")} className={sidebarButtonClass("delivery")}><Truck className="h-5 w-5" />Автопарк</button>
             <button type="button" onClick={() => openSidebarSection("drivers")} className={sidebarButtonClass("drivers")}><Users className="h-5 w-5" />Водители</button>
             <a href="/admin/driver-map" onClick={() => setIsSidebarOpen(false)} className={sidebarButtonClass("driver_map")}><MapPin className="h-5 w-5" />Карта водителей</a>
@@ -3401,6 +3404,8 @@ export default function AdminDashboardScreen({
             />
           ) : activeTab === "support" ? (
             <SupportScreen operatorMode />
+          ) : activeTab === "cities" ? (
+            <AdminCitiesScreen onClose={() => openSidebarSection("materials")} />
           ) : activeTab === "profile" ? (
             <AdminProfileScreen onLogout={handleLogout} />
           ) : null}

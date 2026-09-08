@@ -250,6 +250,12 @@ export default function App() {
       ) : renderPartnerLogin();
     }
 
+    if (currentPath === "/admin/cities") {
+      return role === "admin" ? (
+        <AdminDashboardScreen onLogout={() => setCurrentRoute("login")} initialTab="cities" />
+      ) : renderPartnerLogin();
+    }
+
     if (currentPath === "/logist/orders") {
       return role === "logist" ? (
         <LogistDashboardScreen onLogout={() => setCurrentRoute("login")} />

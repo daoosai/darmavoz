@@ -555,7 +555,7 @@ export default function PickupPointMapScreen({
         <div ref={mapContainerRef} className="absolute inset-0" />
       )}
       {!isAddressSheetOpen && (
-      <header className="absolute top-0 inset-x-0 p-4 pt-[max(1rem,env(safe-area-inset-top))] pointer-events-none">
+      <header className="absolute top-0 inset-x-0 p-4 pt-[max(env(safe-area-inset-top),2.5rem)] pointer-events-none">
         <div className="flex items-center gap-3 pointer-events-auto">
           <button onClick={onClose} className="grid h-11 w-11 place-items-center rounded-full bg-white text-gray-900 shadow-lg">
             <ArrowLeft className="w-5 h-5" />

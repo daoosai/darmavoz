@@ -29,7 +29,7 @@ interface MarketplaceOption {
   quarry_name: string;
   point_type: string;
   distance: number;
-  delivery_cost: number;
+  delivery_cost: number | null | undefined;
   material_cost: number;
   total_amount: number;
   primary_image_url?: string | null;
@@ -128,7 +128,6 @@ export default function CartScreen({
     cartItems,
     removeFromCart,
     getTotalPrice,
-    clearCart,
     updateItemVolume,
   } = useCartStore();
   const { role, token } = useAuthStore();
@@ -294,6 +293,7 @@ export default function CartScreen({
               delivery_lat: lat,
               delivery_lon: lon,
               quantity: item.quantity,
+              volume: getCartItemVolume(item),
               quarry_id: selectedQuarryId || undefined,
             }),
           });
@@ -394,41 +394,47 @@ export default function CartScreen({
     try {
       setIsSubmitting(true);
 
-      const requests = cartItems.map((item) => {
+      let completedOrders = 0;
+      for (const item of cartItems) {
         const calculation = calcResults[item.id];
         const selectedOption = isMarketplaceCalculation(calculation)
           ? calculation.best_option
           : null;
-        const orderedVolume = item.deliveryOption.capacity_m3 * item.quantity;
+        const orderedVolume = getCartItemVolume(item);
         const expectedMaterialUnitPrice = selectedOption && orderedVolume > 0
           ? selectedOption.material_cost / orderedVolume
           : item.pickupPoint?.price;
-        return cityFetch(`${baseURL}/orders/checkout`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            material_id: item.material.id,
-            delivery_option_id: item.deliveryOption.id,
-            address: globalAddress,
-            notes: item.comment || "",
-            source: "web",
-            quantity: item.quantity,
-            quarry_id: selectedOption?.quarry_id || item.pickupPoint?.id,
-            mileage_km: selectedOption?.distance,
-            delivery_lat: deliveryCoords?.lat,
-            delivery_lon: deliveryCoords?.lon,
-            expected_material_unit_price: expectedMaterialUnitPrice,
-          }),
-        });
-      });
+        try {
+          const response = await cityFetch(`${baseURL}/orders/checkout`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              material_id: item.material.id,
+              delivery_option_id: item.deliveryOption.id,
+              address: globalAddress,
+              notes: item.comment || "",
+              source: "web",
+              quantity: item.quantity,
+              volume: orderedVolume,
+              quarry_id: selectedOption?.quarry_id || item.pickupPoint?.id,
+              mileage_km: selectedOption?.distance,
+              delivery_lat: deliveryCoords?.lat,
+              delivery_lon: deliveryCoords?.lon,
+              expected_material_unit_price: expectedMaterialUnitPrice,
+            }),
+          });
+          if (!response.ok) continue;
+          removeFromCart(item.id);
+          completedOrders += 1;
+        } catch (error) {
+          console.error("Checkout item error", error);
+        }
+      }
 
-      const responses = await Promise.all(requests);
-      const hasErrors = responses.some((res) => !res.ok);
-
-      if (!hasErrors) {
+      if (completedOrders === cartItems.length) {
         try {
           const ordersResponse = await cityFetch(`${baseURL}/clients/me/orders`, {
             headers: {
@@ -447,13 +453,12 @@ export default function CartScreen({
           console.error("Orders refresh error", refreshError);
         }
         toast.success("Заказ успешно оформлен");
-        clearCart();
         setGlobalAddress("");
         onGoToOrders();
+      } else if (completedOrders > 0) {
+        toast("Часть заказов оформлена. Проверьте оставшиеся позиции", { icon: "⚠️" });
       } else {
-        alert(
-          "Некоторые заказы не удалось оформить. Пожалуйста, попробуйте еще раз.",
-        );
+        toast.error("Не удалось оформить заказы. Проверьте данные и попробуйте ещё раз.");
       }
     } catch (err) {
       console.error(err);
@@ -484,9 +489,14 @@ export default function CartScreen({
     && deliveryCoords !== null
     && cartItems.every((item) => {
       const result = calcResults[item.id];
+      const deliveryCost = isMarketplaceCalculation(result)
+        ? result.best_option.delivery_cost
+        : null;
       return isMarketplaceCalculation(result)
-        && Number.isFinite(Number(result.best_option.delivery_cost))
-        && Number(result.best_option.delivery_cost) > 0;
+        && deliveryCost !== null
+        && deliveryCost !== undefined
+        && Number.isFinite(Number(deliveryCost))
+        && Number(deliveryCost) >= 0;
     });
   const isCheckoutDisabled = isSubmitting || !globalAddress.trim() || !hasValidDeliveryCalculation;
 

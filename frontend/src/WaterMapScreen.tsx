@@ -59,6 +59,8 @@ export default function WaterMapScreen({ initialTab = "water" }: { initialTab?: 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showList, setShowList] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadVersion, setReloadVersion] = useState(0);
   const [mapUnavailable, setMapUnavailable] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -96,6 +98,7 @@ export default function WaterMapScreen({ initialTab = "water" }: { initialTab?: 
   useEffect(() => {
     let disposed = false;
     setLoading(true);
+    setLoadError(false);
     const endpoint = serviceTab === "water"
       ? `${baseURL}/water-points/map${filter ? `?water_type=${filter}` : ""}`
       : `${baseURL}/septic-providers`;
@@ -113,6 +116,7 @@ export default function WaterMapScreen({ initialTab = "water" }: { initialTab?: 
       })
       .catch(() => {
         if (!disposed) {
+          setLoadError(true);
           if (serviceTab === "water") setPoints([]);
           else setSepticProfiles([]);
         }
@@ -123,7 +127,7 @@ export default function WaterMapScreen({ initialTab = "water" }: { initialTab?: 
     return () => {
       disposed = true;
     };
-  }, [filter, serviceTab]);
+  }, [filter, reloadVersion, serviceTab]);
 
   useEffect(() => {
     let disposed = false;
@@ -274,7 +278,7 @@ export default function WaterMapScreen({ initialTab = "water" }: { initialTab?: 
         </div>
       ) : null}
 
-      <header className="pointer-events-none absolute inset-x-0 top-0 z-10 pt-[max(env(safe-area-inset-top),0px)]">
+      <header className="pointer-events-none absolute inset-x-0 top-0 z-10 pt-[max(env(safe-area-inset-top),2.5rem)]">
         <div className={`pointer-events-auto bg-white/95 backdrop-blur ${showList ? "m-0 w-full rounded-none border-b border-gray-200 px-4 py-3 shadow-sm" : "m-4 rounded-xl p-4 shadow-lg"}`}>
         <div className="flex items-center gap-3">
           <span className="rounded-2xl bg-sky-100 p-3 text-sky-600"><Droplets /></span>
@@ -311,7 +315,7 @@ export default function WaterMapScreen({ initialTab = "water" }: { initialTab?: 
       </header>
 
       {loading ? <div className="pointer-events-none absolute inset-x-4 top-48 z-10 rounded-2xl bg-white p-4 text-sm font-medium text-slate-600 shadow-xl">Загружаем {serviceTab === "water" ? "точки воды" : "услуги откачки"}…</div> : null}
-      {!loading && (serviceTab === "water" ? visiblePoints.length : septicProfiles.length) === 0 ? <div className="pointer-events-none absolute inset-x-4 top-48 z-10 rounded-2xl bg-white p-4 text-sm font-medium text-slate-600 shadow-xl">{serviceTab === "water" ? "Подходящих точек пока нет." : "Одобренных предложений пока нет."}</div> : null}
+      {!loading && loadError ? <div className="absolute inset-x-4 top-48 z-10 rounded-2xl bg-white p-4 text-sm font-medium text-slate-600 shadow-xl"><p>Не удалось загрузить данные карты.</p><button type="button" onClick={() => setReloadVersion((value) => value + 1)} className="mt-3 rounded-xl bg-sky-500 px-3 py-2 font-bold text-white">Повторить попытку</button></div> : !loading && (serviceTab === "water" ? visiblePoints.length : septicProfiles.length) === 0 ? <div className="pointer-events-none absolute inset-x-4 top-48 z-10 rounded-2xl bg-white p-4 text-sm font-medium text-slate-600 shadow-xl">{serviceTab === "water" ? "Подходящих точек пока нет." : "Одобренных предложений пока нет."}</div> : null}
 
       <SwipeableBottomSheet
         isOpen={serviceTab === "water" && Boolean(selectedPoint)}

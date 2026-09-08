@@ -46,6 +46,7 @@ async def calculate_order(
         delivery_lat=payload.delivery_lat,
         delivery_lon=payload.delivery_lon,
         quantity=payload.quantity,
+        volume=payload.volume,
         quarry_id=payload.quarry_id,
     )
     best_pricing = pricing_options[0]
@@ -76,6 +77,7 @@ async def checkout_order(
         notes=payload.notes,
         source=payload.source,
         quantity=payload.quantity,
+        volume=payload.volume,
         address_id=payload.address_id,
         quarry_id=payload.quarry_id,
         delivery_lat=payload.delivery_lat,

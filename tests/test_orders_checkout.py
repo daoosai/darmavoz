@@ -79,6 +79,54 @@ async def test_checkout_persists_and_returns_quantity(client, session_factory):
 
 
 @pytest.mark.asyncio
+async def test_checkout_persists_requested_volume(client, session_factory):
+    category = Category(name="Песок на объём", slug="sand-custom-volume", sort_order=0, is_active=True)
+    material = Material(
+        category=category,
+        name="Песок",
+        description="",
+        price=2500.0,
+        unit="m3",
+        min_volume=1.0,
+        is_active=True,
+        sort_order=0,
+    )
+    delivery_option = DeliveryOption(
+        capacity_m3=20.0,
+        title="20 м3",
+        description="",
+        base_price=0.0,
+        is_active=True,
+        sort_order=0,
+    )
+
+    async with session_factory() as session:
+        session.add_all([category, material, delivery_option])
+        await session.commit()
+        await session.refresh(material)
+        await session.refresh(delivery_option)
+
+    response = await client.post(
+        "/api/v1/orders/checkout",
+        json={
+            "material_id": str(material.id),
+            "delivery_option_id": str(delivery_option.id),
+            "address": "Тестовый адрес",
+            "delivery_lat": 55.751,
+            "delivery_lon": 37.618,
+            "quantity": 1,
+            "volume": 6,
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["total_amount"] == 15000.0
+    assert payload["items"][0]["volume"] == 6.0
+    assert payload["items"][0]["amount"] == 15000.0
+
+
+@pytest.mark.asyncio
 async def test_checkout_uses_client_from_jwt_when_present(client, session_factory):
     from app.models.models import Client
 

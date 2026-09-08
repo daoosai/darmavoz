@@ -139,6 +139,7 @@ class ClientOrderPricing:
     delivery_option: DeliveryOption
     quarry: Quarry
     quantity: int
+    volume: float
     material_unit_price: float
     minimum_delivery_price: float
     material_cost: float
@@ -315,6 +316,7 @@ async def calculate_client_order_pricing(
     delivery_lat: float,
     delivery_lon: float,
     quantity: int = 1,
+    volume: float | None = None,
     quarry_id: UUID | None = None,
     city_id: UUID | None = None,
 ) -> ClientOrderPricing:
@@ -325,6 +327,7 @@ async def calculate_client_order_pricing(
         delivery_lat=delivery_lat,
         delivery_lon=delivery_lon,
         quantity=quantity,
+        volume=volume,
         quarry_id=quarry_id,
         city_id=city_id,
     )
@@ -339,6 +342,7 @@ async def calculate_client_order_options(
     delivery_lat: float,
     delivery_lon: float,
     quantity: int = 1,
+    volume: float | None = None,
     quarry_id: UUID | None = None,
     city_id: UUID | None = None,
 ) -> list[ClientOrderPricing]:
@@ -356,6 +360,13 @@ async def calculate_client_order_options(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Для выбранного типа машины не настроен тариф доставки.",
+        )
+    maximum_volume = float(delivery_option.capacity_m3) * quantity
+    requested_volume = maximum_volume if volume is None else float(volume)
+    if requested_volume > maximum_volume:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Requested volume exceeds the selected vehicle capacity.",
         )
     if not has_valid_coordinates(delivery_lat, delivery_lon):
         raise HTTPException(
@@ -454,7 +465,7 @@ async def calculate_client_order_options(
         primary_image_url = media_files[0].public_url if media_files else None
         minimum_delivery_price = resolve_min_delivery_price(delivery_option, quarry.point_type)
         material_cost = round(
-            material_unit_price * float(delivery_option.capacity_m3) * quantity,
+            material_unit_price * requested_volume,
             2,
         )
         delivery_cost = max(
@@ -467,6 +478,7 @@ async def calculate_client_order_options(
                 delivery_option=delivery_option,
                 quarry=quarry,
                 quantity=quantity,
+                volume=requested_volume,
                 material_unit_price=material_unit_price,
                 minimum_delivery_price=minimum_delivery_price,
                 material_cost=material_cost,

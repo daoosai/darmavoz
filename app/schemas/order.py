@@ -58,6 +58,7 @@ class CheckoutRequest(BaseModel):
     notes: str | None = None
     source: str | None = "mobile"
     quantity: int = Field(default=1, ge=1)
+    volume: float | None = Field(default=None, gt=0)
 
     model_config = ConfigDict(
         str_strip_whitespace=True,
@@ -130,6 +131,7 @@ class ClientOrderCalculationRequest(BaseModel):
     delivery_lat: float
     delivery_lon: float
     quantity: int = Field(default=1, ge=1)
+    volume: float | None = Field(default=None, gt=0)
 
     model_config = ConfigDict(extra="forbid")
 

@@ -111,7 +111,15 @@ export default function App() {
     | "water_septic_partner_register"
     | "driver_register"
   >(
-    role === "client" && currentPath.startsWith("/client/orders/")
+    role === "client" && (
+      currentPath === "/"
+      || currentPath === "/calculator"
+      || currentPath === "/map"
+      || currentPath === "/water"
+      || currentPath === "/septic"
+      || currentPath === "/septics"
+      || currentPath.startsWith("/client/orders/")
+    )
       ? "main"
       : role === "driver"
       ? "driver"

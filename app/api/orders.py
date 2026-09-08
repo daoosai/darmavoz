@@ -100,6 +100,7 @@ async def checkout_order(
         notes=payload.notes,
         source=payload.source,
         quantity=payload.quantity,
+        volume=payload.volume,
         address_id=payload.address_id,
         quarry_id=payload.quarry_id,
         delivery_lat=payload.delivery_lat,

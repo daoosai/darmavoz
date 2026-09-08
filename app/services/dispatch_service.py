@@ -375,6 +375,7 @@ async def build_order(
     created_by_source: str,
     quantity: int,
     auto_dispatch: bool,
+    volume: float | None = None,
     pickup_address: str | None = None,
     pickup_lat: float | None = None,
     pickup_lon: float | None = None,
@@ -393,17 +394,17 @@ async def build_order(
     city = await resolve_city(session, city_id)
     if quarry_id is not None:
         ensure_same_city(city.id, await session.get(Quarry, quarry_id))
-    volume = delivery_option.capacity_m3 * quantity
+    resolved_volume = volume if volume is not None else delivery_option.capacity_m3 * quantity
     unit_price = material.price
-    calculated_amount = volume * unit_price if unit_price is not None else None
+    calculated_amount = resolved_volume * unit_price if unit_price is not None else None
     resolved_total_amount = (
         round(total_amount, 2)
         if total_amount is not None
         else round(calculated_amount or 0.0, 2)
     )
     resolved_item_price = unit_price
-    if total_amount is not None and volume > 0:
-        resolved_item_price = round(resolved_total_amount / volume, 2)
+    if total_amount is not None and resolved_volume > 0:
+        resolved_item_price = round(resolved_total_amount / resolved_volume, 2)
     now = utcnow()
     clarification_reasons: list[str] = []
     if not (client.phone or "").strip(): clarification_reasons.append("client_phone_missing")
@@ -446,7 +447,7 @@ async def build_order(
             order_id=order.id,
             material_id=material.id,
             quantity=quantity,
-            volume=volume,
+            volume=resolved_volume,
             price=resolved_item_price,
             amount=resolved_total_amount,
         )
@@ -481,6 +482,7 @@ async def create_checkout_order(
     notes: str | None,
     source: str | None,
     quantity: int,
+    volume: float | None = None,
     address_id: UUID | None = None,
     quarry_id: UUID | None = None,
     city_id: UUID | None = None,
@@ -502,6 +504,13 @@ async def create_checkout_order(
         material_id=material_id,
         delivery_option_id=delivery_option_id,
     )
+    maximum_volume = float(delivery_option.capacity_m3) * quantity
+    requested_volume = maximum_volume if volume is None else float(volume)
+    if requested_volume > maximum_volume:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Requested volume exceeds the selected vehicle capacity.",
+        )
 
     resolved_delivery_address = delivery_address
     resolved_delivery_lat = delivery_lat
@@ -564,6 +573,7 @@ async def create_checkout_order(
             delivery_lat=resolved_delivery_lat,
             delivery_lon=resolved_delivery_lon,
             quantity=quantity,
+            volume=requested_volume,
             quarry_id=quarry_id,
         )
         selected_quarry = pricing.quarry
@@ -595,7 +605,7 @@ async def create_checkout_order(
                     detail="MATERIAL_NOT_AVAILABLE_AT_POINT",
                 )
             point_material_total = round(
-                unit_price * float(delivery_option.capacity_m3) * quantity,
+                unit_price * requested_volume,
                 2,
             )
             point_unit_price = unit_price
@@ -618,6 +628,7 @@ async def create_checkout_order(
             delivery_lat=resolved_delivery_lat,
             delivery_lon=resolved_delivery_lon,
             quantity=quantity,
+            volume=requested_volume,
         )
         selected_quarry = pricing.quarry
         resolved_mileage_km = pricing.mileage_km
@@ -650,6 +661,7 @@ async def create_checkout_order(
         source=source or "mobile",
         created_by_source="client_app",
         quantity=quantity,
+        volume=requested_volume,
         auto_dispatch=True,
         pickup_address=(selected_quarry.address or selected_quarry.name) if selected_quarry is not None else None,
         pickup_lat=selected_quarry.lat if selected_quarry is not None else None,

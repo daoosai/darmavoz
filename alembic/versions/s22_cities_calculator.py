@@ -9,7 +9,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID
 
 revision = "s22_cities_calculator"
-down_revision = ("b1c2d3e4f5a6", "f9e8d7c6b5a4")
+down_revision = ("b1c2d3e4f5a6", "f9e8d7c6b5a4", "a0b1c2d3e4f5")
 branch_labels = None
 depends_on = None
 

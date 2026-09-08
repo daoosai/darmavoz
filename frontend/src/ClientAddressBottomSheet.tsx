@@ -15,10 +15,9 @@ import {
 import {
   fetch2gisAddressSuggestions,
   get2gisSuggestionAddress,
+  get2gisSuggestionCityName,
   get2gisSuggestionCoordinates,
-  get2gisSuggestionLocalityNames,
   get2gisSuggestionLabel,
-  withCityBias,
 } from "./addressSearch";
 import { baseURL, handleApiError } from "./utils";
 import { useAuthStore, useAddressStore } from "./store";
@@ -41,7 +40,7 @@ interface AddressSuggestion {
   address: string;
   lat?: number;
   lon?: number;
-  localityNames: string[];
+  cityName: string;
 }
 
 interface ClientAddressBottomSheetProps {
@@ -84,12 +83,25 @@ export default function ClientAddressBottomSheet({
   const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
   const [pendingCityId, setPendingCityId] = useState<string | null>(null);
   const [previewZoom, setPreviewZoom] = useState<number | null>(null);
+  const [selectedSuggestion, setSelectedSuggestion] = useState<AddressSuggestion | null>(null);
 
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
+
+  const showWarning = (message: string) => {
+    toast(message, {
+      icon: "⚠️",
+      duration: 4000,
+      style: {
+        background: "#FEF3C7",
+        color: "#92400E",
+        border: "1px solid #F59E0B",
+      },
+    });
+  };
 
   const createDraggableMarker = (mapInstance: any, coordinates: [number, number]) => {
     const marker = new (window as any).mapgl.Marker(mapInstance, {
@@ -119,6 +131,9 @@ export default function ClientAddressBottomSheet({
     setEditingAddressId(null);
     setIsAdding(true);
     setNewAddress(selectedAddress || "");
+    setLat(null);
+    setLon(null);
+    setSelectedSuggestion(null);
   }, [isOpen, token, role, selectedAddress]);
 
   useEffect(() => {
@@ -209,7 +224,7 @@ export default function ClientAddressBottomSheet({
           address,
           lat: suggestionLat,
           lon: suggestionLon,
-          localityNames: get2gisSuggestionLocalityNames(item),
+          cityName: get2gisSuggestionCityName(item),
         };
       })
       .filter((item) => Boolean(item.address));
@@ -224,66 +239,41 @@ export default function ClientAddressBottomSheet({
     setLon(null);
     setPendingCityId(null);
     setPreviewZoom(null);
+    setSelectedSuggestion(null);
     const suggests = await fetch2GISSuggests(val);
     setSuggestions(suggests.filter(Boolean));
   };
 
   const selectSuggestion = async (suggestion: AddressSuggestion) => {
     const address = suggestion.address.trim() || suggestion.label.trim();
+    if (
+      !address ||
+      !Number.isFinite(suggestion.lat) ||
+      !Number.isFinite(suggestion.lon)
+    ) {
+      showWarning("Не удалось определить точку адреса. Выберите другой вариант из подсказок.");
+      return;
+    }
+
     const normalizeName = (value: string) => value.trim().toLocaleLowerCase().replace(/ё/g, "е");
     const supportedCities = useCityStore.getState().cities.filter((city) => city.is_active);
-    const matchedCity = supportedCities.find((city) =>
-      suggestion.localityNames.some((name) => normalizeName(name) === normalizeName(city.name)),
-    );
+    const cityName = suggestion.cityName.trim();
+    const matchedCity = cityName
+      ? supportedCities.find((city) => normalizeName(city.name) === normalizeName(cityName))
+      : undefined;
 
-    if (suggestion.localityNames.length > 0 && !matchedCity) {
-      const cityName = suggestion.localityNames[0]?.trim();
-      toast(
-        cityName
-          ? `В г. ${cityName} доставка пока недоступна. Выберите адрес в поддерживаемом регионе.`
-          : "В выбранном городе доставка пока недоступна. Выберите адрес в поддерживаемом регионе.",
-        {
-          icon: "⚠️",
-          duration: 4000,
-          style: {
-            background: "#FEF3C7",
-            color: "#92400E",
-            border: "1px solid #F59E0B",
-          },
-        },
-      );
+    if (cityName && !matchedCity) {
+      showWarning(`В г. ${cityName} доставка пока недоступна. Выберите адрес в поддерживаемом регионе.`);
       return;
     }
 
     setPendingCityId(matchedCity?.id ?? null);
     setPreviewZoom(matchedCity?.map_zoom ?? 15);
     setNewAddress(address);
+    setSelectedSuggestion(suggestion);
     setSuggestions([]);
-
-    if (
-      typeof suggestion.lat === "number" &&
-      typeof suggestion.lon === "number"
-    ) {
-      setLat(suggestion.lat);
-      setLon(suggestion.lon);
-      return;
-    }
-
-    try {
-      const response = await cityFetch(
-        `${baseURL}/geo/geocode?address=${encodeURIComponent(withCityBias(address))}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-      if (response.ok) {
-        const data = await response.json();
-        setLat(data.lat);
-        setLon(data.lon);
-      }
-    } catch (e) {
-      console.error(e);
-    }
+    setLat(suggestion.lat);
+    setLon(suggestion.lon);
   };
 
   const fetchAddresses = async () => {
@@ -351,18 +341,7 @@ export default function ClientAddressBottomSheet({
       chooseCity(pendingCityId, { preserveAddress: true });
       return true;
     } catch {
-      toast(
-        "В выбранном городе доставка пока недоступна. Выберите адрес в поддерживаемом регионе.",
-        {
-          icon: "⚠️",
-          duration: 4000,
-          style: {
-            background: "#FEF3C7",
-            color: "#92400E",
-            border: "1px solid #F59E0B",
-          },
-        },
-      );
+      showWarning("В выбранном городе доставка пока недоступна. Выберите адрес в поддерживаемом регионе.");
       return false;
     }
   };
@@ -403,13 +382,33 @@ export default function ClientAddressBottomSheet({
     setNewComment(addr.comment || "");
     setLat(Number.isFinite(addressLat) ? addressLat : null);
     setLon(Number.isFinite(addressLon) ? addressLon : null);
+    setSelectedSuggestion(
+      Number.isFinite(addressLat) && Number.isFinite(addressLon)
+        ? {
+            label: addr.full_address || addr.address || "",
+            address: addr.full_address || addr.address || "",
+            lat: addressLat,
+            lon: addressLon,
+            cityName: "",
+          }
+        : null,
+    );
     setEditingAddressId(addr.id || null);
     setIsAdding(true);
   };
 
   const handleAddAddress = async () => {
-    const addressToSave = newAddress;
-    if (!addressToSave.trim()) return;
+    const addressToSave = newAddress.trim();
+    const isSelectedAddressValid =
+      selectedSuggestion?.address.trim() === addressToSave &&
+      Number.isFinite(lat) &&
+      Number.isFinite(lon);
+
+    if (!isSelectedAddressValid) {
+      showWarning("Пожалуйста, выберите точный адрес из выпадающего списка подсказок");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       if (!applyPendingCity()) return;
@@ -428,6 +427,7 @@ export default function ClientAddressBottomSheet({
         setNewComment("");
         setPendingCityId(null);
         setPreviewZoom(null);
+        setSelectedSuggestion(null);
         setSuggestions([]);
         if (closeOnSelect) onClose();
         return;
@@ -470,6 +470,7 @@ export default function ClientAddressBottomSheet({
         setEditingAddressId(null);
         setPendingCityId(null);
         setPreviewZoom(null);
+        setSelectedSuggestion(null);
         setIsAdding(false);
         if (closeOnSelect) onClose();
         else fetchAddresses();
@@ -490,6 +491,9 @@ export default function ClientAddressBottomSheet({
     setEditingAddressId(null);
     setPendingCityId(null);
     setPreviewZoom(null);
+    setLat(null);
+    setLon(null);
+    setSelectedSuggestion(null);
     setIsAdding(true);
     setSuggestions([]);
   };

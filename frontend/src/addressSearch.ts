@@ -70,6 +70,27 @@ export const get2gisSuggestionLocalityNames = (item: any): string[] => {
   );
 };
 
+export const get2gisSuggestionCityName = (item: any): string => {
+  const divisions = Array.isArray(item?.adm_div)
+    ? item.adm_div
+    : item?.adm_div
+      ? [item.adm_div]
+      : [];
+  const city = divisions.find((division: any) => {
+    const type = getText(division?.type);
+    return (
+      type === "city" ||
+      type === "settlement" ||
+      type === "adm_div.city" ||
+      type === "adm_div.settlement"
+    );
+  });
+  const fallbackName = getText(item?.name);
+
+  return getText(city?.name || city?.caption) ||
+    (/^(россия|российская федерация)$/i.test(fallbackName) ? "" : fallbackName);
+};
+
 const appendUniqueParts = (address: string, parts: string[]): string => {
   const normalizedAddress = address.toLocaleLowerCase();
   const uniqueParts = parts.filter((part, index) => {

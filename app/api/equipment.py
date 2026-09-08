@@ -1284,6 +1284,10 @@ async def approve_supplier_equipment(
     if staged_changes:
         pending_payload = EquipmentListingUpdate.model_validate(staged_changes)
         pending_data = await _normalize_listing_update_data(db, pending_payload)
+        if "city_id" in pending_data:
+            city = await resolve_city(db, pending_data["city_id"], require_active=False)
+            await ensure_owner_city(db, listing.owner_user_id, city.id)
+            pending_data["city_id"] = city.id
         _apply_listing_update_data(listing, pending_data)
         clear_entity_pending_changes(listing)
     await create_moderation_audit_log(

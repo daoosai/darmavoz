@@ -17,7 +17,7 @@ export default function ServiceCityField({ value, onChange, onCityChange, admin 
     const controller = new AbortController();
     const headers = { Authorization: `Bearer ${token}` };
     (async () => {
-      const res = await fetch(`${baseURL}${admin ? '/admin/cities/' : '/cities/'}`, { headers, signal: controller.signal });
+      const res = await fetch(`${baseURL}${admin ? '/operator/cities/' : '/cities/'}`, { headers, signal: controller.signal });
       if (!res.ok) throw new Error('Не удалось загрузить города');
       let data: City[] = await res.json();
       if (!admin) {

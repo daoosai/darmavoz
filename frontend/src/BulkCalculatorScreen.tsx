@@ -46,12 +46,12 @@ export default function BulkCalculatorScreen({ materialId, onClose, onChooseSupp
       <p className="text-sm text-slate-500">Рассчитайте объём слоя и количество загрузок. Запас, уплотнение и влажность автоматически не учитываются.</p>
       {error && <p role="alert">{error} <button className="text-sky-600" onClick={() => setAttempt(attempt + 1)}>Повторить</button></p>}
       {!references && !error && <p>Загрузка справочников…</p>}
-      <label className="block">Материал<select className={inputClass} value={material?.id ?? ''} onChange={(event) => {
+      <label className="block">Материал<select aria-label="Материал" className={inputClass} value={material?.id ?? ''} onChange={(event) => {
         const next = references?.materials.find((item) => item.id === event.target.value);
         update({ materialId: event.target.value, density: next?.bulk_density_t_m3?.toString() ?? '' });
       }}><option value="">Выберите материал</option>{references?.materials.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
       {references?.materials.length === 0 && <p>Материалы для расчёта пока не настроены.</p>}
-      {([['length', 'Длина, м'], ['width', 'Ширина, м'], ['thickness', 'Толщина слоя']] as const).map(([field, label]) => <label key={field} className="block">{label}<input className={inputClass} inputMode="decimal" value={draft[field]} onChange={(event) => update({ [field]: event.target.value })} /></label>)}
+      {([['length', 'Длина, м'], ['width', 'Ширина, м'], ['thickness', 'Толщина слоя']] as const).map(([field, label]) => <label key={field} className="block">{label}<input aria-label={label} className={inputClass} inputMode="decimal" value={draft[field]} onChange={(event) => update({ [field]: event.target.value })} /></label>)}
       <label className="block">Единица толщины<select className={inputClass} value={draft.thicknessUnit} onChange={(event) => update({ thicknessUnit: event.target.value as 'cm' | 'm' })}><option value="cm">Сантиметры</option><option value="m">Метры</option></select></label>
       <label className="block">Кубатура из справочника<select className={inputClass} value="" onChange={(event) => { if (event.target.value) update({ capacity: event.target.value }); }}><option value="">Выберите или введите ниже</option>{references?.delivery_options.map((item) => <option key={item.id} value={item.capacity_m3}>{item.title} — {item.capacity_m3} м³</option>)}</select></label>
       <label className="block">Кубатура машины, м³<input className={inputClass} inputMode="decimal" value={draft.capacity} onChange={(event) => update({ capacity: event.target.value })} /></label>

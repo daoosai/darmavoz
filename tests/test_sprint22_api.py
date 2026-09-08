@@ -72,3 +72,48 @@ async def test_driver_membership_and_unknown_historical_city(session_factory):
         with pytest.raises(HTTPException):
             await ensure_driver_city(db, SimpleNamespace(city_id=None), driver.id)
         await db.rollback()
+
+
+@pytest.mark.asyncio
+async def test_dispatch_queries_offers_and_manual_assignment_respect_city(session_factory):
+    from app.api.drivers import build_driver_list_query
+    from app.models.models import Client, DeliveryOption, Order, Role, User, Vehicle
+    from app.services.dispatch_service import (
+        _matching_drivers_base_query, assign_order_to_driver_manually, create_offer_for_driver,
+    )
+    async with session_factory() as db:
+        city = await db.scalar(select(City).where(City.code == 'tyumen'))
+        role = await db.scalar(select(Role).where(Role.name == 'driver'))
+        if role is None:
+            role = Role(name='driver')
+            db.add(role)
+        option = DeliveryOption(title='CI 20', capacity_m3=20, is_active=True)
+        customer = Client(name='CI customer', phone=f'+7{uuid4().int % 10**10:010d}')
+        db.add_all([option, customer])
+        await db.flush()
+        drivers = []
+        for index in range(2):
+            user = User(username=f'ci-driver-{uuid4().hex}', hashed_password='unused-ci', role_id=role.id, is_active=True)
+            vehicle = Vehicle(title='CI vehicle', delivery_option_id=option.id, cubature_min=10, cubature_max=30, is_active=True, moderation_status='approved')
+            db.add_all([user, vehicle])
+            await db.flush()
+            driver = Driver(name=f'CI {index}', phone=f'+7{uuid4().int % 10**10:010d}', user_id=user.id, vehicle_id=vehicle.id, status='available', is_active=True, is_auto_dispatch_enabled=True, moderation_status='approved')
+            db.add(driver)
+            await db.flush()
+            drivers.append(driver)
+        await db.execute(driver_cities.insert().values(driver_id=drivers[0].id, city_id=city.id))
+        order = Order(city_id=city.id, client_id=customer.id, delivery_option_id=option.id, address='CI address', total_amount=1000, status='searching_driver')
+        db.add(order)
+        await db.flush()
+        await db.refresh(order, ['delivery_option', 'items'])
+        for query in (build_driver_list_query(order=order), _matching_drivers_base_query(order)):
+            candidates = list((await db.scalars(query)).unique().all())
+            assert drivers[0].id in [driver.id for driver in candidates]
+            assert drivers[1].id not in [driver.id for driver in candidates]
+        with pytest.raises(HTTPException) as rejected_offer:
+            await create_offer_for_driver(db, order, drivers[1])
+        assert rejected_offer.value.status_code == 409
+        with pytest.raises(HTTPException) as rejected_assignment:
+            await assign_order_to_driver_manually(db, order_id=order.id, driver_id=drivers[1].id)
+        assert rejected_assignment.value.status_code == 409
+        await db.rollback()

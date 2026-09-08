@@ -53,6 +53,7 @@ test('смена города сохраняет старую корзину и 
     localStorage.setItem('cart-storage', JSON.stringify({ version: 0, state: { cartItems: [{ id: 'legacy-item', material: { id: 'sand', name: 'Песок' }, deliveryOption: { id: 'truck20', title: 'Кузов', capacity_m3: 20 }, quantity: 1, volume: 20 }] } }));
   });
   await page.goto('/water');
+  await page.getByRole('button', { name: 'Я Клиент' }).click();
   await expect(page.getByRole('button', { name: 'Город: Тюмень' })).toBeVisible();
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('cart-storage')!).state.cartCityId)).toBe('city-1');
   await page.getByRole('button', { name: 'Город: Тюмень' }).click();
@@ -63,6 +64,7 @@ test('смена города сохраняет старую корзину и 
   expect(second.cartItems).toEqual([]);
   expect(second.cityCarts['city-1'][0].id).toBe('legacy-item');
   await page.reload();
+  await page.getByRole('button', { name: 'Я Клиент' }).click();
   await expect(page.getByRole('button', { name: 'Город: Второй город' })).toBeVisible();
   await page.getByRole('button', { name: 'Город: Второй город' }).click();
   await page.getByRole('button', { name: /Тюмень/ }).click();

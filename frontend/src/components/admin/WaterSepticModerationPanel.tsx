@@ -1,3 +1,5 @@
+import ServiceCitiesPanel from '../../ServiceCitiesPanel';
+import { useAuthStore } from '../../store';
 import OperatorCityField from '../../OperatorCityField';
 import ServiceCityField from '../../ServiceCityField';
 import type { City } from '../../AdminCitiesScreen';
@@ -170,6 +172,7 @@ const createSepticEditForm = (profile: SepticProfile) => ({
 const normalizePhoneForApi = (value: string) => value.replace(/[^\d+]/g, "").trim();
 
 export default function WaterSepticModerationPanel({ token }: { token: string | null }) {
+  const role = useAuthStore((state) => state.role);
   const [cityFilter, setCityFilter] = useState("");
   const cityRef = useRef(cityFilter);
   cityRef.current = cityFilter;
@@ -717,6 +720,7 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
       {modalKind ? (
         <div className="fixed inset-0 z-[99999] flex items-end justify-center bg-slate-900/40 p-4 sm:items-center" role="dialog" aria-modal="true">
           <form onSubmit={submitEdit} className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl">
+              {role === "admin" && (editTarget?.data as any)?.owner_user_id && <ServiceCitiesPanel userId={(editTarget!.data as any).owner_user_id} />}
               <ServiceCityField admin value={serviceCityId} onChange={setServiceCityId} onCityChange={setMapCity} />
             <div className="flex items-start justify-between gap-4">
               <h3 className="text-lg font-black text-slate-900">

@@ -4,7 +4,7 @@ import type { BulkInput } from './bulkCalculator';
 
 export type CalculatorDraft = BulkInput & { materialId: string; includeMass: boolean };
 const initial: CalculatorDraft = {
-  length: '', width: '', thickness: '', thicknessUnit: 'cm', capacity: '',
+  length: '', width: '', thickness: '', thicknessUnit: 'cm', capacity: '20',
   density: '', materialId: '', includeMass: false,
 };
 

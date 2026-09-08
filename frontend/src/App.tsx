@@ -12,6 +12,7 @@ import {
   Truck,
   Wrench,
   Droplets,
+  Calculator,
   X,
 } from "lucide-react";
 import { MaterialProps } from "./MaterialDetailScreen";
@@ -430,8 +431,7 @@ function MainContent({
 
   const [showAddressSheet, setShowAddressSheet] = useState(false);
   const [calculatorMaterial, setCalculatorMaterial] = useState<string | null>(null);
-  const { cityId, cities } = useCityStore();
-  const city = cities.find((item) => item.id === cityId);
+  const { cityId } = useCityStore();
   const [showCitySelector, setShowCitySelector] = useState(false);
   const [serviceDirection, setServiceDirection] = useState<"delivery" | "equipment">("delivery");
   const [mapMaterial, setMapMaterial] = useState<MaterialProps | null>(null);
@@ -560,7 +560,9 @@ function MainContent({
       <div className="w-full max-w-md bg-white min-h-screen sm:min-h-0 sm:h-[85vh] relative shadow-2xl flex flex-col overflow-hidden sm:rounded-[32px] sm:border-8 border-slate-900">
         {/* Main Content Area */}
         <main className="flex h-full flex-1 flex-col overflow-y-auto pb-[calc(90px+env(safe-area-inset-bottom))] pt-4">
-          <button className="mx-4 my-2 text-left font-semibold text-sky-700" onClick={() => setShowCitySelector(true)}>Город: {city?.name}</button>
+          {activeTab !== "home" && <div className="flex justify-end px-4 pb-2">
+            <button type="button" aria-label="Выбрать город" title="Выбрать город" className="rounded-full bg-slate-100 p-2.5 text-sky-700" onClick={() => setShowCitySelector(true)}><MapPin className="h-4 w-4" /></button>
+          </div>}
           {showCitySelector && <CitySelector onClose={() => setShowCitySelector(false)} />}
           {activeTab === "home" && (
             <>
@@ -568,8 +570,6 @@ function MainContent({
                 <UpdateBanner />
               </div>
 
-              {/* Top Address Button */}
-              <button className="mx-4 mb-3 rounded-xl bg-sky-50 p-3 text-sky-700" onClick={() => setCalculatorMaterial('')}>Калькулятор материалов</button>
               <div className="mb-4 px-4 pt-[calc(env(safe-area-inset-top,0px)+0.25rem)]">
                 <button
                   onClick={() => {
@@ -611,6 +611,21 @@ function MainContent({
                   <Wrench className="h-4 w-4" /> Спецтехника
                 </button>
               </div>
+
+              <button
+                type="button"
+                aria-label="Калькулятор материалов"
+                onClick={() => setCalculatorMaterial('')}
+                className="mx-4 mb-6 flex w-[calc(100%-2rem)] items-center gap-4 rounded-2xl bg-gradient-to-r from-blue-50 to-blue-100 px-4 py-4 text-left shadow-sm ring-1 ring-blue-100 transition active:scale-[0.99]"
+              >
+                <span className="rounded-xl bg-white p-3 text-sky-600 shadow-sm">
+                  <Calculator className="h-6 w-6" />
+                </span>
+                <span>
+                  <span className="block text-sm font-black text-slate-900">Рассчитайте объём материала</span>
+                  <span className="mt-0.5 block text-sm text-slate-600">Не знаете, сколько заказать? Рассчитайте объём в калькуляторе</span>
+                </span>
+              </button>
 
               <div className="mx-4 mb-6">
                 <button
@@ -863,6 +878,12 @@ function MainContent({
         {calculatorMaterial !== null && <BulkCalculatorScreen
           materialId={calculatorMaterial || undefined}
           onClose={() => setCalculatorMaterial(null)}
+          onGoToCatalog={() => {
+            setCalculatorMaterial(null);
+            closeMaterialSheet();
+            setMapMaterial(null);
+            setActiveTab("home");
+          }}
           onChooseSupplier={async (id) => {
             try {
               const response = await fetch(`${baseURL}/catalog/materials/${id}`);

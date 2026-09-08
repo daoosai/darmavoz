@@ -448,7 +448,7 @@ async def upsert_places(
     truncated: bool,
     skipped_items: list[ParserSkippedItem] | None = None,
 ) -> ParserRunResult:
-    city = await resolve_city(db, payload.city_id, require_active=False)
+    city = await resolve_city(db, payload.city_id, require_active=False) if payload.city_id is not None else None
     result = ParserRunResult(
         found=len(places),
         total_found=len(places) + sum(item.count for item in skipped_items or []),
@@ -464,7 +464,7 @@ async def upsert_places(
     for place in places:
         existing = await db.scalar(select(destination_model).where(destination_model.twogis_id == place.twogis_id))
         if existing is not None:
-            if existing.city_id != city.id:
+            if city is not None and existing.city_id != city.id:
                 result.skipped += 1
                 _append_skipped_item(result.skipped_items, name=place.name, reason="City conflict: review the existing object")
                 continue
@@ -491,7 +491,7 @@ async def upsert_places(
 
         if payload.target == "material":
             point = Quarry(
-                city_id=city.id,
+                city_id=city.id if city is not None else None,
                 name=place.name,
                 short_name=place.name,
                 point_type=point_type,
@@ -507,7 +507,7 @@ async def upsert_places(
             )
         else:
             point = WaterPoint(
-                city_id=city.id,
+                city_id=city.id if city is not None else None,
                 water_type="unknown",
                 name=place.name,
                 source="2GIS",

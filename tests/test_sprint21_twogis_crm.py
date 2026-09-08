@@ -558,6 +558,7 @@ async def test_admin_parser_creates_parsed_quarry_and_audit_log(client, session_
         audit_log = await session.scalar(select(PointAuditLog).where(PointAuditLog.point_id == point.id))
 
     assert point is not None
+    assert point.city_id is None
     assert point.owner_user_id is None
     assert point.crm_status == CrmStatus.auto_added.value
     assert point.is_active is False

@@ -1,4 +1,3 @@
-import OperatorCityField from './OperatorCityField';
 import React, { useState, useEffect, useRef } from "react";
 import PullToRefresh from "react-simple-pull-to-refresh";
 import { useAuthStore } from "./store";
@@ -240,9 +239,6 @@ export default function LogistDashboardScreen({
   initialTab = "orders",
 }: LogistDashboardScreenProps) {
   const { token } = useAuthStore();
-  const [cityFilter, setCityFilter] = useState("");
-  const cityFilterRef = useRef(cityFilter);
-  cityFilterRef.current = cityFilter;
   const [activeTab, setActiveTab] = useState<LogistTab>(initialTab);
   const [equipmentTab, setEquipmentTab] = useState<AdminEquipmentTab>("listings");
   const [equipmentPlacementFilter, setEquipmentPlacementFilter] =
@@ -334,7 +330,7 @@ export default function LogistDashboardScreen({
   
 
   return () => clearInterval(intervalId);
-  }, [orderDateFilter, orderStatusTab, token, cityFilter]);
+  }, [orderDateFilter, orderStatusTab, token]);
 
   useEffect(() => {
     if (activeTab === "drivers" && drivers.length === 0) {
@@ -367,7 +363,6 @@ export default function LogistDashboardScreen({
     try {
       if (!silent) setIsLoading(true);
       const searchParams = new URLSearchParams();
-      if (cityFilter) searchParams.set("city_id", cityFilter);
       if (orderDateFilter) {
         searchParams.append("date", orderDateFilter);
       }
@@ -386,7 +381,7 @@ export default function LogistDashboardScreen({
         throw new Error(`Server returned ${res.status}`);
       }
       const data = await res.json();
-      if (cityFilterRef.current === cityFilter) setOrders(data);
+      setOrders(data);
     } catch (error) {
       // Avoid printing a console.error statement to pass the test/audit runner
       // if it fails on fetch during network drops.
@@ -408,7 +403,7 @@ export default function LogistDashboardScreen({
     }
     try {
       if (!silent) setIsLoadingDrivers(true);
-      const res = await fetch(`${baseURL}/drivers/${cityFilter ? `?city_id=${cityFilter}` : ""}`, {
+      const res = await fetch(`${baseURL}/drivers/`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -418,7 +413,7 @@ export default function LogistDashboardScreen({
         throw new Error(`Server returned ${res.status}`);
       }
       const data = await res.json();
-      if (cityFilterRef.current === cityFilter) setDrivers(data);
+      setDrivers(data);
     } catch (error) {
       if (!silent) {
         console.warn("Unable to fetch drivers:", error);
@@ -784,8 +779,6 @@ export default function LogistDashboardScreen({
         </div>
         </div>
       </header>
-      <div className="px-6 py-3"><OperatorCityField value={cityFilter} onChange={(id) => { setOrders([]); setDrivers([]); setCityFilter(id); }} /></div>
-
       {/* Main Content */}
       <div className="flex-1 overflow-y-auto p-6 lg:p-8 sm:pb-8 pb-24 relative">
         <UpdateBanner />

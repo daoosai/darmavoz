@@ -1,6 +1,4 @@
-import OperatorCityField from '../OperatorCityField';
 import { useCityStore } from '../cityStore';
-import type { City } from '../AdminCitiesScreen';
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Clock, MapPin, Phone, Truck, X } from "lucide-react";
 
@@ -112,10 +110,8 @@ const formatLocationUpdatedAt = (value: string | null) => {
 };
 
 export default function DriverMapComponent() {
-  const [cityFilter, setCityFilter] = useState("");
-  const [selectedCity, setSelectedCity] = useState<City | null>(null);
   const cities = useCityStore((state) => state.cities);
-  const mapCity = selectedCity || cities.find((city) => city.is_default) || cities[0];
+  const mapCity = cities.find((city) => city.is_default) || cities[0];
   const token = useAuthStore((state) => state.token);
   const [drivers, setDrivers] = useState<DriverMapItem[]>([]);
   const [filters, setFilters] = useState<Record<ActiveDriverMapStatus, boolean>>({
@@ -165,7 +161,7 @@ export default function DriverMapComponent() {
           throw new Error("Требуется авторизация");
         }
 
-        const response = await fetch(`${baseURL}/logist/driver-map${cityFilter ? `?city_id=${cityFilter}` : ""}`, {
+        const response = await fetch(`${baseURL}/logist/driver-map`, {
           headers: { Authorization: `Bearer ${token}` },
           signal: controller.signal,
         });
@@ -196,7 +192,7 @@ export default function DriverMapComponent() {
       window.clearInterval(intervalId);
       controller.abort();
     };
-  }, [token, cityFilter]);
+  }, [token]);
 
   useEffect(() => {
     if (selectedDriverId && !selectedDriver) setSelectedDriverId(null);
@@ -338,7 +334,6 @@ export default function DriverMapComponent() {
 
   return (
     <section className="flex min-h-[calc(100dvh-13rem)] flex-1 flex-col gap-4">
-      <OperatorCityField value={cityFilter} onChange={(id, city) => { setDrivers([]); setSelectedDriverId(null); setCityFilter(id); setSelectedCity(city || null); }} />
       <div className="relative flex min-h-[50vh] flex-1 overflow-hidden rounded-[28px] bg-slate-100 sm:min-h-[560px]">
       <div className="absolute inset-0 bg-slate-100">
         <div ref={mapContainerRef} className="h-full w-full" aria-label="Карта водителей" />

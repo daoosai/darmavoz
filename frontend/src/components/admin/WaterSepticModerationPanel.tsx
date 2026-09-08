@@ -1,6 +1,5 @@
 import ServiceCitiesPanel from '../../ServiceCitiesPanel';
 import { useAuthStore } from '../../store';
-import OperatorCityField from '../../OperatorCityField';
 import ServiceCityField from '../../ServiceCityField';
 import type { City } from '../../AdminCitiesScreen';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
@@ -173,9 +172,6 @@ const normalizePhoneForApi = (value: string) => value.replace(/[^\d+]/g, "").tri
 
 export default function WaterSepticModerationPanel({ token }: { token: string | null }) {
   const role = useAuthStore((state) => state.role);
-  const [cityFilter, setCityFilter] = useState("");
-  const cityRef = useRef(cityFilter);
-  cityRef.current = cityFilter;
   const [tab, setTab] = useState<ManagementTab>("water");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("pending_moderation");
   const [waterPoints, setWaterPoints] = useState<WaterPoint[]>([]);
@@ -217,7 +213,7 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
     setLoading(true);
     try {
       const headers = { Authorization: `Bearer ${token}` };
-      const query = `?${new URLSearchParams({ ...(statusFilter !== "all" ? { moderation_status: statusFilter } : {}), ...(cityFilter ? { city_id: cityFilter } : {}) })}`;
+      const query = `?${new URLSearchParams({ ...(statusFilter !== "all" ? { moderation_status: statusFilter } : {}) })}`;
       const [waterResponse, septicResponse, countsResponse] = await Promise.all([
         fetch(`${baseURL}/admin/water-points${query}`, { headers }),
         fetch(`${baseURL}/admin/septic-providers${query}`, { headers }),
@@ -241,7 +237,6 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
         ? waterData.map((point) => normalizeWaterPoint(point as WaterPoint))
         : [];
       const nextSepticProfiles = Array.isArray(septicData) ? septicData : [];
-      if (cityRef.current !== cityFilter) return;
       setWaterPoints(nextWaterPoints);
       setSepticProfiles(nextSepticProfiles);
       const nextPendingWaterCount = countsResponse.ok
@@ -264,7 +259,7 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, token, cityFilter]);
+  }, [statusFilter, token]);
 
   useEffect(() => {
     void load();
@@ -649,7 +644,6 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
 
   return (
     <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-      <OperatorCityField value={cityFilter} onChange={(id) => { setSelectedIds(new Set()); setWaterPoints([]); setSepticProfiles([]); setCityFilter(id); }} />
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold text-slate-800">Вода и септики</h2>

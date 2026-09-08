@@ -1,4 +1,3 @@
-import OperatorCityField from './OperatorCityField';
 import { currentCity } from './cityStore';
 import type { City } from './AdminCitiesScreen';
 import ServiceCityField from './ServiceCityField';
@@ -262,9 +261,6 @@ export default function AdminQuarriesScreen({
   onTypeFilterChange,
 }: AdminQuarriesScreenProps) {
   const { token } = useAuthStore();
-  const [cityFilter, setCityFilter] = useState("");
-  const cityRef = React.useRef(cityFilter);
-  cityRef.current = cityFilter;
   const [quarries, setQuarries] = useState<Quarry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -296,7 +292,6 @@ export default function AdminQuarriesScreen({
     try {
       setIsLoading(true);
       const params = new URLSearchParams();
-      if (cityFilter) params.set("city_id", cityFilter);
       if (normalizedStatusFilter) {
         params.set("moderation_status", normalizedStatusFilter);
       }
@@ -330,7 +325,7 @@ export default function AdminQuarriesScreen({
           : Array.isArray((data as { results?: unknown[] }).results)
             ? (data as { results: Quarry[] }).results
             : [];
-      if (cityRef.current === cityFilter) setQuarries(loadedPoints);
+      setQuarries(loadedPoints);
     } catch (e) {
       console.error("Error fetching quarries", e);
       setQuarries([]);
@@ -347,7 +342,7 @@ export default function AdminQuarriesScreen({
       return;
     }
     fetchQuarries();
-  }, [token, normalizedStatusFilter, normalizedPlacementFilter, normalizedTypeFilter, crmStatusFilter, cityFilter]);
+  }, [token, normalizedStatusFilter, normalizedPlacementFilter, normalizedTypeFilter, crmStatusFilter]);
 
   useEffect(() => {
     if (!policy) void loadPolicy();
@@ -541,7 +536,6 @@ export default function AdminQuarriesScreen({
 
   return (
     <div className="flex flex-col gap-4 pb-[calc(6rem+env(safe-area-inset-bottom,0px))]">
-      <OperatorCityField value={cityFilter} onChange={(id) => { setSelectedIds(new Set()); setQuarries([]); setCityFilter(id); }} />
       <div className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
         <div className="flex items-center gap-3">
           <div>

@@ -1,5 +1,4 @@
 import ServiceCitiesPanel from './ServiceCitiesPanel';
-import OperatorCityField from './OperatorCityField';
 import ServiceCityField from './ServiceCityField';
 import React, { useEffect, useState } from "react";
 import {
@@ -112,9 +111,6 @@ export default function AdminEquipmentScreen({
   const [listings, setListings] = useState<EquipmentListing[]>([]);
   const [loading, setLoading] = useState(true);
   const [showListingForm, setShowListingForm] = useState(false);
-  const [cityFilter, setCityFilter] = useState("");
-  const cityRef = React.useRef(cityFilter);
-  cityRef.current = cityFilter;
   const [serviceCityId, setServiceCityId] = useState('');
   const [listingForm, setListingForm] = useState<ListingForm>({ ...emptyListing });
   const [newTypeName, setNewTypeName] = useState("");
@@ -150,7 +146,7 @@ export default function AdminEquipmentScreen({
           { headers },
         ),
         fetch(
-          `${baseURL}/admin/equipment?${new URLSearchParams({ ...(placementFilter ? { placement_status: placementFilter } : {}), ...(cityFilter ? { city_id: cityFilter } : {}) })}`,
+          `${baseURL}/admin/equipment?${new URLSearchParams({ ...(placementFilter ? { placement_status: placementFilter } : {}) })}`,
           { headers },
         ),
       ]);
@@ -160,7 +156,6 @@ export default function AdminEquipmentScreen({
 
       const loadedTypes: EquipmentTypeItem[] = await typesResponse.json();
       const loadedListings: EquipmentListing[] = await listingsResponse.json();
-      if (cityRef.current !== cityFilter) return;
       setTypes(Array.isArray(loadedTypes) ? loadedTypes : []);
       setListings(Array.isArray(loadedListings) ? loadedListings : []);
       onPendingModerationChanged?.(
@@ -196,7 +191,7 @@ export default function AdminEquipmentScreen({
 
   useEffect(() => {
     void load();
-  }, [token, placementFilter, cityFilter]);
+  }, [token, placementFilter]);
 
   const saveType = async () => {
     if (!newTypeName.trim()) return;
@@ -512,7 +507,6 @@ export default function AdminEquipmentScreen({
 
   return (
     <div className="space-y-5 pb-[calc(6rem+env(safe-area-inset-bottom,0px))]">
-      <OperatorCityField value={cityFilter} onChange={(id) => { setListings([]); setCityFilter(id); }} />
       <div className="flex gap-2 overflow-x-auto rounded-2xl bg-white p-2 shadow-sm">
         {[
           ["listings", "Объявления"],

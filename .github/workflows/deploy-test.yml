@@ -74,6 +74,8 @@ jobs:
           npm run lint
           node --import tsx --test src/bulkCalculator.test.ts
           npm run build
+          npx playwright install --with-deps chromium
+          npx playwright test tests/e2e/sprint22.spec.ts
           tar -C dist -cf ../frontend-dist.tar .
 
       - name: Setup SSH agent

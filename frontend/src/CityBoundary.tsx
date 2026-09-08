@@ -24,7 +24,7 @@ export function CitySelector({ onClose }: { onClose?: () => void }) {
 }
 
 export default function CityBoundary({ children }: { children: ReactNode }) {
-  const { cities, cityId, loaded, refresh, error } = useCityStore();
+  const { cities, cityId, loaded, refresh, error, preserveAddressOnNextCitySwitch, completeCitySwitch } = useCityStore();
   const city = cities.find((item) => item.id === cityId);
   const cartCityId = useCartStore((state) => state.cartCityId);
   useEffect(() => {
@@ -39,11 +39,12 @@ export default function CityBoundary({ children }: { children: ReactNode }) {
     const state = useCartStore.getState();
     if (state.cartCityId !== city.id) {
       state.switchCityCart(city.id, city.code === 'tyumen');
-      useAddressStore.getState().clearSelectedAddress();
+      if (!preserveAddressOnNextCitySwitch) useAddressStore.getState().clearSelectedAddress();
+      completeCitySwitch();
     }
-  }, [city]);
+  }, [city, completeCitySwitch, preserveAddressOnNextCitySwitch]);
   if (!loaded) return <div className="p-6 pt-[max(env(safe-area-inset-top),2.5rem)]">{error || 'Загрузка городов…'}{error && <button onClick={() => void refresh()}>Повторить</button>}</div>;
   if (!city) return <CitySelector />;
   if (cartCityId !== city.id) return null;
-  return <div key={cityId}>{children}</div>;
+  return <div>{children}</div>;
 }

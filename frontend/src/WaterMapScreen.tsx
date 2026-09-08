@@ -1,4 +1,4 @@
-import { cityFetch, currentCity } from './cityStore';
+import { cityFetch, currentCity, useCityStore } from './cityStore';
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Droplets, List, Map, MapPin, Phone, X } from "lucide-react";
 
@@ -52,6 +52,7 @@ const isFreePoint = (point: WaterPoint) =>
 const isPointReady = (point: WaterPoint) => point.crm_status === "activated";
 
 export default function WaterMapScreen({ initialTab = "water" }: { initialTab?: ServiceTab }) {
+  const cityId = useCityStore((state) => state.cityId);
   const [points, setPoints] = useState<WaterPoint[]>([]);
   const [septicProfiles, setSepticProfiles] = useState<SepticProfile[]>([]);
   const [serviceTab, setServiceTab] = useState<ServiceTab>(initialTab);
@@ -127,7 +128,7 @@ export default function WaterMapScreen({ initialTab = "water" }: { initialTab?: 
     return () => {
       disposed = true;
     };
-  }, [filter, reloadVersion, serviceTab]);
+  }, [cityId, filter, reloadVersion, serviceTab]);
 
   useEffect(() => {
     let disposed = false;
@@ -161,7 +162,7 @@ export default function WaterMapScreen({ initialTab = "water" }: { initialTab?: 
       mapRef.current = null;
       setMapReady(false);
     };
-  }, []);
+  }, [cityId]);
 
   useEffect(() => {
     const mapgl = (window as any).mapgl;

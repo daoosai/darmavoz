@@ -36,6 +36,9 @@ const getRequestUrlForLog = (requestUrl: URL) => {
 const getText = (value: unknown): string =>
   typeof value === "string" ? value.trim() : "";
 
+const normalizeLocalityName = (value: string): string =>
+  value.trim().toLocaleLowerCase().replace(/ё/g, "е");
+
 export const get2gisSuggestionAdministrativeNames = (item: any): string[] => {
   const divisions = Array.isArray(item?.adm_div)
     ? item.adm_div
@@ -46,6 +49,27 @@ export const get2gisSuggestionAdministrativeNames = (item: any): string[] => {
   return divisions
     .map((division: any) => getText(division?.name || division?.caption))
     .filter(Boolean);
+};
+
+export const get2gisSuggestionLocalityNames = (item: any): string[] => {
+  const divisions = Array.isArray(item?.adm_div)
+    ? item.adm_div
+    : item?.adm_div
+      ? [item.adm_div]
+      : [];
+  const localityNames = divisions
+    .filter((division: any) => /city|settlement|locality|village|town/i.test(
+      getText(division?.type || division?.kind || division?.scope),
+    ))
+    .map((division: any) => getText(division?.name || division?.caption))
+    .filter(Boolean);
+  const fallbackNames = get2gisSuggestionAdministrativeNames(item);
+  return [...localityNames, ...fallbackNames].filter(
+    (name, index, names) =>
+      names.findIndex(
+        (candidate) => normalizeLocalityName(candidate) === normalizeLocalityName(name),
+      ) === index,
+  );
 };
 
 const appendUniqueParts = (address: string, parts: string[]): string => {
@@ -116,7 +140,12 @@ export const withCityBias = (address: string, city: City = currentCity()): strin
   if (!normalized) {
     return "";
   }
-  if (normalized.toLowerCase().includes(city.name.toLowerCase())) {
+  const normalizedAddress = normalizeLocalityName(normalized);
+  const includesSupportedCity = useCityStore
+    .getState()
+    .cities
+    .some((availableCity) => normalizedAddress.includes(normalizeLocalityName(availableCity.name)));
+  if (includesSupportedCity || normalizedAddress.includes(normalizeLocalityName(city.name))) {
     return normalized;
   }
   return `${city.name}, ${city.region}, ${normalized}`;

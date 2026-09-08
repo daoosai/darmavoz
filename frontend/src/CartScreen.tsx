@@ -129,6 +129,7 @@ export default function CartScreen({
     removeFromCart,
     getTotalPrice,
     updateItemVolume,
+    setItemIdempotencyKey,
   } = useCartStore();
   const { role, token } = useAuthStore();
   const setOrders = useClientOrdersStore((state) => state.setOrders);
@@ -404,12 +405,15 @@ export default function CartScreen({
         const expectedMaterialUnitPrice = selectedOption && orderedVolume > 0
           ? selectedOption.material_cost / orderedVolume
           : item.pickupPoint?.price;
+        const idempotencyKey = item.idempotencyKey || crypto.randomUUID();
+        if (!item.idempotencyKey) setItemIdempotencyKey(item.id, idempotencyKey);
         try {
           const response = await cityFetch(`${baseURL}/orders/checkout`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
               Authorization: `Bearer ${token}`,
+              "Idempotency-Key": idempotencyKey,
             },
             body: JSON.stringify({
               material_id: item.material.id,

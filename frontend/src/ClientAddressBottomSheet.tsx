@@ -1,4 +1,4 @@
-import { cityFetch, currentCity } from './cityStore';
+import { cityFetch, currentCity, useCityStore } from './cityStore';
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -16,6 +16,7 @@ import {
   fetch2gisAddressSuggestions,
   get2gisSuggestionAddress,
   get2gisSuggestionCoordinates,
+  get2gisSuggestionLocalityNames,
   get2gisSuggestionLabel,
   withCityBias,
 } from "./addressSearch";
@@ -40,6 +41,7 @@ interface AddressSuggestion {
   address: string;
   lat?: number;
   lon?: number;
+  localityNames: string[];
 }
 
 interface ClientAddressBottomSheetProps {
@@ -68,6 +70,7 @@ export default function ClientAddressBottomSheet({
   const { token, role } = useAuthStore();
   const { selectedAddress, setSelectedAddress, clearSelectedAddress } =
     useAddressStore();
+  const chooseCity = useCityStore((state) => state.choose);
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
@@ -202,6 +205,7 @@ export default function ClientAddressBottomSheet({
           address,
           lat: suggestionLat,
           lon: suggestionLon,
+          localityNames: get2gisSuggestionLocalityNames(item),
         };
       })
       .filter((item) => Boolean(item.address));
@@ -220,6 +224,20 @@ export default function ClientAddressBottomSheet({
 
   const selectSuggestion = async (suggestion: AddressSuggestion) => {
     const address = suggestion.address.trim() || suggestion.label.trim();
+    const normalizeName = (value: string) => value.trim().toLocaleLowerCase().replace(/ё/g, "е");
+    const supportedCities = useCityStore.getState().cities.filter((city) => city.is_active);
+    const matchedCity = supportedCities.find((city) =>
+      suggestion.localityNames.some((name) => normalizeName(name) === normalizeName(city.name)),
+    );
+
+    if (suggestion.localityNames.length > 0 && !matchedCity) {
+      toast.error("В этом населенном пункте доставка пока недоступна");
+      return;
+    }
+
+    if (matchedCity && matchedCity.id !== useCityStore.getState().cityId) {
+      chooseCity(matchedCity.id, { preserveAddress: true });
+    }
     setNewAddress(address);
     setSuggestions([]);
 

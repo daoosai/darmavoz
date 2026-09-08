@@ -29,6 +29,7 @@ export interface CartItem {
   comment?: string;
   quantity: number;
   volume: number;
+  idempotencyKey?: string;
 }
 
 export interface ClientOrderSummary {
@@ -110,6 +111,7 @@ interface CartState {
     availableDeliveryOptions?: DeliveryOption[],
   ) => boolean;
   updateItemVolume: (id: string, volume: number) => boolean;
+  setItemIdempotencyKey: (id: string, idempotencyKey: string) => void;
   removeFromCart: (id: string) => void;
   clearCart: () => void;
   getTotalPrice: () => number;
@@ -413,6 +415,13 @@ export const useCartStore = create<CartState>()(
       ),
     }));
     return true;
+  },
+  setItemIdempotencyKey: (id, idempotencyKey) => {
+    set((state) => ({
+      cartItems: state.cartItems.map((item) =>
+        item.id === id ? { ...item, idempotencyKey } : item,
+      ),
+    }));
   },
   removeFromCart: (id) => {
     set((state) => ({ cartItems: state.cartItems.filter((i) => i.id !== id) }));

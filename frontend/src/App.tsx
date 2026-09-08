@@ -18,7 +18,7 @@ import {
 import { MaterialProps } from "./MaterialDetailScreen";
 import BulkCalculatorScreen from './BulkCalculatorScreen';
 import CityBoundary from './CityBoundary';
-import { useCityStore } from './cityStore';
+import { cityFetch, useCityStore } from './cityStore';
 import OrdersScreen from "./OrdersScreen";
 import WelcomeScreen from "./WelcomeScreen";
 import PrivacyPolicyScreen from "./PrivacyPolicyScreen";
@@ -81,6 +81,8 @@ const ADMIN_DASHBOARD_PATHS = {
 // Reuse Material type as MaterialProps by exporting it from MaterialDetailScreen or type matching
 export default function App() {
   const refreshCities = useCityStore((state) => state.refresh);
+  const activeCityId = useCityStore((state) => state.cityId);
+  const citiesLoaded = useCityStore((state) => state.loaded);
   useEffect(() => { void refreshCities(); }, [refreshCities]);
   usePushNotifications();
   const [currentPath, setCurrentPath] = useState(
@@ -147,6 +149,8 @@ export default function App() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [materials, setMaterials] = useState<MaterialProps[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState(false);
+  const [catalogReloadVersion, setCatalogReloadVersion] = useState(0);
   const [showAuthSheet, setShowAuthSheet] = useState(false);
 
   const navigateToPath = (nextPath: string, replace = false) => {
@@ -171,12 +175,15 @@ export default function App() {
   }, [currentPath, role, token]);
 
   useEffect(() => {
+    if (!citiesLoaded || !activeCityId) return;
+    let cancelled = false;
     const fetchData = async () => {
       try {
         setIsLoading(true);
+        setCatalogError(false);
         const [categoriesRes, materialsRes] = await Promise.all([
-          fetch(`${baseURL}/catalog/categories/`),
-          fetch(`${baseURL}/catalog/materials/`),
+          cityFetch(`${baseURL}/catalog/categories/`),
+          cityFetch(`${baseURL}/catalog/materials/`),
         ]);
 
         if (categoriesRes.ok && materialsRes.ok) {
@@ -193,18 +200,21 @@ export default function App() {
           setMaterials(
             fetchedMaterials.filter((m: any) => m.is_active !== false),
           );
-        } else {
-          console.error("Failed to fetch data");
+        } else if (!cancelled) {
+          setCatalogError(true);
         }
       } catch (err) {
-        // Silent error for release
+        if (!cancelled && !(err instanceof DOMException && err.name === "AbortError")) {
+          setCatalogError(true);
+        }
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     };
 
-    fetchData();
-  }, []);
+    void fetchData();
+    return () => { cancelled = true; };
+  }, [activeCityId, catalogReloadVersion, citiesLoaded]);
 
   const cartItemsCount = useCartStore((state) => state.cartItems.length);
   const focusedClientOrderId = currentPath.match(/^\/client\/orders\/([^/]+)\/?$/)?.[1] || null;
@@ -386,6 +396,8 @@ export default function App() {
         selectedCategoryId={selectedCategoryId}
         setSelectedCategoryId={setSelectedCategoryId}
         isLoading={isLoading}
+        catalogError={catalogError}
+        onRetryCatalog={() => setCatalogReloadVersion((value) => value + 1)}
         showAuthSheet={showAuthSheet}
         setShowAuthSheet={setShowAuthSheet}
         role={role}
@@ -433,6 +445,8 @@ function MainContent({
   selectedCategoryId,
   setSelectedCategoryId,
   isLoading,
+  catalogError,
+  onRetryCatalog,
   showAuthSheet,
   setShowAuthSheet,
   role,
@@ -733,7 +747,12 @@ function MainContent({
 
               {/* Product Grid Area */}
               <div className="px-4 flex flex-col gap-6 pb-6">
-                {isLoading ? (
+                {catalogError ? (
+                  <div role="alert" className="rounded-2xl bg-red-50 p-5 text-center text-sm font-medium text-red-700">
+                    <p>Не удалось загрузить каталог материалов</p>
+                    <button type="button" onClick={onRetryCatalog} className="mt-3 rounded-xl bg-primary px-4 py-2 font-bold text-white">Повторить попытку</button>
+                  </div>
+                ) : isLoading ? (
                   <div className="flex justify-center py-10">
                     <span className="text-slate-500 text-sm font-medium animate-pulse">
                       Загрузка...

@@ -1,4 +1,4 @@
-import { cityFetch, currentCity } from './cityStore';
+import { cityFetch, currentCity, useCityStore } from './cityStore';
 import { Capacitor } from "@capacitor/core";
 import { Geolocation } from "@capacitor/geolocation";
 import { useEffect, useRef, useState } from "react";
@@ -129,6 +129,7 @@ export default function GlobalMapScreen({
   isAuthenticated: boolean;
   onOpenAuth: () => void;
 }) {
+  const cityId = useCityStore((state) => state.cityId);
   const [points, setPoints] = useState<GlobalPickupPoint[]>([]);
   const [selectedMaterials, setSelectedMaterials] = useState<string[]>([]);
   const [selectedPoint, setSelectedPoint] = useState<GlobalPickupPoint | null>(null);
@@ -312,7 +313,7 @@ export default function GlobalMapScreen({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [cityId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -407,7 +408,7 @@ export default function GlobalMapScreen({
       mapRef.current?.destroy();
       mapRef.current = null;
     };
-  }, []);
+  }, [cityId]);
 
   useEffect(() => {
     const mapgl = (window as any).mapgl;

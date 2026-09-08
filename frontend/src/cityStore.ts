@@ -8,16 +8,19 @@ interface CityState {
   cities: City[];
   loaded: boolean;
   error: string;
-  choose: (id: string) => void;
+  preserveAddressOnNextCitySwitch: boolean;
+  choose: (id: string, options?: { preserveAddress?: boolean }) => void;
+  completeCitySwitch: () => void;
   refresh: () => Promise<void>;
 }
 let revision = 0;
 export const useCityStore = create<CityState>()(persist((set, get) => ({
-  cityId: null, cities: [], loaded: false, error: '',
-  choose: (id) => {
+  cityId: null, cities: [], loaded: false, error: '', preserveAddressOnNextCitySwitch: false,
+  choose: (id, options = {}) => {
     if (!get().cities.some((city) => city.id === id && city.is_active)) throw new Error('Город недоступен');
-    set({ cityId: id });
+    set({ cityId: id, preserveAddressOnNextCitySwitch: Boolean(options.preserveAddress) });
   },
+  completeCitySwitch: () => set({ preserveAddressOnNextCitySwitch: false }),
   refresh: async () => {
     const request = ++revision;
     try {

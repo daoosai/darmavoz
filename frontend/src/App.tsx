@@ -56,7 +56,6 @@ import FloatingOrderTracker from "./FloatingOrderTracker";
 import EquipmentCatalogScreen from "./EquipmentCatalogScreen";
 import GlobalMapScreen from "./GlobalMapScreen";
 import WaterMapScreen from "./WaterMapScreen";
-import SepticCatalogScreen from "./SepticCatalogScreen";
 import SupportScreen from "./SupportScreen";
 import PickupPointMapScreen, { PickupPointSelection } from "./PickupPointMapScreen";
 import EquipmentOwnerPortalScreen from "./EquipmentOwnerPortalScreen";
@@ -522,14 +521,30 @@ function MainContent({
     setMapMaterial(null);
   };
 
-  const openSpecialCategory = (path: "/water" | "/septics", tab: "water" | "septic") => {
+  const openServiceMap = (path: "/water" | "/septics") => {
     if (typeof window !== "undefined" && window.location.pathname !== path) {
       window.history.pushState({}, "", path);
     }
     setCurrentPath(path);
     setMapMaterial(null);
     closeMaterialSheet();
-    setActiveTab(tab);
+    setActiveTab("water");
+  };
+
+  const openCalculator = (materialId = "") => {
+    if (typeof window !== "undefined" && window.location.pathname !== "/calculator") {
+      window.history.pushState({}, "", "/calculator");
+    }
+    setCurrentPath("/calculator");
+    setCalculatorMaterial(materialId);
+  };
+
+  const closeCalculator = () => {
+    setCalculatorMaterial(null);
+    if (typeof window !== "undefined" && window.location.pathname === "/calculator") {
+      window.history.pushState({}, "", "/");
+    }
+    setCurrentPath("/");
   };
 
   const handleCatalogMaterialClick = (material: MaterialProps) => {
@@ -540,12 +555,12 @@ function MainContent({
     ).toLowerCase();
 
     if (categoryName.includes("вода") || categoryName.includes("water")) {
-      openSpecialCategory("/water", "water");
+      openServiceMap("/water");
       return;
     }
 
     if (categoryName.includes("септик") || categoryName.includes("septic")) {
-      openSpecialCategory("/septics", "septic");
+      openServiceMap("/septics");
       return;
     }
 
@@ -568,12 +583,16 @@ function MainContent({
       setActiveTab("map");
       return;
     }
-    if (currentPath === "/water" && activeTab !== "water") { setActiveTab("water"); return; }
-    if ((currentPath === "/septic" || currentPath === "/septics") && activeTab !== "septic") { setActiveTab("septic"); return; }
+    if ((currentPath === "/water" || currentPath === "/septic" || currentPath === "/septics") && activeTab !== "water") { setActiveTab("water"); return; }
     if (currentPath !== "/map" && currentPath !== "/water" && currentPath !== "/septic" && currentPath !== "/septics" && (activeTab === "map" || activeTab === "water" || activeTab === "septic")) {
       setActiveTab("home");
     }
   }, [activeTab, currentPath, setActiveTab]);
+
+  useEffect(() => {
+    if (currentPath === "/calculator" && calculatorMaterial === null) setCalculatorMaterial("");
+    if (currentPath !== "/calculator" && calculatorMaterial !== null) setCalculatorMaterial(null);
+  }, [calculatorMaterial, currentPath]);
 
   return (
     <div className="min-h-screen w-full bg-slate-100 flex sm:items-center justify-center text-slate-900">
@@ -629,33 +648,19 @@ function MainContent({
                 </button>
               </div>
 
-              <button
-                type="button"
-                aria-label="Калькулятор материалов"
-                onClick={() => setCalculatorMaterial('')}
-                className="mx-4 mb-6 flex w-[calc(100%-2rem)] items-center gap-4 rounded-2xl bg-gradient-to-r from-blue-50 to-blue-100 px-4 py-4 text-left shadow-sm ring-1 ring-blue-100 transition active:scale-[0.99]"
-              >
-                <span className="rounded-xl bg-white p-3 text-sky-600 shadow-sm">
-                  <Calculator className="h-6 w-6" />
-                </span>
-                <span>
-                  <span className="block text-sm font-black text-slate-900">Рассчитайте объём материала</span>
-                  <span className="mt-0.5 block text-sm text-slate-600">Не знаете, сколько заказать? Рассчитайте объём в калькуляторе</span>
-                </span>
-              </button>
-
               <div className="mx-4 mb-6">
                 <button
                   type="button"
-                  onClick={() => openSpecialCategory("/septics", "septic")}
-                  className="flex w-full items-center gap-4 rounded-2xl bg-sky-500 px-5 py-4 text-left text-white shadow-sm transition active:scale-[0.99] hover:bg-sky-600"
+                  aria-label="Калькулятор материалов"
+                  onClick={() => openCalculator()}
+                  className="flex w-full items-center gap-4 rounded-2xl bg-gradient-to-r from-blue-50 to-blue-100 px-4 py-4 text-left shadow-sm ring-1 ring-blue-100 transition active:scale-[0.99]"
                 >
-                  <span className="rounded-xl bg-white/20 p-3">
-                    <Droplets className="h-7 w-7" />
+                  <span className="rounded-xl bg-white p-3 text-sky-600 shadow-sm">
+                    <Calculator className="h-6 w-6" />
                   </span>
                   <span>
-                    <span className="block text-base font-black">Откачка септиков</span>
-                    <span className="mt-0.5 block text-sm text-sky-100">Выбрать исполнителя и позвонить</span>
+                    <span className="block text-sm font-black text-slate-900">Рассчитайте объём материала</span>
+                    <span className="mt-0.5 block text-sm text-slate-600">Не знаете, сколько заказать? Рассчитайте объём в калькуляторе</span>
                   </span>
                 </button>
               </div>
@@ -703,14 +708,14 @@ function MainContent({
                     ))}
                     <button
                       type="button"
-                      onClick={() => openSpecialCategory("/water", "water")}
+                      onClick={() => openServiceMap("/water")}
                       className="px-5 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all duration-200 bg-slate-50 text-slate-500 hover:bg-slate-100"
                     >
                       Вода
                     </button>
                     <button
                       type="button"
-                      onClick={() => openSpecialCategory("/septics", "septic")}
+                      onClick={() => openServiceMap("/septics")}
                       className="px-5 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all duration-200 bg-slate-50 text-slate-500 hover:bg-slate-100"
                     >
                       Септики
@@ -774,8 +779,7 @@ function MainContent({
               onOpenAuth={() => setShowAuthSheet(true)}
             />
           )}
-          {activeTab === "water" && <WaterMapScreen key={cityId} />}
-          {activeTab === "septic" && <SepticCatalogScreen key={cityId} />}
+          {activeTab === "water" && <WaterMapScreen initialTab={currentPath === "/septic" || currentPath === "/septics" ? "septic" : "water"} />}
 
           {activeTab === "profile" &&
             (role === "client" ? (
@@ -876,7 +880,7 @@ function MainContent({
 
         {/* Bottom Sheet */}
         <MaterialBottomSheet
-          onOpenCalculator={setCalculatorMaterial}
+          onOpenCalculator={openCalculator}
           material={selectedMaterial}
           pickupPoint={selectedPickupPoint}
           onClose={closeMaterialSheet}
@@ -894,9 +898,9 @@ function MainContent({
         {/* Auth Bottom Sheet */}
         {calculatorMaterial !== null && <BulkCalculatorScreen
           materialId={calculatorMaterial || undefined}
-          onClose={() => setCalculatorMaterial(null)}
+          onClose={closeCalculator}
           onGoToCatalog={() => {
-            setCalculatorMaterial(null);
+            closeCalculator();
             closeMaterialSheet();
             setMapMaterial(null);
             setActiveTab("home");
@@ -908,7 +912,7 @@ function MainContent({
               const material = await response.json();
               closeMaterialSheet();
               setMapMaterial(material);
-              setCalculatorMaterial(null);
+              closeCalculator();
             } catch { toast.error('Не удалось открыть выбор поставщика. Расчёт сохранён.'); }
           }}
         />}

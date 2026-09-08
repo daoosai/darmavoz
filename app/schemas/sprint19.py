@@ -55,6 +55,7 @@ class PhonePasswordResetComplete(PhonePasswordResetRequest):
 
 
 class WaterPointIn(BaseModel):
+    city_id: UUID | None = None
     water_type: Literal["free", "paid", "unknown"]
     name: str | None = Field(default=None, max_length=255)
     source: str = Field(min_length=1, max_length=255)
@@ -100,6 +101,7 @@ class WaterPointIn(BaseModel):
 
 
 class WaterPointOut(WaterPointIn):
+    city_id: UUID | None = None
     id: UUID
     owner_user_id: UUID | None = None
     moderation_status: str
@@ -117,6 +119,7 @@ class WaterPointOut(WaterPointIn):
 
 
 class SepticProfileIn(BaseModel):
+    city_id: UUID | None = None
     phone: str = Field(min_length=5, max_length=20)
     address: str = Field(min_length=1, max_length=2000)
     lat: float = Field(ge=-90, le=90)
@@ -136,6 +139,7 @@ class SepticMediaOut(BaseModel):
 
 
 class SepticProfileOut(SepticProfileIn):
+    city_id: UUID | None = None
     id: UUID
     owner_user_id: UUID | None = None
     moderation_status: str

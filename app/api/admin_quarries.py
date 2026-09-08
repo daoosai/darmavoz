@@ -1,3 +1,4 @@
+from app.services.cities import resolve_city, ensure_owner_city
 import logging
 from datetime import datetime, timezone
 from uuid import UUID
@@ -97,8 +98,13 @@ async def _apply_point_changes(
         payload_data["short_name"] = payload_data["name"]
     elif "short_name" in payload_data and not payload_data["short_name"]:
         payload_data["short_name"] = payload_data.get("name") or point.name
+    if "city_id" in payload_data:
+        city = await resolve_city(db, payload_data["city_id"], require_active=False)
+        await ensure_owner_city(db, point.owner_user_id, city.id)
+        payload_data["city_id"] = city.id
     changed = set(payload_data)
     for field in (
+        "city_id",
         "name",
         "short_name",
         "point_type",
@@ -150,11 +156,13 @@ async def list_pickup_points(
     point_type: str | None = None,
     material_id: UUID | None = None,
     search: str | None = Query(default=None, max_length=100),
+    city_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_logist_user),
 ) -> list[dict]:
     del current_user
-    stmt = select(Quarry)
+    city_filter = (Quarry.city_id == city_id) if city_id is not None else True
+    stmt = select(Quarry).where(city_filter)
     if moderation_status:
         if moderation_status == ModerationStatus.pending_moderation.value:
             stmt = stmt.where(
@@ -204,11 +212,13 @@ async def create_pickup_point(
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin_user),
 ) -> dict:
+    city = await resolve_city(db, payload.city_id, require_active=False)
     min_price = payload.min_delivery_price
     if min_price is None:
         min_price = default_min_delivery_price(payload.point_type)
     short_name = payload.short_name or payload.name
     point = Quarry(
+        city_id=city.id,
         name=payload.name,
         short_name=short_name,
         point_type=payload.point_type,

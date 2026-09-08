@@ -1,6 +1,6 @@
+import { currentCity, useCityStore } from './cityStore';
+import type { City } from './AdminCitiesScreen';
 const DGIS_KEY = import.meta.env.VITE_2GIS_KEY;
-const TYUMEN_CITY = "Тюмень";
-const TYUMEN_LOCATION = "65.534328,57.152286";
 const TWOGIS_SUGGEST_URL = "https://catalog.api.2gis.com/3.0/suggests";
 const TWOGIS_ADDRESS_SUGGEST_TYPES = [
   "building",
@@ -102,19 +102,20 @@ export const get2gisSuggestionCoordinates = (
   return {};
 };
 
-export const withTyumenBias = (address: string): string => {
+export const withCityBias = (address: string, city: City = currentCity()): string => {
   const normalized = address.trim();
   if (!normalized) {
     return "";
   }
-  if (normalized.toLowerCase().includes(TYUMEN_CITY.toLowerCase())) {
+  if (normalized.toLowerCase().includes(city.name.toLowerCase())) {
     return normalized;
   }
-  return `${TYUMEN_CITY} ${normalized}`;
+  return `${city.name}, ${city.region}, ${normalized}`;
 };
 
 export const fetch2gisAddressSuggestions = async (
   query: string,
+  city: City = currentCity(),
 ): Promise<any[]> => {
   const normalized = query.trim();
   if (normalized.length < 3) {
@@ -128,11 +129,11 @@ export const fetch2gisAddressSuggestions = async (
 
   const requestUrl = new URL(TWOGIS_SUGGEST_URL);
   requestUrl.search = new URLSearchParams({
-    q: normalized,
+    q: withCityBias(normalized, city),
     key: DGIS_KEY,
     type: TWOGIS_ADDRESS_SUGGEST_TYPES,
     fields: "items.point,items.address,items.adm_div,items.full_address_name",
-    location: TYUMEN_LOCATION,
+    location: `${city.center_lon},${city.center_lat}`,
     page_size: "20",
     locale: "ru_RU",
   }).toString();

@@ -1,3 +1,4 @@
+import ServiceCitiesPanel from './ServiceCitiesPanel';
 import React, { useState, useEffect, useMemo } from "react";
 import { useAdminModerationStore, useAuthStore } from "./store";
 import { baseURL, extractApiErrorMessage, handleApiError } from "./utils";
@@ -74,6 +75,8 @@ interface AdminMediaFile {
 }
 
 interface AdminMaterial {
+  calculator_enabled?: boolean;
+  bulk_density_t_m3?: number | null;
   id: string;
   category_id?: string | null;
   name: string;
@@ -1123,6 +1126,8 @@ export default function AdminDashboardScreen({
         description: editingMaterial.description || "",
         price: editingMaterial.is_free ? 0 : Number(editingMaterial.price),
         is_free: Boolean(editingMaterial.is_free),
+        calculator_enabled: Boolean(editingMaterial.calculator_enabled),
+        bulk_density_t_m3: editingMaterial.bulk_density_t_m3 ?? null,
         unit: editingMaterial.unit || "м3",
         min_volume: Number(editingMaterial.min_volume || 1),
         is_active: editingMaterial.is_active ?? true,
@@ -3563,6 +3568,8 @@ export default function AdminDashboardScreen({
                     </option>
                   ))}
                 </select>
+                <label className="flex gap-2"><input type="checkbox" checked={Boolean(editingMaterial.calculator_enabled)} onChange={(event) => setEditingMaterial({ ...editingMaterial, calculator_enabled: event.target.checked })} /> Доступен в калькуляторе</label>
+                <label>Плотность, т/м³ (необязательно)<input className="w-full rounded-xl border p-3" type="number" min="0.000001" step="any" value={editingMaterial.bulk_density_t_m3 ?? ''} onChange={(event) => setEditingMaterial({ ...editingMaterial, bulk_density_t_m3: event.target.value === '' ? null : Number(event.target.value) })} /></label>
               </div>
 
               <div className="flex flex-col gap-1.5">
@@ -3996,6 +4003,7 @@ export default function AdminDashboardScreen({
               onSubmit={handleSaveDriver}
               className="p-6 overflow-y-auto flex flex-col gap-5"
             >
+              {editingDriver.id && <ServiceCitiesPanel driverId={editingDriver.id} />}
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
                   ФИО

@@ -1,3 +1,4 @@
+import { cityFetch, currentCity } from './cityStore';
 import { Capacitor } from "@capacitor/core";
 import { Geolocation } from "@capacitor/geolocation";
 import { useEffect, useRef, useState } from "react";
@@ -38,7 +39,7 @@ interface UserLocation {
   lon: number;
 }
 
-const DEFAULT_MAP_CENTER: [number, number] = [65.534328, 57.152286];
+const DEFAULT_MAP_CENTER = (): [number, number] => [currentCity().center_lon, currentCity().center_lat];
 const SMART_CENTER_DISTANCE_KM = 100;
 
 const TYPE_LABELS: Record<GlobalPickupPoint["point_type"], string> = {
@@ -282,7 +283,7 @@ export default function GlobalMapScreen({
       setError(null);
 
       try {
-        const response = await fetch(`${baseURL}/catalog/pickup-points/global`, {
+        const response = await cityFetch(`${baseURL}/catalog/pickup-points/global`, {
           cache: "no-store",
         });
         if (!response.ok) {
@@ -376,8 +377,8 @@ export default function GlobalMapScreen({
         if (disposed || !mapContainerRef.current || mapRef.current) return;
         const mapInstance = tryCreate2GisMap(
           () => new mapgl.Map(mapContainerRef.current, {
-            center: DEFAULT_MAP_CENTER,
-            zoom: 10,
+            center: DEFAULT_MAP_CENTER(),
+            zoom: currentCity().map_zoom,
             key,
           }),
           () => setIsMapUnavailable(true),

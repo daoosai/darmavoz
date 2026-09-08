@@ -39,6 +39,7 @@ def normalize_parser_keyword(value: str) -> str:
 
 
 class ParserRunRequest(BaseModel):
+    city_id: UUID | None = None
     city: str = Field(min_length=1, max_length=200)
     center_lat: float = Field(ge=-90, le=90)
     center_lon: float = Field(ge=-180, le=180)

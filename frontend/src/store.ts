@@ -32,6 +32,8 @@ export interface CartItem {
 }
 
 export interface ClientOrderSummary {
+  city_id?: string | null;
+  city_name?: string | null;
   id: string;
   status: string;
   address?: string | null;
@@ -96,6 +98,9 @@ interface ClientOrdersState {
 }
 
 interface CartState {
+  cartCityId: string;
+  cityCarts: Record<string, CartItem[]>;
+  switchCityCart: (cityId: string, isLegacyCity: boolean) => void;
   cartItems: CartItem[];
   addToCart: (
     material: MaterialProps,
@@ -279,6 +284,17 @@ export const useAdminModerationStore = create<AdminModerationState>((set) => ({
 
 export const useCartStore = create<CartState>()(
   persist((set, get) => ({
+  cartCityId: 'legacy:tyumen',
+  cityCarts: {},
+  switchCityCart: (cityId, isLegacyCity) => set((state) => {
+    if (state.cartCityId === cityId) return state;
+    const cityCarts = { ...state.cityCarts, [state.cartCityId]: state.cartItems };
+    if (isLegacyCity && cityCarts['legacy:tyumen']) {
+      cityCarts[cityId] = [...(cityCarts[cityId] || []), ...cityCarts['legacy:tyumen']];
+      cityCarts['legacy:tyumen'] = [];
+    }
+    return { cityCarts, cartCityId: cityId, cartItems: cityCarts[cityId] || [] };
+  }),
   cartItems: [],
   addToCart: (
     material,
@@ -415,5 +431,7 @@ export const useCartStore = create<CartState>()(
   },
   }), {
     name: "cart-storage",
+    version: 1,
+    migrate: (persisted: any) => ({ ...persisted, cartCityId: 'legacy:tyumen', cityCarts: {} }),
   })
 );

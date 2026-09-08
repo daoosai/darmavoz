@@ -1,3 +1,4 @@
+import ServiceCitiesPanel from './ServiceCitiesPanel';
 import React, { useState, useEffect } from "react";
 import { useAuthStore } from "./store";
 import {
@@ -538,6 +539,7 @@ export default function DriverProfileScreen({
       <div className="flex-1 flex flex-col gap-4 p-5 pb-6">
         <UpdateBanner />
 
+        <ServiceCitiesPanel />
         {moderationStatus === "approved" && !isDriverInactive && (
           <div className="flex flex-col gap-2">
             <div className="flex gap-1 rounded-xl border border-slate-100 bg-white p-1 shadow-sm">

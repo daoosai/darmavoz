@@ -58,6 +58,8 @@ class CategoryUpdate(BaseModel):
 
 
 class MaterialCreate(BaseModel):
+    calculator_enabled: bool = True
+    bulk_density_t_m3: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     name: str
     description: str | None = None
     price: float | None = None
@@ -71,6 +73,8 @@ class MaterialCreate(BaseModel):
 
 
 class MaterialUpdate(BaseModel):
+    calculator_enabled: bool | None = None
+    bulk_density_t_m3: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     name: str | None = None
     description: str | None = None
     price: float | None = None
@@ -107,6 +111,8 @@ class DeliveryOptionOut(BaseModel):
 
 
 class MaterialOut(BaseModel):
+    calculator_enabled: bool = True
+    bulk_density_t_m3: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     id: UUID
     name: str
     description: str | None = None

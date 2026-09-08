@@ -1,3 +1,4 @@
+from app.services.cities import initialize_service_cities
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -6,6 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.cities import resolve_city, ensure_owner_city
+from app.services.cities import resolve_city, ensure_same_city
 from app.db.database import get_db
 from app.models.models import Client, MediaFile, Quarry, Role, SepticProviderProfile, SpecialEquipmentListing, User, UserNotification, WaterPoint
 from app.schemas.sprint19 import ConfirmationRequest, NotificationOut, SepticMediaOut, SepticProfileIn, SepticProfileOut
@@ -91,8 +94,9 @@ async def _hard_delete_septic_profile(
 
 
 @router.get("/septic-providers", response_model=list[SepticProfileOut])
-async def list_septic_providers(db: AsyncSession = Depends(get_db)):
-    stmt = select(SepticProviderProfile).where(SepticProviderProfile.moderation_status == "approved", SepticProviderProfile.is_active.is_(True), SepticProviderProfile.is_deleted.is_(False))
+async def list_septic_providers(city_id: UUID | None = None, db: AsyncSession = Depends(get_db)):
+    selected_city = await resolve_city(db, city_id)
+    stmt = select(SepticProviderProfile).where(SepticProviderProfile.city_id == selected_city.id).where(SepticProviderProfile.moderation_status == "approved", SepticProviderProfile.is_active.is_(True), SepticProviderProfile.is_deleted.is_(False))
     profiles = (await db.execute(stmt.order_by(SepticProviderProfile.created_at.desc()))).scalars().all()
     return await _serialize_septic_profiles(list(profiles), db)
 
@@ -101,11 +105,13 @@ async def list_septic_providers(db: AsyncSession = Depends(get_db)):
 async def list_septic_providers_for_moderation(
     moderation_status: str | None = None,
     status: str | None = None,
+    city_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_logist_user),
 ):
     del current_user
-    stmt = select(SepticProviderProfile).where(SepticProviderProfile.is_deleted.is_(False))
+    city_filter = (SepticProviderProfile.city_id == city_id) if city_id is not None else True
+    stmt = select(SepticProviderProfile).where(city_filter).where(SepticProviderProfile.is_deleted.is_(False))
     selected_status = moderation_status or status
     if selected_status and selected_status.lower() not in {"all", "все"}:
         stmt = stmt.where(SepticProviderProfile.moderation_status == selected_status)
@@ -119,6 +125,9 @@ async def create_septic_provider_by_admin(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_logist_user),
 ):
+    selected_city = await resolve_city(db, payload.city_id, require_active=False)
+    await initialize_service_cities(db, user_id=current_user.id, city_ids=[selected_city.id], require_active=False)
+    payload.city_id = selected_city.id
     profile = SepticProviderProfile(
         **payload.model_dump(),
         owner_user_id=current_user.id,
@@ -156,6 +165,9 @@ async def create_septic_profile(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_water_septic_partner_user),
 ):
+    selected_city = await resolve_city(db, payload.city_id, require_active=False)
+    await ensure_owner_city(db, current_user.id, selected_city.id)
+    payload.city_id = selected_city.id
     profile = SepticProviderProfile(
         **payload.model_dump(),
         owner_user_id=current_user.id,
@@ -182,6 +194,9 @@ async def update_septic_profile(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_water_septic_partner_user),
 ):
+    selected_city = await resolve_city(db, payload.city_id, require_active=False)
+    await ensure_owner_city(db, current_user.id, selected_city.id)
+    payload.city_id = selected_city.id
     profile = await db.scalar(
         select(SepticProviderProfile).where(
             SepticProviderProfile.id == profile_id,
@@ -257,6 +272,9 @@ async def get_septic_profile(db: AsyncSession = Depends(get_db), current_user: U
 
 @water_septic_partner_router.put("/septic-profile", response_model=SepticProfileOut)
 async def upsert_septic_profile(payload: SepticProfileIn, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_water_septic_partner_user)):
+    selected_city = await resolve_city(db, payload.city_id, require_active=False)
+    await ensure_owner_city(db, current_user.id, selected_city.id)
+    payload.city_id = selected_city.id
     profile = await db.scalar(select(SepticProviderProfile).where(SepticProviderProfile.owner_user_id == current_user.id))
     if profile is None:
         profile = SepticProviderProfile(**payload.model_dump(), owner_user_id=current_user.id, moderation_status="pending_moderation")
@@ -300,6 +318,10 @@ async def update_septic_provider_by_admin(
     profile = await db.get(SepticProviderProfile, profile_id)
     if profile is None or profile.is_deleted:
         raise HTTPException(status_code=404, detail="Профиль септика не найден")
+
+    selected_city = await resolve_city(db, payload.city_id if "city_id" in payload.model_fields_set else profile.city_id, require_active=False)
+    await ensure_owner_city(db, profile.owner_user_id, selected_city.id)
+    payload.city_id = selected_city.id
 
     for field, value in payload.model_dump().items():
         setattr(profile, field, value)

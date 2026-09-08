@@ -1,3 +1,4 @@
+import RegistrationCitiesField from './RegistrationCitiesField';
 import React, { useState } from "react";
 import { ArrowLeft, Eye, EyeOff, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -21,6 +22,7 @@ export default function DriverRegistrationScreen({
   onRegister,
   onBack,
 }: DriverRegistrationScreenProps) {
+  const [registrationCities, setRegistrationCities] = useState<string[]>([]);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
@@ -42,6 +44,7 @@ export default function DriverRegistrationScreen({
   const normalizePhoneValue = (value: string) => value.replace(/[^\d+]/g, "");
 
   const buildPayload = () => ({
+    city_ids: registrationCities,
     name: name.trim(),
     phone: normalizePhoneValue(phone),
     password,
@@ -148,7 +151,7 @@ export default function DriverRegistrationScreen({
       const response = await fetch(`${baseURL}/driver/auth/verify-register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: normalizePhoneValue(otpPhone), code }),
+        body: JSON.stringify({ city_ids: registrationCities, phone: normalizePhoneValue(otpPhone), code }),
       });
       const data = await response.json().catch(() => ({}));
 
@@ -209,6 +212,7 @@ export default function DriverRegistrationScreen({
           />
         ) : (
           <form onSubmit={handleSubmit} className="w-full max-w-sm flex flex-col space-y-4">
+        <RegistrationCitiesField value={registrationCities} onChange={setRegistrationCities} />
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">
                 ФИО

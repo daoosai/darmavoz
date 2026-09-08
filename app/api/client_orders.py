@@ -41,6 +41,7 @@ async def calculate_order(
     pricing_options = await calculate_client_order_options(
         db,
         material_id=payload.material_id,
+        city_id=payload.city_id,
         delivery_option_id=payload.delivery_option_id,
         delivery_lat=payload.delivery_lat,
         delivery_lon=payload.delivery_lon,
@@ -69,6 +70,7 @@ async def checkout_order(
         db,
         client_id=current_client.id if current_client is not None else payload.client_id,
         material_id=payload.material_id,
+        city_id=payload.city_id,
         delivery_option_id=payload.delivery_option_id,
         delivery_address=payload.delivery_address,
         notes=payload.notes,

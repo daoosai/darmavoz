@@ -3,16 +3,18 @@ from typing import Any
 
 import logging
 import httpx
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from uuid import UUID
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.db.database import get_db
+from app.models.models import City
+from app.services.cities import resolve_city
 
 from app.core.config import settings
 
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-TYUMEN_CITY_NAME = "Тюмень"
-TYUMEN_LOCATION = "65.534328,57.152286"
-TYUMEN_BOUND = "65.10,56.95,65.95,57.45"
 GEOCODE_FALLBACK_ERROR_MESSAGE = "Не удалось рассчитать маршрут. Проверьте адрес доставки."
 
 
@@ -35,11 +37,11 @@ def _extract_2gis_error(payload: dict[str, Any]) -> str | None:
     return None
 
 
-def _prepare_tyumen_address(address: str) -> str:
+def _prepare_city_address(address: str, city: City) -> str:
     normalized = address.strip()
-    if TYUMEN_CITY_NAME.casefold() in normalized.casefold():
+    if city.name.casefold() in normalized.casefold():
         return normalized
-    return f"{TYUMEN_CITY_NAME} {normalized}"
+    return f"{city.name}, {city.region}, {normalized}"
 
 
 def _parse_coordinate(value: Any) -> float | None:
@@ -50,13 +52,13 @@ def _parse_coordinate(value: Any) -> float | None:
     return parsed if isfinite(parsed) else None
 
 
-async def _fallback_geocode(address: str) -> dict[str, float]:
+async def _fallback_geocode(address: str, city: City) -> dict[str, float]:
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.get(
                 "https://nominatim.openstreetmap.org/search",
                 params={
-                    "q": _prepare_tyumen_address(address),
+                    "q": _prepare_city_address(address, city),
                     "format": "jsonv2",
                     "limit": 1,
                     "addressdetails": 0,
@@ -169,42 +171,41 @@ def _collect_route_geometry(route: dict[str, Any]) -> list[dict[str, float]]:
 @router.get("/geocode")
 async def geocode_address(
     address: str = Query(..., min_length=1, max_length=500),
+    city_id: UUID | None = None,
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, float]:
+    city = await resolve_city(db, city_id)
     if not settings.TWOGIS_API_KEY:
         logger.warning("2GIS key is not configured, using fallback geocoder")
-        return await _fallback_geocode(address)
+        return await _fallback_geocode(address, city)
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.get(
                 "https://catalog.api.2gis.com/3.0/items/geocode",
                 params={
-                    "q": _prepare_tyumen_address(address),
+                    "q": _prepare_city_address(address, city),
                     "fields": "items.point",
-                    "location": TYUMEN_LOCATION,
-                    "radius": 40000,
-                    "bound": TYUMEN_BOUND,
+                    "location": f"{city.center_lon},{city.center_lat}",
+                    "bound": f"{city.min_lon},{city.min_lat},{city.max_lon},{city.max_lat}",
                     "key": settings.TWOGIS_API_KEY,
                 },
             )
             response.raise_for_status()
     except httpx.HTTPError as exc:
         logger.warning("2GIS geocoder is unavailable, using fallback geocoder: %s", exc)
-        return await _fallback_geocode(address)
+        return await _fallback_geocode(address, city)
 
     try:
         data = response.json()
         geocoder_error = _extract_2gis_error(data)
         if geocoder_error:
             logger.warning("2GIS geocoder returned business error, using fallback geocoder: %s", geocoder_error)
-            return await _fallback_geocode(address)
+            return await _fallback_geocode(address, city)
 
         items = data["result"]["items"]
         if not items:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Address not found",
-            )
+            return await _fallback_geocode(address, city)
 
         point = items[0]["point"]
         return {
@@ -215,7 +216,7 @@ async def geocode_address(
         raise
     except (KeyError, ValueError, TypeError, IndexError) as exc:
         logger.warning("Invalid 2GIS geocoder response, using fallback geocoder: %s", exc)
-        return await _fallback_geocode(address)
+        return await _fallback_geocode(address, city)
 
 
 @router.get("/route-distance")

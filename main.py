@@ -131,6 +131,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from app.api import cities
+from app.api import service_cities
+app.include_router(service_cities.router, prefix="/api/v1", tags=["service-cities"])
+app.include_router(cities.router, prefix="/api/v1", tags=["cities"])
+app.include_router(cities.admin_router, prefix="/api/v1/admin", tags=["admin-cities"])
+
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(auth.driver_auth_router, tags=["driver-auth"])
 app.include_router(client_auth.router, prefix="/api/v1/auth", tags=["client-auth"])

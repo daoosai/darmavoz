@@ -11,6 +11,7 @@ from sqlalchemy.future import select
 from sqlalchemy import func
 from sqlalchemy.orm import selectinload
 
+from app.services.cities import initialize_service_cities
 from app.db.database import get_db
 from app.models.models import Client, Driver, ModerationStatus, Role, User, Vehicle
 from app.schemas.email_auth import (
@@ -385,6 +386,8 @@ async def _create_driver_from_payload(
         moderation_status=ModerationStatus.incomplete.value,
     )
     db.add(driver)
+    await db.flush()
+    await initialize_service_cities(db, user_id=user.id, driver_id=driver.id, city_ids=payload.city_ids)
     await db.commit()
 
     result = await db.execute(

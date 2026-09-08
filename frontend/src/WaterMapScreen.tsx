@@ -1,3 +1,4 @@
+import { cityFetch, currentCity } from './cityStore';
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Droplets, List, Map, MapPin, Phone, X } from "lucide-react";
 
@@ -29,7 +30,7 @@ interface WaterPoint {
   is_ready: boolean;
 }
 
-const DEFAULT_CENTER: [number, number] = [65.534328, 57.152286];
+const DEFAULT_CENTER = (): [number, number] => [currentCity().center_lon, currentCity().center_lat];
 
 const isFreePoint = (point: WaterPoint) =>
   point.is_free === true || point.water_type === "free" || Number(point.price) === 0;
@@ -67,7 +68,7 @@ export default function WaterMapScreen() {
   useEffect(() => {
     let disposed = false;
     setLoading(true);
-    void fetch(`${baseURL}/water-points/map${filter ? `?water_type=${filter}` : ""}`, {
+    void cityFetch(`${baseURL}/water-points/map${filter ? `?water_type=${filter}` : ""}`, {
       cache: "no-store",
     })
       .then(async (response) => {
@@ -100,7 +101,7 @@ export default function WaterMapScreen() {
       .then((mapgl) => {
         if (disposed || !mapContainerRef.current || mapRef.current) return;
         const map = tryCreate2GisMap(
-          () => new mapgl.Map(mapContainerRef.current, { center: DEFAULT_CENTER, zoom: 10, key }),
+          () => new mapgl.Map(mapContainerRef.current, { center: DEFAULT_CENTER(), zoom: currentCity().map_zoom, key }),
           () => setMapUnavailable(true),
         );
         if (!map || disposed) {

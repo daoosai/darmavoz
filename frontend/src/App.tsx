@@ -15,6 +15,9 @@ import {
   X,
 } from "lucide-react";
 import { MaterialProps } from "./MaterialDetailScreen";
+import BulkCalculatorScreen from './BulkCalculatorScreen';
+import CityBoundary, { CitySelector } from './CityBoundary';
+import { useCityStore } from './cityStore';
 import OrdersScreen from "./OrdersScreen";
 import WelcomeScreen from "./WelcomeScreen";
 import PrivacyPolicyScreen from "./PrivacyPolicyScreen";
@@ -25,7 +28,7 @@ import ProfileScreen from "./ProfileScreen";
 import MaterialBottomSheet from "./MaterialBottomSheet";
 import UpdateBanner from "./UpdateBanner";
 
-import { Toaster } from "react-hot-toast";
+import toast, { Toaster } from "react-hot-toast";
 
 interface Category {
   id: string;
@@ -63,6 +66,8 @@ const WATER_PARTNER_BOARD_PATH = "/water-partner-board";
 
 // Reuse Material type as MaterialProps by exporting it from MaterialDetailScreen or type matching
 export default function App() {
+  const refreshCities = useCityStore((state) => state.refresh);
+  useEffect(() => { void refreshCities(); }, [refreshCities]);
   usePushNotifications();
   const [currentPath, setCurrentPath] = useState(
     typeof window !== "undefined" ? window.location.pathname : "/",
@@ -336,7 +341,7 @@ export default function App() {
     }
 
     return (
-      <MainContent
+      <CityBoundary><MainContent
         currentRoute={currentRoute}
         setCurrentRoute={setCurrentRoute}
         activeTab={activeTab}
@@ -359,7 +364,7 @@ export default function App() {
         onClearFocusedOrder={clearFocusedClientOrder}
         currentPath={currentPath}
         setCurrentPath={setCurrentPath}
-      />
+      /></CityBoundary>
     );
   };
 
@@ -424,12 +429,23 @@ function MainContent({
   ];
 
   const [showAddressSheet, setShowAddressSheet] = useState(false);
+  const [calculatorMaterial, setCalculatorMaterial] = useState<string | null>(null);
+  const { cityId, cities } = useCityStore();
+  const city = cities.find((item) => item.id === cityId);
+  const [showCitySelector, setShowCitySelector] = useState(false);
   const [serviceDirection, setServiceDirection] = useState<"delivery" | "equipment">("delivery");
   const [mapMaterial, setMapMaterial] = useState<MaterialProps | null>(null);
   const [materialActionChoice, setMaterialActionChoice] = useState<MaterialProps | null>(null);
   const [quickBuyMaterial, setQuickBuyMaterial] = useState<MaterialProps | null>(null);
   const [selectedPickupPoint, setSelectedPickupPoint] =
     useState<PickupPointSelection | null>(null);
+  useEffect(() => {
+    setSelectedMaterial(null);
+    setSelectedPickupPoint(null);
+    setMapMaterial(null);
+    setMaterialActionChoice(null);
+    setQuickBuyMaterial(null);
+  }, [cityId, setSelectedMaterial]);
 
   const handleCartClick = () => {
     setActiveTab("cart");
@@ -544,6 +560,8 @@ function MainContent({
       <div className="w-full max-w-md bg-white min-h-screen sm:min-h-0 sm:h-[85vh] relative shadow-2xl flex flex-col overflow-hidden sm:rounded-[32px] sm:border-8 border-slate-900">
         {/* Main Content Area */}
         <main className="flex h-full flex-1 flex-col overflow-y-auto pb-[calc(90px+env(safe-area-inset-bottom))] pt-4">
+          <button className="mx-4 my-2 text-left font-semibold text-sky-700" onClick={() => setShowCitySelector(true)}>Город: {city?.name}</button>
+          {showCitySelector && <CitySelector onClose={() => setShowCitySelector(false)} />}
           {activeTab === "home" && (
             <>
               <div className="px-4">
@@ -551,6 +569,7 @@ function MainContent({
               </div>
 
               {/* Top Address Button */}
+              <button className="mx-4 mb-3 rounded-xl bg-sky-50 p-3 text-sky-700" onClick={() => setCalculatorMaterial('')}>Калькулятор материалов</button>
               <div className="mb-4 px-4 pt-[calc(env(safe-area-inset-top,0px)+0.25rem)]">
                 <button
                   onClick={() => {
@@ -723,8 +742,8 @@ function MainContent({
               onOpenAuth={() => setShowAuthSheet(true)}
             />
           )}
-          {activeTab === "water" && <WaterMapScreen />}
-          {activeTab === "septic" && <SepticCatalogScreen />}
+          {activeTab === "water" && <WaterMapScreen key={cityId} />}
+          {activeTab === "septic" && <SepticCatalogScreen key={cityId} />}
 
           {activeTab === "profile" &&
             (role === "client" ? (
@@ -825,6 +844,7 @@ function MainContent({
 
         {/* Bottom Sheet */}
         <MaterialBottomSheet
+          onOpenCalculator={setCalculatorMaterial}
           material={selectedMaterial}
           pickupPoint={selectedPickupPoint}
           onClose={closeMaterialSheet}
@@ -840,6 +860,20 @@ function MainContent({
         )}
 
         {/* Auth Bottom Sheet */}
+        {calculatorMaterial !== null && <BulkCalculatorScreen
+          materialId={calculatorMaterial || undefined}
+          onClose={() => setCalculatorMaterial(null)}
+          onChooseSupplier={async (id) => {
+            try {
+              const response = await fetch(`${baseURL}/catalog/materials/${id}`);
+              if (!response.ok) throw new Error('Материал недоступен');
+              const material = await response.json();
+              closeMaterialSheet();
+              setMapMaterial(material);
+              setCalculatorMaterial(null);
+            } catch { toast.error('Не удалось открыть выбор поставщика. Расчёт сохранён.'); }
+          }}
+        />}
         <ClientAuthBottomSheet
           isOpen={showAuthSheet}
           onClose={() => setShowAuthSheet(false)}

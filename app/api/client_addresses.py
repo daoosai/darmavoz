@@ -1,3 +1,4 @@
+from app.services.cities import resolve_city, ensure_same_city
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -34,7 +35,7 @@ async def _set_default_address(db: AsyncSession, *, current_client_id: UUID, add
     existing_addresses = list(
         (
             await db.execute(
-                select(ClientAddress).where(ClientAddress.client_id == current_client_id)
+                select(ClientAddress).where(ClientAddress.client_id == current_client_id, ClientAddress.city_id == address.city_id)
             )
         ).scalars().all()
     )
@@ -49,11 +50,13 @@ async def _set_default_address(db: AsyncSession, *, current_client_id: UUID, add
 @router.get("/", response_model=list[ClientAddressOut], include_in_schema=False)
 async def list_client_addresses(
     current_client: Client = Depends(get_current_client),
+    city_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> list[ClientAddress]:
+    city = await resolve_city(db, city_id)
     result = await db.execute(
         select(ClientAddress)
-        .where(ClientAddress.client_id == current_client.id)
+        .where(ClientAddress.client_id == current_client.id, ClientAddress.city_id == city.id)
         .order_by(ClientAddress.is_default.desc(), ClientAddress.created_at.desc())
     )
     return list(result.scalars().all())
@@ -66,10 +69,11 @@ async def create_client_address(
     current_client: Client = Depends(get_current_client),
     db: AsyncSession = Depends(get_db),
 ) -> ClientAddress:
+    city = await resolve_city(db, payload.city_id)
     existing_addresses = list(
         (
             await db.execute(
-                select(ClientAddress).where(ClientAddress.client_id == current_client.id)
+                select(ClientAddress).where(ClientAddress.client_id == current_client.id, ClientAddress.city_id == city.id)
             )
         ).scalars().all()
     )
@@ -80,6 +84,7 @@ async def create_client_address(
             existing.is_default = False
 
     address = ClientAddress(
+        city_id=city.id,
         client_id=current_client.id,
         full_address=payload.full_address,
         comment=payload.comment,
@@ -100,11 +105,13 @@ async def update_client_address(
     current_client: Client = Depends(get_current_client),
     db: AsyncSession = Depends(get_db),
 ) -> ClientAddress:
+    city = await resolve_city(db, payload.city_id)
     address = await _get_client_address_or_404(
         db,
         address_id=address_id,
         client_id=current_client.id,
     )
+    ensure_same_city(city.id, address)
     address.full_address = payload.full_address
     address.comment = payload.comment
     address.lat = payload.lat
@@ -148,7 +155,7 @@ async def delete_client_address(
     if was_default:
         next_address = await db.scalar(
             select(ClientAddress)
-            .where(ClientAddress.client_id == current_client.id)
+            .where(ClientAddress.client_id == current_client.id, ClientAddress.city_id == address.city_id)
             .order_by(ClientAddress.created_at.asc())
             .limit(1)
         )

@@ -44,11 +44,12 @@ logger = logging.getLogger(__name__)
 
 @router.get("/driver-map", response_model=list[DriverMapResponse])
 async def get_driver_map(
+    city_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_logist_user),
 ) -> list[DriverMapResponse]:
     del current_user
-    return await list_driver_map(db)
+    return await list_driver_map(db, city_id=city_id)
 
 
 @router.post("/me/fcm-token", response_model=ClientFcmTokenOut)
@@ -101,6 +102,7 @@ async def create_order_by_logist(
 
 @router.get("/orders", response_model=list[OrderOut])
 async def list_logist_orders(
+    city_id: UUID | None = None,
     driver_id: UUID | None = None,
     date: date_type | None = None,
     is_deleted: bool = False,
@@ -110,7 +112,7 @@ async def list_logist_orders(
 ) -> list[Order]:
     del current_user
     deleted_filter = show_deleted if show_deleted is not None else is_deleted
-    return await list_recent_orders(db, driver_id=driver_id, created_on=date, is_deleted=deleted_filter)
+    return await list_recent_orders(db, city_id=city_id, driver_id=driver_id, created_on=date, is_deleted=deleted_filter)
 
 
 @router.get("/orders/{order_id}", response_model=OrderOut)

@@ -11,6 +11,21 @@ from app.schemas.catalog import CategoryOut, DeliveryOptionOut, MaterialOut
 router = APIRouter()
 
 
+from app.schemas.calculator import CalculatorReferences
+
+
+@router.get("/calculator/", response_model=CalculatorReferences)
+async def calculator_references(db: AsyncSession = Depends(get_db)):
+    materials = (await db.scalars(select(Material).where(
+        Material.is_active.is_(True), Material.calculator_enabled.is_(True)
+    ).order_by(Material.sort_order, Material.name))).all()
+    options = (await db.scalars(select(DeliveryOption).where(
+        DeliveryOption.is_active.is_(True), DeliveryOption.capacity_m3 > 0,
+        DeliveryOption.capacity_m3 < float("inf"),
+    ).order_by(DeliveryOption.sort_order, DeliveryOption.capacity_m3))).all()
+    return {"materials": materials, "delivery_options": options}
+
+
 async def _get_active_delivery_options(db: AsyncSession) -> list[DeliveryOption]:
     result = await db.execute(
         select(DeliveryOption)

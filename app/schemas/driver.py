@@ -71,6 +71,7 @@ class DriverCreate(BaseModel):
 
 
 class AdminDriverCreate(BaseModel):
+    city_ids: list[UUID] | None = Field(default=None, min_length=1)
     name: str
     phone: str
     password: str
@@ -128,6 +129,7 @@ class AdminDriverUpdate(BaseModel):
 
 
 class DriverRegisterRequest(BaseModel):
+    city_ids: list[UUID] | None = Field(default=None, min_length=1)
     phone: str
     password: str
     name: str | None = None
@@ -207,6 +209,7 @@ class DriverFcmTokenOut(BaseModel):
 
 
 class DriverResponse(BaseModel):
+    city_ids: list[UUID] = Field(default_factory=list)
     id: UUID
     name: str
     phone: str

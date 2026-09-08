@@ -1,3 +1,4 @@
+from app.api.service_cities import set_service_cities, ServiceCitiesIn
 import logging
 from uuid import UUID
 
@@ -5,6 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.cities import resolve_city, ensure_owner_city
 from app.db.database import get_db
 from app.models.models import ModerationStatus, Quarry, User
 from app.schemas.client import ClientFcmTokenIn, ClientFcmTokenOut
@@ -126,6 +128,7 @@ async def _apply_supplier_point_patch(
 
     changed = set(payload_data)
     for field in (
+        "city_id",
         "name",
         "short_name",
         "point_type",
@@ -182,6 +185,7 @@ async def get_supplier_profile(
     current_user: User = Depends(get_current_supplier_user),
 ) -> SupplierProfileOut:
     return SupplierProfileOut(
+        city_ids=current_user.city_ids,
         phone=_supplier_phone_value(current_user),
         email=current_user.email,
         display_name=current_user.display_name,
@@ -194,10 +198,14 @@ async def update_supplier_profile(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_supplier_user),
 ) -> SupplierProfileOut:
-    current_user.display_name = payload.display_name
+    if payload.city_ids is not None:
+        await set_service_cities(db, current_user, ServiceCitiesIn(city_ids=payload.city_ids))
+    if "display_name" in payload.model_fields_set:
+        current_user.display_name = payload.display_name
     await db.commit()
     await db.refresh(current_user)
     return SupplierProfileOut(
+        city_ids=current_user.city_ids,
         phone=_supplier_phone_value(current_user),
         email=current_user.email,
         display_name=current_user.display_name,
@@ -265,11 +273,15 @@ async def create_supplier_point(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_supplier_user),
 ) -> dict:
+    selected_city = await resolve_city(db, payload.city_id, require_active=False)
+    await ensure_owner_city(db, current_user.id, selected_city.id)
+    payload.city_id = selected_city.id
     _validate_supplier_display_name(current_user)
     if payload.point_type not in SUPPLIER_POINT_TYPES:
         raise HTTPException(status_code=422, detail="Suppliers may create only quarry or accumulator points")
     short_name = payload.short_name or payload.name
     point = Quarry(
+        city_id=payload.city_id,
         name=payload.name,
         short_name=short_name,
         point_type=payload.point_type,
@@ -331,6 +343,10 @@ async def update_supplier_point(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_supplier_user),
 ) -> dict:
+    if "city_id" in payload.model_fields_set:
+        selected_city = await resolve_city(db, payload.city_id, require_active=False)
+        await ensure_owner_city(db, current_user.id, selected_city.id)
+        payload.city_id = selected_city.id
     point = await _owned_point(db, current_user, point_id)
     previous_status = point.moderation_status
     if payload.point_type is not None and payload.point_type not in SUPPLIER_POINT_TYPES:

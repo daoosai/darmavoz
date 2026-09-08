@@ -133,13 +133,17 @@ async def _load_cached_locations(driver_ids: list[UUID]) -> dict[UUID, tuple[flo
     return locations
 
 
-async def list_driver_map(db: AsyncSession) -> list[DriverMapResponse]:
+async def list_driver_map(db: AsyncSession, city_id: UUID | None = None) -> list[DriverMapResponse]:
+    from app.services.cities import driver_city_clause, resolve_city
+    if city_id is not None:
+        await resolve_city(db, city_id, require_active=False)
     result = await db.execute(
         select(Driver)
         .join(Driver.user)
         .join(Driver.vehicle)
         .where(User.is_active.is_(True))
         .where(Driver.is_active.is_(True))
+        .where(driver_city_clause(city_id) if city_id is not None else True)
         .where(Driver.moderation_status == ModerationStatus.approved.value)
         .where(Vehicle.is_active.is_(True))
         .where(Vehicle.moderation_status == ModerationStatus.approved.value)

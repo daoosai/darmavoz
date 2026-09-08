@@ -4,6 +4,7 @@ import { LogOut } from "lucide-react";
 import { baseURL, handleApiError } from "./utils";
 import { useAuthStore } from "./store";
 import DeleteAccountButton from "./components/shared/DeleteAccountButton";
+import AdminCitiesScreen from './AdminCitiesScreen';
 
 interface AdminProfileScreenProps {
   onLogout: () => void;
@@ -13,6 +14,7 @@ export default function AdminProfileScreen({
   onLogout,
 }: AdminProfileScreenProps) {
   const [email, setEmail] = useState("");
+  const [showCities, setShowCities] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const token = useAuthStore((state) => state.token);
@@ -76,6 +78,8 @@ export default function AdminProfileScreen({
 
   return (
     <div className="max-w-md mx-auto w-full p-4 flex flex-col gap-6 relative">
+      <button className="rounded-xl bg-sky-50 p-3 text-sky-700" onClick={() => setShowCities(true)}>Управление городами</button>
+      {showCities && <AdminCitiesScreen onClose={() => setShowCities(false)} />}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
         <div className="p-6">
           <h2 className="text-xl font-bold text-slate-800 mb-6">Профиль</h2>

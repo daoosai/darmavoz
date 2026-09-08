@@ -190,6 +190,7 @@ function OrderCard({
           {order.address}
         </p>
       ) : null}
+      {order.city_name && <p className="mt-2 text-xs text-slate-500">Город: {order.city_name}</p>}
       <p className="mt-4 text-xs text-slate-400">Создан: {formatDateTime(order.created_at)}</p>
       {onCancel && cancellableClientOrderStatuses.has(status) ? <button type="button" onClick={() => onCancel(order)} className="mt-4 w-full rounded-xl border border-red-200 py-3 text-sm font-bold text-red-600">Отменить заказ</button> : null}
     </motion.article>

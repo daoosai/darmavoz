@@ -1,3 +1,4 @@
+import ServiceCityField from './ServiceCityField';
 import { type FormEvent, useEffect, useState } from "react";
 import { AlertCircle, Edit2, ImageIcon, Loader2, Plus, Trash2, UploadCloud, X } from "lucide-react";
 import toast from "react-hot-toast";
@@ -126,6 +127,7 @@ export default function SupplierEquipmentScreen({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [serviceCityId, setServiceCityId] = useState('');
   const [form, setForm] = useState<EquipmentForm>(EMPTY_FORM);
   const [pendingPhotos, setPendingPhotos] = useState<PendingPhotoItem[]>([]);
   const [isCompressingPhotos, setIsCompressingPhotos] = useState(false);
@@ -159,6 +161,7 @@ export default function SupplierEquipmentScreen({
     setForm(EMPTY_FORM);
   };
 
+  useEffect(() => { setServiceCityId((listings.find((item) => item.id === form.id) as any)?.city_id || ''); }, [form.id]);
   useEffect(() => {
     return () => {
       pendingPhotos.forEach((item) => URL.revokeObjectURL(item.previewUrl));
@@ -404,6 +407,7 @@ export default function SupplierEquipmentScreen({
         method: form.id ? "PATCH" : "POST",
         headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify({
+          city_id: serviceCityId,
           equipment_type: form.equipment_type,
           title: form.title,
           description: form.description,
@@ -478,7 +482,8 @@ export default function SupplierEquipmentScreen({
           method: form.id ? "PATCH" : "POST",
           headers: { ...headers, "Content-Type": "application/json" },
           body: JSON.stringify({
-            equipment_type: form.equipment_type,
+            city_id: serviceCityId,
+          equipment_type: form.equipment_type,
             title: form.title,
             description: form.description,
             tariffs,
@@ -777,6 +782,7 @@ export default function SupplierEquipmentScreen({
             onSubmit={save}
             className="max-h-[92vh] w-full max-w-md space-y-4 overflow-y-auto rounded-3xl bg-white p-6"
           >
+        <ServiceCityField value={serviceCityId} onChange={setServiceCityId} />
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-black">
                 {form.id ? "Редактировать объявление" : "Новое объявление"}

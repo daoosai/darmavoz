@@ -282,6 +282,7 @@ async def pickup_point_payload(
 
     payload = {
         "id": point.id,
+        "city_id": point.city_id,
         "name": point.name,
         "short_name": point.short_name or point.name,
         "point_type": point.point_type,

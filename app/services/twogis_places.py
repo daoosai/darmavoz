@@ -11,6 +11,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.cities import resolve_city
 from app.core.config import settings
 from app.models.models import CrmStatus, PointAuditLog, Quarry, WaterPoint
 from app.schemas.parser import MATERIAL_KEYWORDS, ParserResultItem, ParserRunRequest, ParserRunResult, ParserSkippedItem, ParserTarget, normalize_parser_keyword
@@ -447,6 +448,7 @@ async def upsert_places(
     truncated: bool,
     skipped_items: list[ParserSkippedItem] | None = None,
 ) -> ParserRunResult:
+    city = await resolve_city(db, payload.city_id, require_active=False)
     result = ParserRunResult(
         found=len(places),
         total_found=len(places) + sum(item.count for item in skipped_items or []),
@@ -462,6 +464,10 @@ async def upsert_places(
     for place in places:
         existing = await db.scalar(select(destination_model).where(destination_model.twogis_id == place.twogis_id))
         if existing is not None:
+            if existing.city_id != city.id:
+                result.skipped += 1
+                _append_skipped_item(result.skipped_items, name=place.name, reason="City conflict: review the existing object")
+                continue
             existing.parsed_data = place.parsed_data
             if place.phone:
                 if payload.target == "material" and not existing.contact_phone:
@@ -485,6 +491,7 @@ async def upsert_places(
 
         if payload.target == "material":
             point = Quarry(
+                city_id=city.id,
                 name=place.name,
                 short_name=place.name,
                 point_type=point_type,
@@ -500,6 +507,7 @@ async def upsert_places(
             )
         else:
             point = WaterPoint(
+                city_id=city.id,
                 water_type="unknown",
                 name=place.name,
                 source="2GIS",

@@ -82,6 +82,7 @@ class QuarryMaterialOfferOut(BaseModel):
 
 
 class QuarryBase(BaseModel):
+    city_id: UUID | None = None
     name: str = Field(min_length=1, max_length=255)
     short_name: Optional[str] = Field(default=None, max_length=100)
     point_type: PickupPointTypeValue = "quarry"
@@ -160,6 +161,7 @@ class QuarryCreate(QuarryBase):
 
 
 class QuarryUpdate(BaseModel):
+    city_id: UUID | None = None
     name: Optional[str] = Field(default=None, min_length=1, max_length=255)
     short_name: Optional[str] = Field(default=None, max_length=100)
     point_type: Optional[PickupPointTypeValue] = None
@@ -243,6 +245,7 @@ class QuarryUpdate(BaseModel):
 
 
 class QuarryOut(QuarryBase):
+    city_id: UUID | None = None
     id: UUID
     min_delivery_price: Optional[float] = None
     rating: float = 5.0
@@ -288,6 +291,7 @@ class AdminPickupPointOut(QuarryOut):
 
 
 class PickupPointMarkerOut(BaseModel):
+    city_id: UUID | None = None
     id: UUID
     name: str
     short_name: str
@@ -312,6 +316,7 @@ class GlobalPickupPointMaterialOut(BaseModel):
 
 
 class GlobalPickupPointOut(BaseModel):
+    city_id: UUID | None = None
     id: UUID
     name: str
     short_name: str
@@ -340,10 +345,12 @@ class RejectionDecision(BaseModel):
 
 
 class SupplierRegisterRequest(BaseModel):
+    city_ids: list[UUID] | None = Field(default=None, min_length=1)
     phone: str = Field(min_length=10, max_length=20)
 
 
 class SupplierVerifyCodeRequest(BaseModel):
+    city_ids: list[UUID] | None = Field(default=None, min_length=1)
     phone: str = Field(min_length=10, max_length=20)
     code: str = Field(min_length=4, max_length=8)
 

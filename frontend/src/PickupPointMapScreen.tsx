@@ -1,5 +1,7 @@
+import { cityFetch, currentCity } from './cityStore';
 import { Capacitor } from "@capacitor/core";
 import { Geolocation } from "@capacitor/geolocation";
+import CalculatorReminder from './CalculatorReminder';
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
@@ -301,7 +303,7 @@ export default function PickupPointMapScreen({
     }
 
     let cancelled = false;
-    fetch(
+    cityFetch(
       `${baseURL}/geo/geocode?address=${encodeURIComponent(currentDeliveryAddress)}`,
     )
       .then(async (response) => {
@@ -328,7 +330,7 @@ export default function PickupPointMapScreen({
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
-    fetch(`${baseURL}/catalog/pickup-points?material_id=${material.id}`)
+    cityFetch(`${baseURL}/catalog/pickup-points?material_id=${material.id}`)
       .then(async (response) => {
         if (!response.ok) throw new Error("Не удалось загрузить точки забора");
         return response.json();
@@ -355,8 +357,8 @@ export default function PickupPointMapScreen({
         if (disposed || !mapContainerRef.current || mapRef.current) return;
         const mapInstance = tryCreate2GisMap(
           () => new mapgl.Map(mapContainerRef.current, {
-            center: [65.527202, 57.152223],
-            zoom: 10,
+            center: [currentCity().center_lon, currentCity().center_lat],
+            zoom: currentCity().map_zoom,
             key,
           }),
           () => setIsMapUnavailable(true),
@@ -474,7 +476,7 @@ export default function PickupPointMapScreen({
     detailsAbortRef.current = controller;
     setDetailsLoadingId(point.id);
     try {
-      const response = await fetch(
+      const response = await cityFetch(
         `${baseURL}/catalog/pickup-points/${point.id}?material_id=${material.id}`,
         { signal: controller.signal },
       );
@@ -561,6 +563,7 @@ export default function PickupPointMapScreen({
           <div className="flex-1 rounded-2xl bg-white/95 px-4 py-3 shadow-lg backdrop-blur">
             <p className="text-xs uppercase tracking-[0.16em] text-gray-500">Материал</p>
             <h1 className="truncate font-bold text-gray-900">{material.name}</h1>
+            <CalculatorReminder materialId={material.id} />
           </div>
         </div>
         <div className="mt-3 flex gap-2 pointer-events-auto">
@@ -831,7 +834,7 @@ export default function PickupPointMapScreen({
           if (lat != null && lon != null) {
             setSelectedDeliveryLocation({ lat, lon });
           } else if (address.trim()) {
-            void fetch(
+            void cityFetch(
               `${baseURL}/geo/geocode?address=${encodeURIComponent(address)}`,
             )
               .then(async (response) => {

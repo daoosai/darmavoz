@@ -1,3 +1,4 @@
+import { cityFetch, currentCity } from './cityStore';
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Droplets, ImageIcon, List, Map, MapPin, Phone, X } from "lucide-react";
 
@@ -20,7 +21,7 @@ interface SepticProfile {
   media_files?: { id: string; public_url: string; is_primary?: boolean }[];
 }
 
-const DEFAULT_CENTER: [number, number] = [65.534328, 57.152286];
+const DEFAULT_CENTER = (): [number, number] => [currentCity().center_lon, currentCity().center_lat];
 
 const phoneLink = (phone: string) => phone.replace(/[^+\d]/g, "");
 
@@ -44,7 +45,7 @@ export default function SepticCatalogScreen() {
     let disposed = false;
     setLoading(true);
 
-    void fetch(`${baseURL}/septic-providers`)
+    void cityFetch(`${baseURL}/septic-providers`)
       .then(async (response) => {
         if (!response.ok) throw new Error("Не удалось загрузить услуги откачки септиков");
         return response.json() as Promise<SepticProfile[]>;
@@ -76,7 +77,7 @@ export default function SepticCatalogScreen() {
       .then((mapgl) => {
         if (disposed || !mapContainerRef.current || mapRef.current) return;
         const map = tryCreate2GisMap(
-          () => new mapgl.Map(mapContainerRef.current, { center: DEFAULT_CENTER, zoom: 10, key }),
+          () => new mapgl.Map(mapContainerRef.current, { center: DEFAULT_CENTER(), zoom: currentCity().map_zoom, key }),
           () => setMapUnavailable(true),
         );
         if (!map || disposed) {

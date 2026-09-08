@@ -1,3 +1,6 @@
+import OperatorCityField from '../../OperatorCityField';
+import ServiceCityField from '../../ServiceCityField';
+import type { City } from '../../AdminCitiesScreen';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import {
   Archive,
@@ -167,6 +170,9 @@ const createSepticEditForm = (profile: SepticProfile) => ({
 const normalizePhoneForApi = (value: string) => value.replace(/[^\d+]/g, "").trim();
 
 export default function WaterSepticModerationPanel({ token }: { token: string | null }) {
+  const [cityFilter, setCityFilter] = useState("");
+  const cityRef = useRef(cityFilter);
+  cityRef.current = cityFilter;
   const [tab, setTab] = useState<ManagementTab>("water");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("pending_moderation");
   const [waterPoints, setWaterPoints] = useState<WaterPoint[]>([]);
@@ -179,7 +185,10 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
   const [rejectTarget, setRejectTarget] = useState<RejectTarget | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
+  const [serviceCityId, setServiceCityId] = useState("");
+  const [mapCity, setMapCity] = useState<City | null>(null);
   const [createTarget, setCreateTarget] = useState<ManagementTab | null>(null);
+  useEffect(() => { setServiceCityId((editTarget?.data as any)?.city_id || ""); setMapCity(null); }, [editTarget, createTarget]);
   const [editMedia, setEditMedia] = useState<MediaFile[]>([]);
   const [mediaActionId, setMediaActionId] = useState<string | null>(null);
   const [waterEditForm, setWaterEditForm] = useState(() => createWaterEditForm({
@@ -205,7 +214,7 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
     setLoading(true);
     try {
       const headers = { Authorization: `Bearer ${token}` };
-      const query = statusFilter === "all" ? "" : `?moderation_status=${statusFilter}`;
+      const query = `?${new URLSearchParams({ ...(statusFilter !== "all" ? { moderation_status: statusFilter } : {}), ...(cityFilter ? { city_id: cityFilter } : {}) })}`;
       const [waterResponse, septicResponse, countsResponse] = await Promise.all([
         fetch(`${baseURL}/admin/water-points${query}`, { headers }),
         fetch(`${baseURL}/admin/septic-providers${query}`, { headers }),
@@ -229,6 +238,7 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
         ? waterData.map((point) => normalizeWaterPoint(point as WaterPoint))
         : [];
       const nextSepticProfiles = Array.isArray(septicData) ? septicData : [];
+      if (cityRef.current !== cityFilter) return;
       setWaterPoints(nextWaterPoints);
       setSepticProfiles(nextSepticProfiles);
       const nextPendingWaterCount = countsResponse.ok
@@ -251,7 +261,7 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, token]);
+  }, [statusFilter, token, cityFilter]);
 
   useEffect(() => {
     void load();
@@ -595,7 +605,7 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
       const response = await fetch(`${baseURL}${resource}${isCreating ? "" : `/${editTarget.data.id}`}`, {
         method: isCreating ? "POST" : "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, city_id: serviceCityId }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось сохранить изменения"));
@@ -636,6 +646,7 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
 
   return (
     <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+      <OperatorCityField value={cityFilter} onChange={(id) => { setSelectedIds(new Set()); setWaterPoints([]); setSepticProfiles([]); setCityFilter(id); }} />
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold text-slate-800">Вода и септики</h2>
@@ -706,6 +717,7 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
       {modalKind ? (
         <div className="fixed inset-0 z-[99999] flex items-end justify-center bg-slate-900/40 p-4 sm:items-center" role="dialog" aria-modal="true">
           <form onSubmit={submitEdit} className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl">
+              <ServiceCityField admin value={serviceCityId} onChange={setServiceCityId} onCityChange={setMapCity} />
             <div className="flex items-start justify-between gap-4">
               <h3 className="text-lg font-black text-slate-900">
                 {modalKind === "water" ? (editTarget ? "Редактирование точки воды" : "Добавить точку воды") : (editTarget ? "Редактирование септика" : "Добавить септик")}
@@ -729,7 +741,8 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
                 <label className="block text-sm font-bold">Источник
                   <input required value={waterEditForm.source} onChange={(event) => setWaterEditForm((current) => ({ ...current, source: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal" />
                 </label>
-                <AddressMapPicker
+                {mapCity && (<AddressMapPicker
+                  city={mapCity}
                   token={token}
                   inputId="admin-water-address"
                   address={waterEditForm.address}
@@ -737,7 +750,7 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
                   lon={waterEditForm.lon}
                   addressRequired={false}
                   onChange={(location) => setWaterEditForm((current) => ({ ...current, ...location }))}
-                />
+                />)}
                 {editTarget ? renderMediaManager() : <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">Фотографии можно добавить после сохранения.</p>}
                 <label className="block text-sm font-bold">Телефон
                   <input type="tel" inputMode="tel" autoComplete="tel" maxLength={18} value={waterEditForm.phone} onChange={(event) => setWaterEditForm((current) => ({ ...current, phone: formatPhoneNumber(event.target.value) }))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal" placeholder="+7 (999) 999-99-99" />
@@ -765,14 +778,15 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
                 <label className="block text-sm font-bold">Телефон
                   <input required type="tel" inputMode="tel" autoComplete="tel" maxLength={18} value={septicEditForm.phone} onChange={(event) => setSepticEditForm((current) => ({ ...current, phone: formatPhoneNumber(event.target.value) }))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal" placeholder="+7 (999) 999-99-99" />
                 </label>
-                <AddressMapPicker
+                {mapCity && (<AddressMapPicker
+                  city={mapCity}
                   token={token}
                   inputId="admin-septic-address"
                   address={septicEditForm.address}
                   lat={septicEditForm.lat}
                   lon={septicEditForm.lon}
                   onChange={(location) => setSepticEditForm((current) => ({ ...current, ...location }))}
-                />
+                />)}
                 {editTarget ? renderMediaManager() : <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">Фотографии можно добавить после сохранения.</p>}
                 <div className="grid grid-cols-2 gap-3">
                   <label className="text-sm font-bold">Объём, м³

@@ -1,3 +1,5 @@
+import OperatorCityField from './OperatorCityField';
+import ServiceCityField from './ServiceCityField';
 import React, { useEffect, useState } from "react";
 import {
   ArrowDown,
@@ -109,6 +111,10 @@ export default function AdminEquipmentScreen({
   const [listings, setListings] = useState<EquipmentListing[]>([]);
   const [loading, setLoading] = useState(true);
   const [showListingForm, setShowListingForm] = useState(false);
+  const [cityFilter, setCityFilter] = useState("");
+  const cityRef = React.useRef(cityFilter);
+  cityRef.current = cityFilter;
+  const [serviceCityId, setServiceCityId] = useState('');
   const [listingForm, setListingForm] = useState<ListingForm>({ ...emptyListing });
   const [newTypeName, setNewTypeName] = useState("");
   const [isReorderingTypes, setIsReorderingTypes] = useState(false);
@@ -143,7 +149,7 @@ export default function AdminEquipmentScreen({
           { headers },
         ),
         fetch(
-          `${baseURL}/admin/equipment${placementFilter ? `?placement_status=${placementFilter}` : ""}`,
+          `${baseURL}/admin/equipment?${new URLSearchParams({ ...(placementFilter ? { placement_status: placementFilter } : {}), ...(cityFilter ? { city_id: cityFilter } : {}) })}`,
           { headers },
         ),
       ]);
@@ -153,6 +159,7 @@ export default function AdminEquipmentScreen({
 
       const loadedTypes: EquipmentTypeItem[] = await typesResponse.json();
       const loadedListings: EquipmentListing[] = await listingsResponse.json();
+      if (cityRef.current !== cityFilter) return;
       setTypes(Array.isArray(loadedTypes) ? loadedTypes : []);
       setListings(Array.isArray(loadedListings) ? loadedListings : []);
       onPendingModerationChanged?.(
@@ -169,6 +176,7 @@ export default function AdminEquipmentScreen({
     }
   };
 
+  useEffect(() => { setServiceCityId((listings.find((item) => item.id === listingForm.id) as any)?.city_id || ''); }, [listingForm.id]);
   useEffect(() => {
     if (!policy) void loadPolicy();
   }, [loadPolicy, policy]);
@@ -187,7 +195,7 @@ export default function AdminEquipmentScreen({
 
   useEffect(() => {
     void load();
-  }, [token, placementFilter]);
+  }, [token, placementFilter, cityFilter]);
 
   const saveType = async () => {
     if (!newTypeName.trim()) return;
@@ -356,6 +364,7 @@ export default function AdminEquipmentScreen({
         method: listingForm.id ? "PATCH" : "POST",
         headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify({
+          city_id: serviceCityId,
           equipment_type: listingForm.equipment_type,
           title: listingForm.title,
           description: listingForm.description,
@@ -502,6 +511,7 @@ export default function AdminEquipmentScreen({
 
   return (
     <div className="space-y-5 pb-[calc(6rem+env(safe-area-inset-bottom,0px))]">
+      <OperatorCityField value={cityFilter} onChange={(id) => { setListings([]); setCityFilter(id); }} />
       <div className="flex gap-2 overflow-x-auto rounded-2xl bg-white p-2 shadow-sm">
         {[
           ["listings", "Объявления"],
@@ -851,6 +861,7 @@ export default function AdminEquipmentScreen({
             onSubmit={saveListing}
             className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 pb-[max(env(safe-area-inset-bottom,16px),2rem)]"
           >
+          <ServiceCityField admin value={serviceCityId} onChange={setServiceCityId} />
             <div className="mb-5 flex justify-between">
               <h3 className="text-xl font-black">
                 {listingForm.id ? "Редактировать" : "Новое объявление"}

@@ -7,7 +7,40 @@ on:
   workflow_dispatch:
 
 jobs:
+  sprint22-checks:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-only
+          POSTGRES_DB: sprint22
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:ci-only@localhost:5432/sprint22
+      REDIS_URL: redis://localhost:6379/0
+      SECRET_KEY: isolated-ci-only-not-for-deployment
+      ALGORITHM: HS256
+      ADMIN_USERNAME: ci-admin
+      ADMIN_PASSWORD: ci-only
+      AVITO_WEBHOOK_SECRET: ci-only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Verify migration and city isolation in disposable CI database
+        run: python -m pytest -q tests/test_sprint22_unit.py tests/test_sprint22_api.py
+
   deploy-test:
+    needs: sprint22-checks
     runs-on: ubuntu-latest
 
     steps:
@@ -38,6 +71,8 @@ jobs:
         run: |
           set -euo pipefail
           npm ci
+          npm run lint
+          node --import tsx --test src/bulkCalculator.test.ts
           npm run build
           tar -C dist -cf ../frontend-dist.tar .
 
@@ -105,19 +140,14 @@ jobs:
           DEPLOY_REF="$(git rev-parse FETCH_HEAD)"
           echo "Deploying commit ${DEPLOY_REF}"
 
-          # САМОИСЦЕЛЕНИЕ GIT WORKTREE (Убиваем зомби-папки)
-          git worktree prune || true
-          if git worktree list | grep -q "${DEPLOY_DIR}"; then
+          # Never discard local runtime changes or remove a worktree during deploy.
+          if [ -d "${DEPLOY_DIR}/.git" ] || [ -f "${DEPLOY_DIR}/.git" ]; then
             if [ -n "$(git -C "${DEPLOY_DIR}" status --porcelain)" ]; then
-              git worktree remove --force "${DEPLOY_DIR}" || true
-              rm -rf "${DEPLOY_DIR}"
-              git worktree prune || true
-              git worktree add --detach "${DEPLOY_DIR}" "${DEPLOY_REF}"
-            else
-              git -C "${DEPLOY_DIR}" checkout --detach "${DEPLOY_REF}"
+              echo "Runtime has local changes; refusing to overwrite them" >&2
+              exit 1
             fi
+            git -C "${DEPLOY_DIR}" checkout --detach "${DEPLOY_REF}"
           else
-            rm -rf "${DEPLOY_DIR}"
             git worktree add --detach "${DEPLOY_DIR}" "${DEPLOY_REF}"
           fi
 
@@ -128,20 +158,15 @@ jobs:
           fi
 
           mkdir -p /opt/daoos-kit/sites/darmavoz_test/frontend /opt/daoos-kit/sites/darmavoz_test/static
-          rm -rf /opt/daoos-kit/sites/darmavoz_test/frontend/*
           tar -xf /tmp/frontend-dist.tar -C /opt/daoos-kit/sites/darmavoz_test/frontend
-          rm -f /tmp/frontend-dist.tar
           cp -a "${DEPLOY_DIR}/static/." /opt/daoos-kit/sites/darmavoz_test/static/
-
-          # УБИВАЕМ ЗАВИСШИЕ КОНТЕЙНЕРЫ
-          docker rm -f minio_test db_test redis_test || true
 
           COMPOSE_FILE="${DEPLOY_DIR}/docker-compose.test.yml"
 
           # Сначала поднимаем инфраструктуру и собираем backend. Миграции должны
           # выполняться одним процессом, иначе PostgreSQL DDL может столкнуться
           # с параллельным запуском Alembic из entrypoint.sh.
-          docker compose -f "${COMPOSE_FILE}" up -d db_test redis_test minio_test --force-recreate
+          docker compose -f "${COMPOSE_FILE}" up -d db_test redis_test minio_test
           docker compose -f "${COMPOSE_FILE}" build \
             --build-arg APP_BUILD_COMMIT="${DEPLOY_REF}" \
             backend_test
@@ -159,8 +184,10 @@ jobs:
 
           # Compose run по умолчанию подключает stdin контейнера и может поглотить
           # остаток SSH heredoc. /dev/null гарантирует продолжение deploy-скрипта.
-          docker compose -f "${COMPOSE_FILE}" run --rm -T --no-deps --entrypoint alembic backend_test upgrade heads </dev/null
-          docker rm -f backend_test || true
+          docker compose -f "${COMPOSE_FILE}" stop backend_test
+          docker compose -f "${COMPOSE_FILE}" run --rm -T --no-deps --entrypoint alembic backend_test upgrade head </dev/null
+          # Approved Sprint 22 initial test-market assignment, recorded once in DB.
+          docker compose -f "${COMPOSE_FILE}" run --rm -T --no-deps --entrypoint python backend_test -m scripts.city_backfill --assign-all-existing-city-code tyumen --apply </dev/null
           docker compose -f "${COMPOSE_FILE}" up -d --no-deps --force-recreate backend_test
           docker compose -f "${COMPOSE_FILE}" restart backend_test
 
@@ -184,6 +211,8 @@ jobs:
               openapi = json.load(response)
 
           required_sprint18_paths = {
+              "/api/v1/cities/",
+              "/api/v1/catalog/calculator/",
               "/api/v1/admin/placements/summary",
               "/api/v1/system/placement-policy",
               "/api/v1/supplier/points/{point_id}/confirm-relevance",

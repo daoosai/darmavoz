@@ -1,3 +1,4 @@
+import { cityFetch, currentCity } from './cityStore';
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -16,7 +17,7 @@ import {
   get2gisSuggestionAddress,
   get2gisSuggestionCoordinates,
   get2gisSuggestionLabel,
-  withTyumenBias,
+  withCityBias,
 } from "./addressSearch";
 import { baseURL, handleApiError } from "./utils";
 import { useAuthStore, useAddressStore } from "./store";
@@ -121,14 +122,14 @@ export default function ClientAddressBottomSheet({
     if (isOpen && (window as any).mapgl && !mapRef.current) {
       const container = document.getElementById("client-map");
       if (container) {
-        const initialLon = lon || 65.527202;
-        const initialLat = lat || 57.152223;
+        const initialLon = lon ?? currentCity().center_lon;
+        const initialLat = lat ?? currentCity().center_lat;
 
         mapInstance = tryCreate2GisMap(
           () =>
             new (window as any).mapgl.Map("client-map", {
               center: [initialLon, initialLat],
-              zoom: 12,
+              zoom: currentCity().map_zoom,
               key: import.meta.env.VITE_2GIS_KEY,
             }),
           () => setIsMapUnavailable(true),
@@ -232,8 +233,8 @@ export default function ClientAddressBottomSheet({
     }
 
     try {
-      const response = await fetch(
-        `${baseURL}/geo/geocode?address=${encodeURIComponent(withTyumenBias(address))}`,
+      const response = await cityFetch(
+        `${baseURL}/geo/geocode?address=${encodeURIComponent(withCityBias(address))}`,
         {
           headers: { Authorization: `Bearer ${token}` },
         },
@@ -251,7 +252,7 @@ export default function ClientAddressBottomSheet({
   const fetchAddresses = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${baseURL}/client/addresses`, {
+      const res = await cityFetch(`${baseURL}/client/addresses`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -309,7 +310,7 @@ export default function ClientAddressBottomSheet({
     e.stopPropagation();
     try {
       const deletedAddress = addresses.find((item) => item.id === id);
-      const res = await fetch(`${baseURL}/client/addresses/${id}`, {
+      const res = await cityFetch(`${baseURL}/client/addresses/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -373,7 +374,7 @@ export default function ClientAddressBottomSheet({
         ? `${baseURL}/client/addresses/${editingAddressId}`
         : `${baseURL}/client/addresses`;
 
-      const res = await fetch(url, {
+      const res = await cityFetch(url, {
         method,
         headers: {
           "Content-Type": "application/json",

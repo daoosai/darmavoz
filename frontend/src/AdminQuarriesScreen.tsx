@@ -1,3 +1,7 @@
+import OperatorCityField from './OperatorCityField';
+import { currentCity } from './cityStore';
+import type { City } from './AdminCitiesScreen';
+import ServiceCityField from './ServiceCityField';
 import React, { useState, useEffect } from "react";
 import { Plus, Edit2, ImagePlus, Star, Trash2, Crown, MoreVertical, CalendarPlus, EyeOff, Archive, RotateCcw, Check, X } from "lucide-react";
 import toast from "react-hot-toast";
@@ -6,7 +10,7 @@ import {
   get2gisSuggestionAddress,
   get2gisSuggestionCoordinates,
   get2gisSuggestionLabel,
-  withTyumenBias,
+  withCityBias,
 } from "./addressSearch";
 import { useAuthStore, usePlacementStore } from "./store";
 import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
@@ -258,6 +262,9 @@ export default function AdminQuarriesScreen({
   onTypeFilterChange,
 }: AdminQuarriesScreenProps) {
   const { token } = useAuthStore();
+  const [cityFilter, setCityFilter] = useState("");
+  const cityRef = React.useRef(cityFilter);
+  cityRef.current = cityFilter;
   const [quarries, setQuarries] = useState<Quarry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -270,7 +277,7 @@ export default function AdminQuarriesScreen({
   const [rejectPointId, setRejectPointId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [crmStatusFilter, setCrmStatusFilter] = useState<CrmStatus | "">("");
-  const [parserCenter, setParserCenter] = useState({ lat: 57.1522, lon: 65.5272 });
+  const [parserCenter, setParserCenter] = useState({ lat: 0, lon: 0 });
   const { policy, loadPolicy, loadSummary } = usePlacementStore();
   const normalizedStatusFilter = ALLOWED_MODERATION_FILTERS.has(statusFilter)
     ? statusFilter
@@ -289,6 +296,7 @@ export default function AdminQuarriesScreen({
     try {
       setIsLoading(true);
       const params = new URLSearchParams();
+      if (cityFilter) params.set("city_id", cityFilter);
       if (normalizedStatusFilter) {
         params.set("moderation_status", normalizedStatusFilter);
       }
@@ -322,7 +330,7 @@ export default function AdminQuarriesScreen({
           : Array.isArray((data as { results?: unknown[] }).results)
             ? (data as { results: Quarry[] }).results
             : [];
-      setQuarries(loadedPoints);
+      if (cityRef.current === cityFilter) setQuarries(loadedPoints);
     } catch (e) {
       console.error("Error fetching quarries", e);
       setQuarries([]);
@@ -339,7 +347,7 @@ export default function AdminQuarriesScreen({
       return;
     }
     fetchQuarries();
-  }, [token, normalizedStatusFilter, normalizedPlacementFilter, normalizedTypeFilter, crmStatusFilter]);
+  }, [token, normalizedStatusFilter, normalizedPlacementFilter, normalizedTypeFilter, crmStatusFilter, cityFilter]);
 
   useEffect(() => {
     if (!policy) void loadPolicy();
@@ -506,8 +514,8 @@ export default function AdminQuarriesScreen({
         description: "",
         contact_phone: "",
         subscription_end_date: "",
-        lat: 57.152223,
-        lon: 65.527202,
+        lat: null,
+        lon: null,
         is_vip: false,
         manual_priority: 0,
         is_active: false,
@@ -533,6 +541,7 @@ export default function AdminQuarriesScreen({
 
   return (
     <div className="flex flex-col gap-4 pb-[calc(6rem+env(safe-area-inset-bottom,0px))]">
+      <OperatorCityField value={cityFilter} onChange={(id) => { setSelectedIds(new Set()); setQuarries([]); setCityFilter(id); }} />
       <div className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
         <div className="flex items-center gap-3">
           <div>
@@ -919,6 +928,8 @@ function EditQuarryModal({
   onSave: (savedQuarry: Quarry) => void;
 }) {
   const { token } = useAuthStore();
+  const [serviceCityId, setServiceCityId] = useState((quarry as any)?.city_id || '');
+  const [mapCity, setMapCity] = useState<City | null>(null);
   const [formData, setFormData] = useState<QuarryFormData>(() => buildQuarryFormData(quarry));
   const [isSaving, setIsSaving] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
@@ -969,7 +980,7 @@ function EditQuarryModal({
   React.useEffect(() => {
     const mapgl = (window as any).mapgl;
     const key = import.meta.env.VITE_2GIS_KEY;
-    if (!mapgl || !key || !mapContainerRef.current || mapRef.current) return;
+    if (!mapCity || !mapgl || !key || !mapContainerRef.current || mapRef.current) return;
 
     const initialCoordinates = getParsedCoordinates();
     const mapInstance = tryCreate2GisMap(
@@ -977,8 +988,8 @@ function EditQuarryModal({
         new mapgl.Map(mapContainerRef.current, {
           center: initialCoordinates
             ? [initialCoordinates.lon, initialCoordinates.lat]
-            : [65.527202, 57.152223],
-          zoom: 12,
+            : [mapCity.center_lon, mapCity.center_lat],
+          zoom: mapCity.map_zoom,
           key,
         }),
       () => setIsMapUnavailable(true),
@@ -1008,7 +1019,7 @@ function EditQuarryModal({
         markerRef.current = null;
       }
     };
-  }, []);
+  }, [mapCity?.id]);
 
   React.useEffect(() => {
     const handleDocumentMouseDown = (event: MouseEvent) => {
@@ -1064,7 +1075,7 @@ function EditQuarryModal({
 
     try {
       const res = await fetch(
-        `${baseURL}/geo/geocode?address=${encodeURIComponent(withTyumenBias(address))}`,
+        `${baseURL}/geo/geocode?city_id=${serviceCityId}&address=${encodeURIComponent(withCityBias(address, mapCity || currentCity()))}`,
         {
           headers: { Authorization: `Bearer ${token}` },
         },
@@ -1273,7 +1284,7 @@ function EditQuarryModal({
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, city_id: serviceCityId }),
       });
 
       const responseData = await res.json().catch(() => ({}));
@@ -1515,6 +1526,7 @@ function EditQuarryModal({
           onSubmit={handleSave}
           className="flex flex-col gap-5 overflow-y-auto p-6 pb-36"
         >
+          <ServiceCityField admin value={serviceCityId} onChange={setServiceCityId} onCityChange={setMapCity} />
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
               Название
@@ -1824,6 +1836,8 @@ function EnhancedEditQuarryModal({
   onSave: (savedQuarry: Quarry) => void;
 }) {
   const { token } = useAuthStore();
+  const [serviceCityId, setServiceCityId] = useState((quarry as any)?.city_id || '');
+  const [mapCity, setMapCity] = useState<City | null>(null);
   const [formData, setFormData] = useState<QuarryFormData>(() => buildQuarryFormData(quarry));
   const [isSaving, setIsSaving] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
@@ -1877,7 +1891,7 @@ function EnhancedEditQuarryModal({
   React.useEffect(() => {
     const mapgl = (window as any).mapgl;
     const key = import.meta.env.VITE_2GIS_KEY;
-    if (!mapgl || !key || !mapContainerRef.current || mapRef.current) return;
+    if (!mapCity || !mapgl || !key || !mapContainerRef.current || mapRef.current) return;
 
     const initialCoordinates = getParsedCoordinates();
     const mapInstance = tryCreate2GisMap(
@@ -1885,8 +1899,8 @@ function EnhancedEditQuarryModal({
         new mapgl.Map(mapContainerRef.current, {
           center: initialCoordinates
             ? [initialCoordinates.lon, initialCoordinates.lat]
-            : [65.527202, 57.152223],
-          zoom: 12,
+            : [mapCity.center_lon, mapCity.center_lat],
+          zoom: mapCity.map_zoom,
           key,
         }),
       () => setIsMapUnavailable(true),
@@ -1914,7 +1928,7 @@ function EnhancedEditQuarryModal({
         markerRef.current = null;
       }
     };
-  }, []);
+  }, [mapCity?.id]);
 
   React.useEffect(() => {
     const handleDocumentMouseDown = (event: MouseEvent) => {
@@ -1945,7 +1959,7 @@ function EnhancedEditQuarryModal({
     setIsGeocoding(true);
     try {
       const response = await fetch(
-        `${baseURL}/geo/geocode?address=${encodeURIComponent(withTyumenBias(address))}`,
+        `${baseURL}/geo/geocode?city_id=${serviceCityId}&address=${encodeURIComponent(withCityBias(address, mapCity || currentCity()))}`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
       const data = await response.json().catch(() => ({}));
@@ -2301,7 +2315,7 @@ function EnhancedEditQuarryModal({
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({ ...payload, city_id: serviceCityId }),
         },
       );
       const data = await response.json().catch(() => ({}));
@@ -2388,6 +2402,7 @@ function EnhancedEditQuarryModal({
           onSubmit={handleSave}
           className="flex flex-col gap-5 overflow-y-auto p-6 pb-36"
         >
+          <ServiceCityField admin value={serviceCityId} onChange={setServiceCityId} onCityChange={setMapCity} />
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Название</label>
             <input

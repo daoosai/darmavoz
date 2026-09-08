@@ -1,3 +1,4 @@
+import ServiceCitiesPanel from './ServiceCitiesPanel';
 import { useEffect, useState, type FormEvent } from "react";
 import { Loader2, LogOut, Mail, Phone, UserRound } from "lucide-react";
 import toast from "react-hot-toast";
@@ -97,6 +98,7 @@ export default function EquipmentOwnerProfileScreen({
       </p>
       <h1 className="mt-1 text-3xl font-black">Профиль</h1>
 
+      <ServiceCitiesPanel />
       <form onSubmit={saveProfile} className="mt-8 space-y-5 rounded-2xl bg-white p-5 shadow-sm">
         <label className="block text-sm font-bold text-gray-900">
           Номер телефона

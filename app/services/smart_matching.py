@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.services.cities import driver_city_clause
 from app.core.config import settings
 from app.models.models import Driver, Order, OrderDistributionHistory, OrderOffer, OrderOfferStatus, Vehicle
 from app.services.redis_client import get_redis
@@ -193,7 +194,7 @@ class SmartMatchingService:
     ) -> dict:
         excluded_driver_ids = excluded_driver_ids or set()
         query = (
-            select(Driver)
+            select(Driver).where(driver_city_clause(getattr(order, "city_id", None)))
             .options(selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option))
             .where(Driver.vehicle_id.is_not(None))
             .order_by(Driver.dispatch_priority.desc(), Driver.id.asc())

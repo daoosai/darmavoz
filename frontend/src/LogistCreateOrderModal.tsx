@@ -1,10 +1,13 @@
+import OperatorCityField from './OperatorCityField';
+import { currentCity } from './cityStore';
+import type { City } from './AdminCitiesScreen';
 import React, { useEffect, useRef, useState } from "react";
 import { Loader2, MapPin, X } from "lucide-react";
 import toast from "react-hot-toast";
 import {
   fetch2gisAddressSuggestions,
   get2gisSuggestionLabel,
-  withTyumenBias,
+  withCityBias,
 } from "./addressSearch";
 import { baseURL } from "./utils";
 
@@ -119,6 +122,8 @@ export default function LogistCreateOrderModal({
   deliveryOptions,
   onOrderCreated,
 }: CreateOrderModalProps) {
+  const [orderCity, setOrderCity] = useState<City | null>(null);
+  const cityId = orderCity?.id || "";
   const [isCreating, setIsCreating] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
   const [calculationResult, setCalculationResult] =
@@ -193,7 +198,7 @@ export default function LogistCreateOrderModal({
       return;
     }
 
-    if (!machineId) {
+    if (!machineId || !cityId) {
       setAvailableDrivers([]);
       setIsLoadingDrivers(false);
       return;
@@ -205,7 +210,7 @@ export default function LogistCreateOrderModal({
       try {
         setIsLoadingDrivers(true);
         const response = await fetch(
-          `${baseURL}/drivers/?status=available&delivery_option_id=${encodeURIComponent(machineId)}`,
+          `${baseURL}/drivers/?city_id=${cityId}&status=available&delivery_option_id=${encodeURIComponent(machineId)}`,
           {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -242,7 +247,7 @@ export default function LogistCreateOrderModal({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, token, machineId]);
+  }, [isOpen, token, machineId, cityId]);
 
   useEffect(() => {
     if (!machineId) {
@@ -347,6 +352,7 @@ export default function LogistCreateOrderModal({
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
           body: JSON.stringify({
+            city_id: cityId,
             material_id: newOrder.material_id,
             delivery_option_id: newOrder.delivery_option_id,
             delivery_lat: newOrder.delivery_lat,
@@ -409,6 +415,7 @@ export default function LogistCreateOrderModal({
       clearTimeout(timer);
     };
   }, [
+    cityId,
     newOrder.material_id,
     newOrder.delivery_option_id,
     newOrder.delivery_lat,
@@ -442,7 +449,7 @@ export default function LogistCreateOrderModal({
   };
 
   const fetch2GISSuggests = async (query: string) => {
-    const items = await fetch2gisAddressSuggestions(query);
+    const items = await fetch2gisAddressSuggestions(query, orderCity || currentCity());
     return items.map((item: any) => get2gisSuggestionLabel(item));
   };
 
@@ -474,7 +481,7 @@ export default function LogistCreateOrderModal({
 
     try {
       const response = await fetch(
-        `${baseURL}/geo/geocode?address=${encodeURIComponent(withTyumenBias(address))}`,
+        `${baseURL}/geo/geocode?city_id=${cityId}&address=${encodeURIComponent(withCityBias(address, orderCity || currentCity()))}`,
         {
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         },
@@ -538,6 +545,7 @@ export default function LogistCreateOrderModal({
       setIsCreating(true);
 
       const payload = {
+        city_id: cityId,
         client_name: normalizedClientName,
         client_phone: cleanPhone,
         driver_id: newOrder.driver_id || undefined,
@@ -664,6 +672,7 @@ export default function LogistCreateOrderModal({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <OperatorCityField all={false} value={cityId} onChange={(_, city) => { setOrderCity(city || null); setCalculationResult(null); setSuggestions([]); setNewOrder((prev) => ({ ...prev, driver_id: "", delivery_address: "", delivery_lat: null, delivery_lon: null })); }} />
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                 Материал <span className="text-red-500">*</span>

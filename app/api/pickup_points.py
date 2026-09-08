@@ -1,3 +1,4 @@
+from app.services.cities import resolve_city, ensure_same_city
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -47,8 +48,10 @@ async def list_pickup_points(
     bbox: str | None = None,
     point_type: str | None = None,
     limit: int = Query(default=300, ge=1, le=1000),
+    city_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> list[dict]:
+    city = await resolve_city(db, city_id)
     _disable_map_cache(response)
     material = await db.get(Material, material_id)
     if material is None or not material.is_active:
@@ -63,6 +66,7 @@ async def list_pickup_points(
     stmt = (
         select(
             Quarry.id,
+            Quarry.city_id,
             Quarry.name,
             Quarry.short_name,
             Quarry.point_type,
@@ -83,6 +87,7 @@ async def list_pickup_points(
             ),
         )
         .where(
+            Quarry.city_id == city.id,
             Quarry.lat.is_not(None),
             Quarry.lon.is_not(None),
             or_(
@@ -114,6 +119,7 @@ async def list_pickup_points(
     return [
         {
             "id": row.id,
+            "city_id": row.city_id,
             "name": row.name,
             "short_name": row.short_name or row.name,
             "point_type": row.point_type,
@@ -134,8 +140,10 @@ async def list_pickup_points(
 @router.get("/global", response_model=list[GlobalPickupPointOut])
 async def list_global_pickup_points(
     response: Response,
+    city_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> list[dict]:
+    city = await resolve_city(db, city_id)
     _disable_map_cache(response)
     result = await db.execute(
         select(Quarry)
@@ -146,6 +154,7 @@ async def list_global_pickup_points(
                     CrmStatus.activated.value,
                 ]
             ),
+            Quarry.city_id == city.id,
             Quarry.lat.is_not(None),
             Quarry.lon.is_not(None),
         )
@@ -172,6 +181,7 @@ async def list_global_pickup_points(
         items.append(
             {
                 "id": payload["id"],
+                "city_id": point.city_id,
                 "name": payload["name"],
                 "short_name": payload["short_name"],
                 "point_type": payload["point_type"],
@@ -195,9 +205,12 @@ async def list_global_pickup_points(
 async def get_pickup_point(
     point_id: UUID,
     material_id: UUID | None = None,
+    city_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
+    city = await resolve_city(db, city_id)
     point = await db.get(Quarry, point_id)
+    ensure_same_city(city.id, point)
     if point is None or (
         point.crm_status == CrmStatus.activated.value
         and not is_pickup_point_publicly_available(point)

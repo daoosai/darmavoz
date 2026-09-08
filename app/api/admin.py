@@ -553,6 +553,7 @@ async def get_manager_area(current_user: User = Depends(get_current_manager_user
 
 @router.get("/orders", response_model=list[OrderOut])
 async def list_admin_panel_orders(
+    city_id: UUID | None = None,
     driver_id: UUID | None = None,
     date: date_type | None = None,
     is_deleted: bool = False,
@@ -562,7 +563,7 @@ async def list_admin_panel_orders(
 ) -> list[Order]:
     del current_user
     deleted_filter = show_deleted if show_deleted is not None else is_deleted
-    return await list_recent_orders(db, driver_id=driver_id, created_on=date, is_deleted=deleted_filter)
+    return await list_recent_orders(db, city_id=city_id, driver_id=driver_id, created_on=date, is_deleted=deleted_filter)
 
 
 @router.patch("/orders/{order_id}", response_model=OrderOut)
@@ -1392,6 +1393,9 @@ async def create_admin_driver(
         moderated_by_user_id=current_admin.id,
     )
     db.add(driver)
+    await db.flush()
+    from app.services.cities import initialize_service_cities
+    await initialize_service_cities(db, user_id=user.id, driver_id=driver.id, city_ids=payload.city_ids)
     _set_vehicle_moderation(vehicle, ModerationStatus.approved.value, comment="Approved by admin onboarding", admin_user_id=current_admin.id)
     await db.commit()
     return await _load_driver_or_404(db, driver.id)

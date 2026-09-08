@@ -1,3 +1,4 @@
+import { cityFetch } from './cityStore';
 import React, { useState, useEffect, useRef } from "react";
 import {
   ShoppingCart,
@@ -249,7 +250,7 @@ export default function CartScreen({
           lat = Number(storedCoordinates.lat);
           lon = Number(storedCoordinates.lon);
         } else {
-          const geoRes = await fetch(
+          const geoRes = await cityFetch(
             `${baseURL}/geo/geocode?address=${encodeURIComponent(globalAddress)}`,
             {
               headers: { Authorization: `Bearer ${token}` },
@@ -280,7 +281,7 @@ export default function CartScreen({
         const newResults: Record<string, CalculationResult> = {};
         for (const item of cartItems) {
           const selectedQuarryId = preferredPointIds[item.id] || item.pickupPoint?.id;
-          const res = await fetch(`${baseURL}/client/orders/calculate`, {
+          const res = await cityFetch(`${baseURL}/client/orders/calculate`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -402,7 +403,7 @@ export default function CartScreen({
         const expectedMaterialUnitPrice = selectedOption && orderedVolume > 0
           ? selectedOption.material_cost / orderedVolume
           : item.pickupPoint?.price;
-        return fetch(`${baseURL}/orders/checkout`, {
+        return cityFetch(`${baseURL}/orders/checkout`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -429,7 +430,7 @@ export default function CartScreen({
 
       if (!hasErrors) {
         try {
-          const ordersResponse = await fetch(`${baseURL}/clients/me/orders`, {
+          const ordersResponse = await cityFetch(`${baseURL}/clients/me/orders`, {
             headers: {
               Authorization: `Bearer ${token}`,
             },

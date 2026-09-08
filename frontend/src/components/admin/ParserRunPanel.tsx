@@ -1,3 +1,5 @@
+import type { City } from '../../AdminCitiesScreen';
+import ServiceCityField from '../../ServiceCityField';
 import { useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { Loader2, MapPin, Play } from "lucide-react";
@@ -8,7 +10,7 @@ import {
   get2gisSuggestionAddress,
   get2gisSuggestionCoordinates,
   get2gisSuggestionLabel,
-  withTyumenBias,
+  withCityBias,
 } from "../../addressSearch";
 import { baseURL, extractApiErrorMessage } from "../../utils";
 
@@ -107,9 +109,11 @@ export default function ParserRunPanel({
   onCompleted?: () => void | Promise<void>;
   onCoordinatesChange?: (coordinates: ParserCoordinates) => void;
 }) {
-  const [city, setCity] = useState("Тюмень");
-  const [lat, setLat] = useState("57.1522");
-  const [lon, setLon] = useState("65.5272");
+  const [mapCity, setMapCity] = useState<City | null>(null);
+  const [serviceCityId, setServiceCityId] = useState('');
+  const [city, setCity] = useState('');
+  const [lat, setLat] = useState('');
+  const [lon, setLon] = useState('');
   const [radius, setRadius] = useState("50000");
   const [keyword, setKeyword] = useState(keywords[target][0]);
   const [loading, setLoading] = useState(false);
@@ -139,7 +143,7 @@ export default function ParserRunPanel({
       return;
     }
 
-    const items = await fetch2gisAddressSuggestions(value);
+    const items = await fetch2gisAddressSuggestions(value, mapCity || undefined);
     if (requestId !== suggestionRequestRef.current) return;
     setSuggestions(
       items
@@ -160,7 +164,7 @@ export default function ParserRunPanel({
     setIsGeocoding(true);
     try {
       const response = await fetch(
-        `${baseURL}/geo/geocode?address=${encodeURIComponent(withTyumenBias(value))}`,
+        `${baseURL}/geo/geocode?city_id=${serviceCityId}&address=${encodeURIComponent(withCityBias(value, mapCity || undefined))}`,
         { headers: token ? { Authorization: `Bearer ${token}` } : undefined },
       );
       const data = await response.json().catch(() => ({}));
@@ -210,7 +214,7 @@ export default function ParserRunPanel({
       const response = await fetch(`${baseURL}/admin/parser/run`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ city, center_lat: centerLat, center_lon: centerLon, radius_m: Number(radius), target, keyword }),
+        body: JSON.stringify({ city_id: serviceCityId, city, center_lat: centerLat, center_lon: centerLon, radius_m: Number(radius), target, keyword }),
       });
       if (!response.ok) {
         const errorPayload = await response.json().catch(() => ({ status: response.status }));
@@ -241,7 +245,7 @@ export default function ParserRunPanel({
     if (items.length === 0) return;
     setLoading(true);
     try {
-      const response = await fetch(`${baseURL}/admin/parser/save`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ city, center_lat: parseCoordinate(lat), center_lon: parseCoordinate(lon), radius_m: Number(radius), target, keyword, items }) });
+      const response = await fetch(`${baseURL}/admin/parser/save`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ city_id: serviceCityId, city, center_lat: parseCoordinate(lat), center_lon: parseCoordinate(lon), radius_m: Number(radius), target, keyword, items }) });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось сохранить точки"));
       toast.success(`Сохранено: ${data.created + data.updated}`);
@@ -253,6 +257,7 @@ export default function ParserRunPanel({
   return (
     <>
       <form onSubmit={submit} className="grid gap-3 rounded-2xl border border-sky-100 bg-sky-50 p-4 lg:grid-cols-[1.2fr_repeat(4,minmax(0,1fr))_auto]">
+      <ServiceCityField admin value={serviceCityId} onChange={(id) => { setServiceCityId(id); setParserResult(null); }} onCityChange={(selected) => { setMapCity(selected); setCity(selected.name); setLat(String(selected.center_lat)); setLon(String(selected.center_lon)); notifyCoordinates(String(selected.center_lat), String(selected.center_lon)); }} />
       <label className="relative text-xs font-bold text-slate-600">Город или место
         <input
           required

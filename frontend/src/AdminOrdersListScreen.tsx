@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
+import OperatorCityField from './OperatorCityField';
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   CalendarDays,
@@ -35,6 +36,9 @@ export default function AdminOrdersListScreen({
 }: AdminOrdersListScreenProps) {
   const routeBase = role === "logist" ? "/logist" : "/admin";
   const token = useAuthStore((state) => state.token);
+  const [cityFilter, setCityFilter] = useState("");
+  const cityFilterRef = useRef(cityFilter);
+  cityFilterRef.current = cityFilter;
   const [orders, setOrders] = useState<AdminListOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -42,7 +46,7 @@ export default function AdminOrdersListScreen({
   const fetchOrders = async () => {
     try {
       setIsLoading(true);
-      const res = await fetch(`${baseURL}/admin/orders?is_deleted=false`, {
+      const res = await fetch(`${baseURL}/admin/orders?is_deleted=false${cityFilter ? `&city_id=${cityFilter}` : ""}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -53,7 +57,7 @@ export default function AdminOrdersListScreen({
       }
 
       const data = await res.json();
-      setOrders(Array.isArray(data) ? data : []);
+      if (cityFilterRef.current === cityFilter) setOrders(Array.isArray(data) ? data : []);
     } catch (error: any) {
       toast.error(
         handleApiError(
@@ -69,7 +73,7 @@ export default function AdminOrdersListScreen({
 
   useEffect(() => {
     fetchOrders();
-  }, [token]);
+  }, [token, cityFilter]);
 
   const handleHardDelete = async (orderId: string) => {
     if (
@@ -151,6 +155,7 @@ export default function AdminOrdersListScreen({
         </div>
 
         <div className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-6">
+          <OperatorCityField value={cityFilter} onChange={(id) => { setOrders([]); setCityFilter(id); }} />
           {isLoading ? (
             <div className="min-h-[320px] flex items-center justify-center text-slate-500 gap-3">
               <Loader2 className="w-5 h-5 animate-spin text-sky-500" />

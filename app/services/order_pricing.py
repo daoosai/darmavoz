@@ -1,3 +1,4 @@
+from app.services.cities import resolve_city
 import asyncio
 import logging
 from dataclasses import dataclass
@@ -315,6 +316,7 @@ async def calculate_client_order_pricing(
     delivery_lon: float,
     quantity: int = 1,
     quarry_id: UUID | None = None,
+    city_id: UUID | None = None,
 ) -> ClientOrderPricing:
     options = await calculate_client_order_options(
         session,
@@ -324,6 +326,7 @@ async def calculate_client_order_pricing(
         delivery_lon=delivery_lon,
         quantity=quantity,
         quarry_id=quarry_id,
+        city_id=city_id,
     )
     return options[0]
 
@@ -337,7 +340,9 @@ async def calculate_client_order_options(
     delivery_lon: float,
     quantity: int = 1,
     quarry_id: UUID | None = None,
+    city_id: UUID | None = None,
 ) -> list[ClientOrderPricing]:
+    city = await resolve_city(session, city_id)
     material = await session.get(Material, material_id)
     if material is None or not material.is_active:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Материал недоступен.")
@@ -364,6 +369,7 @@ async def calculate_client_order_options(
             select(Quarry, quarry_materials.c.price)
             .join(quarry_materials, quarry_materials.c.quarry_id == Quarry.id)
             .where(
+                Quarry.city_id == city.id,
                 *public_pickup_point_filters(),
                 Quarry.id == quarry_id,
                 Quarry.point_type.in_(MARKETPLACE_POINT_TYPES),
@@ -387,6 +393,7 @@ async def calculate_client_order_options(
             )
             .join(quarry_materials, quarry_materials.c.quarry_id == Quarry.id)
             .where(
+                Quarry.city_id == city.id,
                 *public_pickup_point_filters(),
                 Quarry.point_type == "quarry",
                 quarry_materials.c.material_id == material_id,

@@ -1,3 +1,4 @@
+import RegistrationCitiesField from './RegistrationCitiesField';
 import { useState, type FormEvent } from "react";
 import { ArrowLeft, Loader2, Phone } from "lucide-react";
 import toast from "react-hot-toast";
@@ -29,6 +30,7 @@ const getSupplierAuthErrorMessage = (
 };
 
 export default function SupplierRegisterScreen({ onBack }: Props) {
+  const [registrationCities, setRegistrationCities] = useState<string[]>([]);
   const [phone, setPhone] = useState("");
   const [challengeValue, setChallengeValue] = useState("");
   const [otpError, setOtpError] = useState("");
@@ -38,7 +40,7 @@ export default function SupplierRegisterScreen({ onBack }: Props) {
     const response = await fetch(`${baseURL}/auth/supplier/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone: normalizePhone(phone) }),
+      body: JSON.stringify({ city_ids: registrationCities, phone: normalizePhone(phone) }),
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -79,7 +81,7 @@ export default function SupplierRegisterScreen({ onBack }: Props) {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ phone: challengeValue, code }),
+          body: JSON.stringify({ city_ids: registrationCities, phone: challengeValue, code }),
         },
       );
       const data = await response.json().catch(() => ({}));
@@ -136,6 +138,7 @@ export default function SupplierRegisterScreen({ onBack }: Props) {
             />
           ) : (
             <form onSubmit={handleSendCode} className="space-y-5">
+        <RegistrationCitiesField value={registrationCities} onChange={setRegistrationCities} />
               <label className="block text-sm font-bold text-gray-900">
                 Номер телефона
                 <span className="mt-2 flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 focus-within:border-sky-500">

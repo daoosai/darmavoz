@@ -1,3 +1,6 @@
+import OperatorCityField from '../OperatorCityField';
+import { useCityStore } from '../cityStore';
+import type { City } from '../AdminCitiesScreen';
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Clock, MapPin, Phone, Truck, X } from "lucide-react";
 
@@ -32,7 +35,7 @@ export interface DriverMapItem {
   vehicle_tonnage_max: number | null;
 }
 
-const DEFAULT_CENTER: [number, number] = [65.534328, 57.152286];
+
 const STALE_LOCATION_MS = 2 * 60 * 1000;
 const POLLING_INTERVAL_MS = 15 * 1000;
 const activeDriverStatuses: ActiveDriverMapStatus[] = ["available", "busy"];
@@ -109,6 +112,10 @@ const formatLocationUpdatedAt = (value: string | null) => {
 };
 
 export default function DriverMapComponent() {
+  const [cityFilter, setCityFilter] = useState("");
+  const [selectedCity, setSelectedCity] = useState<City | null>(null);
+  const cities = useCityStore((state) => state.cities);
+  const mapCity = selectedCity || cities.find((city) => city.is_default) || cities[0];
   const token = useAuthStore((state) => state.token);
   const [drivers, setDrivers] = useState<DriverMapItem[]>([]);
   const [filters, setFilters] = useState<Record<ActiveDriverMapStatus, boolean>>({
@@ -158,7 +165,7 @@ export default function DriverMapComponent() {
           throw new Error("Требуется авторизация");
         }
 
-        const response = await fetch(`${baseURL}/logist/driver-map`, {
+        const response = await fetch(`${baseURL}/logist/driver-map${cityFilter ? `?city_id=${cityFilter}` : ""}`, {
           headers: { Authorization: `Bearer ${token}` },
           signal: controller.signal,
         });
@@ -189,7 +196,7 @@ export default function DriverMapComponent() {
       window.clearInterval(intervalId);
       controller.abort();
     };
-  }, [token]);
+  }, [token, cityFilter]);
 
   useEffect(() => {
     if (selectedDriverId && !selectedDriver) setSelectedDriverId(null);
@@ -198,7 +205,7 @@ export default function DriverMapComponent() {
   useEffect(() => {
     let disposed = false;
     const key = import.meta.env.VITE_2GIS_KEY;
-    if (!mapContainerRef.current || !key || mapRef.current) {
+    if (!mapCity || !mapContainerRef.current || !key || mapRef.current) {
       if (!key) setMapUnavailable(true);
       return;
     }
@@ -207,7 +214,7 @@ export default function DriverMapComponent() {
       .then((mapgl) => {
         if (disposed || !mapContainerRef.current || mapRef.current) return;
         const map = tryCreate2GisMap(
-          () => new mapgl.Map(mapContainerRef.current, { center: DEFAULT_CENTER, zoom: 10, key }),
+          () => new mapgl.Map(mapContainerRef.current, { center: [mapCity.center_lon, mapCity.center_lat], zoom: mapCity.map_zoom, key }),
           () => setMapUnavailable(true),
         );
         if (!map || disposed) {
@@ -228,7 +235,7 @@ export default function DriverMapComponent() {
       hasCenteredOnDrivers.current = false;
       setMapReady(false);
     };
-  }, []);
+  }, [mapCity?.id]);
 
   useEffect(() => {
     const mapgl = (window as any).mapgl;
@@ -331,6 +338,7 @@ export default function DriverMapComponent() {
 
   return (
     <section className="flex min-h-[calc(100dvh-13rem)] flex-1 flex-col gap-4">
+      <OperatorCityField value={cityFilter} onChange={(id, city) => { setDrivers([]); setSelectedDriverId(null); setCityFilter(id); setSelectedCity(city || null); }} />
       <div className="relative flex min-h-[50vh] flex-1 overflow-hidden rounded-[28px] bg-slate-100 sm:min-h-[560px]">
       <div className="absolute inset-0 bg-slate-100">
         <div ref={mapContainerRef} className="h-full w-full" aria-label="Карта водителей" />

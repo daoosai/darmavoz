@@ -1,10 +1,11 @@
+import { currentCity } from './cityStore';
 import React, { useEffect, useRef, useState } from "react";
 import { Loader2, MapPin, X } from "lucide-react";
 import toast from "react-hot-toast";
 import {
   fetch2gisAddressSuggestions,
   get2gisSuggestionLabel,
-  withTyumenBias,
+  withCityBias,
 } from "./addressSearch";
 import { baseURL } from "./utils";
 
@@ -224,7 +225,7 @@ export default function LogistEditOrderModal({
             "Content-Type": "application/json",
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
-          body: JSON.stringify({
+          body: JSON.stringify({ city_id: order.city_id,
             material_id: newOrder.material_id,
             delivery_option_id: newOrder.delivery_option_id,
             delivery_lat: newOrder.delivery_lat,
@@ -319,7 +320,7 @@ export default function LogistEditOrderModal({
   };
 
   const fetch2GISSuggests = async (query: string) => {
-    const items = await fetch2gisAddressSuggestions(query);
+    const items = await fetch2gisAddressSuggestions(query, currentCity(order.city_id));
     return items.map((item: any) => get2gisSuggestionLabel(item));
   };
 
@@ -351,7 +352,7 @@ export default function LogistEditOrderModal({
 
     try {
       const response = await fetch(
-        `${baseURL}/geo/geocode?address=${encodeURIComponent(withTyumenBias(address))}`,
+        `${baseURL}/geo/geocode?city_id=${order.city_id}&address=${encodeURIComponent(withCityBias(address, currentCity(order.city_id)))}`,
         {
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         },

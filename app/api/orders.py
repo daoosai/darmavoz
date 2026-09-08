@@ -35,6 +35,7 @@ async def list_orders(
 
 @router.get("/admin", response_model=list[OrderOut])
 async def list_admin_orders(
+    city_id: UUID | None = None,
     driver_id: UUID | None = None,
     date: date_type | None = None,
     is_deleted: bool = False,
@@ -44,7 +45,7 @@ async def list_admin_orders(
 ) -> list[Order]:
     del current_user
     deleted_filter = show_deleted if show_deleted is not None else is_deleted
-    return await list_recent_orders(db, driver_id=driver_id, created_on=date, is_deleted=deleted_filter)
+    return await list_recent_orders(db, city_id=city_id, driver_id=driver_id, created_on=date, is_deleted=deleted_filter)
 
 
 @router.delete("/{order_id}", response_model=OrderDeleteOut)
@@ -93,6 +94,7 @@ async def checkout_order(
         db,
         client_id=current_client.id if current_client is not None else payload.client_id,
         material_id=payload.material_id,
+        city_id=payload.city_id,
         delivery_option_id=payload.delivery_option_id,
         delivery_address=payload.delivery_address,
         notes=payload.notes,

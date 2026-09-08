@@ -176,6 +176,7 @@ interface PendingModerationRequest {
 interface AdminDashboardScreenProps {
   onLogout: () => void;
   initialTab?: AdminTab;
+  onNavigate?: (path: string) => void;
 }
 
 type AdminTab =
@@ -192,6 +193,21 @@ type AdminTab =
   | "support"
   | "profile";
 
+const ADMIN_TAB_PATHS: Record<AdminTab, string> = {
+  materials: "/admin/catalog",
+  quarries: "/admin/points",
+  delivery: "/admin/fleet",
+  drivers: "/admin/drivers",
+  moderation: "/admin/moderation",
+  water_septic: "/admin/water-septic",
+  suppliers: "/admin/suppliers",
+  equipment: "/admin/equipment",
+  cities: "/admin/cities",
+  driver_map: "/admin/driver-map",
+  support: "/admin/support",
+  profile: "/admin/profile",
+};
+
 interface QuarrySummaryFilters {
   statusFilter: string;
   placementFilter: PlacementStatus | "";
@@ -201,6 +217,7 @@ interface QuarrySummaryFilters {
 export default function AdminDashboardScreen({
   onLogout,
   initialTab = "materials",
+  onNavigate,
 }: AdminDashboardScreenProps) {
   const { token } = useAuthStore();
   const moderationRefreshNonce = useAdminModerationStore(
@@ -209,9 +226,14 @@ export default function AdminDashboardScreen({
   const [activeTab, setActiveTab] = useState<AdminTab>(initialTab);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
+
   const openSidebarSection = (tab: AdminTab) => {
     setActiveTab(tab);
     setIsSidebarOpen(false);
+    onNavigate?.(ADMIN_TAB_PATHS[tab]);
   };
 
   const sidebarButtonClass = (tab: AdminTab) =>
@@ -1760,7 +1782,7 @@ export default function AdminDashboardScreen({
         <div className="hidden sm:flex flex-1 sm:justify-center">
           <div className="bg-slate-100 p-1 rounded-xl flex w-full sm:w-auto overflow-x-auto">
             <button
-              onClick={() => setActiveTab("materials")}
+              onClick={() => openSidebarSection("materials")}
               className={`flex-1 sm:w-auto flex-shrink-0 whitespace-nowrap py-2 px-3 text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2 ${
                 activeTab === "materials"
                   ? "bg-white text-[#209ccf] shadow-sm"
@@ -1771,7 +1793,7 @@ export default function AdminDashboardScreen({
               Каталог
             </button>
             <button
-              onClick={() => setActiveTab("quarries")}
+              onClick={() => openSidebarSection("quarries")}
               className={`flex-1 sm:w-auto flex-shrink-0 whitespace-nowrap py-2 px-3 text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2 ${
                 activeTab === "quarries"
                   ? "bg-white text-[#209ccf] shadow-sm"
@@ -1787,7 +1809,7 @@ export default function AdminDashboardScreen({
               )}
             </button>
             <button
-              onClick={() => setActiveTab("delivery")}
+              onClick={() => openSidebarSection("delivery")}
               className={`flex-1 sm:w-auto flex-shrink-0 whitespace-nowrap py-2 px-3 text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2 ${
                 activeTab === "delivery"
                   ? "bg-white text-[#209ccf] shadow-sm"
@@ -1798,7 +1820,7 @@ export default function AdminDashboardScreen({
               Автопарк
             </button>
             <button
-              onClick={() => setActiveTab("drivers")}
+              onClick={() => openSidebarSection("drivers")}
               className={`flex-1 sm:w-auto flex-shrink-0 whitespace-nowrap py-2 px-3 text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2 ${
                 activeTab === "drivers"
                   ? "bg-white text-[#209ccf] shadow-sm"
@@ -1809,7 +1831,7 @@ export default function AdminDashboardScreen({
               Водители
             </button>
             <button
-              onClick={() => setActiveTab("moderation")}
+              onClick={() => openSidebarSection("moderation")}
               className={`flex-1 sm:w-auto flex-shrink-0 whitespace-nowrap py-2 px-3 text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2 ${
                 activeTab === "moderation"
                   ? "bg-white text-[#209ccf] shadow-sm"
@@ -1827,7 +1849,7 @@ export default function AdminDashboardScreen({
               Модерация
             </button>
             <button
-              onClick={() => setActiveTab("profile")}
+              onClick={() => openSidebarSection("profile")}
               className={`flex-1 sm:w-auto flex-shrink-0 whitespace-nowrap py-2 px-3 text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2 ${
                 activeTab === "profile"
                   ? "bg-white text-[#209ccf] shadow-sm"
@@ -1931,10 +1953,10 @@ export default function AdminDashboardScreen({
             <p className="px-3 pb-1 text-xs font-bold uppercase tracking-wide text-slate-400">Управление</p>
             <button type="button" onClick={() => openSidebarSection("materials")} className={sidebarButtonClass("materials")}><Layers className="h-5 w-5" />Каталог</button>
             <button type="button" onClick={() => openSidebarSection("quarries")} className={sidebarButtonClass("quarries")}><Map className="h-5 w-5" />Точки</button>
-            <a href="/admin/cities" onClick={() => setIsSidebarOpen(false)} className={sidebarButtonClass("cities")}><MapPin className="h-5 w-5" />Города</a>
+            <button type="button" onClick={() => openSidebarSection("cities")} className={sidebarButtonClass("cities")}><MapPin className="h-5 w-5" />Города</button>
             <button type="button" onClick={() => openSidebarSection("delivery")} className={sidebarButtonClass("delivery")}><Truck className="h-5 w-5" />Автопарк</button>
             <button type="button" onClick={() => openSidebarSection("drivers")} className={sidebarButtonClass("drivers")}><Users className="h-5 w-5" />Водители</button>
-            <a href="/admin/driver-map" onClick={() => setIsSidebarOpen(false)} className={sidebarButtonClass("driver_map")}><MapPin className="h-5 w-5" />Карта водителей</a>
+            <button type="button" onClick={() => openSidebarSection("driver_map")} className={sidebarButtonClass("driver_map")}><MapPin className="h-5 w-5" />Карта водителей</button>
             <button type="button" onClick={() => openSidebarSection("profile")} className={sidebarButtonClass("profile")}><User className="h-5 w-5" />Профиль</button>
           </nav>
         </aside>
@@ -3415,7 +3437,7 @@ export default function AdminDashboardScreen({
       {/* Mobile Bottom Navigation Menu */}
       <div className="fixed bottom-0 left-0 right-0 z-50 flex min-h-[68px] items-center justify-start overflow-x-auto border-t border-gray-200 bg-white px-2 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] sm:hidden">
         <button
-          onClick={() => setActiveTab("materials")}
+          onClick={() => openSidebarSection("materials")}
           className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${
             activeTab === "materials"
               ? "text-[#2DB0E6]"
@@ -3428,7 +3450,7 @@ export default function AdminDashboardScreen({
           <span className="text-[10px] font-bold">Каталог</span>
         </button>
         <button
-          onClick={() => setActiveTab("quarries")}
+          onClick={() => openSidebarSection("quarries")}
           className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${
             activeTab === "quarries"
               ? "text-[#2DB0E6]"
@@ -3446,7 +3468,7 @@ export default function AdminDashboardScreen({
           <span className="text-[10px] font-bold">Точки</span>
         </button>
         <button
-          onClick={() => setActiveTab("delivery")}
+          onClick={() => openSidebarSection("delivery")}
           className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${
             activeTab === "delivery"
               ? "text-[#2DB0E6]"
@@ -3461,7 +3483,7 @@ export default function AdminDashboardScreen({
           <span className="text-[10px] font-bold">Автопарк</span>
         </button>
         <button
-          onClick={() => setActiveTab("drivers")}
+          onClick={() => openSidebarSection("drivers")}
           className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${
             activeTab === "drivers"
               ? "text-[#2DB0E6]"
@@ -3476,7 +3498,7 @@ export default function AdminDashboardScreen({
           <span className="text-[10px] font-bold">Водители</span>
         </button>
         <button
-          onClick={() => setActiveTab("moderation")}
+          onClick={() => openSidebarSection("moderation")}
           className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${
             activeTab === "moderation"
               ? "text-[#2DB0E6]"
@@ -3496,7 +3518,7 @@ export default function AdminDashboardScreen({
           <span className="text-[10px] font-bold">Модерация</span>
         </button>
         <button
-          onClick={() => setActiveTab("profile")}
+          onClick={() => openSidebarSection("profile")}
           className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${
             activeTab === "profile"
               ? "text-[#2DB0E6]"

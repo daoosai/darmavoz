@@ -64,6 +64,20 @@ import WaterSepticPartnerPortalScreen from "./WaterSepticPartnerPortalScreen";
 import AdminNotificationToastListener from "./components/shared/AdminNotificationToastListener";
 
 const WATER_PARTNER_BOARD_PATH = "/water-partner-board";
+const ADMIN_DASHBOARD_PATHS = {
+  "/admin/catalog": "materials",
+  "/admin/points": "quarries",
+  "/admin/fleet": "delivery",
+  "/admin/drivers": "drivers",
+  "/admin/moderation": "moderation",
+  "/admin/water-septic": "water_septic",
+  "/admin/suppliers": "suppliers",
+  "/admin/equipment": "equipment",
+  "/admin/cities": "cities",
+  "/admin/driver-map": "driver_map",
+  "/admin/support": "support",
+  "/admin/profile": "profile",
+} as const;
 
 // Reuse Material type as MaterialProps by exporting it from MaterialDetailScreen or type matching
 export default function App() {
@@ -244,15 +258,14 @@ export default function App() {
       return role === "admin" ? <AdminOrdersListScreen role="admin" /> : renderPartnerLogin();
     }
 
-    if (currentPath === "/admin/driver-map") {
+    const adminInitialTab = ADMIN_DASHBOARD_PATHS[currentPath as keyof typeof ADMIN_DASHBOARD_PATHS];
+    if (adminInitialTab) {
       return role === "admin" ? (
-        <AdminDashboardScreen onLogout={() => setCurrentRoute("login")} initialTab="driver_map" />
-      ) : renderPartnerLogin();
-    }
-
-    if (currentPath === "/admin/cities") {
-      return role === "admin" ? (
-        <AdminDashboardScreen onLogout={() => setCurrentRoute("login")} initialTab="cities" />
+        <AdminDashboardScreen
+          onLogout={() => setCurrentRoute("login")}
+          initialTab={adminInitialTab}
+          onNavigate={navigateToPath}
+        />
       ) : renderPartnerLogin();
     }
 
@@ -343,7 +356,10 @@ export default function App() {
 
     if (currentRoute === "admin") {
       return role === "admin" ? (
-        <AdminDashboardScreen onLogout={() => setCurrentRoute("login")} />
+        <AdminDashboardScreen
+          onLogout={() => setCurrentRoute("login")}
+          onNavigate={navigateToPath}
+        />
       ) : renderPartnerLogin();
     }
 

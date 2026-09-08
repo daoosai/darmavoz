@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { MaterialProps } from "./MaterialDetailScreen";
 import BulkCalculatorScreen from './BulkCalculatorScreen';
-import CityBoundary, { CitySelector } from './CityBoundary';
+import CityBoundary from './CityBoundary';
 import { useCityStore } from './cityStore';
 import OrdersScreen from "./OrdersScreen";
 import WelcomeScreen from "./WelcomeScreen";
@@ -432,7 +432,6 @@ function MainContent({
   const [showAddressSheet, setShowAddressSheet] = useState(false);
   const [calculatorMaterial, setCalculatorMaterial] = useState<string | null>(null);
   const { cityId } = useCityStore();
-  const [showCitySelector, setShowCitySelector] = useState(false);
   const [serviceDirection, setServiceDirection] = useState<"delivery" | "equipment">("delivery");
   const [mapMaterial, setMapMaterial] = useState<MaterialProps | null>(null);
   const [materialActionChoice, setMaterialActionChoice] = useState<MaterialProps | null>(null);
@@ -560,10 +559,6 @@ function MainContent({
       <div className="w-full max-w-md bg-white min-h-screen sm:min-h-0 sm:h-[85vh] relative shadow-2xl flex flex-col overflow-hidden sm:rounded-[32px] sm:border-8 border-slate-900">
         {/* Main Content Area */}
         <main className="flex h-full flex-1 flex-col overflow-y-auto pb-[calc(90px+env(safe-area-inset-bottom))] pt-4">
-          {activeTab !== "home" && <div className="flex justify-end px-4 pb-2">
-            <button type="button" aria-label="Выбрать город" title="Выбрать город" className="rounded-full bg-slate-100 p-2.5 text-sky-700" onClick={() => setShowCitySelector(true)}><MapPin className="h-4 w-4" /></button>
-          </div>}
-          {showCitySelector && <CitySelector onClose={() => setShowCitySelector(false)} />}
           {activeTab === "home" && (
             <>
               <div className="px-4">

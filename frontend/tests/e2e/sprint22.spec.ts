@@ -50,28 +50,14 @@ test('калькулятор показывает объём, тоннаж и з
   expect(padding).toBeGreaterThanOrEqual(40);
 });
 
-test('смена города сохраняет старую корзину и изолирует поздние ответы карты', async ({ page }) => {
+test('сохранённый город восстанавливается без глобальной кнопки выбора', async ({ page }) => {
   await page.addInitScript(() => {
-    if (localStorage.getItem('sprint22-fixture')) return;
-    localStorage.setItem('sprint22-fixture', '1');
-    localStorage.setItem('cart-storage', JSON.stringify({ version: 0, state: { cartItems: [{ id: 'legacy-item', material: { id: 'sand', name: 'Песок' }, deliveryOption: { id: 'truck20', title: 'Кузов', capacity_m3: 20 }, quantity: 1, volume: 20 }] } }));
+    localStorage.setItem('selected-city', JSON.stringify({ state: { cityId: 'city-2' }, version: 1 }));
   });
   await page.goto('/water');
   await page.getByRole('button', { name: 'Я Клиент' }).click();
-  const citySelector = page.getByRole('button', { name: 'Выбрать город' });
-  await expect(citySelector).toBeVisible();
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('cart-storage')!).state.cartCityId)).toBe('city-1');
-  await citySelector.click();
-  await page.getByRole('button', { name: /Второй город/ }).click();
+  await expect(page.getByRole('button', { name: 'Выбрать город' })).toHaveCount(0);
   await expect(page.getByText('Источник второго города')).toBeVisible();
   await expect(page.getByText('Источник Тюмени')).toHaveCount(0);
-  const second = await page.evaluate(() => JSON.parse(localStorage.getItem('cart-storage')!).state);
-  expect(second.cartItems).toEqual([]);
-  expect(second.cityCarts['city-1'][0].id).toBe('legacy-item');
-  await page.reload();
-  await page.getByRole('button', { name: 'Я Клиент' }).click();
-  await expect(citySelector).toBeVisible();
-  await citySelector.click();
-  await page.getByRole('button', { name: /Тюмень/ }).click();
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('cart-storage')!).state.cartItems[0]?.id)).toBe('legacy-item');
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('cart-storage')!).state.cartCityId)).toBe('city-2');
 });

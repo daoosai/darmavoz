@@ -51,6 +51,7 @@ import ClientAddressBottomSheet from "./ClientAddressBottomSheet";
 import ClientProfileScreen from "./ClientProfileScreen";
 import InstallPWA from "./InstallPWA";
 import { usePushNotifications } from "./usePushNotifications";
+import { LOGOUT_COMPLETED_EVENT } from "./pushAuth";
 import SupplierPortalScreen from "./SupplierPortalScreen";
 import FloatingOrderTracker from "./FloatingOrderTracker";
 import EquipmentCatalogScreen from "./EquipmentCatalogScreen";
@@ -160,11 +161,25 @@ export default function App() {
     setCurrentPath(nextPath);
   };
 
+  const returnToWelcome = () => {
+    navigateToPath("/", true);
+    setActiveTab("home");
+    setSelectedCategoryId(null);
+    setSelectedMaterial(null);
+    setCurrentRoute("welcome");
+  };
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const handlePopState = () => setCurrentPath(window.location.pathname);
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.addEventListener(LOGOUT_COMPLETED_EVENT, returnToWelcome);
+    return () => window.removeEventListener(LOGOUT_COMPLETED_EVENT, returnToWelcome);
   }, []);
 
   useEffect(() => {
@@ -260,10 +275,7 @@ export default function App() {
           }
           setCurrentRoute(resolveRouteForRole(nextRole));
         }}
-        onBack={() => {
-          navigateToPath("/");
-          setCurrentRoute("welcome");
-        }}
+        onBack={returnToWelcome}
         onSelectSupplierRegister={() => setCurrentRoute("supplier_register")}
         onSelectEquipmentOwnerRegister={() => setCurrentRoute("equipment_owner_register")}
         onSelectWaterSepticPartnerRegister={() => setCurrentRoute("water_septic_partner_register")}
@@ -279,7 +291,7 @@ export default function App() {
     if (adminInitialTab) {
       return role === "admin" ? (
         <AdminDashboardScreen
-          onLogout={() => setCurrentRoute("login")}
+          onLogout={returnToWelcome}
           initialTab={adminInitialTab}
           onNavigate={navigateToPath}
         />
@@ -288,13 +300,13 @@ export default function App() {
 
     if (currentPath === "/logist/orders") {
       return role === "logist" ? (
-        <LogistDashboardScreen onLogout={() => setCurrentRoute("login")} />
+        <LogistDashboardScreen onLogout={returnToWelcome} />
       ) : renderPartnerLogin();
     }
 
     if (currentPath === "/logist/driver-map") {
       return role === "logist" ? (
-        <LogistDashboardScreen onLogout={() => setCurrentRoute("login")} initialTab="driver_map" />
+        <LogistDashboardScreen onLogout={returnToWelcome} initialTab="driver_map" />
       ) : renderPartnerLogin();
     }
 
@@ -311,10 +323,7 @@ export default function App() {
     if (currentPath === WATER_PARTNER_BOARD_PATH) {
       return token && role === "water_septic_partner" ? (
         <WaterSepticPartnerPortalScreen
-          onBack={() => {
-            navigateToPath("/");
-            setCurrentRoute("login");
-          }}
+          onBack={returnToWelcome}
         />
       ) : renderPartnerLogin();
     }
@@ -341,18 +350,18 @@ export default function App() {
     }
 
     if (currentRoute === "supplier_register" || currentRoute === "supplier") {
-      return <SupplierPortalScreen onBack={() => setCurrentRoute("login")} />;
+      return <SupplierPortalScreen onBack={returnToWelcome} />;
     }
 
     if (
       currentRoute === "equipment_owner_register" ||
       currentRoute === "equipment_owner"
     ) {
-      return <EquipmentOwnerPortalScreen onBack={() => setCurrentRoute("login")} />;
+      return <EquipmentOwnerPortalScreen onBack={returnToWelcome} />;
     }
 
     if (currentRoute === "water_septic_partner_register") {
-      return <WaterSepticPartnerPortalScreen onBack={() => setCurrentRoute("login")} />;
+      return <WaterSepticPartnerPortalScreen onBack={returnToWelcome} />;
     }
 
     if (currentRoute === "login") {
@@ -361,20 +370,20 @@ export default function App() {
 
     if (currentRoute === "driver") {
       return role === "driver" ? (
-        <DriverOrdersScreen onLogout={() => setCurrentRoute("login")} />
+        <DriverOrdersScreen onLogout={returnToWelcome} />
       ) : renderPartnerLogin();
     }
 
     if (currentRoute === "logist") {
       return role === "logist" ? (
-        <LogistDashboardScreen onLogout={() => setCurrentRoute("login")} />
+        <LogistDashboardScreen onLogout={returnToWelcome} />
       ) : renderPartnerLogin();
     }
 
     if (currentRoute === "admin") {
       return role === "admin" ? (
         <AdminDashboardScreen
-          onLogout={() => setCurrentRoute("login")}
+          onLogout={returnToWelcome}
           onNavigate={navigateToPath}
         />
       ) : renderPartnerLogin();
@@ -404,6 +413,7 @@ export default function App() {
         focusedOrderId={focusedClientOrderId}
         onOpenOrder={openClientOrder}
         onClearFocusedOrder={clearFocusedClientOrder}
+        onReturnToWelcome={returnToWelcome}
         currentPath={currentPath}
         setCurrentPath={setCurrentPath}
       /></CityBoundary>
@@ -453,6 +463,7 @@ function MainContent({
   focusedOrderId,
   onOpenOrder,
   onClearFocusedOrder,
+  onReturnToWelcome,
   currentPath,
   setCurrentPath,
 }: any) {
@@ -813,6 +824,7 @@ function MainContent({
               <ClientProfileScreen
                 onOpenAddresses={() => setShowAddressSheet(true)}
                 onOpenSupport={() => setActiveTab("support")}
+                onLogout={onReturnToWelcome}
               />
             ) : (
               <ProfileScreen onOpenAuth={() => setShowAuthSheet(true)} />

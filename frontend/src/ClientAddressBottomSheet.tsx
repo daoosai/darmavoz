@@ -82,6 +82,8 @@ export default function ClientAddressBottomSheet({
   const [isMapUnavailable, setIsMapUnavailable] = useState(false);
   const [localSelectedId, setLocalSelectedId] = useState<string | null>(null);
   const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
+  const [pendingCityId, setPendingCityId] = useState<string | null>(null);
+  const [previewZoom, setPreviewZoom] = useState<number | null>(null);
 
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -163,8 +165,8 @@ export default function ClientAddressBottomSheet({
     if (mapRef.current && lat && lon) {
       const coords: [number, number] = [lon, lat];
 
-      mapRef.current.setCenter(coords);
-      mapRef.current.setZoom(15);
+      mapRef.current.setCenter(coords, { duration: 450, easing: "easeOutCubic" });
+      mapRef.current.setZoom(previewZoom ?? 15, { duration: 450 });
 
       if (markerRef.current) {
         markerRef.current.setCoordinates(coords);
@@ -172,7 +174,7 @@ export default function ClientAddressBottomSheet({
         markerRef.current = createDraggableMarker(mapRef.current, coords);
       }
     }
-  }, [lat, lon]);
+  }, [lat, lon, previewZoom]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent | TouchEvent) => {
@@ -194,7 +196,9 @@ export default function ClientAddressBottomSheet({
   }, []);
 
   const fetch2GISSuggests = async (query: string) => {
-    const items = await fetch2gisAddressSuggestions(query);
+    const items = await fetch2gisAddressSuggestions(query, currentCity(), {
+      searchAllCities: true,
+    });
     return items
       .map((item: any): AddressSuggestion => {
         const address = get2gisSuggestionAddress(item);
@@ -218,6 +222,8 @@ export default function ClientAddressBottomSheet({
     setNewAddress(val);
     setLat(null);
     setLon(null);
+    setPendingCityId(null);
+    setPreviewZoom(null);
     const suggests = await fetch2GISSuggests(val);
     setSuggestions(suggests.filter(Boolean));
   };
@@ -235,9 +241,8 @@ export default function ClientAddressBottomSheet({
       return;
     }
 
-    if (matchedCity && matchedCity.id !== useCityStore.getState().cityId) {
-      chooseCity(matchedCity.id, { preserveAddress: true });
-    }
+    setPendingCityId(matchedCity?.id ?? null);
+    setPreviewZoom(matchedCity?.map_zoom ?? 15);
     setNewAddress(address);
     setSuggestions([]);
 
@@ -324,6 +329,19 @@ export default function ClientAddressBottomSheet({
     onClose();
   };
 
+  const applyPendingCity = () => {
+    if (!pendingCityId || pendingCityId === useCityStore.getState().cityId) {
+      return true;
+    }
+    try {
+      chooseCity(pendingCityId, { preserveAddress: true });
+      return true;
+    } catch {
+      toast.error("В этом населенном пункте доставка пока недоступна");
+      return false;
+    }
+  };
+
   const handleDeleteAddress = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     try {
@@ -369,6 +387,7 @@ export default function ClientAddressBottomSheet({
     if (!addressToSave.trim()) return;
     setIsSubmitting(true);
     try {
+      if (!applyPendingCity()) return;
       if (!token || role !== "client") {
         setSelectedAddress(
           addressToSave,
@@ -382,6 +401,8 @@ export default function ClientAddressBottomSheet({
         toast.success("Адрес выбран");
         setNewAddress("");
         setNewComment("");
+        setPendingCityId(null);
+        setPreviewZoom(null);
         setSuggestions([]);
         if (closeOnSelect) onClose();
         return;
@@ -422,6 +443,8 @@ export default function ClientAddressBottomSheet({
         setNewAddress("");
         setNewComment("");
         setEditingAddressId(null);
+        setPendingCityId(null);
+        setPreviewZoom(null);
         setIsAdding(false);
         if (closeOnSelect) onClose();
         else fetchAddresses();
@@ -440,6 +463,8 @@ export default function ClientAddressBottomSheet({
     setNewAddress("");
     setNewComment("");
     setEditingAddressId(null);
+    setPendingCityId(null);
+    setPreviewZoom(null);
     setIsAdding(true);
     setSuggestions([]);
   };

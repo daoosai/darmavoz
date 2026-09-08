@@ -3,14 +3,12 @@ import type { City } from './AdminCitiesScreen';
 const DGIS_KEY = import.meta.env.VITE_2GIS_KEY;
 const TWOGIS_SUGGEST_URL = "https://catalog.api.2gis.com/3.0/suggests";
 const TWOGIS_ADDRESS_SUGGEST_TYPES = [
-  "building",
-  "street",
   "adm_div.city",
   "adm_div.settlement",
-  "adm_div.district",
-  "adm_div.division",
-  "adm_div.living_area",
+  "building",
+  "street",
   "adm_div.place",
+  "adm_div.living_area",
 ].join(",");
 
 type SuggestApiError = Error & {
@@ -154,6 +152,7 @@ export const withCityBias = (address: string, city: City = currentCity()): strin
 export const fetch2gisAddressSuggestions = async (
   query: string,
   city: City = currentCity(),
+  options: { searchAllCities?: boolean } = {},
 ): Promise<any[]> => {
   const normalized = query.trim();
   if (normalized.length < 3) {
@@ -166,15 +165,18 @@ export const fetch2gisAddressSuggestions = async (
   }
 
   const requestUrl = new URL(TWOGIS_SUGGEST_URL);
-  requestUrl.search = new URLSearchParams({
-    q: withCityBias(normalized, city),
+  const params = new URLSearchParams({
+    q: options.searchAllCities ? normalized : withCityBias(normalized, city),
     key: DGIS_KEY,
     type: TWOGIS_ADDRESS_SUGGEST_TYPES,
     fields: "items.point,items.address,items.adm_div,items.full_address_name",
-    location: `${city.center_lon},${city.center_lat}`,
     page_size: "20",
     locale: "ru_RU",
-  }).toString();
+  });
+  if (!options.searchAllCities) {
+    params.set("location", `${city.center_lon},${city.center_lat}`);
+  }
+  requestUrl.search = params.toString();
 
   try {
     const response = await fetch(requestUrl);

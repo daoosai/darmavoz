@@ -424,6 +424,7 @@ export default function App() {
     <>
       <Toaster
         position="top-right"
+        containerStyle={{ zIndex: 999999 }}
         toastOptions={{
           duration: 2000,
           style: {

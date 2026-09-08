@@ -237,7 +237,21 @@ export default function ClientAddressBottomSheet({
     );
 
     if (suggestion.localityNames.length > 0 && !matchedCity) {
-      toast.error("В этом населенном пункте доставка пока недоступна");
+      const cityName = suggestion.localityNames[0]?.trim();
+      toast(
+        cityName
+          ? `В г. ${cityName} доставка пока недоступна. Выберите адрес в поддерживаемом регионе.`
+          : "В выбранном городе доставка пока недоступна. Выберите адрес в поддерживаемом регионе.",
+        {
+          icon: "⚠️",
+          duration: 4000,
+          style: {
+            background: "#FEF3C7",
+            color: "#92400E",
+            border: "1px solid #F59E0B",
+          },
+        },
+      );
       return;
     }
 
@@ -337,7 +351,18 @@ export default function ClientAddressBottomSheet({
       chooseCity(pendingCityId, { preserveAddress: true });
       return true;
     } catch {
-      toast.error("В этом населенном пункте доставка пока недоступна");
+      toast(
+        "В выбранном городе доставка пока недоступна. Выберите адрес в поддерживаемом регионе.",
+        {
+          icon: "⚠️",
+          duration: 4000,
+          style: {
+            background: "#FEF3C7",
+            color: "#92400E",
+            border: "1px solid #F59E0B",
+          },
+        },
+      );
       return false;
     }
   };

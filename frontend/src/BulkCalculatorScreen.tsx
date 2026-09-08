@@ -61,6 +61,9 @@ export default function BulkCalculatorScreen({ materialId, onClose, onGoToCatalo
   } catch (err) { validation = (err as Error).message; }
   const material = references?.materials.find((item) => item.id === draft.materialId);
   const inputClass = 'mt-1.5 w-full rounded-xl border border-slate-200 bg-white p-3 text-slate-900 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100';
+  const thicknessPresets = draft.thicknessUnit === 'm'
+    ? [{ value: '0.05', label: '0.05 м' }, { value: '0.1', label: '0.1 м' }, { value: '0.15', label: '0.15 м' }, { value: '0.2', label: '0.2 м' }]
+    : [{ value: '5', label: '5 см' }, { value: '10', label: '10 см' }, { value: '15', label: '15 см' }, { value: '20', label: '20 см' }];
   const selectMaterial = (id: string) => {
     const selectedMaterial = references?.materials.find((item) => item.id === id);
     setIsDensityEditable(false);
@@ -69,7 +72,7 @@ export default function BulkCalculatorScreen({ materialId, onClose, onGoToCatalo
   return <section role="dialog" aria-modal="true" aria-label="Калькулятор материалов" className="fixed inset-0 z-[100] overflow-y-auto bg-slate-50 pt-[max(env(safe-area-inset-top),2.5rem)] pb-[max(env(safe-area-inset-bottom),1rem)]">
     <div className="mx-auto max-w-md space-y-5 px-4">
       <button type="button" onClick={onClose} className="py-2 font-semibold text-sky-600">← Назад</button>
-      <header className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-100">
+      <header className="rounded-3xl bg-white p-5 shadow-sm">
         <span className="mb-3 inline-flex rounded-2xl bg-blue-50 p-3 text-sky-600"><Calculator className="h-6 w-6" /></span>
         <h1 className="text-2xl font-black tracking-tight text-slate-900">Калькулятор материалов</h1>
         <p className="mt-2 text-sm leading-5 text-slate-500">Введите размеры участка — объём, вес и количество машин рассчитаются автоматически.</p>
@@ -77,7 +80,7 @@ export default function BulkCalculatorScreen({ materialId, onClose, onGoToCatalo
       {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error} <button className="font-bold text-sky-600" onClick={() => setAttempt((value) => value + 1)}>Повторить</button></p>}
       {!references && !error && <p className="text-sm text-slate-500">Загрузка справочников…</p>}
 
-      <section className="space-y-4 rounded-3xl bg-white p-5 shadow-sm ring-1 ring-slate-100">
+      <section className="space-y-4 rounded-3xl bg-white p-5 shadow-sm">
         <label className="block text-sm font-bold text-slate-700">Материал
           <select aria-label="Материал" className={inputClass} value={draft.materialId} onChange={(event) => selectMaterial(event.target.value)}>
             <option value="">Выберите материал</option>{references?.materials.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
@@ -94,7 +97,7 @@ export default function BulkCalculatorScreen({ materialId, onClose, onGoToCatalo
           </div>
         </label>
         <div className="flex flex-wrap gap-2" aria-label="Быстрый выбор толщины">
-          {[5, 10, 15, 20].map((value) => <button key={value} type="button" onClick={() => update({ thickness: String(value), thicknessUnit: 'cm' })} className={`rounded-full px-3 py-1.5 text-sm font-bold transition ${draft.thickness === String(value) && draft.thicknessUnit === 'cm' ? 'bg-sky-500 text-white' : 'bg-slate-100 text-slate-600 active:bg-slate-200'}`}>{value} см</button>)}
+          {thicknessPresets.map((preset) => <button key={preset.value} type="button" onClick={() => update({ thickness: preset.value })} className={`rounded-full px-3 py-1.5 text-sm font-bold transition ${draft.thickness === preset.value ? 'bg-sky-500 text-white' : 'bg-slate-100 text-slate-600 active:bg-slate-200'}`}>{preset.label}</button>)}
         </div>
         <label className="block text-sm font-bold text-slate-700">Кубатура машины, м³<input aria-label="Кубатура машины, м³" className={inputClass} inputMode="decimal" value={draft.capacity} onChange={(event) => update({ capacity: event.target.value })} /></label>
         <select aria-label="Кубатура из справочника" className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 outline-none focus:border-sky-400" value="" onChange={(event) => { if (event.target.value) update({ capacity: event.target.value }); }}><option value="">Выбрать кубатуру из справочника</option>{references?.delivery_options.map((item) => <option key={item.id} value={item.capacity_m3}>{item.title} — {item.capacity_m3} м³</option>)}</select>
@@ -107,7 +110,7 @@ export default function BulkCalculatorScreen({ materialId, onClose, onGoToCatalo
           <p className="mt-2 text-xs leading-4 text-slate-500">Коэффициент подставляется для выбранного материала автоматически.</p>
         </div>
       </section>
-      {result ? <section aria-live="polite" className="space-y-4 rounded-3xl bg-blue-50 p-5 ring-1 ring-blue-100">
+      {result ? <section aria-live="polite" className="space-y-4 rounded-3xl bg-blue-50 p-5 shadow-sm">
         <h2 className="text-sm font-black uppercase tracking-wide text-sky-700">Итоги расчёта</h2>
         <div><p className="text-sm font-medium text-slate-600">Объём</p><p className="text-2xl font-black text-slate-900">{formatBulk(result.volume)} м³</p></div>
         <div><p className="text-sm font-medium text-slate-600">Примерный вес</p><p className="text-2xl font-black text-slate-900">{result.mass !== null ? `${formatBulk(result.mass)} тонн` : 'Укажите плотность'}</p></div>
@@ -118,8 +121,8 @@ export default function BulkCalculatorScreen({ materialId, onClose, onGoToCatalo
         setContext({ ...draft, density: draft.density });
         onChooseSupplier(draft.materialId);
       }}>Выбрать поставщика</button>
-      <p className="text-center text-sm leading-5 text-slate-500">Расчёт не добавляет товары в корзину. Оформите нужные машины в каталоге.</p>
-      <button type="button" onClick={onGoToCatalog} className="mb-3 w-full rounded-2xl bg-blue-600 p-4 font-black text-white shadow-sm transition hover:bg-blue-700">Перейти в каталог</button>
+      <button type="button" onClick={onGoToCatalog} className="w-full rounded-2xl bg-sky-500 p-4 font-black text-white shadow-sm transition hover:bg-sky-600">Перейти в каталог</button>
+      <p className="mb-3 text-center text-sm leading-5 text-slate-500">Расчёт не добавляет товары в корзину. Оформите нужные машины в каталоге.</p>
     </div>
   </section>;
 }

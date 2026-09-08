@@ -32,6 +32,11 @@ test('калькулятор показывает объём, тоннаж и з
   await page.getByRole('button', { name: 'Калькулятор материалов', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Калькулятор материалов' });
   await dialog.getByLabel('Материал', { exact: true }).selectOption('sand');
+  await dialog.getByLabel('Единица толщины', { exact: true }).selectOption('m');
+  await dialog.getByRole('button', { name: '0.05 м', exact: true }).click();
+  await expect(dialog.getByLabel('Толщина слоя', { exact: true })).toHaveValue('0.05');
+  await dialog.getByLabel('Единица толщины', { exact: true }).selectOption('cm');
+  await expect(dialog.getByRole('button', { name: '5 см', exact: true })).toBeVisible();
   await dialog.getByLabel('Длина, м', { exact: true }).fill('10');
   await dialog.getByLabel('Ширина, м', { exact: true }).fill('10');
   await dialog.getByLabel('Толщина слоя', { exact: true }).fill('50');

@@ -446,7 +446,7 @@ function MainContent({
       badge: cartItemsCount > 0 ? cartItemsCount : undefined,
     },
     { id: "map", label: "Карта", icon: Map },
-    { id: "water", label: "Вода", icon: Droplets },
+    { id: "water", label: "Вода/септики", icon: Droplets },
     { id: "profile", label: "Профиль", icon: User },
   ];
 
@@ -849,7 +849,7 @@ function MainContent({
                     )}
                   </span>
                   <span
-                    className={`whitespace-nowrap text-[10px] leading-none ${
+                    className={`whitespace-nowrap leading-none ${tab.id === "water" ? "text-[9px] tracking-[-0.04em] sm:text-[10px]" : "text-[10px]"} ${
                       isActive && isPriority
                         ? "font-bold text-white"
                         : isPriority

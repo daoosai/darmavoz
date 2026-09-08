@@ -292,7 +292,7 @@ export default function WaterMapScreen({ initialTab = "water" }: { initialTab?: 
           </button>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1" role="tablist" aria-label="Тип точек на карте">
-          <button type="button" role="tab" aria-selected={serviceTab === "water"} onClick={() => { setServiceTab("water"); setSelectedId(null); setShowList(false); }} className={`rounded-lg px-3 py-2 text-sm font-bold transition ${serviceTab === "water" ? "bg-white text-sky-600 shadow-sm" : "text-slate-500"}`}>Точки воды</button>
+          <button type="button" role="tab" aria-selected={serviceTab === "water"} onClick={() => { setServiceTab("water"); setSelectedId(null); setShowList(false); }} className={`rounded-lg px-3 py-2 text-sm font-bold transition ${serviceTab === "water" ? "bg-white text-sky-600 shadow-sm" : "text-slate-500"}`}>Вода</button>
           <button type="button" role="tab" aria-selected={serviceTab === "septic"} onClick={() => { setServiceTab("septic"); setSelectedId(null); setShowList(false); }} className={`rounded-lg px-3 py-2 text-sm font-bold transition ${serviceTab === "septic" ? "bg-white text-sky-600 shadow-sm" : "text-slate-500"}`}>Откачка септиков</button>
         </div>
         {serviceTab === "water" ? <div className="mt-3 flex gap-2" role="group" aria-label="Фильтр типа воды">

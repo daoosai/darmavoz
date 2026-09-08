@@ -8,18 +8,23 @@ class CityCreate(BaseModel):
 
     name: str = Field(min_length=1, max_length=255)
     region: str = Field(min_length=1, max_length=255)
-    code: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=64)
+    code: str | None = Field(default=None, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=64)
     center_lat: float = Field(ge=-90, le=90)
     center_lon: float = Field(ge=-180, le=180)
     map_zoom: float = Field(ge=1, le=20)
-    min_lat: float = Field(ge=-90, le=90)
-    min_lon: float = Field(ge=-180, le=180)
-    max_lat: float = Field(ge=-90, le=90)
-    max_lon: float = Field(ge=-180, le=180)
+    min_lat: float | None = Field(default=None, ge=-90, le=90)
+    min_lon: float | None = Field(default=None, ge=-180, le=180)
+    max_lat: float | None = Field(default=None, ge=-90, le=90)
+    max_lon: float | None = Field(default=None, ge=-180, le=180)
     sort_order: int = 0
 
     @model_validator(mode="after")
     def validate_bounds(self):
+        bounds = (self.min_lat, self.min_lon, self.max_lat, self.max_lon)
+        if any(value is not None for value in bounds) and any(value is None for value in bounds):
+            raise ValueError("Границы поиска должны быть указаны полностью")
+        if all(value is None for value in bounds):
+            return self
         if not (self.min_lat < self.max_lat and self.min_lon < self.max_lon):
             raise ValueError("Некорректные границы поиска")
         if not (self.min_lat <= self.center_lat <= self.max_lat and self.min_lon <= self.center_lon <= self.max_lon):

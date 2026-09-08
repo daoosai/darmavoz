@@ -36,7 +36,7 @@ const getRequestUrlForLog = (requestUrl: URL) => {
 const getText = (value: unknown): string =>
   typeof value === "string" ? value.trim() : "";
 
-const getAdministrativeNames = (item: any): string[] => {
+export const get2gisSuggestionAdministrativeNames = (item: any): string[] => {
   const divisions = Array.isArray(item?.adm_div)
     ? item.adm_div
     : item?.adm_div
@@ -71,11 +71,20 @@ export const get2gisSuggestionAddress = (item: any): string => {
     getText(item?.name) ||
     getText(item?.search_attributes?.suggested_text);
 
-  return appendUniqueParts(baseAddress, getAdministrativeNames(item));
+  return appendUniqueParts(baseAddress, get2gisSuggestionAdministrativeNames(item));
 };
 
 export const get2gisSuggestionLabel = (item: any): string =>
   get2gisSuggestionAddress(item);
+
+export const get2gisCitySuggestionName = (item: any): string =>
+  getText(item?.name) || getText(item?.address?.name) || get2gisSuggestionAddress(item).split(",")[0];
+
+export const get2gisCitySuggestionRegion = (item: any): string => {
+  const city = get2gisCitySuggestionName(item).toLowerCase();
+  const divisions = get2gisSuggestionAdministrativeNames(item).filter((name) => name.toLowerCase() !== city);
+  return getText(item?.region?.name) || divisions.find((name) => /област|край|республик|округ/i.test(name)) || divisions.at(-1) || "";
+};
 
 export const get2gisSuggestionCoordinates = (
   item: any,
@@ -162,6 +171,28 @@ export const fetch2gisAddressSuggestions = async (
     }
 
     return items;
+  } catch (error) {
+    logSuggestError(error);
+    return [];
+  }
+};
+
+export const fetch2gisCitySuggestions = async (query: string): Promise<any[]> => {
+  const normalized = query.trim();
+  if (normalized.length < 3 || !DGIS_KEY) return [];
+  const requestUrl = new URL(TWOGIS_SUGGEST_URL);
+  requestUrl.search = new URLSearchParams({
+    q: normalized,
+    key: DGIS_KEY,
+    type: "adm_div.city,adm_div.settlement",
+    fields: "items.point,items.address,items.adm_div,items.full_address_name",
+    page_size: "10",
+    locale: "ru_RU",
+  }).toString();
+  try {
+    const response = await fetch(requestUrl);
+    const data = await response.json();
+    return response.ok && Array.isArray(data?.result?.items) ? data.result.items : [];
   } catch (error) {
     logSuggestError(error);
     return [];

@@ -30,6 +30,7 @@ def test_city_geo_validation(field, value):
 def test_city_create_is_inactive_only_and_patch_rejects_null():
     with pytest.raises(ValidationError):
         CityCreate(**city_data(), is_active=True)
+    assert CityCreate(name='Екатеринбург', region='Свердловская область', center_lat=56.838011, center_lon=60.597465, map_zoom=11).code is None
     with pytest.raises(ValidationError):
         CityUpdate(name=None)
 

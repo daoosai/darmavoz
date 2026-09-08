@@ -56,6 +56,19 @@ async def test_city_lifecycle_and_public_water_isolation(client, admin_token):
 
 
 @pytest.mark.asyncio
+async def test_simplified_city_create_generates_code_and_bounds(client, admin_token):
+    response = await client.post('/api/v1/admin/cities/', headers={"Authorization": f"Bearer {admin_token}"}, json={
+        'name': 'Екатеринбург', 'region': 'Свердловская область',
+        'center_lat': 56.838011, 'center_lon': 60.597465, 'map_zoom': 11,
+    })
+    assert response.status_code == 201, response.text
+    city = response.json()
+    assert city['code'] == 'ekaterinburg'
+    assert city['min_lat'] < city['center_lat'] < city['max_lat']
+    assert city['min_lon'] < city['center_lon'] < city['max_lon']
+
+
+@pytest.mark.asyncio
 async def test_driver_membership_and_unknown_historical_city(session_factory):
     async with session_factory() as db:
         city = await db.scalar(select(City).where(City.code == 'tyumen'))

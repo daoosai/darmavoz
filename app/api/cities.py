@@ -15,6 +15,36 @@ from app.services.cities import LEGACY_CITY_CODE
 router = APIRouter()
 admin_router = APIRouter(dependencies=[Depends(get_current_admin_user)])
 
+_TRANSLIT = str.maketrans({
+    "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "e", "ж": "zh", "з": "z", "и": "i", "й": "y",
+    "к": "k", "л": "l", "м": "m", "н": "n", "о": "o", "п": "p", "р": "r", "с": "s", "т": "t", "у": "u", "ф": "f",
+    "х": "h", "ц": "ts", "ч": "ch", "ш": "sh", "щ": "sch", "ъ": "", "ы": "y", "ь": "", "э": "e", "ю": "yu", "я": "ya",
+})
+
+
+def city_code_base(name: str) -> str:
+    transliterated = name.lower().translate(_TRANSLIT)
+    parts = "".join(char if char.isascii() and char.isalnum() else "-" for char in transliterated).split("-")
+    return "-".join(part for part in parts if part)[:64] or "city"
+
+
+async def generated_city_code(db: AsyncSession, name: str) -> str:
+    base = city_code_base(name)
+    candidate, number = base, 2
+    while await db.scalar(select(City.id).where(City.code == candidate)) is not None:
+        suffix = f"-{number}"
+        candidate = f"{base[:64 - len(suffix)]}{suffix}"
+        number += 1
+    return candidate
+
+
+def default_bounds(center_lat: float, center_lon: float) -> dict[str, float]:
+    radius = 0.5
+    return {
+        "min_lat": max(-90, center_lat - radius), "max_lat": min(90, center_lat + radius),
+        "min_lon": max(-180, center_lon - radius), "max_lon": min(180, center_lon + radius),
+    }
+
 
 @router.get("/cities/", response_model=list[CityOut])
 async def list_cities(db: AsyncSession = Depends(get_db)):
@@ -43,7 +73,11 @@ async def save_city(db: AsyncSession, city: City):
 
 @admin_router.post("/cities/", response_model=CityOut, status_code=201)
 async def create_city(payload: CityCreate, db: AsyncSession = Depends(get_db)):
-    city = City(**payload.model_dump(), is_active=False, is_default=False)
+    values = payload.model_dump()
+    values["code"] = values["code"] or await generated_city_code(db, payload.name)
+    if values["min_lat"] is None:
+        values.update(default_bounds(payload.center_lat, payload.center_lon))
+    city = City(**values, is_active=False, is_default=False)
     db.add(city)
     return await save_city(db, city)
 

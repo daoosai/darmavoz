@@ -3405,7 +3405,7 @@ export default function AdminDashboardScreen({
           ) : activeTab === "support" ? (
             <SupportScreen operatorMode />
           ) : activeTab === "cities" ? (
-            <AdminCitiesScreen onClose={() => openSidebarSection("materials")} />
+            <AdminCitiesScreen />
           ) : activeTab === "profile" ? (
             <AdminProfileScreen onLogout={handleLogout} />
           ) : null}

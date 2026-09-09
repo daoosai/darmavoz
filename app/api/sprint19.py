@@ -320,7 +320,12 @@ async def update_septic_provider_by_admin(
         raise HTTPException(status_code=404, detail="Профиль септика не найден")
 
     selected_city = await resolve_city(db, payload.city_id if "city_id" in payload.model_fields_set else profile.city_id, require_active=False)
-    await ensure_owner_city(db, profile.owner_user_id, selected_city.id)
+    await ensure_owner_city(
+        db,
+        profile.owner_user_id,
+        selected_city.id,
+        auto_sync=current_user.role is not None and current_user.role.name == "admin",
+    )
     payload.city_id = selected_city.id
 
     for field, value in payload.model_dump().items():

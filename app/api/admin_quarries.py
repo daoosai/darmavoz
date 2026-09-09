@@ -89,6 +89,8 @@ async def _apply_point_changes(
     db: AsyncSession,
     point: Quarry,
     payload_data: dict,
+    *,
+    auto_sync_owner_city: bool = False,
 ) -> None:
     for nullable_field in ("description", "contact_phone", "subscription_end_date", "short_name"):
         if nullable_field in payload_data and isinstance(payload_data[nullable_field], str):
@@ -100,7 +102,12 @@ async def _apply_point_changes(
         payload_data["short_name"] = payload_data.get("name") or point.name
     if "city_id" in payload_data:
         city = await resolve_city(db, payload_data["city_id"], require_active=False)
-        await ensure_owner_city(db, point.owner_user_id, city.id)
+        await ensure_owner_city(
+            db,
+            point.owner_user_id,
+            city.id,
+            auto_sync=auto_sync_owner_city,
+        )
         payload_data["city_id"] = city.id
     changed = set(payload_data)
     for field in (
@@ -282,7 +289,12 @@ async def update_pickup_point(
 ) -> dict:
     point = await _get_point_or_404(db, point_id)
     payload_data = payload.model_dump(exclude_unset=True)
-    await _apply_point_changes(db, point, payload_data)
+    await _apply_point_changes(
+        db,
+        point,
+        payload_data,
+        auto_sync_owner_city=current_user.role is not None and current_user.role.name == "admin",
+    )
     changed = set(payload_data)
     if "subscription_end_date" in changed:
         await apply_manual_placement_end_date(
@@ -386,6 +398,7 @@ async def approve_pickup_point(
                 db,
                 point,
                 pending_payload.model_dump(exclude_unset=True),
+                auto_sync_owner_city=current_user.role is not None and current_user.role.name == "admin",
             )
         await validate_point_can_be_approved(db, point)
         point.moderation_status = ModerationStatus.approved.value

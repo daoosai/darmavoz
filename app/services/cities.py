@@ -38,10 +38,26 @@ async def ensure_driver_city(db: AsyncSession, order, driver_id: UUID):
         raise HTTPException(409, "Водитель не обслуживает город заказа")
 
 
-async def ensure_owner_city(db: AsyncSession, owner_id: UUID | None, city_id: UUID):
-    if owner_id is not None:
-        await db.execute(select(User.id).where(User.id == owner_id).with_for_update())
-    if owner_id is not None and not await db.scalar(select(user_cities.c.user_id).where(
+async def ensure_owner_city(
+    db: AsyncSession,
+    owner_id: UUID | None,
+    city_id: UUID,
+    *,
+    auto_sync: bool = False,
+):
+    if owner_id is None:
+        return
+
+    await db.execute(select(User.id).where(User.id == owner_id).with_for_update())
+    if auto_sync:
+        await db.execute(
+            insert(user_cities)
+            .values(user_id=owner_id, city_id=city_id)
+            .on_conflict_do_nothing()
+        )
+        return
+
+    if not await db.scalar(select(user_cities.c.user_id).where(
         user_cities.c.user_id == owner_id, user_cities.c.city_id == city_id,
     )):
         raise HTTPException(409, "Город точки должен входить в города обслуживания владельца")

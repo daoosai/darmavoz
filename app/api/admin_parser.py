@@ -97,7 +97,7 @@ async def bind_point_owner(point_kind: PointKind, point_id: UUID, payload: Point
     point.owner_user_id = owner.id
     if point.city_id is None:
         raise HTTPException(409, "Сначала укажите город точки")
-    await ensure_owner_city(db, owner.id, point.city_id)
+    await ensure_owner_city(db, owner.id, point.city_id, auto_sync=True)
     point.crm_status = CrmStatus.activated.value
     point.is_active = True
     await _add_status_audit_log(db, point=point, point_kind=point_kind, admin_id=current_admin.id, old_status=old_status, new_status=CrmStatus.activated.value)

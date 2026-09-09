@@ -249,7 +249,12 @@ async def update_water_point_by_admin(
         raise HTTPException(status_code=404, detail="Точка воды не найдена")
 
     selected_city = await resolve_city(db, payload.city_id if "city_id" in payload.model_fields_set else point.city_id, require_active=False)
-    await ensure_owner_city(db, point.owner_user_id, selected_city.id)
+    await ensure_owner_city(
+        db,
+        point.owner_user_id,
+        selected_city.id,
+        auto_sync=current_user.role is not None and current_user.role.name == "admin",
+    )
     payload.city_id = selected_city.id
 
     for field, value in payload.model_dump().items():

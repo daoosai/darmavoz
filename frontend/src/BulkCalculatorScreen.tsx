@@ -11,21 +11,30 @@ type References = {
 };
 
 const densityDefaults: Array<[string, number]> = [
+  ['асфальтная крошка', 1.5],
+  ['бой кирпича', 1.25],
+  ['кирпич', 1.25],
+  ['пгс', 1.65],
+  ['щпс', 1.65],
+  ['отсев', 1.45],
   ['песок', 1.5],
-  ['щеб', 1.4],
+  ['щебень', 1.4],
+  ['гравий', 1.4],
   ['торф', 0.8],
-  ['грав', 1.5],
   ['грунт', 1.3],
-  ['земл', 1.3],
-  ['черноз', 1.2],
-  ['керамзит', 0.4],
-  ['асфальт', 2.3],
+  ['земля', 1.3],
+  ['чернозем', 1.1],
+  ['суглинок', 1.5],
+  ['глина', 1.5],
+  ['керамзит', 0.5],
+  ['асфальт', 2.1],
 ];
 const CUSTOM_MATERIAL_ID = '__custom_material__';
 
 function getMaterialDensity(material?: MaterialReference): string {
   if (!material) return '';
-  const defaultDensity = densityDefaults.find(([name]) => material.name.toLowerCase().includes(name));
+  const materialName = material.name.toLowerCase().replace(/ё/g, 'е');
+  const defaultDensity = densityDefaults.find(([name]) => materialName.includes(name));
   return String(defaultDensity?.[1] ?? material.bulk_density_t_m3 ?? '');
 }
 

@@ -349,7 +349,7 @@ export default function AdminQuarriesMap({
     <div
       ref={mapContainerRef}
       aria-label="Карта точек"
-      className="h-[420px] min-h-[360px] w-full overflow-hidden rounded-2xl bg-slate-200"
+      className="h-[420px] min-h-[360px] w-full max-w-full overflow-hidden rounded-2xl bg-slate-200"
     />
   );
 }

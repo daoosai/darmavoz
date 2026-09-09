@@ -592,19 +592,19 @@ export default function AdminQuarriesScreen({
         </select>
       </div>
 
-      <section className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
-        <div className="mb-3 flex items-center justify-between gap-3 px-1">
+      <section className="w-full max-w-full overflow-hidden rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
+        <div className="mb-3 flex flex-col gap-2 px-1 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h3 className="text-base font-bold text-slate-800">Карта точек</h3>
           </div>
-          <div className="flex shrink-0 items-center gap-3 text-xs font-semibold text-slate-500">
-            <span className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-gray-600 px-1">
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
               <span className="h-3 w-3 rounded-full bg-yellow-400" /> Добавлена / приглашение
             </span>
-            <span className="flex items-center gap-1.5">
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
               <span className="h-3 w-3 rounded-full bg-slate-400" /> Воронка CRM
             </span>
-            <span className="flex items-center gap-1.5">
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
               <span className="h-3 w-3 rounded-full bg-green-600" /> Активирована
             </span>
           </div>

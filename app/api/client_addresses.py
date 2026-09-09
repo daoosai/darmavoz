@@ -53,12 +53,11 @@ async def list_client_addresses(
     city_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> list[ClientAddress]:
-    city = await resolve_city(db, city_id)
-    result = await db.execute(
-        select(ClientAddress)
-        .where(ClientAddress.client_id == current_client.id, ClientAddress.city_id == city.id)
-        .order_by(ClientAddress.is_default.desc(), ClientAddress.created_at.desc())
-    )
+    query = select(ClientAddress).where(ClientAddress.client_id == current_client.id)
+    if city_id is not None:
+        city = await resolve_city(db, city_id)
+        query = query.where(ClientAddress.city_id == city.id)
+    result = await db.execute(query.order_by(ClientAddress.is_default.desc(), ClientAddress.created_at.desc()))
     return list(result.scalars().all())
 
 

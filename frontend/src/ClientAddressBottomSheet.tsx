@@ -26,7 +26,8 @@ import SwipeableBottomSheet from "./SwipeableBottomSheet";
 import MapWebGLFallback, { tryCreate2GisMap } from "./components/MapWebGLFallback";
 
 interface Address {
-  id?: string;
+  id: string;
+  city_id: string | null;
   address?: string; // keeping just in case
   full_address: string;
   lat?: number;
@@ -121,6 +122,12 @@ export default function ClientAddressBottomSheet({
       fetchAddresses();
     }
   }, [isOpen, token, role, isAdding]);
+
+  useEffect(() => {
+    if (isOpen) return;
+    setEditingAddressId(null);
+    setIsAdding(false);
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -279,14 +286,14 @@ export default function ClientAddressBottomSheet({
   const fetchAddresses = async () => {
     setIsLoading(true);
     try {
-      const res = await cityFetch(`${baseURL}/client/addresses`, {
+      const res = await fetch(`${baseURL}/client/addresses`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
       if (res.ok) {
         const data = await res.json();
-        const addressList = Array.isArray(data) ? data : data.results || [];
+        const addressList: Address[] = Array.isArray(data) ? data : data.results || [];
         setAddresses(addressList);
 
         if (addressList.length === 0) {
@@ -315,6 +322,14 @@ export default function ClientAddressBottomSheet({
     if (localSelectedId) {
       const selectedAddr = addresses.find((a) => a.id === localSelectedId);
       if (selectedAddr) {
+        if (selectedAddr.city_id && selectedAddr.city_id !== useCityStore.getState().cityId) {
+          try {
+            chooseCity(selectedAddr.city_id, { preserveAddress: true });
+          } catch {
+            showWarning("Город сохранённого адреса больше недоступен.");
+            return;
+          }
+        }
         const savedLat = Number(selectedAddr.lat);
         const savedLon = Number(selectedAddr.lon);
         setSelectedAddress(
@@ -393,7 +408,8 @@ export default function ClientAddressBottomSheet({
           }
         : null,
     );
-    setEditingAddressId(addr.id || null);
+    setPendingCityId(addr.city_id);
+    setEditingAddressId(addr.id);
     setIsAdding(true);
   };
 
@@ -433,9 +449,10 @@ export default function ClientAddressBottomSheet({
         return;
       }
 
-      const method = editingAddressId ? "PUT" : "POST";
-      const url = editingAddressId
-        ? `${baseURL}/client/addresses/${editingAddressId}`
+      const addressId = editingAddressId;
+      const method = addressId ? "PUT" : "POST";
+      const url = addressId
+        ? `${baseURL}/client/addresses/${addressId}`
         : `${baseURL}/client/addresses`;
 
       const res = await cityFetch(url, {
@@ -450,12 +467,19 @@ export default function ClientAddressBottomSheet({
           lat: lat,
           lon: lon,
           comment: newComment,
-          is_default: addresses.length === 0,
         }),
       });
 
       if (res.ok) {
-        toast.success(editingAddressId ? "Адрес обновлен!" : "Адрес добавлен!");
+        const savedAddress = await res.json() as Address;
+        setAddresses((current) => {
+          const existingIndex = current.findIndex((address) => address.id === savedAddress.id);
+          if (addressId || existingIndex >= 0) {
+            return current.map((address) => address.id === savedAddress.id ? savedAddress : address);
+          }
+          return [...current, savedAddress];
+        });
+        toast.success(addressId ? "Адрес обновлен!" : "Адрес добавлен!");
         setSelectedAddress(
           addressToSave,
           lat != null && lon != null ? { lat, lon } : null,
@@ -473,7 +497,7 @@ export default function ClientAddressBottomSheet({
         setSelectedSuggestion(null);
         setIsAdding(false);
         if (closeOnSelect) onClose();
-        else fetchAddresses();
+        else void fetchAddresses();
       } else {
         toast.error("Не удалось сохранить адрес");
       }
@@ -617,8 +641,8 @@ export default function ClientAddressBottomSheet({
                     const isSelected = localSelectedId === addr.id;
                     return (
                       <div
-                        key={addr.id || addr.full_address || addr.address}
-                        onClick={() => setLocalSelectedId(addr.id || null)}
+                        key={addr.id}
+                        onClick={() => setLocalSelectedId(addr.id)}
                         className={`p-4 rounded-2xl border flex items-center gap-3 cursor-pointer transition-all ${
                           isSelected
                             ? "border-[#2DB0E6] bg-[#2DB0E6]/5"
@@ -644,24 +668,20 @@ export default function ClientAddressBottomSheet({
                             </p>
                           )}
                         </div>
-                        {addr.id && (
-                          <div className="flex items-center gap-2 shrink-0">
-                            <button
-                              onClick={(e) => handleEditAddress(addr, e)}
-                              className="p-2 text-slate-400 hover:text-[#2DB0E6] hover:bg-[#2DB0E6]/10 rounded-xl transition-colors"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={(e) =>
-                                handleDeleteAddress(addr.id as string, e)
-                              }
-                              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        )}
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            onClick={(e) => handleEditAddress(addr, e)}
+                            className="p-2 text-slate-400 hover:text-[#2DB0E6] hover:bg-[#2DB0E6]/10 rounded-xl transition-colors"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={(e) => handleDeleteAddress(addr.id, e)}
+                            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                     );
                   })}

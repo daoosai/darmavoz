@@ -542,6 +542,7 @@ async def test_admin_parser_creates_parsed_quarry_and_audit_log(client, session_
     assert response.status_code == 200
     preview = response.json()
     assert len(preview["items"]) == 1
+    assert preview["items"][0]["phone"] == "+79990000000"
     async with session_factory() as session:
         assert await session.scalar(select(Quarry).where(Quarry.twogis_id == "2gis-test-1")) is None
     saved = await client.post(
@@ -551,7 +552,9 @@ async def test_admin_parser_creates_parsed_quarry_and_audit_log(client, session_
               "radius_m": 1000, "target": "material", "keyword": "песок оптом", "items": preview["items"]},
     )
     assert saved.status_code == 200
-    assert saved.json()["created"] == 1
+    saved_payload = saved.json()
+    assert saved_payload["created"] == 1
+    assert saved_payload["created_items"][0]["phone"] == "+79990000000"
 
     async with session_factory() as session:
         point = await session.scalar(select(Quarry).where(Quarry.twogis_id == "2gis-test-1"))

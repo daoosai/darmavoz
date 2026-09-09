@@ -21,6 +21,7 @@ const densityDefaults: Array<[string, number]> = [
   ['керамзит', 0.4],
   ['асфальт', 2.3],
 ];
+const CUSTOM_MATERIAL_ID = '__custom_material__';
 
 function getMaterialDensity(material?: MaterialReference): string {
   if (!material) return '';
@@ -36,6 +37,7 @@ export default function BulkCalculatorScreen({ materialId, onClose, onGoToCatalo
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
   const [isDensityEditable, setIsDensityEditable] = useState(false);
+  const [customMaterialName, setCustomMaterialName] = useState('');
   useEffect(() => {
     const controller = new AbortController();
     setError('');
@@ -60,13 +62,21 @@ export default function BulkCalculatorScreen({ materialId, onClose, onGoToCatalo
     result = calculateBulk({ ...draft, density: draft.density });
   } catch (err) { validation = (err as Error).message; }
   const material = references?.materials.find((item) => item.id === draft.materialId);
+  const isCustomMaterial = draft.materialId === CUSTOM_MATERIAL_ID;
+  const densityEditable = isCustomMaterial || isDensityEditable;
   const inputClass = 'mt-1.5 w-full rounded-xl border border-slate-200 bg-white p-3 text-slate-900 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100';
   const thicknessPresets = draft.thicknessUnit === 'm'
     ? [{ value: '0.05', label: '0.05 м' }, { value: '0.1', label: '0.1 м' }, { value: '0.15', label: '0.15 м' }, { value: '0.2', label: '0.2 м' }]
     : [{ value: '5', label: '5 см' }, { value: '10', label: '10 см' }, { value: '15', label: '15 см' }, { value: '20', label: '20 см' }];
   const selectMaterial = (id: string) => {
+    if (id === CUSTOM_MATERIAL_ID) {
+      setIsDensityEditable(true);
+      update({ materialId: id, density: '1.5', includeMass: true });
+      return;
+    }
     const selectedMaterial = references?.materials.find((item) => item.id === id);
     setIsDensityEditable(false);
+    setCustomMaterialName('');
     update({ materialId: id, density: getMaterialDensity(selectedMaterial), includeMass: true });
   };
   return <section role="dialog" aria-modal="true" aria-label="Калькулятор материалов" className="fixed inset-0 z-[100] overflow-y-auto bg-slate-50 pt-[max(env(safe-area-inset-top),2.5rem)] pb-[max(env(safe-area-inset-bottom),1rem)]">
@@ -84,9 +94,12 @@ export default function BulkCalculatorScreen({ materialId, onClose, onGoToCatalo
       <section className="space-y-4">
         <label className="block text-sm font-bold text-slate-700">Материал
           <select aria-label="Материал" className={inputClass} value={draft.materialId} onChange={(event) => selectMaterial(event.target.value)}>
-            <option value="">Выберите материал</option>{references?.materials.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            <option value="">Выберите материал</option>{references?.materials.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}<option value={CUSTOM_MATERIAL_ID}>Другой материал (ввести вручную)</option>
           </select>
         </label>
+        {isCustomMaterial ? <label className="block text-sm font-bold text-slate-700">Введите название материала
+          <input aria-label="Введите название материала" className={inputClass} value={customMaterialName} onChange={(event) => setCustomMaterialName(event.target.value)} placeholder="Асфальтная крошка" />
+        </label> : null}
         {references?.materials.length === 0 && <p className="text-sm text-slate-500">Материалы для расчёта пока не настроены.</p>}
         <div className="grid grid-cols-2 gap-3">
           {([['length', 'Длина, м'], ['width', 'Ширина, м']] as const).map(([field, label]) => <label key={field} className="block text-sm font-bold text-slate-700">{label}<input aria-label={label} className={inputClass} inputMode="decimal" value={draft[field]} onChange={(event) => update({ [field]: event.target.value })} /></label>)}
@@ -105,10 +118,10 @@ export default function BulkCalculatorScreen({ materialId, onClose, onGoToCatalo
         <div className="rounded-2xl bg-slate-50 p-3">
           <div className="flex items-center justify-between gap-3">
             <label className="text-sm font-bold text-slate-700" htmlFor="calculator-density">Плотность, т/м³</label>
-            <label className="flex cursor-pointer items-center gap-1.5 text-xs font-semibold text-sky-700"><input type="checkbox" checked={isDensityEditable} onChange={(event) => setIsDensityEditable(event.target.checked)} /><PencilLine className="h-3.5 w-3.5" /> Изменить вручную</label>
+            <label className={`flex items-center gap-1.5 text-xs font-semibold text-sky-700 ${isCustomMaterial ? 'cursor-default opacity-70' : 'cursor-pointer'}`}><input type="checkbox" checked={densityEditable} disabled={isCustomMaterial} onChange={(event) => setIsDensityEditable(event.target.checked)} /><PencilLine className="h-3.5 w-3.5" /> Изменить вручную</label>
           </div>
-          <input id="calculator-density" aria-label="Плотность, т/м³" className={`${inputClass} ${isDensityEditable ? '' : 'cursor-default bg-slate-100 text-slate-500'}`} inputMode="decimal" readOnly={!isDensityEditable} value={draft.density ?? ''} placeholder="Выберите материал" onChange={(event) => update({ density: event.target.value, includeMass: true })} />
-          <p className="mt-2 text-xs leading-4 text-slate-500">Коэффициент подставляется для выбранного материала автоматически.</p>
+          <input id="calculator-density" aria-label="Плотность, т/м³" className={`${inputClass} ${densityEditable ? '' : 'cursor-default bg-slate-100 text-slate-500'}`} inputMode="decimal" disabled={false} readOnly={!densityEditable} value={draft.density ?? ''} placeholder="Выберите материал" onChange={(event) => update({ density: event.target.value, includeMass: true })} />
+          <p className="mt-2 text-xs leading-4 text-slate-500">{isCustomMaterial ? 'Для другого материала укажите плотность вручную.' : 'Коэффициент подставляется для выбранного материала автоматически.'}</p>
         </div>
       </section>
       {result ? <section aria-live="polite" className="space-y-4 rounded-3xl bg-blue-50 p-5 shadow-sm">

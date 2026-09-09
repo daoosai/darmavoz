@@ -315,7 +315,7 @@ export default function ParserRunPanel({
                       <strong>{item.name}</strong>
                       <span className="block text-slate-500">{item.address}</span>
                       {details.rubrics.text ? <span title={details.rubrics.fullText} className="block truncate text-xs text-gray-500">Рубрики: {details.rubrics.text}</span> : null}
-                      {details.phone ? <span className="block text-xs text-gray-500">Телефон: {details.phone}</span> : null}
+                      <span className="block text-xs font-semibold text-sky-700">Телефон: {item.phone || 'Телефон не указан в 2ГИС'}</span>
                       {details.website ? <span className="block text-xs text-gray-500">Сайт: {details.website}</span> : null}
                     </span>
                   </label>

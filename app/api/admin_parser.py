@@ -50,7 +50,16 @@ async def run_parser(payload: ParserRunRequest, db: AsyncSession = Depends(get_d
     items = []
     for place in places:
         is_update = await db.scalar(select(model.id).where(model.twogis_id == place.twogis_id)) is not None
-        items.append(ParserPreviewItem(**place.__dict__, is_update=is_update))
+        items.append(ParserPreviewItem(
+            twogis_id=place.twogis_id,
+            name=place.name,
+            address=place.address,
+            lat=place.lat,
+            lon=place.lon,
+            phone=place.phone,
+            parsed_data=place.parsed_data,
+            is_update=is_update,
+        ))
     return ParserPreviewResult(items=items, skipped_items=skipped_items, truncated=truncated)
 
 

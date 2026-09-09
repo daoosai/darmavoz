@@ -61,6 +61,7 @@ class ParserRunRequest(BaseModel):
 class ParserResultItem(BaseModel):
     id: str
     name: str
+    phone: str | None = None
 
 
 class ParserSkippedItem(BaseModel):

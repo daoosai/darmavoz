@@ -475,7 +475,9 @@ async def upsert_places(
                 elif payload.target == "water" and not existing.phone:
                     existing.phone = place.phone
             result.updated += 1
-            result.updated_items.append(ParserResultItem(id=place.twogis_id, name=place.name))
+            result.updated_items.append(
+                ParserResultItem(id=place.twogis_id, name=place.name, phone=place.phone)
+            )
             continue
 
         other_kind_match = await db.scalar(select(other_model.id).where(other_model.twogis_id == place.twogis_id))
@@ -533,6 +535,8 @@ async def upsert_places(
             )
         )
         result.created += 1
-        result.created_items.append(ParserResultItem(id=place.twogis_id, name=place.name))
+        result.created_items.append(
+            ParserResultItem(id=place.twogis_id, name=place.name, phone=place.phone)
+        )
 
     return result

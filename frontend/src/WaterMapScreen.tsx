@@ -279,8 +279,8 @@ export default function WaterMapScreen({ initialTab = "water" }: { initialTab?: 
         </div>
       ) : null}
 
-      <header className="pointer-events-none absolute inset-x-0 top-0 z-10 pt-[max(env(safe-area-inset-top),2.5rem)]">
-        <div className={`pointer-events-auto bg-white/95 backdrop-blur ${showList ? "m-0 w-full rounded-none border-b border-gray-200 px-4 py-3 shadow-sm" : "m-4 rounded-xl p-4 shadow-lg"}`}>
+      <header className="pointer-events-none absolute inset-x-0 top-0 z-10 pt-[max(env(safe-area-inset-top),0.5rem)]">
+        <div className={`pointer-events-auto bg-white/95 backdrop-blur ${showList ? "m-0 w-full rounded-none border-b border-gray-200 px-4 py-3 shadow-sm" : "mx-4 mb-4 rounded-xl p-4 shadow-lg"}`}>
         <div className="flex items-center gap-3">
           <span className="rounded-2xl bg-sky-100 p-3 text-sky-600"><Droplets /></span>
           <div className="min-w-0 flex-1">

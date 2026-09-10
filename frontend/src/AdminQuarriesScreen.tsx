@@ -42,7 +42,7 @@ export interface Quarry extends PlacementFields {
   owner_user_id?: string | null;
   crm_status?: CrmStatus;
   material_ids?: string[];
-  material_offers?: { material_id: string; price: number; is_active: boolean }[];
+  material_offers?: { material_id: string; price: number; is_active: boolean; is_free?: boolean }[];
   delivery_option_ids?: string[];
   materials?: any[];
   owner_name?: string | null;
@@ -1191,8 +1191,9 @@ function EditQuarryModal({
             ...(prev.material_offers || []),
             {
               material_id: id,
-              price: Number(material?.price || 0),
+              price: material?.is_free ? 0 : Number(material?.price || 0),
               is_active: true,
+              is_free: Boolean(material?.is_free),
             },
           ],
         };
@@ -1255,8 +1256,9 @@ function EditQuarryModal({
         .filter((item) => item.material_id)
         .map((item) => ({
           material_id: item.material_id,
-          price: Number(item.price || 0),
+          price: item.is_free ? 0 : Number(item.price || 0),
           is_active: Boolean(item.is_active),
+          is_free: Boolean(item.is_free),
         }));
 
       const payload = {
@@ -1705,18 +1707,32 @@ function EditQuarryModal({
                     {m.name}
                   </span>
                   {offer && (
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={offer.price ?? ""}
-                      onChange={(event) => setFormData({
-                        ...formData,
-                        material_offers: (formData.material_offers || []).map((item) => item.material_id === m.id ? { ...item, price: Number(event.target.value) } : item),
-                      })}
-                      className="ml-auto w-28 bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-sm"
-                      placeholder="Цена"
-                    />
+                    <div className="ml-auto flex items-center gap-3">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        disabled={Boolean(offer.is_free)}
+                        value={offer.is_free ? 0 : offer.price ?? ""}
+                        onChange={(event) => setFormData({
+                          ...formData,
+                          material_offers: (formData.material_offers || []).map((item) => item.material_id === m.id ? { ...item, price: Number(event.target.value) } : item),
+                        })}
+                        className="w-28 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                        placeholder="Цена"
+                      />
+                      <label className="flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold text-emerald-700">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(offer.is_free)}
+                          onChange={(event) => setFormData({
+                            ...formData,
+                            material_offers: (formData.material_offers || []).map((item) => item.material_id === m.id ? { ...item, is_free: event.target.checked, price: event.target.checked ? 0 : item.price } : item),
+                          })}
+                        />
+                        Бесплатно
+                      </label>
+                    </div>
                   )}
                 </div>
               )})}
@@ -2103,8 +2119,9 @@ function EnhancedEditQuarryModal({
           ...(current.material_offers || []),
           {
             material_id: id,
-            price: Number(material?.price || 0),
+            price: material?.is_free ? 0 : Number(material?.price || 0),
             is_active: true,
+            is_free: Boolean(material?.is_free),
           },
         ],
       };
@@ -2295,8 +2312,9 @@ function EnhancedEditQuarryModal({
         .filter((item) => item.material_id)
         .map((item) => ({
           material_id: item.material_id,
-          price: Number(item.price || 0),
+          price: item.is_free ? 0 : Number(item.price || 0),
           is_active: Boolean(item.is_active),
+          is_free: Boolean(item.is_free),
         }));
 
       const payload = {
@@ -2577,24 +2595,44 @@ function EnhancedEditQuarryModal({
                     />
                     <span className="text-sm font-medium text-slate-700">{material.name}</span>
                     {offer ? (
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={offer.price ?? ""}
-                        onChange={(event) =>
-                          setFormData({
-                            ...formData,
-                            material_offers: (formData.material_offers || []).map((item) =>
-                              item.material_id === material.id
-                                ? { ...item, price: Number(event.target.value) }
-                                : item,
-                            ),
-                          })
-                        }
-                        className="ml-auto w-28 bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-sm"
-                        placeholder="Цена"
-                      />
+                      <div className="ml-auto flex items-center gap-3">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          disabled={Boolean(offer.is_free)}
+                          value={offer.is_free ? 0 : offer.price ?? ""}
+                          onChange={(event) =>
+                            setFormData({
+                              ...formData,
+                              material_offers: (formData.material_offers || []).map((item) =>
+                                item.material_id === material.id
+                                  ? { ...item, price: Number(event.target.value) }
+                                  : item,
+                              ),
+                            })
+                          }
+                          className="w-28 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                          placeholder="Цена"
+                        />
+                        <label className="flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold text-emerald-700">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(offer.is_free)}
+                            onChange={(event) =>
+                              setFormData({
+                                ...formData,
+                                material_offers: (formData.material_offers || []).map((item) =>
+                                  item.material_id === material.id
+                                    ? { ...item, is_free: event.target.checked, price: event.target.checked ? 0 : item.price }
+                                    : item,
+                                ),
+                              })
+                            }
+                          />
+                          Бесплатно
+                        </label>
+                      </div>
                     ) : null}
                   </div>
                 );

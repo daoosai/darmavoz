@@ -70,6 +70,13 @@ class QuarryMaterialOfferIn(BaseModel):
     material_id: UUID
     price: float = Field(ge=0)
     is_active: bool = True
+    is_free: bool = False
+
+    @model_validator(mode="after")
+    def normalize_free_offer_price(self):
+        if self.is_free:
+            self.price = 0
+        return self
 
 
 class QuarryMaterialOfferOut(BaseModel):

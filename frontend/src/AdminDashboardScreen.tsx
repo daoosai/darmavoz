@@ -990,7 +990,7 @@ export default function AdminDashboardScreen({
 
   useEffect(() => {
     fetchCategories();
-    if (activeTab === "materials" && materials.length === 0) {
+    if ((activeTab === "materials" || activeTab === "quarries") && materials.length === 0) {
       fetchMaterials();
     } else if (activeTab === "delivery" && deliveryOptions.length === 0) {
       fetchDeliveryOptions();

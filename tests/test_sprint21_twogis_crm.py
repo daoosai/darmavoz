@@ -3,15 +3,26 @@ import httpx
 from fastapi import HTTPException
 from sqlalchemy import select
 
-from app.models.models import CrmStatus, PointAuditLog, Quarry, Role, User
+from app.models.models import City, CrmStatus, PointAuditLog, Quarry, Role, User
 from app.security.jwt import create_access_token
 from app.services.pickup_points import is_pickup_point_publicly_available
 from app.schemas.parser import ParserRunRequest
-from app.services.twogis_places import MATERIAL_SKIP_REASON, ParsedPlace, _fetch_page, _normalize_place, _skip_reason, search_places
+from app.services.twogis_places import MATERIAL_SKIP_REASON, PLACES_FIELDS, ParsedPlace, _fetch_page, _normalize_place, _skip_reason, search_places
+from app.schemas.quarry import QuarryMaterialOfferIn
 
 
 def auth_headers(username: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {create_access_token(data={'sub': username})}"}
+
+
+def test_free_material_offer_is_saved_with_zero_price():
+    offer = QuarryMaterialOfferIn.model_validate({
+        "material_id": "15000000-0000-0000-0000-000000000001",
+        "price": 1500,
+        "is_free": True,
+    })
+
+    assert offer.price == 0
 
 
 def test_normalize_place_maps_required_twogis_fields_to_db_payload():
@@ -21,6 +32,10 @@ def test_normalize_place_maps_required_twogis_fields_to_db_payload():
             "name": "Material base",
             "address_name": "Test street, 1",
             "point": {"lat": 57.15, "lon": 65.53},
+            "adm_div": [
+                {"name": "Тюменская область", "type": "region"},
+                {"name": "Тюмень", "type": "city"},
+            ],
             "contact_groups": [{"contacts": [
                 {"type": "phone", "value": "+7 999 000-00-01"},
                 {"type": "email", "value": "sale@example.test"},
@@ -41,6 +56,8 @@ def test_normalize_place_maps_required_twogis_fields_to_db_payload():
     assert place.phone == "+7 999 000-00-01"
     assert place.parsed_data["rubrics"] == ["Песок и щебень", "Строительные материалы"]
     assert place.parsed_data["schedule"] == {"Mon": "09:00-18:00"}
+    assert place.parsed_data["adm_div"][1]["name"] == "Тюмень"
+    assert "items.adm_div" in PLACES_FIELDS
     assert place.parsed_data["contacts"] == [{"contacts": [
         {"type": "phone", "value": "+7 999 000-00-01"},
         {"type": "email", "value": "sale@example.test"},
@@ -545,7 +562,15 @@ async def test_admin_parser_creates_parsed_quarry_and_audit_log(client, session_
                 lat=57.15,
                 lon=65.53,
                 phone="+79990000000",
-                parsed_data={"phones": ["+79990000000"], "schedule": {"Mon": "09:00-18:00"}, "raw": {}},
+                parsed_data={
+                    "phones": ["+79990000000"],
+                    "schedule": {"Mon": "09:00-18:00"},
+                    "adm_div": [
+                        {"name": "Тестовая область", "type": "region"},
+                        {"name": "Тестоград", "type": "city"},
+                    ],
+                    "raw": {},
+                },
             )
         ], False
 
@@ -582,10 +607,14 @@ async def test_admin_parser_creates_parsed_quarry_and_audit_log(client, session_
 
     async with session_factory() as session:
         point = await session.scalar(select(Quarry).where(Quarry.twogis_id == "2gis-test-1"))
+        city = await session.scalar(select(City).where(City.name == "Тестоград"))
         audit_log = await session.scalar(select(PointAuditLog).where(PointAuditLog.point_id == point.id))
 
     assert point is not None
-    assert point.city_id is None
+    assert city is not None
+    assert city.is_active is True
+    assert city.region == "Тестовая область"
+    assert point.city_id == city.id
     assert point.owner_user_id is None
     assert point.crm_status == CrmStatus.auto_added.value
     assert point.moderation_status == "pending_moderation"

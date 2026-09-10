@@ -1,13 +1,81 @@
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import select, false
+from sqlalchemy import false, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.models import City, Driver, User, driver_cities, user_cities
 from sqlalchemy.dialects.postgresql import insert
 
 LEGACY_CITY_CODE = "tyumen"
+
+_CITY_TRANSLIT = str.maketrans({
+    "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "e", "ж": "zh", "з": "z", "и": "i", "й": "y",
+    "к": "k", "л": "l", "м": "m", "н": "n", "о": "o", "п": "p", "р": "r", "с": "s", "т": "t", "у": "u", "ф": "f",
+    "х": "h", "ц": "ts", "ч": "ch", "ш": "sh", "щ": "sch", "ъ": "", "ы": "y", "ь": "", "э": "e", "ю": "yu", "я": "ya",
+})
+
+
+def city_code_base(name: str) -> str:
+    transliterated = name.lower().translate(_CITY_TRANSLIT)
+    parts = "".join(char if char.isascii() and char.isalnum() else "-" for char in transliterated).split("-")
+    return "-".join(part for part in parts if part)[:64] or "city"
+
+
+async def generated_city_code(db: AsyncSession, name: str) -> str:
+    base = city_code_base(name)
+    candidate, number = base, 2
+    while await db.scalar(select(City.id).where(City.code == candidate)) is not None:
+        suffix = f"-{number}"
+        candidate = f"{base[:64 - len(suffix)]}{suffix}"
+        number += 1
+    return candidate
+
+
+def default_bounds(center_lat: float, center_lon: float) -> dict[str, float]:
+    radius = 0.5
+    return {
+        "min_lat": max(-90, center_lat - radius), "max_lat": min(90, center_lat + radius),
+        "min_lon": max(-180, center_lon - radius), "max_lon": min(180, center_lon + radius),
+    }
+
+
+async def get_or_create_parsed_city(
+    db: AsyncSession,
+    *,
+    name: str,
+    region: str | None,
+    center_lat: float,
+    center_lon: float,
+) -> City:
+    """Return a case-insensitive city match or create an active parser-discovered city."""
+    normalized_name = " ".join(name.split())
+    if not normalized_name:
+        raise ValueError("Parser city name must not be blank")
+
+    # The same transaction lock is used by manual city creation, so parallel parser
+    # imports cannot create case-insensitive duplicates.
+    await db.execute(text("SELECT pg_advisory_xact_lock(220023)"))
+    existing = await db.scalar(
+        select(City).where(func.lower(City.name) == normalized_name.lower())
+    )
+    if existing is not None:
+        return existing
+
+    city = City(
+        name=normalized_name,
+        region=" ".join((region or normalized_name).split()),
+        code=await generated_city_code(db, normalized_name),
+        center_lat=center_lat,
+        center_lon=center_lon,
+        map_zoom=11,
+        **default_bounds(center_lat, center_lon),
+        is_active=True,
+        is_default=False,
+    )
+    db.add(city)
+    await db.flush()
+    return city
 
 
 async def resolve_city(db: AsyncSession, city_id: UUID | None, *, require_active: bool = True) -> City:

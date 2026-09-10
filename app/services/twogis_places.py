@@ -11,7 +11,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.cities import resolve_city
+from app.services.cities import get_or_create_parsed_city, resolve_city
 from app.core.config import settings
 from app.models.models import CrmStatus, ModerationStatus, PointAuditLog, Quarry, WaterPoint
 from app.schemas.parser import MATERIAL_KEYWORDS, ParserResultItem, ParserRunRequest, ParserRunResult, ParserSkippedItem, ParserTarget, normalize_parser_keyword
@@ -42,6 +42,7 @@ PLACES_FIELDS = ",".join(
         "items.point",
         "items.address",
         "items.full_address_name",
+        "items.adm_div",
         "items.contact_groups",
         "items.schedule",
         "items.rubrics",
@@ -259,6 +260,7 @@ def _normalize_place(item: object, target: ParserTarget = "material") -> ParsedP
         "phones": phones,
         "websites": contact_details["websites"],
         "contacts": raw_contact_groups if isinstance(raw_contact_groups, list) else [],
+        "adm_div": item.get("adm_div"),
         "contact_details": contact_details,
         "schedule": item.get("schedule"),
         "rubrics": _extract_rubric_names(item),
@@ -273,6 +275,38 @@ def _normalize_place(item: object, target: ParserTarget = "material") -> ParsedP
         phone=phone,
         parsed_data=parsed_data,
     )
+
+
+def _parsed_place_city(place: ParsedPlace, fallback_name: str) -> tuple[str, str | None]:
+    raw = place.parsed_data.get("raw")
+    adm_div = place.parsed_data.get("adm_div")
+    if not isinstance(adm_div, list) and isinstance(raw, dict):
+        adm_div = raw.get("adm_div")
+
+    city_name: str | None = None
+    region_name: str | None = None
+    if isinstance(adm_div, list):
+        for division in adm_div:
+            if not isinstance(division, dict):
+                continue
+            name = division.get("name")
+            if not isinstance(name, str) or not name.strip():
+                continue
+            division_type = division.get("type")
+            if division_type == "city" and city_name is None:
+                city_name = name.strip()
+            elif division_type == "region" and region_name is None:
+                region_name = name.strip()
+        if city_name is None:
+            for division in adm_div:
+                if not isinstance(division, dict) or division.get("type") not in {"settlement", "place"}:
+                    continue
+                name = division.get("name")
+                if isinstance(name, str) and name.strip():
+                    city_name = name.strip()
+                    break
+
+    return city_name or fallback_name, region_name
 
 
 def _places_error_message(payload: object, fallback: str) -> str:
@@ -473,7 +507,7 @@ async def upsert_places(
     truncated: bool,
     skipped_items: list[ParserSkippedItem] | None = None,
 ) -> ParserRunResult:
-    city = await resolve_city(db, payload.city_id, require_active=False) if payload.city_id is not None else None
+    selected_city = await resolve_city(db, payload.city_id, require_active=False) if payload.city_id is not None else None
     result = ParserRunResult(
         found=len(places),
         total_found=len(places) + sum(item.count for item in skipped_items or []),
@@ -487,12 +521,21 @@ async def upsert_places(
     point_type = MATERIAL_KEYWORDS.get(normalize_parser_keyword(payload.keyword), "quarry")
 
     for place in places:
+        city_name, region_name = _parsed_place_city(
+            place,
+            selected_city.name if selected_city is not None else payload.city,
+        )
+        city = await get_or_create_parsed_city(
+            db,
+            name=city_name,
+            region=region_name,
+            center_lat=place.lat,
+            center_lon=place.lon,
+        )
         existing = await db.scalar(select(destination_model).where(destination_model.twogis_id == place.twogis_id))
         if existing is not None:
-            if city is not None and existing.city_id != city.id:
-                result.skipped += 1
-                _append_skipped_item(result.skipped_items, name=place.name, reason="City conflict: review the existing object")
-                continue
+            if existing.owner_user_id is None:
+                existing.city_id = city.id
             existing.parsed_data = place.parsed_data
             if place.phone:
                 if payload.target == "material" and not existing.contact_phone:
@@ -518,7 +561,7 @@ async def upsert_places(
 
         if payload.target == "material":
             point = Quarry(
-                city_id=city.id if city is not None else None,
+                city_id=city.id,
                 name=place.name,
                 short_name=place.name,
                 point_type=point_type,
@@ -534,7 +577,7 @@ async def upsert_places(
             )
         else:
             point = WaterPoint(
-                city_id=city.id if city is not None else None,
+                city_id=city.id,
                 water_type="unknown",
                 name=place.name,
                 source="2GIS",

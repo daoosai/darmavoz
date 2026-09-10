@@ -2,7 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import ValidationError
-from sqlalchemy import select, text, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -100,7 +100,7 @@ async def create_city(payload: CityCreate, db: AsyncSession = Depends(get_db)):
     # check before either transaction commits.
     await db.execute(text("SELECT pg_advisory_xact_lock(220023)"))
     existing_city_id = await db.scalar(
-        select(City.id).where(City.name.ilike(payload.name))
+        select(City.id).where(func.lower(City.name) == payload.name.lower())
     )
     if existing_city_id is not None:
         raise HTTPException(400, "Этот город уже добавлен")

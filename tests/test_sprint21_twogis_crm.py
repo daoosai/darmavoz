@@ -588,6 +588,7 @@ async def test_admin_parser_creates_parsed_quarry_and_audit_log(client, session_
     assert point.city_id is None
     assert point.owner_user_id is None
     assert point.crm_status == CrmStatus.auto_added.value
+    assert point.moderation_status == "pending_moderation"
     assert point.is_active is False
     assert point.parsed_data["phones"] == ["+79990000000"]
     assert audit_log is not None
@@ -659,3 +660,33 @@ async def test_parser_upsert_keeps_crm_fields_and_fills_missing_contact_phone(cl
     assert updated.crm_comment == "Manual CRM decision"
     assert updated.contact_phone == "+79990000002"
     assert updated.parsed_data["phones"] == ["+79990000002"]
+
+
+@pytest.mark.asyncio
+async def test_pending_filter_includes_legacy_auto_added_quarry(client, session_factory):
+    async with session_factory() as session:
+        logist_role = await ensure_role(session, "logist")
+        await create_user(session, username="legacy_parsed_points_logist", role=logist_role)
+        legacy_point = Quarry(
+            name="Legacy parsed quarry",
+            short_name="Legacy parsed quarry",
+            point_type="quarry",
+            address="Tyumen, Test road, 7",
+            lat=57.15,
+            lon=65.53,
+            owner_user_id=None,
+            moderation_status="incomplete",
+            crm_status=CrmStatus.auto_added.value,
+            is_active=False,
+        )
+        session.add(legacy_point)
+        await session.commit()
+        legacy_point_id = str(legacy_point.id)
+
+    response = await client.get(
+        "/api/v1/admin/pickup-points?moderation_status=pending_moderation",
+        headers=auth_headers("legacy_parsed_points_logist"),
+    )
+
+    assert response.status_code == 200
+    assert legacy_point_id in {item["id"] for item in response.json()}

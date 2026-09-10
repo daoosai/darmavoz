@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import delete, select, update
+from sqlalchemy import and_, delete, or_, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -175,11 +175,21 @@ async def list_pickup_points(
     if moderation_status:
         if moderation_status == ModerationStatus.pending_moderation.value:
             stmt = stmt.where(
-                Quarry.moderation_status.in_(
-                    [
-                        ModerationStatus.pending_moderation.value,
-                        ModerationStatus.has_pending_changes.value,
-                    ]
+                or_(
+                    Quarry.moderation_status.in_(
+                        [
+                            ModerationStatus.pending_moderation.value,
+                            ModerationStatus.has_pending_changes.value,
+                        ]
+                    ),
+                    # Before the parser used pending_moderation, imported
+                    # points were saved as incomplete. Include only those
+                    # legacy imports, never supplier drafts.
+                    and_(
+                        Quarry.moderation_status == ModerationStatus.incomplete.value,
+                        Quarry.crm_status == CrmStatus.auto_added.value,
+                        Quarry.owner_user_id.is_(None),
+                    ),
                 )
             )
         else:

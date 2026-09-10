@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.cities import resolve_city
 from app.core.config import settings
-from app.models.models import CrmStatus, PointAuditLog, Quarry, WaterPoint
+from app.models.models import CrmStatus, ModerationStatus, PointAuditLog, Quarry, WaterPoint
 from app.schemas.parser import MATERIAL_KEYWORDS, ParserResultItem, ParserRunRequest, ParserRunResult, ParserSkippedItem, ParserTarget, normalize_parser_keyword
 
 
@@ -527,7 +527,7 @@ async def upsert_places(
                 lat=place.lat,
                 lon=place.lon,
                 is_active=False,
-                moderation_status="incomplete",
+                moderation_status=ModerationStatus.pending_moderation.value,
                 twogis_id=place.twogis_id,
                 crm_status=CrmStatus.auto_added.value,
                 parsed_data=place.parsed_data,

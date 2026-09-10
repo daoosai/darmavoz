@@ -138,15 +138,25 @@ async def list_water_points_for_map(
 async def list_water_points_for_moderation(
     moderation_status: str | None = None,
     status: str | None = None,
+    crm_status: CrmStatus | None = None,
     city_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_logist_user),
 ):
     city_filter = (WaterPoint.city_id == city_id) if city_id is not None else True
-    stmt = select(WaterPoint).where(city_filter).where(WaterPoint.is_deleted.is_(False))
+    # Parser-created points have no owner. Keep the owner relation optional so
+    # moderation and CRM filters do not hide those points.
+    stmt = (
+        select(WaterPoint)
+        .outerjoin(User, WaterPoint.owner_user_id == User.id)
+        .where(city_filter)
+        .where(WaterPoint.is_deleted.is_(False))
+    )
     selected_status = moderation_status or status
     if selected_status and selected_status.lower() not in {"all", "все"}:
         stmt = stmt.where(WaterPoint.moderation_status == selected_status)
+    if crm_status is not None:
+        stmt = stmt.where(WaterPoint.crm_status == crm_status.value)
     points = (await db.execute(stmt.order_by(WaterPoint.created_at.desc()))).scalars().all()
     return await _serialize_points(list(points), db)
 

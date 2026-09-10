@@ -169,7 +169,9 @@ async def list_pickup_points(
 ) -> list[dict]:
     del current_user
     city_filter = (Quarry.city_id == city_id) if city_id is not None else True
-    stmt = select(Quarry).where(city_filter)
+    # Parsed points do not have an owner yet. Keep the owner lookup optional so
+    # administrative filters still return those points.
+    stmt = select(Quarry).outerjoin(User, Quarry.owner_user_id == User.id).where(city_filter)
     if moderation_status:
         if moderation_status == ModerationStatus.pending_moderation.value:
             stmt = stmt.where(

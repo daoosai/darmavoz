@@ -112,6 +112,26 @@ def _iter_contact_records(item: dict[str, Any]) -> Iterator[dict[str, Any]]:
         yield from (link for link in links if isinstance(link, dict))
 
 
+def _extract_phone(item: dict[str, Any]) -> str | None:
+    contact_groups = item.get("contact_groups", [])
+    if not isinstance(contact_groups, list):
+        return None
+
+    for group in contact_groups:
+        if not isinstance(group, dict):
+            continue
+        contacts = group.get("contacts", [])
+        if not isinstance(contacts, list):
+            continue
+        for contact in contacts:
+            if not isinstance(contact, dict) or contact.get("type") != "phone":
+                continue
+            phone = contact.get("value") or contact.get("text")
+            if isinstance(phone, str) and phone.strip():
+                return phone.strip()
+    return None
+
+
 def _extract_contacts(item: dict[str, Any]) -> tuple[list[str], dict[str, list[str]]]:
     phones: list[str] = []
     contacts: dict[str, list[str]] = {
@@ -229,12 +249,17 @@ def _normalize_place(item: object, target: ParserTarget = "material") -> ParsedP
     if not (-90 <= lat <= 90 and -180 <= lon <= 180):
         return None
 
-    phones, contacts = _extract_contacts(item)
+    phones, contact_details = _extract_contacts(item)
+    phone = _extract_phone(item) or (phones[0] if phones else None)
+    if phone and phone not in phones:
+        phones.insert(0, phone)
+    raw_contact_groups = item.get("contact_groups")
     parsed_data: dict[str, Any] = {
         "source": "2gis",
         "phones": phones,
-        "websites": contacts["websites"],
-        "contacts": contacts,
+        "websites": contact_details["websites"],
+        "contacts": raw_contact_groups if isinstance(raw_contact_groups, list) else [],
+        "contact_details": contact_details,
         "schedule": item.get("schedule"),
         "rubrics": _extract_rubric_names(item),
         "raw": item,
@@ -245,7 +270,7 @@ def _normalize_place(item: object, target: ParserTarget = "material") -> ParsedP
         address=address.strip(),
         lat=lat,
         lon=lon,
-        phone=phones[0] if phones else None,
+        phone=phone,
         parsed_data=parsed_data,
     )
 

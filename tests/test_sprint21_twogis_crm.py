@@ -41,12 +41,36 @@ def test_normalize_place_maps_required_twogis_fields_to_db_payload():
     assert place.phone == "+7 999 000-00-01"
     assert place.parsed_data["rubrics"] == ["Песок и щебень", "Строительные материалы"]
     assert place.parsed_data["schedule"] == {"Mon": "09:00-18:00"}
-    assert place.parsed_data["contacts"] == {
+    assert place.parsed_data["contacts"] == [{"contacts": [
+        {"type": "phone", "value": "+7 999 000-00-01"},
+        {"type": "email", "value": "sale@example.test"},
+    ]}]
+    assert place.parsed_data["contact_details"] == {
         "websites": ["https://materials.example.test"],
         "vk": ["https://vk.com/materials"],
         "emails": ["sale@example.test"],
         "other": [],
     }
+
+
+def test_normalize_place_uses_formatted_phone_text_when_value_is_missing():
+    place = _normalize_place(
+        {
+            "id": "2gis-phone-text",
+            "name": "Material base",
+            "address_name": "Test street, 1",
+            "point": {"lat": 57.15, "lon": 65.53},
+            "contact_groups": [{"contacts": [
+                {"type": "phone", "text": "+7 (999) 000-00-02"},
+            ]}],
+        }
+    )
+
+    assert place is not None
+    assert place.phone == "+7 (999) 000-00-02"
+    assert place.parsed_data["contacts"] == [{"contacts": [
+        {"type": "phone", "text": "+7 (999) 000-00-02"},
+    ]}]
 
 
 @pytest.mark.asyncio

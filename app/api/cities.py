@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import ValidationError
 from sqlalchemy import select, text, update
 from sqlalchemy.exc import IntegrityError
@@ -14,6 +14,18 @@ from app.services.cities import LEGACY_CITY_CODE
 
 router = APIRouter()
 admin_router = APIRouter(dependencies=[Depends(get_current_admin_user)])
+
+CITY_REFERENCE_TABLES = (
+    "client_addresses",
+    "quarries",
+    "water_points",
+    "septic_provider_profiles",
+    "special_equipment_listings",
+    "special_equipment_applications",
+    "orders",
+    "user_cities",
+    "driver_cities",
+)
 
 _TRANSLIT = str.maketrans({
     "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "e", "ж": "zh", "з": "z", "и": "i", "й": "y",
@@ -71,8 +83,27 @@ async def save_city(db: AsyncSession, city: City):
     return city
 
 
+async def city_has_references(db: AsyncSession, city_id: UUID) -> bool:
+    for table_name in CITY_REFERENCE_TABLES:
+        table = City.metadata.tables[table_name]
+        reference = await db.scalar(
+            select(table.c.city_id).where(table.c.city_id == city_id).limit(1)
+        )
+        if reference is not None:
+            return True
+    return False
+
+
 @admin_router.post("/cities/", response_model=CityOut, status_code=201)
 async def create_city(payload: CityCreate, db: AsyncSession = Depends(get_db)):
+    # The lock prevents two simultaneous admin requests from passing the name
+    # check before either transaction commits.
+    await db.execute(text("SELECT pg_advisory_xact_lock(220023)"))
+    existing_city_id = await db.scalar(
+        select(City.id).where(City.name.ilike(payload.name))
+    )
+    if existing_city_id is not None:
+        raise HTTPException(400, "Этот город уже добавлен")
     values = payload.model_dump()
     values["code"] = values["code"] or await generated_city_code(db, payload.name)
     if values["min_lat"] is None:
@@ -91,6 +122,11 @@ async def update_city(city_id: UUID, payload: CityUpdate, db: AsyncSession = Dep
     if city is None:
         raise HTTPException(404, "Город не найден")
     changes = payload.model_dump(exclude_unset=True)
+    if "name" in changes and any(
+        item.id != city.id and item.name.casefold() == changes["name"].casefold()
+        for item in cities
+    ):
+        raise HTTPException(400, "Этот город уже добавлен")
     if city.code == LEGACY_CITY_CODE and changes.get("code", city.code) != city.code:
         raise HTTPException(409, "Код исходного города используется старыми клиентами")
     merged = {**CityOut.model_validate(city).model_dump(), **changes}
@@ -111,3 +147,31 @@ async def update_city(city_id: UUID, payload: CityUpdate, db: AsyncSession = Dep
         setattr(city, key, value)
     city.is_active, city.is_default = active, default
     return await save_city(db, city)
+
+
+@admin_router.delete("/cities/{city_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_city(city_id: UUID, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("SELECT pg_advisory_xact_lock(220022)"))
+    cities = list((await db.scalars(select(City).with_for_update())).all())
+    city = next((item for item in cities if item.id == city_id), None)
+    if city is None:
+        raise HTTPException(404, "Город не найден")
+    if city.is_default:
+        raise HTTPException(409, "Сначала назначьте другой город по умолчанию")
+    if city.is_active and not any(item.is_active and item.id != city.id for item in cities):
+        raise HTTPException(409, "Нельзя удалить последний активный город")
+    if await city_has_references(db, city_id):
+        raise HTTPException(
+            409,
+            "Нельзя удалить город, пока к нему привязаны точки, заказы или пользователи",
+        )
+    await db.delete(city)
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(
+            409,
+            "Нельзя удалить город, пока к нему привязаны точки, заказы или пользователи",
+        ) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

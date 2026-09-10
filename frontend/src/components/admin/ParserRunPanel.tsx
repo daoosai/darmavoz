@@ -8,7 +8,6 @@ import {
   get2gisSuggestionAddress,
   get2gisSuggestionCoordinates,
   get2gisSuggestionLabel,
-  withCityBias,
 } from "../../addressSearch";
 import { baseURL, extractApiErrorMessage } from "../../utils";
 
@@ -139,7 +138,7 @@ export default function ParserRunPanel({
       return;
     }
 
-    const items = await fetch2gisAddressSuggestions(value);
+    const items = await fetch2gisAddressSuggestions(value, undefined, { searchAllCities: true });
     if (requestId !== suggestionRequestRef.current) return;
     setSuggestions(
       items
@@ -160,7 +159,7 @@ export default function ParserRunPanel({
     setIsGeocoding(true);
     try {
       const response = await fetch(
-        `${baseURL}/geo/geocode?address=${encodeURIComponent(withCityBias(value))}`,
+        `${baseURL}/geo/geocode?address=${encodeURIComponent(value.trim())}`,
         { headers: token ? { Authorization: `Bearer ${token}` } : undefined },
       );
       const data = await response.json().catch(() => ({}));
@@ -253,7 +252,7 @@ export default function ParserRunPanel({
   return (
     <>
       <form onSubmit={submit} className="grid gap-3 rounded-2xl border border-sky-100 bg-sky-50 p-4 xl:grid-cols-[minmax(12rem,1.25fr)_repeat(4,minmax(7rem,1fr))_auto]">
-      <label className="relative text-xs font-bold text-slate-600">Город или место
+      <label className="relative w-full min-w-[200px] text-xs font-bold text-slate-600">Город или место
         <input
           required
           value={city}

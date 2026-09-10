@@ -24,6 +24,9 @@ async def test_city_lifecycle_and_public_water_isolation(client, admin_token):
     response = await client.post('/api/v1/admin/cities/', json=payload, headers=headers)
     assert response.status_code == 201, response.text
     city = response.json()
+    duplicate = await client.post('/api/v1/admin/cities/', json=payload, headers=headers)
+    assert duplicate.status_code == 400, duplicate.text
+    assert duplicate.json()['detail'] == 'Этот город уже добавлен'
     assert city['is_active'] is False
     assert city['id'] not in [item['id'] for item in (await client.get('/api/v1/cities/')).json()]
     response = await client.patch(f"/api/v1/admin/cities/{city['id']}", json={'is_active': True}, headers=headers)
@@ -49,6 +52,7 @@ async def test_city_lifecycle_and_public_water_isolation(client, admin_token):
     legacy = (await client.get('/api/v1/water-points')).json()
     assert points[0]['id'] in [point['id'] for point in legacy]
     assert points[1]['id'] not in [point['id'] for point in legacy]
+    assert (await client.delete(f"/api/v1/admin/cities/{city['id']}", headers=headers)).status_code == 409
     assert (await client.patch(f"/api/v1/admin/cities/{tyumen['id']}", json={'is_active': False}, headers=headers)).status_code == 409
     assert (await client.patch(f"/api/v1/admin/cities/{city['id']}", json={'is_active': False}, headers=headers)).status_code == 200
     assert (await client.get('/api/v1/water-points', params={'city_id': city['id']})).status_code == 409
@@ -66,6 +70,7 @@ async def test_simplified_city_create_generates_code_and_bounds(client, admin_to
     assert city['code'] == 'ekaterinburg'
     assert city['min_lat'] < city['center_lat'] < city['max_lat']
     assert city['min_lon'] < city['center_lon'] < city['max_lon']
+    assert (await client.delete(f"/api/v1/admin/cities/{city['id']}", headers={"Authorization": f"Bearer {admin_token}"})).status_code == 204
 
 
 @pytest.mark.asyncio

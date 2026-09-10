@@ -29,7 +29,7 @@ interface GlobalPickupPoint {
   lon: number;
   primary_image_url?: string | null;
   material_offers: GlobalPickupPointMaterial[];
-  crm_status: "auto_added" | "invite_sent" | "response_received" | "interested" | "registered" | "registration_completed" | "activated" | "refused" | "call_later";
+  crm_status: string;
   is_active: boolean;
   is_ready: boolean;
 }
@@ -46,10 +46,16 @@ const TYPE_LABELS: Record<GlobalPickupPoint["point_type"], string> = {
   supplier: "Поставщик",
 };
 
-const isPointReady = (point: GlobalPickupPoint) => point.crm_status === "activated";
+const hasOrderableMaterialOffer = (point: GlobalPickupPoint) =>
+  point.material_offers.some((offer) => offer.is_free === true || Number(offer.price) > 0);
+
+const isPointReady = (point: GlobalPickupPoint) =>
+  (point.crm_status === "activated" || point.crm_status === "agreed")
+  && point.is_active
+  && hasOrderableMaterialOffer(point);
 
 const getCrmMarkerStatus = (point: GlobalPickupPoint) =>
-  point.crm_status === "activated" ? "activated" : "inactive";
+  isPointReady(point) ? "activated" : "inactive";
 
 export default function GlobalMapScreen({
   isAuthenticated,

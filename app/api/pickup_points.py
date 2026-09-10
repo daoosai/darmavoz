@@ -2,7 +2,7 @@ from app.services.cities import resolve_city, ensure_same_city
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from sqlalchemy import and_, literal, or_, select
+from sqlalchemy import String, and_, cast, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
@@ -17,10 +17,26 @@ from app.schemas.quarry import GlobalPickupPointOut, PickupPointMarkerOut, Quarr
 from app.services.pickup_points import (
     is_pickup_point_publicly_available,
     pickup_point_payload,
-    public_pickup_point_filters,
 )
 
 router = APIRouter()
+
+# Parsed and refused points are internal CRM records.  Every other CRM stage
+# remains useful on the client map as a muted marker, even before ordering is
+# available.  The current database enum represents legacy `parsed` as
+# `auto_added` and a hidden/refused record as `refused`.
+CLIENT_MAP_HIDDEN_CRM_STATUSES = (
+    "auto_added",
+    "parsed",
+    "hidden",
+    "refused",
+)
+
+
+def _client_map_crm_filter():
+    # Cast keeps this exclusion compatible with legacy/new PostgreSQL enum
+    # values even when a status is not yet present in the Python enum.
+    return cast(Quarry.crm_status, String).notin_(CLIENT_MAP_HIDDEN_CRM_STATUSES)
 
 
 def _disable_map_cache(response: Response) -> None:
@@ -90,18 +106,8 @@ async def list_pickup_points(
             Quarry.city_id == city.id,
             Quarry.lat.is_not(None),
             Quarry.lon.is_not(None),
-            or_(
-                and_(
-                    Quarry.crm_status == CrmStatus.activated.value,
-                    *public_pickup_point_filters(),
-                    quarry_materials.c.is_active.is_(True),
-                    or_(
-                        quarry_materials.c.price.is_not(None),
-                        literal(material.is_free).is_(True),
-                    ),
-                ),
-                Quarry.crm_status == CrmStatus.invite_sent.value,
-            ),
+            _client_map_crm_filter(),
+            quarry_materials.c.is_active.is_(True),
         )
         .order_by(Quarry.name.asc())
         .limit(limit)
@@ -148,12 +154,7 @@ async def list_global_pickup_points(
     result = await db.execute(
         select(Quarry)
         .where(
-            Quarry.crm_status.in_(
-                [
-                    CrmStatus.invite_sent.value,
-                    CrmStatus.activated.value,
-                ]
-            ),
+            _client_map_crm_filter(),
             Quarry.city_id == city.id,
             Quarry.lat.is_not(None),
             Quarry.lon.is_not(None),

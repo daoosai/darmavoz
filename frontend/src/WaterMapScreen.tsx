@@ -25,7 +25,7 @@ interface WaterPoint {
   price_unit?: string | null;
   description?: string | null;
   primary_image_url?: string | null;
-  crm_status: "auto_added" | "invite_sent" | "response_received" | "interested" | "registered" | "registration_completed" | "activated" | "refused" | "call_later";
+  crm_status: string;
   is_active: boolean;
   is_ready: boolean;
 }
@@ -45,9 +45,12 @@ interface SepticProfile {
 type ServiceTab = "water" | "septic";
 
 const isFreePoint = (point: WaterPoint) =>
-  point.is_free === true || point.water_type === "free" || Number(point.price) === 0;
+  point.is_free === true || point.water_type === "free";
 
-const isPointReady = (point: WaterPoint) => point.crm_status === "activated";
+const isPointReady = (point: WaterPoint) =>
+  (point.crm_status === "activated" || point.crm_status === "agreed")
+  && point.is_active
+  && (isFreePoint(point) || (point.price !== null && point.price !== undefined && point.price > 0));
 
 export default function WaterMapScreen({ initialTab = "water" }: { initialTab?: ServiceTab }) {
   const cityId = useCityStore((state) => state.cityId);

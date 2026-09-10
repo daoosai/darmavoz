@@ -1272,6 +1272,7 @@ function EditQuarryModal({
         manual_priority: normalizeManualPriority(formData.manual_priority),
         material_ids: Array.from(new Set((formData.material_ids || []).filter(Boolean))),
         material_offers: normalizedMaterialOffers,
+        moderation_status: formData.moderation_status || "incomplete",
         ...(usesOwnerPhone ? {} : { contact_phone: normalizeOptionalText(formData.contact_phone) }),
       };
 
@@ -1782,6 +1783,21 @@ function EditQuarryModal({
             </div>
           )}
 
+          <label className="block text-sm font-bold text-slate-800">
+            Модерация
+            <select
+              value={formData.moderation_status || "incomplete"}
+              onChange={(event) => setFormData({ ...formData, moderation_status: event.target.value })}
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 font-normal"
+            >
+              <option value="incomplete">Черновик</option>
+              <option value="pending_moderation">На модерации</option>
+              <option value="approved">Одобрен</option>
+              <option value="rejected">Отклонен</option>
+              <option value="suspended">Приостановлен</option>
+            </select>
+          </label>
+
           <div className="flex items-center gap-3 pt-2">
             <label className="relative inline-flex items-center cursor-pointer">
               <input
@@ -2257,11 +2273,6 @@ function EnhancedEditQuarryModal({
       toast.error("Укажите адрес или координаты точки");
       return;
     }
-    if (formData.is_active && totalPhotoCount === 0) {
-      toast.error("Для активации добавьте хотя бы одну фотографию");
-      return;
-    }
-
     setIsSaving(true);
     try {
       let lat = parsedCoordinates?.lat ?? null;
@@ -2301,6 +2312,7 @@ function EnhancedEditQuarryModal({
         manual_priority: normalizeManualPriority(formData.manual_priority),
         material_ids: Array.from(new Set((formData.material_ids || []).filter(Boolean))),
         material_offers: normalizedMaterialOffers,
+        moderation_status: formData.moderation_status || "incomplete",
         ...(usesOwnerPhone ? {} : { contact_phone: normalizeOptionalText(formData.contact_phone) }),
       };
 
@@ -2718,6 +2730,21 @@ function EnhancedEditQuarryModal({
               />
             </label>
           </div>
+
+          <label className="block text-sm font-bold text-slate-800">
+            Модерация
+            <select
+              value={formData.moderation_status || "incomplete"}
+              onChange={(event) => setFormData({ ...formData, moderation_status: event.target.value })}
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 font-normal"
+            >
+              <option value="incomplete">Черновик</option>
+              <option value="pending_moderation">На модерации</option>
+              <option value="approved">Одобрен</option>
+              <option value="rejected">Отклонен</option>
+              <option value="suspended">Приостановлен</option>
+            </select>
+          </label>
 
           <div className="flex items-center gap-3 pt-2">
             <label className="relative inline-flex items-center cursor-pointer">

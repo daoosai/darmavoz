@@ -175,6 +175,7 @@ class QuarryUpdate(BaseModel):
     manual_priority: Optional[int] = None
     min_delivery_price: Optional[float] = Field(default=None, ge=0)
     is_active: Optional[bool] = None
+    moderation_status: ModerationStatusValue | None = None
     material_ids: Optional[list[UUID]] = None
     materials: Optional[list[QuarryMaterialOfferIn]] = None
     material_offers: Optional[list[QuarryMaterialOfferIn]] = None

@@ -100,6 +100,13 @@ class WaterPointIn(BaseModel):
         return self
 
 
+class WaterPointAdminUpdate(WaterPointIn):
+    moderation_status: Literal[
+        "incomplete", "pending_moderation", "has_pending_changes", "approved", "rejected", "suspended"
+    ] | None = None
+    is_active: bool | None = None
+
+
 class WaterPointOut(WaterPointIn):
     city_id: UUID | None = None
     id: UUID
@@ -126,6 +133,13 @@ class SepticProfileIn(BaseModel):
     lon: float = Field(ge=-180, le=180)
     tank_volume_m3: float = Field(gt=0)
     service_price: float = Field(gt=0)
+
+
+class SepticProfileAdminUpdate(SepticProfileIn):
+    moderation_status: Literal[
+        "incomplete", "pending_moderation", "has_pending_changes", "approved", "rejected", "suspended"
+    ] | None = None
+    is_active: bool | None = None
 
 
 class SepticMediaOut(BaseModel):

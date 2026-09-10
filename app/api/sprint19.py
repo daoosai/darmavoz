@@ -11,7 +11,7 @@ from app.services.cities import resolve_city, ensure_owner_city
 from app.services.cities import resolve_city, ensure_same_city
 from app.db.database import get_db
 from app.models.models import Client, MediaFile, Quarry, Role, SepticProviderProfile, SpecialEquipmentListing, User, UserNotification, WaterPoint
-from app.schemas.sprint19 import ConfirmationRequest, NotificationOut, SepticMediaOut, SepticProfileIn, SepticProfileOut
+from app.schemas.sprint19 import ConfirmationRequest, NotificationOut, SepticMediaOut, SepticProfileAdminUpdate, SepticProfileIn, SepticProfileOut
 from app.schemas.bulk import BulkDeleteRequest, BulkDeleteResult
 from app.security.auth import get_current_client, get_current_logist_user, get_current_user, get_current_water_septic_partner_user, oauth2_scheme
 from app.services.notifications import create_operator_notifications
@@ -311,7 +311,7 @@ async def reject_septic_provider(profile_id: UUID, reason: str, db: AsyncSession
 @router.patch("/admin/septic-providers/{profile_id}", response_model=SepticProfileOut)
 async def update_septic_provider_by_admin(
     profile_id: UUID,
-    payload: SepticProfileIn,
+    payload: SepticProfileAdminUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_logist_user),
 ):
@@ -328,8 +328,12 @@ async def update_septic_provider_by_admin(
     )
     payload.city_id = selected_city.id
 
-    for field, value in payload.model_dump().items():
+    payload_data = payload.model_dump(exclude_unset=True)
+    for field, value in payload_data.items():
         setattr(profile, field, value)
+    if "moderation_status" in payload_data:
+        profile.moderated_by_user_id = current_user.id
+        profile.moderated_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(profile)
     return await _serialize_septic_profile(profile, db)

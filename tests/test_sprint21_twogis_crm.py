@@ -690,3 +690,43 @@ async def test_pending_filter_includes_legacy_auto_added_quarry(client, session_
 
     assert response.status_code == 200
     assert legacy_point_id in {item["id"] for item in response.json()}
+
+
+@pytest.mark.asyncio
+async def test_admin_patch_keeps_approved_status_for_empty_parsed_quarry(client, session_factory):
+    async with session_factory() as session:
+        admin_role = await ensure_role(session, "admin")
+        await create_user(session, username="parsed_quarry_status_admin", role=admin_role)
+        point = Quarry(
+            name="Parsed quarry without offers",
+            short_name="Parsed quarry without offers",
+            point_type="quarry",
+            address="Tyumen, Test road, 8",
+            lat=57.15,
+            lon=65.53,
+            owner_user_id=None,
+            moderation_status="incomplete",
+            crm_status=CrmStatus.auto_added.value,
+            is_active=False,
+        )
+        session.add(point)
+        await session.commit()
+        point_uuid = point.id
+        point_id = str(point_uuid)
+
+    response = await client.patch(
+        f"/api/v1/admin/pickup-points/{point_id}",
+        headers=auth_headers("parsed_quarry_status_admin"),
+        json={"moderation_status": "approved", "is_active": True},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["moderation_status"] == "approved"
+    assert response.json()["is_active"] is True
+
+    async with session_factory() as session:
+        persisted = await session.get(Quarry, point_uuid)
+
+    assert persisted is not None
+    assert persisted.moderation_status == "approved"
+    assert persisted.is_active is True

@@ -12,7 +12,7 @@ from app.services.cities import resolve_city, ensure_owner_city
 from app.services.cities import resolve_city, ensure_same_city
 from app.db.database import get_db
 from app.models.models import CrmStatus, MediaFile, User, WaterPoint
-from app.schemas.sprint19 import WaterPointIn, WaterPointOut
+from app.schemas.sprint19 import WaterPointAdminUpdate, WaterPointIn, WaterPointOut
 from app.schemas.bulk import BulkDeleteRequest, BulkDeleteResult
 from app.security.auth import get_current_logist_user, get_current_water_septic_partner_user
 from app.services.notifications import create_operator_notifications
@@ -250,7 +250,7 @@ async def delete_water_point(point_id: UUID, db: AsyncSession = Depends(get_db),
 @router.patch("/admin/water-points/{point_id}", response_model=WaterPointOut)
 async def update_water_point_by_admin(
     point_id: UUID,
-    payload: WaterPointIn,
+    payload: WaterPointAdminUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_logist_user),
 ):
@@ -267,8 +267,12 @@ async def update_water_point_by_admin(
     )
     payload.city_id = selected_city.id
 
-    for field, value in payload.model_dump().items():
+    payload_data = payload.model_dump(exclude_unset=True)
+    for field, value in payload_data.items():
         setattr(point, field, value)
+    if "moderation_status" in payload_data:
+        point.moderated_at = datetime.now(UTC)
+        point.moderated_by_user_id = current_user.id
     await db.commit()
     await db.refresh(point)
     return await _serialize_point(point, db)

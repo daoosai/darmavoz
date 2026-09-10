@@ -607,6 +607,9 @@ export default function AdminQuarriesScreen({
             <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
               <span className="h-3 w-3 rounded-full bg-green-600" /> Активирована
             </span>
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+              <span className="h-3 w-3 rounded-full bg-slate-700" /> Скрыта
+            </span>
           </div>
         </div>
         <AdminQuarriesMap

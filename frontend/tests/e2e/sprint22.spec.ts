@@ -18,7 +18,16 @@ test.beforeEach(async ({ page }) => {
     else if (url.pathname.includes('/water-points/map')) {
       const cityId = url.searchParams.get('city_id');
       if (cityId === 'city-1') await new Promise((resolve) => setTimeout(resolve, 500));
-      body = [{ id: cityId, city_id: cityId, water_type: 'free', source: cityId === 'city-2' ? 'Источник второго города' : 'Источник Тюмени', address: 'Тестовый адрес', lat: 57, lon: 65 }];
+      const isSecondCity = cityId === 'city-2';
+      body = [{
+        id: cityId,
+        city_id: cityId,
+        water_type: 'free',
+        source: isSecondCity ? 'Источник второго города' : 'Источник Тюмени',
+        address: 'Тестовый адрес',
+        lat: isSecondCity ? 56.8 : 57,
+        lon: isSecondCity ? 60.6 : 65,
+      }];
     }
     await route.fulfill({ json: body });
   });

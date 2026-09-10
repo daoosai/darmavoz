@@ -1,4 +1,4 @@
-import { cityFetch, currentCity, useCityStore } from './cityStore';
+import { cityFetch, cityMapCenter, cityMapZoom, useCityStore } from './cityStore';
 import { Capacitor } from "@capacitor/core";
 import { Geolocation } from "@capacitor/geolocation";
 import { useEffect, useRef, useState } from "react";
@@ -39,9 +39,6 @@ interface UserLocation {
   lon: number;
 }
 
-const DEFAULT_MAP_CENTER = (): [number, number] => [currentCity().center_lon, currentCity().center_lat];
-const SMART_CENTER_DISTANCE_KM = 100;
-
 const TYPE_LABELS: Record<GlobalPickupPoint["point_type"], string> = {
   quarry: "Карьер",
   accumulator: "Накопитель",
@@ -49,78 +46,10 @@ const TYPE_LABELS: Record<GlobalPickupPoint["point_type"], string> = {
   supplier: "Поставщик",
 };
 
-const isValidCoordinate = (value: unknown): value is number =>
-  typeof value === "number" && Number.isFinite(value);
-
-const getRenderablePoints = (pickupPoints: GlobalPickupPoint[]) =>
-  pickupPoints.filter(
-    (point) => isValidCoordinate(point.lat) && isValidCoordinate(point.lon),
-  );
-
 const isPointReady = (point: GlobalPickupPoint) => point.crm_status === "activated";
 
 const getCrmMarkerStatus = (point: GlobalPickupPoint) =>
   point.crm_status === "activated" ? "activated" : "inactive";
-
-const calculateDistanceKm = (
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number,
-) => {
-  const earthRadiusKm = 6371;
-  const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
-  const latitudeDelta = toRadians(lat2 - lat1);
-  const longitudeDelta = toRadians(lon2 - lon1);
-  const startLatitude = toRadians(lat1);
-  const endLatitude = toRadians(lat2);
-  const haversine =
-    Math.sin(latitudeDelta / 2) ** 2
-    + Math.cos(startLatitude)
-      * Math.cos(endLatitude)
-      * Math.sin(longitudeDelta / 2) ** 2;
-
-  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
-};
-
-const getNearestPointDistance = (
-  location: UserLocation,
-  pickupPoints: GlobalPickupPoint[],
-) => {
-  const renderablePoints = getRenderablePoints(pickupPoints);
-  if (renderablePoints.length === 0) {
-    return null;
-  }
-
-  return renderablePoints.reduce((nearestDistance, point) => {
-    const nextDistance = calculateDistanceKm(location.lat, location.lon, point.lat, point.lon);
-    return Math.min(nearestDistance, nextDistance);
-  }, Number.POSITIVE_INFINITY);
-};
-
-const getBoundsFromPoints = (pickupPoints: GlobalPickupPoint[]) => {
-  const renderablePoints = getRenderablePoints(pickupPoints);
-  if (renderablePoints.length === 0) {
-    return null;
-  }
-
-  const bounds = renderablePoints.reduce(
-    (accumulator, point) => ({
-      minLat: Math.min(accumulator.minLat, point.lat),
-      maxLat: Math.max(accumulator.maxLat, point.lat),
-      minLon: Math.min(accumulator.minLon, point.lon),
-      maxLon: Math.max(accumulator.maxLon, point.lon),
-    }),
-    {
-      minLat: renderablePoints[0].lat,
-      maxLat: renderablePoints[0].lat,
-      minLon: renderablePoints[0].lon,
-      maxLon: renderablePoints[0].lon,
-    },
-  );
-
-  return bounds;
-};
 
 export default function GlobalMapScreen({
   isAuthenticated,
@@ -130,6 +59,11 @@ export default function GlobalMapScreen({
   onOpenAuth: () => void;
 }) {
   const cityId = useCityStore((state) => state.cityId);
+  const activeCity = useCityStore((state) =>
+    state.cities.find((city) => city.id === state.cityId && city.is_active) ?? null,
+  );
+  const [activeCenterLon, activeCenterLat] = cityMapCenter(activeCity);
+  const activeMapZoom = cityMapZoom(activeCity);
   const [points, setPoints] = useState<GlobalPickupPoint[]>([]);
   const [selectedMaterials, setSelectedMaterials] = useState<string[]>([]);
   const [selectedPoint, setSelectedPoint] = useState<GlobalPickupPoint | null>(null);
@@ -138,14 +72,11 @@ export default function GlobalMapScreen({
   const [error, setError] = useState<string | null>(null);
   const [isMapReady, setIsMapReady] = useState(false);
   const [isMapUnavailable, setIsMapUnavailable] = useState(false);
-  const [isLocationResolved, setIsLocationResolved] = useState(false);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const pointMarkerRefs = useRef<any[]>([]);
   const userMarkerRef = useRef<any | null>(null);
-  const userLocationCenteredRef = useRef(false);
   const initialViewportAppliedRef = useRef(false);
-  const regionToastShownRef = useRef(false);
 
   const clearSelectedPoint = () => setSelectedPoint(null);
 
@@ -194,49 +125,6 @@ export default function GlobalMapScreen({
       easing: "easeOutCubic",
       duration: 700,
     });
-  };
-
-  const fitMapToPoints = (pickupPoints: GlobalPickupPoint[]) => {
-    const renderablePoints = getRenderablePoints(pickupPoints);
-    if (!mapRef.current || renderablePoints.length === 0) {
-      return;
-    }
-
-    if (renderablePoints.length === 1) {
-      centerMapOnCoordinates({ lat: renderablePoints[0].lat, lon: renderablePoints[0].lon }, 12);
-      return;
-    }
-
-    const bounds = getBoundsFromPoints(renderablePoints);
-    if (!bounds) {
-      return;
-    }
-
-    try {
-      if (typeof mapRef.current.fitBounds === "function") {
-        mapRef.current.fitBounds(
-          [
-            [bounds.minLon, bounds.minLat],
-            [bounds.maxLon, bounds.maxLat],
-          ],
-          {
-            padding: [64, 64, 64, 64],
-            duration: 700,
-          },
-        );
-        return;
-      }
-    } catch (fitBoundsError) {
-      console.warn("Не удалось выполнить fitBounds для карты", fitBoundsError);
-    }
-
-    centerMapOnCoordinates(
-      {
-        lat: (bounds.minLat + bounds.maxLat) / 2,
-        lon: (bounds.minLon + bounds.maxLon) / 2,
-      },
-      10,
-    );
   };
 
   const requestUserLocation = async (showErrorToast = false) => {
@@ -323,9 +211,6 @@ export default function GlobalMapScreen({
       if (!cancelled && nextLocation) {
         setUserLocation(nextLocation);
       }
-      if (!cancelled) {
-        setIsLocationResolved(true);
-      }
     };
 
     void resolveInitialUserLocation();
@@ -378,8 +263,8 @@ export default function GlobalMapScreen({
         if (disposed || !mapContainerRef.current || mapRef.current) return;
         const mapInstance = tryCreate2GisMap(
           () => new mapgl.Map(mapContainerRef.current, {
-            center: DEFAULT_MAP_CENTER(),
-            zoom: currentCity().map_zoom,
+            center: [activeCenterLon, activeCenterLat],
+            zoom: activeMapZoom,
             key,
           }),
           () => setIsMapUnavailable(true),
@@ -401,14 +286,24 @@ export default function GlobalMapScreen({
       userMarkerRef.current?.destroy?.();
       userMarkerRef.current = null;
       setIsMapReady(false);
-      setIsLocationResolved(false);
-      userLocationCenteredRef.current = false;
       initialViewportAppliedRef.current = false;
-      regionToastShownRef.current = false;
       mapRef.current?.destroy();
       mapRef.current = null;
     };
   }, [cityId]);
+
+  useEffect(() => {
+    if (!isMapReady || !mapRef.current) return;
+    mapRef.current.setCenter?.([activeCenterLon, activeCenterLat], {
+      easing: "easeOutCubic",
+      duration: 500,
+    });
+    mapRef.current.setZoom?.(activeMapZoom, {
+      easing: "easeOutCubic",
+      duration: 500,
+    });
+    initialViewportAppliedRef.current = false;
+  }, [activeCenterLat, activeCenterLon, activeMapZoom, isMapReady]);
 
   useEffect(() => {
     const mapgl = (window as any).mapgl;
@@ -454,42 +349,18 @@ export default function GlobalMapScreen({
     if (
       !isMapReady ||
       loading ||
-      !isLocationResolved ||
       initialViewportAppliedRef.current ||
       selectedPoint
     ) {
       return;
     }
 
-    if (points.length === 0) {
-      if (userLocation) {
-        centerMapOnCoordinates(userLocation, 12);
-      }
-      initialViewportAppliedRef.current = true;
-      return;
-    }
-
-    const nearestPointDistance = userLocation
-      ? getNearestPointDistance(userLocation, points)
-      : null;
-
-    if (
-      userLocation &&
-      nearestPointDistance !== null &&
-      nearestPointDistance < SMART_CENTER_DISTANCE_KM
-    ) {
-      centerMapOnCoordinates(userLocation, 12);
-      userLocationCenteredRef.current = true;
-    } else {
-      fitMapToPoints(points);
-      if (!regionToastShownRef.current) {
-        toast("В вашем регионе пока нет активных точек. Показаны доступные.");
-        regionToastShownRef.current = true;
-      }
-    }
-
+    centerMapOnCoordinates(
+      { lat: activeCenterLat, lon: activeCenterLon },
+      activeMapZoom,
+    );
     initialViewportAppliedRef.current = true;
-  }, [isLocationResolved, isMapReady, loading, points, selectedPoint, userLocation]);
+  }, [activeCenterLat, activeCenterLon, activeMapZoom, isMapReady, loading, selectedPoint]);
 
   useEffect(() => {
     if (!selectedPoint || !mapRef.current) {

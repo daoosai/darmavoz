@@ -1,4 +1,4 @@
-import { cityFetch, currentCity, useCityStore } from './cityStore';
+import { cityFetch, cityMapCenter, cityMapZoom, useCityStore } from './cityStore';
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Droplets, List, Map, MapPin, Phone, X } from "lucide-react";
 
@@ -44,8 +44,6 @@ interface SepticProfile {
 
 type ServiceTab = "water" | "septic";
 
-const DEFAULT_CENTER = (): [number, number] => [currentCity().center_lon, currentCity().center_lat];
-
 const isFreePoint = (point: WaterPoint) =>
   point.is_free === true || point.water_type === "free" || Number(point.price) === 0;
 
@@ -53,6 +51,11 @@ const isPointReady = (point: WaterPoint) => point.crm_status === "activated";
 
 export default function WaterMapScreen({ initialTab = "water" }: { initialTab?: ServiceTab }) {
   const cityId = useCityStore((state) => state.cityId);
+  const activeCity = useCityStore((state) =>
+    state.cities.find((city) => city.id === state.cityId && city.is_active) ?? null,
+  );
+  const [activeCenterLon, activeCenterLat] = cityMapCenter(activeCity);
+  const activeMapZoom = cityMapZoom(activeCity);
   const [points, setPoints] = useState<WaterPoint[]>([]);
   const [septicProfiles, setSepticProfiles] = useState<SepticProfile[]>([]);
   const [serviceTab, setServiceTab] = useState<ServiceTab>(initialTab);
@@ -142,7 +145,7 @@ export default function WaterMapScreen({ initialTab = "water" }: { initialTab?: 
       .then((mapgl) => {
         if (disposed || !mapContainerRef.current || mapRef.current) return;
         const map = tryCreate2GisMap(
-          () => new mapgl.Map(mapContainerRef.current, { center: DEFAULT_CENTER(), zoom: currentCity().map_zoom, key }),
+          () => new mapgl.Map(mapContainerRef.current, { center: [activeCenterLon, activeCenterLat], zoom: activeMapZoom, key }),
           () => setMapUnavailable(true),
         );
         if (!map || disposed) {
@@ -163,6 +166,12 @@ export default function WaterMapScreen({ initialTab = "water" }: { initialTab?: 
       setMapReady(false);
     };
   }, [cityId]);
+
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return;
+    mapRef.current.setCenter?.([activeCenterLon, activeCenterLat]);
+    mapRef.current.setZoom?.(activeMapZoom);
+  }, [activeCenterLat, activeCenterLon, activeMapZoom, mapReady]);
 
   useEffect(() => {
     const mapgl = (window as any).mapgl;
@@ -199,11 +208,6 @@ export default function WaterMapScreen({ initialTab = "water" }: { initialTab?: 
           });
         });
 
-      const first = septicProfiles.find((profile) => Number.isFinite(profile.lat) && Number.isFinite(profile.lon));
-      if (first) {
-        mapRef.current.setCenter?.([first.lon, first.lat]);
-        mapRef.current.setZoom?.(11);
-      }
       return;
     }
 
@@ -236,11 +240,6 @@ export default function WaterMapScreen({ initialTab = "water" }: { initialTab?: 
         });
       });
 
-    const first = visiblePoints[0];
-    if (first && Number.isFinite(first.lat) && Number.isFinite(first.lon)) {
-      mapRef.current.setCenter?.([first.lon, first.lat]);
-      mapRef.current.setZoom?.(11);
-    }
   }, [mapReady, septicProfiles, serviceTab, visiblePoints]);
 
   const renderPointSummary = (point: WaterPoint) => (

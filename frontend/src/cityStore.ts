@@ -14,6 +14,8 @@ interface CityState {
   refresh: () => Promise<void>;
 }
 let revision = 0;
+const FALLBACK_MAP_CENTER: [number, number] = [65.534328, 57.152286];
+const FALLBACK_MAP_ZOOM = 11;
 export const useCityStore = create<CityState>()(persist((set, get) => ({
   cityId: null, cities: [], loaded: false, error: '', preserveAddressOnNextCitySwitch: false,
   choose: (id, options = {}) => {
@@ -40,6 +42,23 @@ export function currentCity(cityId?: string): City {
   const city = state.cities.find((item) => item.id === (cityId ?? state.cityId) && item.is_active);
   if (!state.loaded || !city) throw new Error('Выберите доступный город');
   return city;
+}
+
+export function cityMapCenter(city: City | null | undefined): [number, number] {
+  if (
+    city
+    && Number.isFinite(city.center_lat)
+    && Number.isFinite(city.center_lon)
+  ) {
+    return [city.center_lon, city.center_lat];
+  }
+  return FALLBACK_MAP_CENTER;
+}
+
+export function cityMapZoom(city: City | null | undefined): number {
+  return city && Number.isFinite(city.map_zoom)
+    ? city.map_zoom
+    : FALLBACK_MAP_ZOOM;
 }
 
 // Public requests capture their city, including response parsing. Late responses

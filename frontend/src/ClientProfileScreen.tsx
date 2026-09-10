@@ -29,11 +29,13 @@ interface ClientData {
 interface ClientProfileScreenProps {
   onOpenAddresses?: () => void;
   onOpenSupport?: () => void;
+  onLogout?: () => void;
 }
 
 export default function ClientProfileScreen({
   onOpenAddresses,
   onOpenSupport,
+  onLogout,
 }: ClientProfileScreenProps) {
   const { token, currentUser, setCurrentUser } = useAuthStore();
   const [client, setClient] = useState<ClientData | null>(
@@ -252,13 +254,19 @@ export default function ClientProfileScreen({
       {/* Footer Area */}
       <div className="px-4 mt-8 pt-6 flex flex-col items-center bg-transparent">
         <button
-          onClick={async () => await logoutCurrentSession()}
+          onClick={async () => {
+            await logoutCurrentSession();
+            onLogout?.();
+          }}
           className="w-full bg-white border border-slate-200 text-slate-600 font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 active:bg-slate-50 transition-colors"
         >
           <LogOut className="w-5 h-5" />
           Выйти
         </button>
-        <DeleteAccountButton token={token} onDeleted={logoutCurrentSession} />
+        <DeleteAccountButton token={token} onDeleted={async () => {
+          await logoutCurrentSession();
+          onLogout?.();
+        }} />
         <div className="text-xs font-medium text-slate-400 mt-4 text-center pb-4">
           Дармавоз.рф • Версия {APP_VERSION}
         </div>

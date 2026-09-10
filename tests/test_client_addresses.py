@@ -1,7 +1,9 @@
+from uuid import uuid4
+
 import pytest
 from sqlalchemy import select
 
-from app.models.models import Client, ClientAddress
+from app.models.models import City, Client, ClientAddress
 from app.security.jwt import create_access_token
 
 
@@ -44,6 +46,38 @@ async def test_client_addresses_crud_and_default_rotation(client, session_factor
     second_payload = create_second.json()
     assert second_payload["is_default"] is True
 
+    async with session_factory() as session:
+        second_city = City(
+            name="Екатеринбург",
+            region="Свердловская область",
+            code=f"address-test-{uuid4().hex}",
+            center_lat=56.838,
+            center_lon=60.597,
+            map_zoom=11,
+            min_lat=56.6,
+            min_lon=60.3,
+            max_lat=57.1,
+            max_lon=60.9,
+            is_active=True,
+        )
+        session.add(second_city)
+        await session.commit()
+        await session.refresh(second_city)
+
+    create_third = await client.post(
+        "/api/v1/client/addresses",
+        json={
+            "city_id": str(second_city.id),
+            "full_address": "Екатеринбург, Ленина 1",
+            "comment": "Другой город",
+        },
+        headers=headers,
+    )
+    assert create_third.status_code == 201
+    third_payload = create_third.json()
+    assert third_payload["id"] not in {first_payload["id"], second_payload["id"]}
+    assert third_payload["city_id"] == str(second_city.id)
+
     update_second = await client.put(
         f"/api/v1/client/addresses/{second_payload['id']}",
         json={
@@ -66,10 +100,17 @@ async def test_client_addresses_crud_and_default_rotation(client, session_factor
     list_response = await client.get("/api/v1/client/addresses", headers=headers)
     assert list_response.status_code == 200
     payload = list_response.json()
-    assert len(payload) == 2
-    assert payload[0]["id"] == first_payload["id"]
-    assert payload[0]["is_default"] is True
-    assert payload[1]["is_default"] is False
+    assert len(payload) == 3
+    addresses_by_id = {address["id"]: address for address in payload}
+    assert set(addresses_by_id) == {
+        first_payload["id"],
+        second_payload["id"],
+        third_payload["id"],
+    }
+    assert addresses_by_id[first_payload["id"]]["is_default"] is True
+    assert addresses_by_id[second_payload["id"]]["is_default"] is False
+    assert addresses_by_id[third_payload["id"]]["full_address"] == "Екатеринбург, Ленина 1"
+    assert addresses_by_id[third_payload["id"]]["is_default"] is True
 
     delete_response = await client.delete(f"/api/v1/client/addresses/{first_payload['id']}", headers=headers)
     assert delete_response.status_code == 204
@@ -81,7 +122,9 @@ async def test_client_addresses_crud_and_default_rotation(client, session_factor
             ).scalars().all()
         )
 
-    assert len(remaining) == 1
-    assert remaining[0].full_address == "Москва, Арбат 12"
-    assert remaining[0].comment == "У второго подъезда"
-    assert remaining[0].is_default is True
+    assert len(remaining) == 2
+    remaining_by_id = {str(address.id): address for address in remaining}
+    assert remaining_by_id[second_payload["id"]].full_address == "Москва, Арбат 12"
+    assert remaining_by_id[second_payload["id"]].comment == "У второго подъезда"
+    assert remaining_by_id[second_payload["id"]].is_default is True
+    assert remaining_by_id[third_payload["id"]].full_address == "Екатеринбург, Ленина 1"

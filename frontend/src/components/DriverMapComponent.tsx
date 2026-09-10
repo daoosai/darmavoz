@@ -1,3 +1,4 @@
+import { useCityStore } from '../cityStore';
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Clock, MapPin, Phone, Truck, X } from "lucide-react";
 
@@ -32,7 +33,7 @@ export interface DriverMapItem {
   vehicle_tonnage_max: number | null;
 }
 
-const DEFAULT_CENTER: [number, number] = [65.534328, 57.152286];
+
 const STALE_LOCATION_MS = 2 * 60 * 1000;
 const POLLING_INTERVAL_MS = 15 * 1000;
 const activeDriverStatuses: ActiveDriverMapStatus[] = ["available", "busy"];
@@ -109,6 +110,8 @@ const formatLocationUpdatedAt = (value: string | null) => {
 };
 
 export default function DriverMapComponent() {
+  const cities = useCityStore((state) => state.cities);
+  const mapCity = cities.find((city) => city.is_default) || cities[0];
   const token = useAuthStore((state) => state.token);
   const [drivers, setDrivers] = useState<DriverMapItem[]>([]);
   const [filters, setFilters] = useState<Record<ActiveDriverMapStatus, boolean>>({
@@ -198,7 +201,7 @@ export default function DriverMapComponent() {
   useEffect(() => {
     let disposed = false;
     const key = import.meta.env.VITE_2GIS_KEY;
-    if (!mapContainerRef.current || !key || mapRef.current) {
+    if (!mapCity || !mapContainerRef.current || !key || mapRef.current) {
       if (!key) setMapUnavailable(true);
       return;
     }
@@ -207,7 +210,7 @@ export default function DriverMapComponent() {
       .then((mapgl) => {
         if (disposed || !mapContainerRef.current || mapRef.current) return;
         const map = tryCreate2GisMap(
-          () => new mapgl.Map(mapContainerRef.current, { center: DEFAULT_CENTER, zoom: 10, key }),
+          () => new mapgl.Map(mapContainerRef.current, { center: [mapCity.center_lon, mapCity.center_lat], zoom: mapCity.map_zoom, key }),
           () => setMapUnavailable(true),
         );
         if (!map || disposed) {
@@ -228,7 +231,7 @@ export default function DriverMapComponent() {
       hasCenteredOnDrivers.current = false;
       setMapReady(false);
     };
-  }, []);
+  }, [mapCity?.id]);
 
   useEffect(() => {
     const mapgl = (window as any).mapgl;

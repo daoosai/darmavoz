@@ -21,7 +21,7 @@ test("карта воды показывает изолированные бес
   });
 
   await page.goto("/water");
-  await expect(page.getByRole("heading", { name: "Карта воды" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Вода и Септики" })).toBeVisible();
   await expect(page.getByText("Родник")).toBeVisible();
   await expect(page.getByText("Вода у склада")).toBeVisible();
   await expect(page.getByText("Бесплатно")).toBeVisible();

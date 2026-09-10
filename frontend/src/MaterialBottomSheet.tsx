@@ -1,3 +1,4 @@
+import { cityFetch } from './cityStore';
 import { useState, useEffect } from "react";
 import { X, Loader2 } from "lucide-react";
 import { MaterialProps, DeliveryOption } from "./MaterialDetailScreen";
@@ -88,7 +89,7 @@ export default function MaterialBottomSheet({
       }
       try {
         setIsLoadingOptions(true);
-        const res = await fetch(`${baseURL}/catalog/delivery-options/`);
+        const res = await cityFetch(`${baseURL}/catalog/delivery-options/`);
         if (res.ok) {
           const data = await res.json();
           const options = Array.isArray(data) ? data : data.results || [];

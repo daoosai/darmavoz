@@ -12,7 +12,7 @@ import pytest_asyncio
 from alembic import command
 from alembic.config import Config
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
@@ -20,6 +20,8 @@ from sqlalchemy.pool import NullPool
 from main import app
 from app.core.config import settings
 from app.db.database import get_db
+from app.models.models import Role, User
+from app.security.jwt import create_access_token
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 ALEMBIC_INI_PATH = os.path.join(PROJECT_ROOT, "alembic.ini")
@@ -44,10 +46,14 @@ TestingSessionLocal = async_sessionmaker(engine_test, class_=AsyncSession, expir
 
 
 @pytest_asyncio.fixture(scope="session", autouse=True)
-async def prepare_database() -> AsyncGenerator[None, None]:
+async def prepare_database(request) -> AsyncGenerator[None, None]:
     """
     Создает и удаляет тестовую базу данных для сессии тестов.
     """
+    if not any({"client", "session_factory", "admin_token"}.intersection(item.fixturenames)
+               for item in request.session.items):
+        yield
+        return
     try:
         async with default_engine.connect() as conn:
             await conn.execute(
@@ -103,3 +109,17 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
 @pytest.fixture
 def session_factory():
     return TestingSessionLocal
+
+
+@pytest_asyncio.fixture
+async def admin_token(session_factory):
+    async with session_factory() as session:
+        role = await session.scalar(select(Role).where(Role.name == "admin"))
+        if role is None:
+            role = Role(name="admin", description="Test administrator")
+            session.add(role)
+            await session.flush()
+        username = f"test_admin_{uuid.uuid4().hex}"
+        session.add(User(username=username, hashed_password="test-only", role_id=role.id, is_active=True))
+        await session.commit()
+    return create_access_token(data={"sub": username})

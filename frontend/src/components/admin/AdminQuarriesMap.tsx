@@ -16,7 +16,7 @@ export interface AdminMapPoint {
   owner_name?: string | null;
   twogis_id?: string | null;
   is_active: boolean;
-  crm_status?: "auto_added" | "invite_sent" | "response_received" | "interested" | "registered" | "registration_completed" | "activated" | "refused" | "call_later";
+  crm_status?: string | null;
   primary_image_url?: string | null;
   parsed_data?: Record<string, unknown> | null;
 }
@@ -37,6 +37,23 @@ const isRenderablePoint = (
 
 const getPointKey = (point: AdminMapPoint) =>
   point.id ?? `${point.name}:${point.lat}:${point.lon}`;
+
+const getMarkerColor = (point: AdminMapPoint) => {
+  if (point.crm_status === "hidden") return "#334155";
+  if (point.crm_status === "agreed" || point.crm_status === "activated" || point.is_active) {
+    return "#16a34a";
+  }
+  if (
+    point.crm_status === "parsed"
+    || point.crm_status === "auto_added"
+    || point.crm_status === "invite_sent"
+    || !point.owner_user_id
+  ) {
+    return "#facc15";
+  }
+  // `in_progress` and all other CRM stages remain visible as neutral gray.
+  return "#94a3b8";
+};
 
 const createDetailRow = (label: string, value: string) => {
   const row = document.createElement("div");
@@ -90,11 +107,7 @@ const createMarkerElement = (
   marker.style.height = "30px";
   marker.style.borderRadius = "9999px";
   marker.style.border = "3px solid white";
-  marker.style.backgroundColor = point.crm_status === "activated"
-    ? "#16a34a"
-    : point.crm_status === "auto_added" || point.crm_status === "invite_sent"
-      ? "#facc15"
-      : "#94a3b8";
+  marker.style.backgroundColor = getMarkerColor(point);
   marker.style.boxShadow = "0 2px 8px rgba(15, 23, 42, 0.35)";
   marker.style.cursor = "pointer";
   marker.addEventListener("click", (event) => {
@@ -349,7 +362,7 @@ export default function AdminQuarriesMap({
     <div
       ref={mapContainerRef}
       aria-label="Карта точек"
-      className="h-[420px] min-h-[360px] w-full overflow-hidden rounded-2xl bg-slate-200"
+      className="h-[420px] min-h-[360px] w-full max-w-full overflow-hidden rounded-2xl bg-slate-200"
     />
   );
 }

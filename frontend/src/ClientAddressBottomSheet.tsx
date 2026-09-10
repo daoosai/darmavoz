@@ -1,3 +1,4 @@
+import { cityFetch, currentCity, useCityStore } from './cityStore';
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -14,9 +15,9 @@ import {
 import {
   fetch2gisAddressSuggestions,
   get2gisSuggestionAddress,
+  get2gisSuggestionCityName,
   get2gisSuggestionCoordinates,
   get2gisSuggestionLabel,
-  withTyumenBias,
 } from "./addressSearch";
 import { baseURL, handleApiError } from "./utils";
 import { useAuthStore, useAddressStore } from "./store";
@@ -25,7 +26,8 @@ import SwipeableBottomSheet from "./SwipeableBottomSheet";
 import MapWebGLFallback, { tryCreate2GisMap } from "./components/MapWebGLFallback";
 
 interface Address {
-  id?: string;
+  id: string;
+  city_id: string | null;
   address?: string; // keeping just in case
   full_address: string;
   lat?: number;
@@ -39,6 +41,7 @@ interface AddressSuggestion {
   address: string;
   lat?: number;
   lon?: number;
+  cityName: string;
 }
 
 interface ClientAddressBottomSheetProps {
@@ -67,6 +70,7 @@ export default function ClientAddressBottomSheet({
   const { token, role } = useAuthStore();
   const { selectedAddress, setSelectedAddress, clearSelectedAddress } =
     useAddressStore();
+  const chooseCity = useCityStore((state) => state.choose);
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
@@ -78,12 +82,27 @@ export default function ClientAddressBottomSheet({
   const [isMapUnavailable, setIsMapUnavailable] = useState(false);
   const [localSelectedId, setLocalSelectedId] = useState<string | null>(null);
   const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
+  const [pendingCityId, setPendingCityId] = useState<string | null>(null);
+  const [previewZoom, setPreviewZoom] = useState<number | null>(null);
+  const [selectedSuggestion, setSelectedSuggestion] = useState<AddressSuggestion | null>(null);
 
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
+
+  const showWarning = (message: string) => {
+    toast(message, {
+      icon: "⚠️",
+      duration: 4000,
+      style: {
+        background: "#FEF3C7",
+        color: "#92400E",
+        border: "1px solid #F59E0B",
+      },
+    });
+  };
 
   const createDraggableMarker = (mapInstance: any, coordinates: [number, number]) => {
     const marker = new (window as any).mapgl.Marker(mapInstance, {
@@ -105,6 +124,12 @@ export default function ClientAddressBottomSheet({
   }, [isOpen, token, role, isAdding]);
 
   useEffect(() => {
+    if (isOpen) return;
+    setEditingAddressId(null);
+    setIsAdding(false);
+  }, [isOpen]);
+
+  useEffect(() => {
     if (!isOpen) return;
     if (token && role === "client") return;
 
@@ -113,6 +138,9 @@ export default function ClientAddressBottomSheet({
     setEditingAddressId(null);
     setIsAdding(true);
     setNewAddress(selectedAddress || "");
+    setLat(null);
+    setLon(null);
+    setSelectedSuggestion(null);
   }, [isOpen, token, role, selectedAddress]);
 
   useEffect(() => {
@@ -121,14 +149,14 @@ export default function ClientAddressBottomSheet({
     if (isOpen && (window as any).mapgl && !mapRef.current) {
       const container = document.getElementById("client-map");
       if (container) {
-        const initialLon = lon || 65.527202;
-        const initialLat = lat || 57.152223;
+        const initialLon = lon ?? currentCity().center_lon;
+        const initialLat = lat ?? currentCity().center_lat;
 
         mapInstance = tryCreate2GisMap(
           () =>
             new (window as any).mapgl.Map("client-map", {
               center: [initialLon, initialLat],
-              zoom: 12,
+              zoom: currentCity().map_zoom,
               key: import.meta.env.VITE_2GIS_KEY,
             }),
           () => setIsMapUnavailable(true),
@@ -159,8 +187,8 @@ export default function ClientAddressBottomSheet({
     if (mapRef.current && lat && lon) {
       const coords: [number, number] = [lon, lat];
 
-      mapRef.current.setCenter(coords);
-      mapRef.current.setZoom(15);
+      mapRef.current.setCenter(coords, { duration: 450, easing: "easeOutCubic" });
+      mapRef.current.setZoom(previewZoom ?? 15, { duration: 450 });
 
       if (markerRef.current) {
         markerRef.current.setCoordinates(coords);
@@ -168,7 +196,7 @@ export default function ClientAddressBottomSheet({
         markerRef.current = createDraggableMarker(mapRef.current, coords);
       }
     }
-  }, [lat, lon]);
+  }, [lat, lon, previewZoom]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent | TouchEvent) => {
@@ -190,7 +218,9 @@ export default function ClientAddressBottomSheet({
   }, []);
 
   const fetch2GISSuggests = async (query: string) => {
-    const items = await fetch2gisAddressSuggestions(query);
+    const items = await fetch2gisAddressSuggestions(query, currentCity(), {
+      searchAllCities: true,
+    });
     return items
       .map((item: any): AddressSuggestion => {
         const address = get2gisSuggestionAddress(item);
@@ -201,6 +231,7 @@ export default function ClientAddressBottomSheet({
           address,
           lat: suggestionLat,
           lon: suggestionLon,
+          cityName: get2gisSuggestionCityName(item),
         };
       })
       .filter((item) => Boolean(item.address));
@@ -213,39 +244,43 @@ export default function ClientAddressBottomSheet({
     setNewAddress(val);
     setLat(null);
     setLon(null);
+    setPendingCityId(null);
+    setPreviewZoom(null);
+    setSelectedSuggestion(null);
     const suggests = await fetch2GISSuggests(val);
     setSuggestions(suggests.filter(Boolean));
   };
 
   const selectSuggestion = async (suggestion: AddressSuggestion) => {
     const address = suggestion.address.trim() || suggestion.label.trim();
-    setNewAddress(address);
-    setSuggestions([]);
-
     if (
-      typeof suggestion.lat === "number" &&
-      typeof suggestion.lon === "number"
+      !address ||
+      !Number.isFinite(suggestion.lat) ||
+      !Number.isFinite(suggestion.lon)
     ) {
-      setLat(suggestion.lat);
-      setLon(suggestion.lon);
+      showWarning("Не удалось определить точку адреса. Выберите другой вариант из подсказок.");
       return;
     }
 
-    try {
-      const response = await fetch(
-        `${baseURL}/geo/geocode?address=${encodeURIComponent(withTyumenBias(address))}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-      if (response.ok) {
-        const data = await response.json();
-        setLat(data.lat);
-        setLon(data.lon);
-      }
-    } catch (e) {
-      console.error(e);
+    const normalizeName = (value: string) => value.trim().toLocaleLowerCase().replace(/ё/g, "е");
+    const supportedCities = useCityStore.getState().cities.filter((city) => city.is_active);
+    const cityName = suggestion.cityName.trim();
+    const matchedCity = cityName
+      ? supportedCities.find((city) => normalizeName(city.name) === normalizeName(cityName))
+      : undefined;
+
+    if (cityName && !matchedCity) {
+      showWarning(`В г. ${cityName} доставка пока недоступна. Выберите адрес в поддерживаемом регионе.`);
+      return;
     }
+
+    setPendingCityId(matchedCity?.id ?? null);
+    setPreviewZoom(matchedCity?.map_zoom ?? 15);
+    setNewAddress(address);
+    setSelectedSuggestion(suggestion);
+    setSuggestions([]);
+    setLat(suggestion.lat);
+    setLon(suggestion.lon);
   };
 
   const fetchAddresses = async () => {
@@ -258,7 +293,7 @@ export default function ClientAddressBottomSheet({
       });
       if (res.ok) {
         const data = await res.json();
-        const addressList = Array.isArray(data) ? data : data.results || [];
+        const addressList: Address[] = Array.isArray(data) ? data : data.results || [];
         setAddresses(addressList);
 
         if (addressList.length === 0) {
@@ -287,6 +322,14 @@ export default function ClientAddressBottomSheet({
     if (localSelectedId) {
       const selectedAddr = addresses.find((a) => a.id === localSelectedId);
       if (selectedAddr) {
+        if (selectedAddr.city_id && selectedAddr.city_id !== useCityStore.getState().cityId) {
+          try {
+            chooseCity(selectedAddr.city_id, { preserveAddress: true });
+          } catch {
+            showWarning("Город сохранённого адреса больше недоступен.");
+            return;
+          }
+        }
         const savedLat = Number(selectedAddr.lat);
         const savedLon = Number(selectedAddr.lon);
         setSelectedAddress(
@@ -305,11 +348,24 @@ export default function ClientAddressBottomSheet({
     onClose();
   };
 
+  const applyPendingCity = () => {
+    if (!pendingCityId || pendingCityId === useCityStore.getState().cityId) {
+      return true;
+    }
+    try {
+      chooseCity(pendingCityId, { preserveAddress: true });
+      return true;
+    } catch {
+      showWarning("В выбранном городе доставка пока недоступна. Выберите адрес в поддерживаемом регионе.");
+      return false;
+    }
+  };
+
   const handleDeleteAddress = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     try {
       const deletedAddress = addresses.find((item) => item.id === id);
-      const res = await fetch(`${baseURL}/client/addresses/${id}`, {
+      const res = await cityFetch(`${baseURL}/client/addresses/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -341,15 +397,37 @@ export default function ClientAddressBottomSheet({
     setNewComment(addr.comment || "");
     setLat(Number.isFinite(addressLat) ? addressLat : null);
     setLon(Number.isFinite(addressLon) ? addressLon : null);
-    setEditingAddressId(addr.id || null);
+    setSelectedSuggestion(
+      Number.isFinite(addressLat) && Number.isFinite(addressLon)
+        ? {
+            label: addr.full_address || addr.address || "",
+            address: addr.full_address || addr.address || "",
+            lat: addressLat,
+            lon: addressLon,
+            cityName: "",
+          }
+        : null,
+    );
+    setPendingCityId(addr.city_id);
+    setEditingAddressId(addr.id);
     setIsAdding(true);
   };
 
   const handleAddAddress = async () => {
-    const addressToSave = newAddress;
-    if (!addressToSave.trim()) return;
+    const addressToSave = newAddress.trim();
+    const isSelectedAddressValid =
+      selectedSuggestion?.address.trim() === addressToSave &&
+      Number.isFinite(lat) &&
+      Number.isFinite(lon);
+
+    if (!isSelectedAddressValid) {
+      showWarning("Пожалуйста, выберите точный адрес из выпадающего списка подсказок");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
+      if (!applyPendingCity()) return;
       if (!token || role !== "client") {
         setSelectedAddress(
           addressToSave,
@@ -363,17 +441,21 @@ export default function ClientAddressBottomSheet({
         toast.success("Адрес выбран");
         setNewAddress("");
         setNewComment("");
+        setPendingCityId(null);
+        setPreviewZoom(null);
+        setSelectedSuggestion(null);
         setSuggestions([]);
         if (closeOnSelect) onClose();
         return;
       }
 
-      const method = editingAddressId ? "PUT" : "POST";
-      const url = editingAddressId
-        ? `${baseURL}/client/addresses/${editingAddressId}`
+      const addressId = editingAddressId;
+      const method = addressId ? "PUT" : "POST";
+      const url = addressId
+        ? `${baseURL}/client/addresses/${addressId}`
         : `${baseURL}/client/addresses`;
 
-      const res = await fetch(url, {
+      const res = await cityFetch(url, {
         method,
         headers: {
           "Content-Type": "application/json",
@@ -385,12 +467,19 @@ export default function ClientAddressBottomSheet({
           lat: lat,
           lon: lon,
           comment: newComment,
-          is_default: addresses.length === 0,
         }),
       });
 
       if (res.ok) {
-        toast.success(editingAddressId ? "Адрес обновлен!" : "Адрес добавлен!");
+        const savedAddress = await res.json() as Address;
+        setAddresses((current) => {
+          const existingIndex = current.findIndex((address) => address.id === savedAddress.id);
+          if (addressId || existingIndex >= 0) {
+            return current.map((address) => address.id === savedAddress.id ? savedAddress : address);
+          }
+          return [...current, savedAddress];
+        });
+        toast.success(addressId ? "Адрес обновлен!" : "Адрес добавлен!");
         setSelectedAddress(
           addressToSave,
           lat != null && lon != null ? { lat, lon } : null,
@@ -403,9 +492,12 @@ export default function ClientAddressBottomSheet({
         setNewAddress("");
         setNewComment("");
         setEditingAddressId(null);
+        setPendingCityId(null);
+        setPreviewZoom(null);
+        setSelectedSuggestion(null);
         setIsAdding(false);
         if (closeOnSelect) onClose();
-        else fetchAddresses();
+        else void fetchAddresses();
       } else {
         toast.error("Не удалось сохранить адрес");
       }
@@ -421,6 +513,11 @@ export default function ClientAddressBottomSheet({
     setNewAddress("");
     setNewComment("");
     setEditingAddressId(null);
+    setPendingCityId(null);
+    setPreviewZoom(null);
+    setLat(null);
+    setLon(null);
+    setSelectedSuggestion(null);
     setIsAdding(true);
     setSuggestions([]);
   };
@@ -544,8 +641,8 @@ export default function ClientAddressBottomSheet({
                     const isSelected = localSelectedId === addr.id;
                     return (
                       <div
-                        key={addr.id || addr.full_address || addr.address}
-                        onClick={() => setLocalSelectedId(addr.id || null)}
+                        key={addr.id}
+                        onClick={() => setLocalSelectedId(addr.id)}
                         className={`p-4 rounded-2xl border flex items-center gap-3 cursor-pointer transition-all ${
                           isSelected
                             ? "border-[#2DB0E6] bg-[#2DB0E6]/5"
@@ -571,24 +668,20 @@ export default function ClientAddressBottomSheet({
                             </p>
                           )}
                         </div>
-                        {addr.id && (
-                          <div className="flex items-center gap-2 shrink-0">
-                            <button
-                              onClick={(e) => handleEditAddress(addr, e)}
-                              className="p-2 text-slate-400 hover:text-[#2DB0E6] hover:bg-[#2DB0E6]/10 rounded-xl transition-colors"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={(e) =>
-                                handleDeleteAddress(addr.id as string, e)
-                              }
-                              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        )}
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            onClick={(e) => handleEditAddress(addr, e)}
+                            className="p-2 text-slate-400 hover:text-[#2DB0E6] hover:bg-[#2DB0E6]/10 rounded-xl transition-colors"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={(e) => handleDeleteAddress(addr.id, e)}
+                            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                     );
                   })}

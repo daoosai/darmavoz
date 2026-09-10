@@ -1,7 +1,7 @@
 from datetime import date as date_type
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Header, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
@@ -16,6 +16,11 @@ from app.services.dispatch_service import (
     get_order_by_id,
     list_recent_orders,
     restart_dispatch_for_order,
+)
+from app.services.order_idempotency import (
+    complete_order_idempotency_key,
+    release_order_idempotency_key,
+    reserve_order_idempotency_key,
 )
 
 router = APIRouter()
@@ -35,6 +40,7 @@ async def list_orders(
 
 @router.get("/admin", response_model=list[OrderOut])
 async def list_admin_orders(
+    city_id: UUID | None = None,
     driver_id: UUID | None = None,
     date: date_type | None = None,
     is_deleted: bool = False,
@@ -44,7 +50,7 @@ async def list_admin_orders(
 ) -> list[Order]:
     del current_user
     deleted_filter = show_deleted if show_deleted is not None else is_deleted
-    return await list_recent_orders(db, driver_id=driver_id, created_on=date, is_deleted=deleted_filter)
+    return await list_recent_orders(db, city_id=city_id, driver_id=driver_id, created_on=date, is_deleted=deleted_filter)
 
 
 @router.delete("/{order_id}", response_model=OrderDeleteOut)
@@ -88,23 +94,35 @@ async def checkout_order(
     payload: CheckoutRequest,
     db: AsyncSession = Depends(get_db),
     current_client: Client | None = Depends(get_optional_current_client),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> Order:
-    return await create_checkout_order(
-        db,
-        client_id=current_client.id if current_client is not None else payload.client_id,
-        material_id=payload.material_id,
-        delivery_option_id=payload.delivery_option_id,
-        delivery_address=payload.delivery_address,
-        notes=payload.notes,
-        source=payload.source,
-        quantity=payload.quantity,
-        address_id=payload.address_id,
-        quarry_id=payload.quarry_id,
-        delivery_lat=payload.delivery_lat,
-        delivery_lon=payload.delivery_lon,
-        mileage_km=payload.mileage_km,
-        expected_material_unit_price=payload.expected_material_unit_price,
-    )
+    reservation = await reserve_order_idempotency_key(idempotency_key)
+    if reservation and reservation.existing_order_id:
+        return await get_order_by_id(db, reservation.existing_order_id)
+    try:
+        order = await create_checkout_order(
+            db,
+            client_id=current_client.id if current_client is not None else payload.client_id,
+            material_id=payload.material_id,
+            city_id=payload.city_id,
+            delivery_option_id=payload.delivery_option_id,
+            delivery_address=payload.delivery_address,
+            notes=payload.notes,
+            source=payload.source,
+            quantity=payload.quantity,
+            volume=payload.volume,
+            address_id=payload.address_id,
+            quarry_id=payload.quarry_id,
+            delivery_lat=payload.delivery_lat,
+            delivery_lon=payload.delivery_lon,
+            mileage_km=payload.mileage_km,
+            expected_material_unit_price=payload.expected_material_unit_price,
+        )
+    except Exception:
+        await release_order_idempotency_key(reservation)
+        raise
+    await complete_order_idempotency_key(reservation, order.id)
+    return order
 
 
 @router.patch("/{order_id}/driver-cancel", response_model=OrderOut)

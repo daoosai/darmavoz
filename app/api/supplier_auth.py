@@ -1,3 +1,5 @@
+import json
+from app.services.cities import initialize_service_cities
 import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -52,6 +54,7 @@ async def register_supplier(
     )
     redis = get_redis()
     await redis.setex(_code_key(phone), TTL_SECONDS, stored_code)
+    await redis.setex(_code_key(phone) + ":cities", TTL_SECONDS, json.dumps([str(value) for value in payload.city_ids] if payload.city_ids is not None else None))
     return SupplierSmsChallengeOut(phone=phone)
 
 
@@ -83,6 +86,10 @@ async def verify_supplier_registration(
             is_active=True,
         )
         db.add(user)
+        await db.flush()
+        saved_cities = await redis.get(_code_key(phone) + ":cities")
+        ids = payload.city_ids if payload.city_ids is not None else json.loads(saved_cities) if saved_cities else None
+        await initialize_service_cities(db, user_id=user.id, city_ids=ids)
         try:
             await db.commit()
         except IntegrityError as exc:

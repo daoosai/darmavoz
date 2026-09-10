@@ -3,15 +3,26 @@ import httpx
 from fastapi import HTTPException
 from sqlalchemy import select
 
-from app.models.models import CrmStatus, PointAuditLog, Quarry, Role, User
+from app.models.models import City, CrmStatus, PointAuditLog, Quarry, Role, User
 from app.security.jwt import create_access_token
 from app.services.pickup_points import is_pickup_point_publicly_available
 from app.schemas.parser import ParserRunRequest
-from app.services.twogis_places import ParsedPlace, _fetch_page, _normalize_place, _skip_reason, search_places
+from app.services.twogis_places import MATERIAL_SKIP_REASON, PLACES_FIELDS, ParsedPlace, _fetch_page, _normalize_place, _skip_reason, search_places
+from app.schemas.quarry import QuarryMaterialOfferIn
 
 
 def auth_headers(username: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {create_access_token(data={'sub': username})}"}
+
+
+def test_free_material_offer_is_saved_with_zero_price():
+    offer = QuarryMaterialOfferIn.model_validate({
+        "material_id": "15000000-0000-0000-0000-000000000001",
+        "price": 1500,
+        "is_free": True,
+    })
+
+    assert offer.price == 0
 
 
 def test_normalize_place_maps_required_twogis_fields_to_db_payload():
@@ -21,6 +32,10 @@ def test_normalize_place_maps_required_twogis_fields_to_db_payload():
             "name": "Material base",
             "address_name": "Test street, 1",
             "point": {"lat": 57.15, "lon": 65.53},
+            "adm_div": [
+                {"name": "Тюменская область", "type": "region"},
+                {"name": "Тюмень", "type": "city"},
+            ],
             "contact_groups": [{"contacts": [
                 {"type": "phone", "value": "+7 999 000-00-01"},
                 {"type": "email", "value": "sale@example.test"},
@@ -41,12 +56,38 @@ def test_normalize_place_maps_required_twogis_fields_to_db_payload():
     assert place.phone == "+7 999 000-00-01"
     assert place.parsed_data["rubrics"] == ["Песок и щебень", "Строительные материалы"]
     assert place.parsed_data["schedule"] == {"Mon": "09:00-18:00"}
-    assert place.parsed_data["contacts"] == {
+    assert place.parsed_data["adm_div"][1]["name"] == "Тюмень"
+    assert "items.adm_div" in PLACES_FIELDS
+    assert place.parsed_data["contacts"] == [{"contacts": [
+        {"type": "phone", "value": "+7 999 000-00-01"},
+        {"type": "email", "value": "sale@example.test"},
+    ]}]
+    assert place.parsed_data["contact_details"] == {
         "websites": ["https://materials.example.test"],
         "vk": ["https://vk.com/materials"],
         "emails": ["sale@example.test"],
         "other": [],
     }
+
+
+def test_normalize_place_uses_formatted_phone_text_when_value_is_missing():
+    place = _normalize_place(
+        {
+            "id": "2gis-phone-text",
+            "name": "Material base",
+            "address_name": "Test street, 1",
+            "point": {"lat": 57.15, "lon": 65.53},
+            "contact_groups": [{"contacts": [
+                {"type": "phone", "text": "+7 (999) 000-00-02"},
+            ]}],
+        }
+    )
+
+    assert place is not None
+    assert place.phone == "+7 (999) 000-00-02"
+    assert place.parsed_data["contacts"] == [{"contacts": [
+        {"type": "phone", "text": "+7 (999) 000-00-02"},
+    ]}]
 
 
 @pytest.mark.asyncio
@@ -238,7 +279,7 @@ async def test_places_search_groups_non_target_skips_and_stops_after_twenty_page
     assert result.truncated is True
     assert len(result.skipped_items) == 1
     assert result.skipped_items[0].name == "Школа"
-    assert result.skipped_items[0].reason == "Нецелевая категория"
+    assert result.skipped_items[0].reason == MATERIAL_SKIP_REASON
     assert result.skipped_items[0].count == 200
 
 
@@ -288,7 +329,7 @@ async def test_places_search_returns_collected_items_when_next_page_is_unavailab
     assert truncated is False
 
 
-def test_places_search_does_not_filter_retail_rubrics():
+def test_water_search_keeps_existing_rubric_policy():
     for rubric_name in (
         "Строительный магазин",
         "Гипермаркет",
@@ -315,8 +356,8 @@ def test_places_search_does_not_filter_retail_rubrics():
             "rubrics": [{"name": rubric_name}],
         }
 
-        assert _skip_reason(allowed_item) is None
-        assert _normalize_place(allowed_item) is not None
+        assert _skip_reason(allowed_item, "water") is None
+        assert _normalize_place(allowed_item, "water") is not None
 
 
 @pytest.mark.parametrize(
@@ -328,7 +369,7 @@ def test_places_search_does_not_filter_retail_rubrics():
         ("Пилорама Север", None, "Пиломатериалы"),
     ],
 )
-def test_places_search_allows_retail_chains_by_name_or_rubric(name, full_name, rubric_name):
+def test_water_search_keeps_existing_name_policy(name, full_name, rubric_name):
     item = {
         "id": "2gis-retail",
         "name": name,
@@ -339,8 +380,8 @@ def test_places_search_allows_retail_chains_by_name_or_rubric(name, full_name, r
     if full_name:
         item["full_name"] = full_name
 
-    assert _skip_reason(item) is None
-    assert _normalize_place(item) is not None
+    assert _skip_reason(item, "water") is None
+    assert _normalize_place(item, "water") is not None
 
 
 @pytest.mark.parametrize("value", ("Институт образования", "Школа", "Детский сад", "Водомат"))
@@ -353,7 +394,8 @@ def test_places_search_skips_only_non_target_organizations(value):
         "rubrics": [{"name": value}],
     }
 
-    assert _skip_reason(item) == "Нецелевая категория"
+    assert _skip_reason(item) == MATERIAL_SKIP_REASON
+    assert _skip_reason(item, "water") == "Нецелевая категория"
     assert _normalize_place(item) is None
 
 
@@ -379,6 +421,113 @@ def test_parser_allows_custom_keyword():
     )
 
     assert payload.keyword == "керамзит"
+
+
+def material_item(name="Оптовая база стройматериалов", item_id="b2b-1"):
+    return {
+        "id": item_id,
+        "name": name,
+        "address_name": "Тюмень, Промышленная, 1",
+        "point": {"lat": 57.15, "lon": 65.53},
+        "rubrics": [{"name": "Песок и щебень"}, {"name": "Строительные материалы"}],
+    }
+
+
+@pytest.mark.parametrize("field", ("name", "full_name", "rubric"))
+@pytest.mark.parametrize("value", (
+    "Строительный двор", "СТРОИТЕЛЬНЫЙ-ДВОР", "Лемана ПРО", "Леруа Мерлен",
+    "Leroy Merlin", "OBI", "ОБИ", "Касторама", "Castorama",
+    "Строительный магазин", "Гипермаркеты", "Супермаркет", "Маркет",
+    "Розничная торговля", "Розница", "Товары для сада", "Товары для дачи",
+    "Отделочные материалы", "ВУЗ", "Курсы вождения", "Школа", "Институт",
+))
+def test_material_search_rejects_retail_in_all_name_fields(field, value):
+    item = material_item()
+    if field == "rubric":
+        item["rubrics"].append({"name": value})
+    else:
+        item[field] = value
+    assert _skip_reason(item) == MATERIAL_SKIP_REASON
+    assert _normalize_place(item) is None
+
+
+@pytest.mark.parametrize("name", (
+    "МирГрад", "Альфа-групп", "Арт-Самосвал", "Тандем", "Арт-Техник",
+    "Оптовая база стройматериалов", "Мобильный карьер", "Обилие",
+    "Садовый карьер", "Дачный накопитель", "Карьерный сервис",
+    "Торгово-транспортная компания", "Офис продаж нерудных материалов",
+))
+def test_material_candidates_are_not_rejected_by_ambiguous_words(name):
+    assert _normalize_place(material_item(name)) is not None
+
+
+@pytest.mark.asyncio
+async def test_search_preserves_custom_query_and_encodes_once(monkeypatch):
+    keyword = "  Песок  оптом + ПГС & щебень  "
+    payload = ParserRunRequest(city="Тюмень", center_lat=57.15, center_lon=65.53,
+                               radius_m=50000, target="material", keyword=keyword)
+    assert payload.keyword == keyword
+
+    def respond(request):
+        assert request.url.params["q"] == keyword
+        assert request.url.params["point"] == "65.53,57.15"
+        assert request.url.params["radius"] == "50000"
+        return httpx.Response(200, json={"result": {"total": 0, "items": []}})
+
+    original_client = httpx.AsyncClient
+    monkeypatch.setattr("app.services.twogis_places.settings.TWOGIS_API_KEY", "test-key")
+    monkeypatch.setattr("app.services.twogis_places.httpx.AsyncClient",
+                        lambda **kwargs: original_client(transport=httpx.MockTransport(respond), **kwargs))
+    result = await search_places(payload)
+    assert result.places == []
+    assert not result.truncated
+
+
+@pytest.mark.parametrize("keyword", ("", " ", "\t\n"))
+def test_parser_rejects_blank_query(keyword):
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        ParserRunRequest(city="Тюмень", center_lat=57.15, center_lon=65.53,
+                         radius_m=50000, target="material", keyword=keyword)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("valid_count", (30, 50))
+async def test_search_digs_past_retail_and_duplicates_to_valid_limit(monkeypatch, valid_count):
+    requested_pages = []
+    retail = [material_item("Строительный двор", f"retail-{i}") for i in range(150)]
+    valid = [material_item(item_id=f"valid-{i}") for i in range(valid_count)]
+    # The 30-point case repeats ten retail branches; these must not be counted twice.
+    items = retail + (retail[:10] if valid_count == 30 else []) + valid
+
+    async def fetch_page(_client, params):
+        page = params["page"]
+        requested_pages.append(page)
+        offset = (page - 1) * params["page_size"]
+        return {"result": {"total": len(items), "items": items[offset:offset + params["page_size"]]}}
+
+    monkeypatch.setattr("app.services.twogis_places.settings.TWOGIS_API_KEY", "test-key")
+    monkeypatch.setattr("app.services.twogis_places._fetch_page", fetch_page)
+    result = await search_places(ParserRunRequest(city="Тюмень", center_lat=57.15, center_lon=65.53,
+                                                 radius_m=50000, target="material", keyword="песок оптом"))
+    assert requested_pages == list(range(1, len(items) // 10 + 1))
+    assert len(result.places) == valid_count
+    assert len({place.twogis_id for place in result.places}) == valid_count
+    assert sum(item.count for item in result.skipped_items) == 150
+    assert result.skipped_items[0].reason == MATERIAL_SKIP_REASON
+    assert not result.truncated
+
+
+@pytest.mark.asyncio
+async def test_search_does_not_hide_first_page_request_errors(monkeypatch):
+    async def fetch_page(_client, _params):
+        raise HTTPException(status_code=400, detail="Invalid radius")
+    monkeypatch.setattr("app.services.twogis_places.settings.TWOGIS_API_KEY", "test-key")
+    monkeypatch.setattr("app.services.twogis_places._fetch_page", fetch_page)
+    with pytest.raises(HTTPException) as error:
+        await search_places(ParserRunRequest(city="Тюмень", center_lat=57.15, center_lon=65.53,
+                                             radius_m=50000, target="material", keyword="песок оптом"))
+    assert error.value.status_code == 400
 
 
 async def ensure_role(session, name: str) -> Role:
@@ -413,7 +562,15 @@ async def test_admin_parser_creates_parsed_quarry_and_audit_log(client, session_
                 lat=57.15,
                 lon=65.53,
                 phone="+79990000000",
-                parsed_data={"phones": ["+79990000000"], "schedule": {"Mon": "09:00-18:00"}, "raw": {}},
+                parsed_data={
+                    "phones": ["+79990000000"],
+                    "schedule": {"Mon": "09:00-18:00"},
+                    "adm_div": [
+                        {"name": "Тестовая область", "type": "region"},
+                        {"name": "Тестоград", "type": "city"},
+                    ],
+                    "raw": {},
+                },
             )
         ], False
 
@@ -432,15 +589,36 @@ async def test_admin_parser_creates_parsed_quarry_and_audit_log(client, session_
     )
 
     assert response.status_code == 200
-    assert response.json()["created"] == 1
+    preview = response.json()
+    assert len(preview["items"]) == 1
+    assert preview["items"][0]["phone"] == "+79990000000"
+    async with session_factory() as session:
+        assert await session.scalar(select(Quarry).where(Quarry.twogis_id == "2gis-test-1")) is None
+    saved = await client.post(
+        "/api/v1/admin/parser/save",
+        headers=auth_headers("sprint21_parser_admin"),
+        json={"city": "Tyumen", "center_lat": 57.15, "center_lon": 65.53,
+              "radius_m": 1000, "target": "material", "keyword": "песок оптом", "items": preview["items"]},
+    )
+    assert saved.status_code == 200
+    saved_payload = saved.json()
+    assert saved_payload["created"] == 1
+    assert saved_payload["created_items"][0]["phone"] == "+79990000000"
 
     async with session_factory() as session:
         point = await session.scalar(select(Quarry).where(Quarry.twogis_id == "2gis-test-1"))
+        city = await session.scalar(select(City).where(City.name == "Тестоград"))
         audit_log = await session.scalar(select(PointAuditLog).where(PointAuditLog.point_id == point.id))
 
     assert point is not None
+    assert city is not None
+    assert city.is_active is True
+    assert city.region == "Тестовая область"
+    assert point.city_id == city.id
     assert point.owner_user_id is None
     assert point.crm_status == CrmStatus.auto_added.value
+    assert point.moderation_status == "pending_moderation"
+    assert point.is_active is False
     assert point.parsed_data["phones"] == ["+79990000000"]
     assert audit_log is not None
     assert audit_log.old_status is None
@@ -491,7 +669,16 @@ async def test_parser_upsert_keeps_crm_fields_and_fills_missing_contact_phone(cl
     )
 
     assert response.status_code == 200
-    assert response.json()["updated"] == 1
+    preview = response.json()
+    assert preview["items"][0]["is_update"] is True
+    saved = await client.post(
+        "/api/v1/admin/parser/save",
+        headers=auth_headers("sprint21_upsert_admin"),
+        json={"city": "Tyumen", "center_lat": 57.15, "center_lon": 65.53,
+              "radius_m": 1000, "target": "material", "keyword": "песок оптом", "items": preview["items"]},
+    )
+    assert saved.status_code == 200
+    assert saved.json()["updated"] == 1
     async with session_factory() as session:
         updated = await session.scalar(select(Quarry).where(Quarry.twogis_id == "2gis-existing"))
 
@@ -502,3 +689,73 @@ async def test_parser_upsert_keeps_crm_fields_and_fills_missing_contact_phone(cl
     assert updated.crm_comment == "Manual CRM decision"
     assert updated.contact_phone == "+79990000002"
     assert updated.parsed_data["phones"] == ["+79990000002"]
+
+
+@pytest.mark.asyncio
+async def test_pending_filter_includes_legacy_auto_added_quarry(client, session_factory):
+    async with session_factory() as session:
+        logist_role = await ensure_role(session, "logist")
+        await create_user(session, username="legacy_parsed_points_logist", role=logist_role)
+        legacy_point = Quarry(
+            name="Legacy parsed quarry",
+            short_name="Legacy parsed quarry",
+            point_type="quarry",
+            address="Tyumen, Test road, 7",
+            lat=57.15,
+            lon=65.53,
+            owner_user_id=None,
+            moderation_status="incomplete",
+            crm_status=CrmStatus.auto_added.value,
+            is_active=False,
+        )
+        session.add(legacy_point)
+        await session.commit()
+        legacy_point_id = str(legacy_point.id)
+
+    response = await client.get(
+        "/api/v1/admin/pickup-points?moderation_status=pending_moderation",
+        headers=auth_headers("legacy_parsed_points_logist"),
+    )
+
+    assert response.status_code == 200
+    assert legacy_point_id in {item["id"] for item in response.json()}
+
+
+@pytest.mark.asyncio
+async def test_admin_patch_keeps_approved_status_for_empty_parsed_quarry(client, session_factory):
+    async with session_factory() as session:
+        admin_role = await ensure_role(session, "admin")
+        await create_user(session, username="parsed_quarry_status_admin", role=admin_role)
+        point = Quarry(
+            name="Parsed quarry without offers",
+            short_name="Parsed quarry without offers",
+            point_type="quarry",
+            address="Tyumen, Test road, 8",
+            lat=57.15,
+            lon=65.53,
+            owner_user_id=None,
+            moderation_status="incomplete",
+            crm_status=CrmStatus.auto_added.value,
+            is_active=False,
+        )
+        session.add(point)
+        await session.commit()
+        point_uuid = point.id
+        point_id = str(point_uuid)
+
+    response = await client.patch(
+        f"/api/v1/admin/pickup-points/{point_id}",
+        headers=auth_headers("parsed_quarry_status_admin"),
+        json={"moderation_status": "approved", "is_active": True},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["moderation_status"] == "approved"
+    assert response.json()["is_active"] is True
+
+    async with session_factory() as session:
+        persisted = await session.get(Quarry, point_uuid)
+
+    assert persisted is not None
+    assert persisted.moderation_status == "approved"
+    assert persisted.is_active is True

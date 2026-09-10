@@ -1,3 +1,5 @@
+import { currentCity } from './cityStore';
+import ServiceCityField from './ServiceCityField';
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { ImagePlus, Loader2, MapPin, Search, X } from "lucide-react";
 import toast from "react-hot-toast";
@@ -6,11 +8,11 @@ import MapWebGLFallback, { load2GisMapSdk, tryCreate2GisMap } from "./components
 import AddressSuggestDropdown from "./components/AddressSuggestDropdown";
 
 import {
-  fetch2gisAddressSuggestions,
+  fetch2gisAddressSuggestions as fetchCitySuggestions,
   get2gisSuggestionAddress,
   get2gisSuggestionCoordinates,
   get2gisSuggestionLabel,
-  withTyumenBias,
+  withCityBias as biasCityAddress,
 } from "./addressSearch";
 import { type MaterialProps } from "./MaterialDetailScreen";
 import { compressImageFiles } from "./imageCompression";
@@ -75,7 +77,6 @@ interface Props {
   onSaved: (point: SupplierPoint) => void;
 }
 
-const DEFAULT_MAP_CENTER: [number, number] = [65.527202, 57.152223];
 
 const normalizeEditablePointType = (value?: SupplierPoint["point_type"]): EditablePointType =>
   value === "accumulator" ? "accumulator" : "quarry";
@@ -177,6 +178,9 @@ export default function SupplierCreatePointModal({
   onSaved,
 }: Props) {
   const isEditing = Boolean(point);
+  const [serviceCityId, setServiceCityId] = useState('');
+  const fetch2gisAddressSuggestions = (query: string) => fetchCitySuggestions(query, currentCity(serviceCityId || undefined));
+  const withCityBias = (address: string) => biasCityAddress(address, currentCity(serviceCityId || undefined));
   const [form, setForm] = useState<SupplierPointFormState>(() => buildInitialForm(point));
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -193,6 +197,7 @@ export default function SupplierCreatePointModal({
   const markerRef = useRef<any>(null);
   const lastGeocodedAddressRef = useRef(normalizeOptionalText(point?.address || "")?.toLowerCase() || "");
 
+  useEffect(() => { setServiceCityId((point as any)?.city_id || ''); }, [point]);
   useEffect(() => {
     const nextForm = buildInitialForm(point);
     setForm(nextForm);
@@ -257,7 +262,7 @@ export default function SupplierCreatePointModal({
           () => new mapgl.Map(mapContainerRef.current, {
             center: initialCoordinates
               ? [initialCoordinates.lon, initialCoordinates.lat]
-              : DEFAULT_MAP_CENTER,
+              : [currentCity(serviceCityId || undefined).center_lon, currentCity(serviceCityId || undefined).center_lat],
             zoom: 12,
             key,
           }),
@@ -289,7 +294,7 @@ export default function SupplierCreatePointModal({
         mapRef.current = null;
       }
     };
-  }, []);
+  }, [serviceCityId]);
 
   useEffect(() => {
     const mapgl = (window as any).mapgl;
@@ -427,7 +432,7 @@ export default function SupplierCreatePointModal({
     setIsGeocoding(true);
     try {
       const response = await fetch(
-        `${baseURL}/geo/geocode?address=${encodeURIComponent(withTyumenBias(address))}`,
+        `${baseURL}/geo/geocode?city_id=${encodeURIComponent(serviceCityId)}&address=${encodeURIComponent(withCityBias(address))}`,
         {
           headers: { Authorization: `Bearer ${token}` },
         },
@@ -604,7 +609,7 @@ export default function SupplierCreatePointModal({
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({ ...payload, city_id: serviceCityId }),
         },
       );
       const data = await response.json().catch(() => ({}));
@@ -692,6 +697,7 @@ export default function SupplierCreatePointModal({
         </header>
 
         <form onSubmit={submit} className="space-y-5 p-5 pb-36">
+        <ServiceCityField value={serviceCityId} onChange={setServiceCityId} />
           <section className="rounded-2xl bg-white p-5 shadow-sm">
             <label className="text-sm font-bold text-slate-900">Тип точки</label>
             <select

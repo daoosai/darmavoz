@@ -12,9 +12,13 @@ import {
   Truck,
   Wrench,
   Droplets,
+  Calculator,
   X,
 } from "lucide-react";
 import { MaterialProps } from "./MaterialDetailScreen";
+import BulkCalculatorScreen from './BulkCalculatorScreen';
+import CityBoundary from './CityBoundary';
+import { cityFetch, useCityStore } from './cityStore';
 import OrdersScreen from "./OrdersScreen";
 import WelcomeScreen from "./WelcomeScreen";
 import PrivacyPolicyScreen from "./PrivacyPolicyScreen";
@@ -25,7 +29,7 @@ import ProfileScreen from "./ProfileScreen";
 import MaterialBottomSheet from "./MaterialBottomSheet";
 import UpdateBanner from "./UpdateBanner";
 
-import { Toaster } from "react-hot-toast";
+import toast, { Toaster } from "react-hot-toast";
 
 interface Category {
   id: string;
@@ -47,12 +51,12 @@ import ClientAddressBottomSheet from "./ClientAddressBottomSheet";
 import ClientProfileScreen from "./ClientProfileScreen";
 import InstallPWA from "./InstallPWA";
 import { usePushNotifications } from "./usePushNotifications";
+import { LOGOUT_COMPLETED_EVENT } from "./pushAuth";
 import SupplierPortalScreen from "./SupplierPortalScreen";
 import FloatingOrderTracker from "./FloatingOrderTracker";
 import EquipmentCatalogScreen from "./EquipmentCatalogScreen";
 import GlobalMapScreen from "./GlobalMapScreen";
 import WaterMapScreen from "./WaterMapScreen";
-import SepticCatalogScreen from "./SepticCatalogScreen";
 import SupportScreen from "./SupportScreen";
 import PickupPointMapScreen, { PickupPointSelection } from "./PickupPointMapScreen";
 import EquipmentOwnerPortalScreen from "./EquipmentOwnerPortalScreen";
@@ -60,9 +64,27 @@ import WaterSepticPartnerPortalScreen from "./WaterSepticPartnerPortalScreen";
 import AdminNotificationToastListener from "./components/shared/AdminNotificationToastListener";
 
 const WATER_PARTNER_BOARD_PATH = "/water-partner-board";
+const ADMIN_DASHBOARD_PATHS = {
+  "/admin/catalog": "materials",
+  "/admin/points": "quarries",
+  "/admin/fleet": "delivery",
+  "/admin/drivers": "drivers",
+  "/admin/moderation": "moderation",
+  "/admin/water-septic": "water_septic",
+  "/admin/suppliers": "suppliers",
+  "/admin/equipment": "equipment",
+  "/admin/cities": "cities",
+  "/admin/driver-map": "driver_map",
+  "/admin/support": "support",
+  "/admin/profile": "profile",
+} as const;
 
 // Reuse Material type as MaterialProps by exporting it from MaterialDetailScreen or type matching
 export default function App() {
+  const refreshCities = useCityStore((state) => state.refresh);
+  const activeCityId = useCityStore((state) => state.cityId);
+  const citiesLoaded = useCityStore((state) => state.loaded);
+  useEffect(() => { void refreshCities(); }, [refreshCities]);
   usePushNotifications();
   const [currentPath, setCurrentPath] = useState(
     typeof window !== "undefined" ? window.location.pathname : "/",
@@ -92,7 +114,15 @@ export default function App() {
     | "water_septic_partner_register"
     | "driver_register"
   >(
-    role === "client" && currentPath.startsWith("/client/orders/")
+    role === "client" && (
+      currentPath === "/"
+      || currentPath === "/calculator"
+      || currentPath === "/map"
+      || currentPath === "/water"
+      || currentPath === "/septic"
+      || currentPath === "/septics"
+      || currentPath.startsWith("/client/orders/")
+    )
       ? "main"
       : role === "driver"
       ? "driver"
@@ -120,6 +150,8 @@ export default function App() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [materials, setMaterials] = useState<MaterialProps[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState(false);
+  const [catalogReloadVersion, setCatalogReloadVersion] = useState(0);
   const [showAuthSheet, setShowAuthSheet] = useState(false);
 
   const navigateToPath = (nextPath: string, replace = false) => {
@@ -127,6 +159,14 @@ export default function App() {
       window.history[replace ? "replaceState" : "pushState"]({}, "", nextPath);
     }
     setCurrentPath(nextPath);
+  };
+
+  const returnToWelcome = () => {
+    navigateToPath("/", true);
+    setActiveTab("home");
+    setSelectedCategoryId(null);
+    setSelectedMaterial(null);
+    setCurrentRoute("welcome");
   };
 
   useEffect(() => {
@@ -137,6 +177,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.addEventListener(LOGOUT_COMPLETED_EVENT, returnToWelcome);
+    return () => window.removeEventListener(LOGOUT_COMPLETED_EVENT, returnToWelcome);
+  }, []);
+
+  useEffect(() => {
     if (!token || role !== "water_septic_partner" || currentPath === WATER_PARTNER_BOARD_PATH) return;
     window.history.replaceState({}, "", WATER_PARTNER_BOARD_PATH);
     setCurrentPath(WATER_PARTNER_BOARD_PATH);
@@ -144,12 +190,15 @@ export default function App() {
   }, [currentPath, role, token]);
 
   useEffect(() => {
+    if (!citiesLoaded || !activeCityId) return;
+    let cancelled = false;
     const fetchData = async () => {
       try {
         setIsLoading(true);
+        setCatalogError(false);
         const [categoriesRes, materialsRes] = await Promise.all([
-          fetch(`${baseURL}/catalog/categories/`),
-          fetch(`${baseURL}/catalog/materials/`),
+          cityFetch(`${baseURL}/catalog/categories/`),
+          cityFetch(`${baseURL}/catalog/materials/`),
         ]);
 
         if (categoriesRes.ok && materialsRes.ok) {
@@ -166,18 +215,21 @@ export default function App() {
           setMaterials(
             fetchedMaterials.filter((m: any) => m.is_active !== false),
           );
-        } else {
-          console.error("Failed to fetch data");
+        } else if (!cancelled) {
+          setCatalogError(true);
         }
       } catch (err) {
-        // Silent error for release
+        if (!cancelled && !(err instanceof DOMException && err.name === "AbortError")) {
+          setCatalogError(true);
+        }
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     };
 
-    fetchData();
-  }, []);
+    void fetchData();
+    return () => { cancelled = true; };
+  }, [activeCityId, catalogReloadVersion, citiesLoaded]);
 
   const cartItemsCount = useCartStore((state) => state.cartItems.length);
   const focusedClientOrderId = currentPath.match(/^\/client\/orders\/([^/]+)\/?$/)?.[1] || null;
@@ -223,10 +275,7 @@ export default function App() {
           }
           setCurrentRoute(resolveRouteForRole(nextRole));
         }}
-        onBack={() => {
-          navigateToPath("/");
-          setCurrentRoute("welcome");
-        }}
+        onBack={returnToWelcome}
         onSelectSupplierRegister={() => setCurrentRoute("supplier_register")}
         onSelectEquipmentOwnerRegister={() => setCurrentRoute("equipment_owner_register")}
         onSelectWaterSepticPartnerRegister={() => setCurrentRoute("water_septic_partner_register")}
@@ -238,21 +287,26 @@ export default function App() {
       return role === "admin" ? <AdminOrdersListScreen role="admin" /> : renderPartnerLogin();
     }
 
-    if (currentPath === "/admin/driver-map") {
+    const adminInitialTab = ADMIN_DASHBOARD_PATHS[currentPath as keyof typeof ADMIN_DASHBOARD_PATHS];
+    if (adminInitialTab) {
       return role === "admin" ? (
-        <AdminDashboardScreen onLogout={() => setCurrentRoute("login")} initialTab="driver_map" />
+        <AdminDashboardScreen
+          onLogout={returnToWelcome}
+          initialTab={adminInitialTab}
+          onNavigate={navigateToPath}
+        />
       ) : renderPartnerLogin();
     }
 
     if (currentPath === "/logist/orders") {
       return role === "logist" ? (
-        <LogistDashboardScreen onLogout={() => setCurrentRoute("login")} />
+        <LogistDashboardScreen onLogout={returnToWelcome} />
       ) : renderPartnerLogin();
     }
 
     if (currentPath === "/logist/driver-map") {
       return role === "logist" ? (
-        <LogistDashboardScreen onLogout={() => setCurrentRoute("login")} initialTab="driver_map" />
+        <LogistDashboardScreen onLogout={returnToWelcome} initialTab="driver_map" />
       ) : renderPartnerLogin();
     }
 
@@ -269,10 +323,7 @@ export default function App() {
     if (currentPath === WATER_PARTNER_BOARD_PATH) {
       return token && role === "water_septic_partner" ? (
         <WaterSepticPartnerPortalScreen
-          onBack={() => {
-            navigateToPath("/");
-            setCurrentRoute("login");
-          }}
+          onBack={returnToWelcome}
         />
       ) : renderPartnerLogin();
     }
@@ -299,18 +350,18 @@ export default function App() {
     }
 
     if (currentRoute === "supplier_register" || currentRoute === "supplier") {
-      return <SupplierPortalScreen onBack={() => setCurrentRoute("login")} />;
+      return <SupplierPortalScreen onBack={returnToWelcome} />;
     }
 
     if (
       currentRoute === "equipment_owner_register" ||
       currentRoute === "equipment_owner"
     ) {
-      return <EquipmentOwnerPortalScreen onBack={() => setCurrentRoute("login")} />;
+      return <EquipmentOwnerPortalScreen onBack={returnToWelcome} />;
     }
 
     if (currentRoute === "water_septic_partner_register") {
-      return <WaterSepticPartnerPortalScreen onBack={() => setCurrentRoute("login")} />;
+      return <WaterSepticPartnerPortalScreen onBack={returnToWelcome} />;
     }
 
     if (currentRoute === "login") {
@@ -319,24 +370,27 @@ export default function App() {
 
     if (currentRoute === "driver") {
       return role === "driver" ? (
-        <DriverOrdersScreen onLogout={() => setCurrentRoute("login")} />
+        <DriverOrdersScreen onLogout={returnToWelcome} />
       ) : renderPartnerLogin();
     }
 
     if (currentRoute === "logist") {
       return role === "logist" ? (
-        <LogistDashboardScreen onLogout={() => setCurrentRoute("login")} />
+        <LogistDashboardScreen onLogout={returnToWelcome} />
       ) : renderPartnerLogin();
     }
 
     if (currentRoute === "admin") {
       return role === "admin" ? (
-        <AdminDashboardScreen onLogout={() => setCurrentRoute("login")} />
+        <AdminDashboardScreen
+          onLogout={returnToWelcome}
+          onNavigate={navigateToPath}
+        />
       ) : renderPartnerLogin();
     }
 
     return (
-      <MainContent
+      <CityBoundary><MainContent
         currentRoute={currentRoute}
         setCurrentRoute={setCurrentRoute}
         activeTab={activeTab}
@@ -351,15 +405,18 @@ export default function App() {
         selectedCategoryId={selectedCategoryId}
         setSelectedCategoryId={setSelectedCategoryId}
         isLoading={isLoading}
+        catalogError={catalogError}
+        onRetryCatalog={() => setCatalogReloadVersion((value) => value + 1)}
         showAuthSheet={showAuthSheet}
         setShowAuthSheet={setShowAuthSheet}
         role={role}
         focusedOrderId={focusedClientOrderId}
         onOpenOrder={openClientOrder}
         onClearFocusedOrder={clearFocusedClientOrder}
+        onReturnToWelcome={returnToWelcome}
         currentPath={currentPath}
         setCurrentPath={setCurrentPath}
-      />
+      /></CityBoundary>
     );
   };
 
@@ -367,6 +424,7 @@ export default function App() {
     <>
       <Toaster
         position="top-right"
+        containerStyle={{ zIndex: 999999 }}
         toastOptions={{
           duration: 2000,
           style: {
@@ -398,12 +456,15 @@ function MainContent({
   selectedCategoryId,
   setSelectedCategoryId,
   isLoading,
+  catalogError,
+  onRetryCatalog,
   showAuthSheet,
   setShowAuthSheet,
   role,
   focusedOrderId,
   onOpenOrder,
   onClearFocusedOrder,
+  onReturnToWelcome,
   currentPath,
   setCurrentPath,
 }: any) {
@@ -419,17 +480,26 @@ function MainContent({
       badge: cartItemsCount > 0 ? cartItemsCount : undefined,
     },
     { id: "map", label: "Карта", icon: Map },
-    { id: "water", label: "Вода", icon: Droplets },
+    { id: "water", label: "Вода/септики", icon: Droplets },
     { id: "profile", label: "Профиль", icon: User },
   ];
 
   const [showAddressSheet, setShowAddressSheet] = useState(false);
+  const [calculatorMaterial, setCalculatorMaterial] = useState<string | null>(null);
+  const { cityId } = useCityStore();
   const [serviceDirection, setServiceDirection] = useState<"delivery" | "equipment">("delivery");
   const [mapMaterial, setMapMaterial] = useState<MaterialProps | null>(null);
   const [materialActionChoice, setMaterialActionChoice] = useState<MaterialProps | null>(null);
   const [quickBuyMaterial, setQuickBuyMaterial] = useState<MaterialProps | null>(null);
   const [selectedPickupPoint, setSelectedPickupPoint] =
     useState<PickupPointSelection | null>(null);
+  useEffect(() => {
+    setSelectedMaterial(null);
+    setSelectedPickupPoint(null);
+    setMapMaterial(null);
+    setMaterialActionChoice(null);
+    setQuickBuyMaterial(null);
+  }, [cityId, setSelectedMaterial]);
 
   const handleCartClick = () => {
     setActiveTab("cart");
@@ -485,14 +555,30 @@ function MainContent({
     setMapMaterial(null);
   };
 
-  const openSpecialCategory = (path: "/water" | "/septics", tab: "water" | "septic") => {
+  const openServiceMap = (path: "/water" | "/septics") => {
     if (typeof window !== "undefined" && window.location.pathname !== path) {
       window.history.pushState({}, "", path);
     }
     setCurrentPath(path);
     setMapMaterial(null);
     closeMaterialSheet();
-    setActiveTab(tab);
+    setActiveTab("water");
+  };
+
+  const openCalculator = (materialId = "") => {
+    if (typeof window !== "undefined" && window.location.pathname !== "/calculator") {
+      window.history.pushState({}, "", "/calculator");
+    }
+    setCurrentPath("/calculator");
+    setCalculatorMaterial(materialId);
+  };
+
+  const closeCalculator = () => {
+    setCalculatorMaterial(null);
+    if (typeof window !== "undefined" && window.location.pathname === "/calculator") {
+      window.history.pushState({}, "", "/");
+    }
+    setCurrentPath("/");
   };
 
   const handleCatalogMaterialClick = (material: MaterialProps) => {
@@ -503,12 +589,12 @@ function MainContent({
     ).toLowerCase();
 
     if (categoryName.includes("вода") || categoryName.includes("water")) {
-      openSpecialCategory("/water", "water");
+      openServiceMap("/water");
       return;
     }
 
     if (categoryName.includes("септик") || categoryName.includes("septic")) {
-      openSpecialCategory("/septics", "septic");
+      openServiceMap("/septics");
       return;
     }
 
@@ -531,12 +617,16 @@ function MainContent({
       setActiveTab("map");
       return;
     }
-    if (currentPath === "/water" && activeTab !== "water") { setActiveTab("water"); return; }
-    if ((currentPath === "/septic" || currentPath === "/septics") && activeTab !== "septic") { setActiveTab("septic"); return; }
+    if ((currentPath === "/water" || currentPath === "/septic" || currentPath === "/septics") && activeTab !== "water") { setActiveTab("water"); return; }
     if (currentPath !== "/map" && currentPath !== "/water" && currentPath !== "/septic" && currentPath !== "/septics" && (activeTab === "map" || activeTab === "water" || activeTab === "septic")) {
       setActiveTab("home");
     }
   }, [activeTab, currentPath, setActiveTab]);
+
+  useEffect(() => {
+    if (currentPath === "/calculator" && calculatorMaterial === null) setCalculatorMaterial("");
+    if (currentPath !== "/calculator" && calculatorMaterial !== null) setCalculatorMaterial(null);
+  }, [calculatorMaterial, currentPath]);
 
   return (
     <div className="min-h-screen w-full bg-slate-100 flex sm:items-center justify-center text-slate-900">
@@ -550,7 +640,6 @@ function MainContent({
                 <UpdateBanner />
               </div>
 
-              {/* Top Address Button */}
               <div className="mb-4 px-4 pt-[calc(env(safe-area-inset-top,0px)+0.25rem)]">
                 <button
                   onClick={() => {
@@ -596,15 +685,16 @@ function MainContent({
               <div className="mx-4 mb-6">
                 <button
                   type="button"
-                  onClick={() => openSpecialCategory("/septics", "septic")}
-                  className="flex w-full items-center gap-4 rounded-2xl bg-sky-500 px-5 py-4 text-left text-white shadow-sm transition active:scale-[0.99] hover:bg-sky-600"
+                  aria-label="Калькулятор материалов"
+                  onClick={() => openCalculator()}
+                  className="flex w-full items-center gap-4 rounded-2xl bg-gradient-to-r from-blue-50 to-blue-100 px-4 py-4 text-left shadow-sm ring-1 ring-blue-100 transition active:scale-[0.99]"
                 >
-                  <span className="rounded-xl bg-white/20 p-3">
-                    <Droplets className="h-7 w-7" />
+                  <span className="rounded-xl bg-white p-3 text-sky-600 shadow-sm">
+                    <Calculator className="h-6 w-6" />
                   </span>
                   <span>
-                    <span className="block text-base font-black">Откачка септиков</span>
-                    <span className="mt-0.5 block text-sm text-sky-100">Выбрать исполнителя и позвонить</span>
+                    <span className="block text-sm font-black text-slate-900">Рассчитайте объём материала</span>
+                    <span className="mt-0.5 block text-sm text-slate-600">Не знаете, сколько заказать? Рассчитайте объём в калькуляторе</span>
                   </span>
                 </button>
               </div>
@@ -652,14 +742,14 @@ function MainContent({
                     ))}
                     <button
                       type="button"
-                      onClick={() => openSpecialCategory("/water", "water")}
+                      onClick={() => openServiceMap("/water")}
                       className="px-5 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all duration-200 bg-slate-50 text-slate-500 hover:bg-slate-100"
                     >
                       Вода
                     </button>
                     <button
                       type="button"
-                      onClick={() => openSpecialCategory("/septics", "septic")}
+                      onClick={() => openServiceMap("/septics")}
                       className="px-5 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all duration-200 bg-slate-50 text-slate-500 hover:bg-slate-100"
                     >
                       Септики
@@ -669,7 +759,12 @@ function MainContent({
 
               {/* Product Grid Area */}
               <div className="px-4 flex flex-col gap-6 pb-6">
-                {isLoading ? (
+                {catalogError ? (
+                  <div role="alert" className="rounded-2xl bg-red-50 p-5 text-center text-sm font-medium text-red-700">
+                    <p>Не удалось загрузить каталог материалов</p>
+                    <button type="button" onClick={onRetryCatalog} className="mt-3 rounded-xl bg-primary px-4 py-2 font-bold text-white">Повторить попытку</button>
+                  </div>
+                ) : isLoading ? (
                   <div className="flex justify-center py-10">
                     <span className="text-slate-500 text-sm font-medium animate-pulse">
                       Загрузка...
@@ -723,14 +818,14 @@ function MainContent({
               onOpenAuth={() => setShowAuthSheet(true)}
             />
           )}
-          {activeTab === "water" && <WaterMapScreen />}
-          {activeTab === "septic" && <SepticCatalogScreen />}
+          {activeTab === "water" && <WaterMapScreen initialTab={currentPath === "/septic" || currentPath === "/septics" ? "septic" : "water"} />}
 
           {activeTab === "profile" &&
             (role === "client" ? (
               <ClientProfileScreen
                 onOpenAddresses={() => setShowAddressSheet(true)}
                 onOpenSupport={() => setActiveTab("support")}
+                onLogout={onReturnToWelcome}
               />
             ) : (
               <ProfileScreen onOpenAuth={() => setShowAuthSheet(true)} />
@@ -794,7 +889,7 @@ function MainContent({
                     )}
                   </span>
                   <span
-                    className={`whitespace-nowrap text-[10px] leading-none ${
+                    className={`whitespace-nowrap leading-none ${tab.id === "water" ? "text-[9px] tracking-[-0.04em] sm:text-[10px]" : "text-[10px]"} ${
                       isActive && isPriority
                         ? "font-bold text-white"
                         : isPriority
@@ -840,6 +935,26 @@ function MainContent({
         )}
 
         {/* Auth Bottom Sheet */}
+        {calculatorMaterial !== null && <BulkCalculatorScreen
+          materialId={calculatorMaterial || undefined}
+          onClose={closeCalculator}
+          onGoToCatalog={() => {
+            closeCalculator();
+            closeMaterialSheet();
+            setMapMaterial(null);
+            setActiveTab("home");
+          }}
+          onChooseSupplier={async (id) => {
+            try {
+              const response = await fetch(`${baseURL}/catalog/materials/${id}`);
+              if (!response.ok) throw new Error('Материал недоступен');
+              const material = await response.json();
+              closeMaterialSheet();
+              setMapMaterial(material);
+              closeCalculator();
+            } catch { toast.error('Не удалось открыть выбор поставщика. Расчёт сохранён.'); }
+          }}
+        />}
         <ClientAuthBottomSheet
           isOpen={showAuthSheet}
           onClose={() => setShowAuthSheet(false)}

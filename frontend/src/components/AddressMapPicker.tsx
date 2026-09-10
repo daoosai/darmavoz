@@ -7,7 +7,7 @@ import {
   get2gisSuggestionAddress,
   get2gisSuggestionCoordinates,
   get2gisSuggestionLabel,
-  withTyumenBias,
+  withCityBias,
 } from "../addressSearch";
 import MapWebGLFallback, {
   load2GisMapSdk,
@@ -15,6 +15,8 @@ import MapWebGLFallback, {
 } from "./MapWebGLFallback";
 import AddressSuggestDropdown from "./AddressSuggestDropdown";
 import { baseURL, extractApiErrorMessage } from "../utils";
+import { currentCity } from '../cityStore';
+import type { City } from '../AdminCitiesScreen';
 
 interface LocationValue {
   address: string;
@@ -30,13 +32,13 @@ interface AddressSuggestion {
 }
 
 interface Props extends LocationValue {
+  city?: City;
   token: string | null;
   inputId: string;
   onChange: (value: LocationValue) => void;
   addressRequired?: boolean;
 }
 
-const DEFAULT_CENTER: [number, number] = [65.534328, 57.152286];
 
 const stringifyCoordinate = (value: number) => String(Number(value.toFixed(7)));
 
@@ -50,6 +52,7 @@ const parseCoordinates = (lat: string, lon: string) => {
 };
 
 export default function AddressMapPicker({
+  city: suppliedCity,
   address,
   lat,
   lon,
@@ -58,6 +61,7 @@ export default function AddressMapPicker({
   onChange,
   addressRequired = true,
 }: Props) {
+  const city = suppliedCity || currentCity();
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
@@ -111,8 +115,8 @@ export default function AddressMapPicker({
         const initialCoordinates = coordinatesRef.current;
         const mapInstance = tryCreate2GisMap(
           () => new mapgl.Map(mapContainerRef.current, {
-            center: initialCoordinates ? [initialCoordinates.lon, initialCoordinates.lat] : DEFAULT_CENTER,
-            zoom: 12,
+            center: initialCoordinates ? [initialCoordinates.lon, initialCoordinates.lat] : [city.center_lon, city.center_lat],
+            zoom: city.map_zoom,
             key,
           }),
           () => setMapUnavailable(true),
@@ -142,7 +146,7 @@ export default function AddressMapPicker({
       mapRef.current?.destroy();
       mapRef.current = null;
     };
-  }, []);
+  }, [city.id]);
 
   useEffect(() => {
     const mapgl = (window as any).mapgl;
@@ -160,7 +164,7 @@ export default function AddressMapPicker({
     setIsGeocoding(true);
     try {
       const response = await fetch(
-        `${baseURL}/geo/geocode?address=${encodeURIComponent(withTyumenBias(nextAddress))}`,
+        `${baseURL}/geo/geocode?city_id=${city.id}&address=${encodeURIComponent(withCityBias(nextAddress, city))}`,
         { headers: token ? { Authorization: `Bearer ${token}` } : undefined },
       );
       const data = await response.json().catch(() => ({}));
@@ -188,7 +192,7 @@ export default function AddressMapPicker({
       setSuggestions([]);
       return;
     }
-    const items = await fetch2gisAddressSuggestions(nextAddress);
+    const items = await fetch2gisAddressSuggestions(nextAddress, city);
     if (requestId !== requestIdRef.current) return;
     setSuggestions(
       items

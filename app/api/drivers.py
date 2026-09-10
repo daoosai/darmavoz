@@ -12,6 +12,7 @@ from app.schemas.driver import DriverCreate, DriverFleetResponse, DriverResponse
 from app.security.auth import get_current_logist_user
 from app.services.dispatch_service import build_vehicle_volume_match_clause, get_order_requested_volume
 from app.services.storage import StorageNotConfiguredError, get_storage_service
+from app.services.cities import driver_city_clause, resolve_city, initialize_service_cities
 
 router = APIRouter()
 
@@ -82,6 +83,7 @@ def _serialize_driver_fleet(
 
 def build_driver_list_query(
     *,
+    city_id: UUID | None = None,
     status_filter: str | None = None,
     order: Order | None = None,
     requested_volume: float | None = None,
@@ -95,6 +97,8 @@ def build_driver_list_query(
         .order_by(Driver.name.asc())
     )
 
+    if city_id is not None:
+        stmt = stmt.where(driver_city_clause(city_id))
     if status_filter:
         stmt = stmt.where(Driver.status == status_filter)
     if requested_volume is not None:
@@ -105,6 +109,7 @@ def build_driver_list_query(
     if order is not None:
         stmt = (
             stmt.join(Driver.vehicle)
+            .where(driver_city_clause(order.city_id))
             .where(Driver.status == DriverStatus.available.value)
             .where(Driver.moderation_status == ModerationStatus.approved.value)
             .where(Vehicle.moderation_status == ModerationStatus.approved.value)
@@ -120,7 +125,10 @@ async def fetch_drivers(
     delivery_option_id: UUID | None = None,
     status_filter: str | None = None,
     order_id: UUID | None = None,
+    city_id: UUID | None = None,
 ) -> list[DriverFleetResponse]:
+    if city_id is not None:
+        await resolve_city(db, city_id, require_active=False)
     order: Order | None = None
     requested_volume: float | None = None
     if order_id is not None:
@@ -142,6 +150,7 @@ async def fetch_drivers(
 
     result = await db.execute(
         build_driver_list_query(
+            city_id=city_id,
             status_filter=status_filter,
             order=order,
             requested_volume=requested_volume,
@@ -187,6 +196,8 @@ async def create_driver(
         dispatch_priority=payload.dispatch_priority,
     )
     db.add(driver)
+    await db.flush()
+    await initialize_service_cities(db, driver_id=driver.id)
     await db.commit()
     result = await db.execute(
         select(Driver)
@@ -198,6 +209,7 @@ async def create_driver(
 
 @router.get("/", response_model=List[DriverFleetResponse])
 async def list_drivers(
+    city_id: UUID | None = Query(default=None),
     delivery_option_id: UUID | None = Query(default=None),
     status_filter: str | None = Query(default=None, alias="status"),
     order_id: UUID | None = Query(default=None),
@@ -207,6 +219,7 @@ async def list_drivers(
     del current_user
     return await fetch_drivers(
         db,
+        city_id=city_id,
         delivery_option_id=delivery_option_id,
         status_filter=status_filter,
         order_id=order_id,

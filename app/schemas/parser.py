@@ -1,8 +1,8 @@
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 
 ParserTarget = Literal["material", "water"]
@@ -39,25 +39,29 @@ def normalize_parser_keyword(value: str) -> str:
 
 
 class ParserRunRequest(BaseModel):
+    city_id: UUID | None = None
     city: str = Field(min_length=1, max_length=200)
     center_lat: float = Field(ge=-90, le=90)
     center_lon: float = Field(ge=-180, le=180)
     radius_m: int = Field(ge=100, le=50000)
     target: ParserTarget
-    keyword: str = Field(min_length=1, max_length=100)
+    keyword: Annotated[str, StringConstraints(strip_whitespace=False)] = Field(min_length=1, max_length=100)
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
     @field_validator("keyword")
     @classmethod
-    def normalize_keyword(cls, value: str) -> str:
-        return normalize_parser_keyword(value)
+    def validate_keyword(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Введите ключевое слово")
+        return value
 
 
 
 class ParserResultItem(BaseModel):
     id: str
     name: str
+    phone: str | None = None
 
 
 class ParserSkippedItem(BaseModel):

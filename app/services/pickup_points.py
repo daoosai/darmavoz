@@ -274,7 +274,7 @@ async def pickup_point_payload(
             "material_name": row.name,
             "unit": row.unit,
             "price": row.price,
-            "is_free": row.is_free,
+            "is_free": row.is_free or (row.price is not None and float(row.price) == 0),
             "is_active": row.is_active,
         }
         for row in offer_rows
@@ -282,6 +282,7 @@ async def pickup_point_payload(
 
     payload = {
         "id": point.id,
+        "city_id": point.city_id,
         "name": point.name,
         "short_name": point.short_name or point.name,
         "point_type": point.point_type,

@@ -112,6 +112,7 @@ def _normalize_tariffs(tariffs: list[EquipmentTariff]) -> list[EquipmentTariff]:
 
 
 class EquipmentListingBase(BaseModel):
+    city_id: UUID | None = None
     equipment_type: str | None = Field(default=None, min_length=1, max_length=255)
     equipment_type_id: UUID | None = None
     title: str = Field(min_length=1, max_length=255)
@@ -141,6 +142,7 @@ class EquipmentListingCreate(EquipmentListingBase):
 
 
 class EquipmentListingUpdate(BaseModel):
+    city_id: UUID | None = None
     equipment_type: str | None = Field(default=None, min_length=1, max_length=255)
     equipment_type_id: UUID | None = None
     title: str | None = Field(default=None, min_length=1, max_length=255)
@@ -165,6 +167,7 @@ class EquipmentListingUpdate(BaseModel):
 
 
 class EquipmentListingOut(BaseModel):
+    city_id: UUID | None = None
     id: UUID
     equipment_type: str
     equipment_type_id: UUID | None = None
@@ -224,6 +227,7 @@ class EquipmentModerationRejection(BaseModel):
 
 
 class EquipmentApplicationCreate(BaseModel):
+    city_id: UUID | None = None
     listing_id: UUID
     object_address: str = Field(min_length=3, max_length=1000)
     requested_date: date
@@ -263,6 +267,7 @@ class EquipmentApplicationCancel(BaseModel):
 
 
 class EquipmentApplicationOut(BaseModel):
+    city_id: UUID | None = None
     id: UUID
     listing_id: UUID
     client_id: UUID

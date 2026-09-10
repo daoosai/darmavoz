@@ -1,0 +1,152 @@
+import { useEffect, useState } from 'react';
+import { Calculator, PencilLine } from 'lucide-react';
+import { baseURL } from './utils';
+import { calculateBulk, describeLoads, formatBulk } from './bulkCalculator';
+import { useCalculatorStore } from './calculatorStore';
+
+type MaterialReference = { id: string; name: string; bulk_density_t_m3: number | null };
+type References = {
+  materials: MaterialReference[];
+  delivery_options: { id: string; title: string; capacity_m3: number }[];
+};
+
+const densityDefaults: Array<[string, number]> = [
+  ['асфальтная крошка', 1.5],
+  ['бой кирпича', 1.25],
+  ['кирпич', 1.25],
+  ['пгс', 1.65],
+  ['щпс', 1.65],
+  ['отсев', 1.45],
+  ['песок', 1.5],
+  ['щебень', 1.4],
+  ['гравий', 1.4],
+  ['торф', 0.8],
+  ['грунт', 1.3],
+  ['земля', 1.3],
+  ['чернозем', 1.1],
+  ['суглинок', 1.5],
+  ['глина', 1.5],
+  ['керамзит', 0.5],
+  ['асфальт', 2.1],
+];
+const CUSTOM_MATERIAL_ID = '__custom_material__';
+
+function getMaterialDensity(material?: MaterialReference): string {
+  if (!material) return '';
+  const materialName = material.name.toLowerCase().replace(/ё/g, 'е');
+  const defaultDensity = densityDefaults.find(([name]) => materialName.includes(name));
+  return String(defaultDensity?.[1] ?? material.bulk_density_t_m3 ?? '');
+}
+
+export default function BulkCalculatorScreen({ materialId, onClose, onGoToCatalog, onChooseSupplier }: {
+  materialId?: string; onClose: () => void; onGoToCatalog: () => void; onChooseSupplier: (id: string) => void;
+}) {
+  const { draft, update, setContext } = useCalculatorStore();
+  const [references, setReferences] = useState<References | null>(null);
+  const [error, setError] = useState('');
+  const [attempt, setAttempt] = useState(0);
+  const [isDensityEditable, setIsDensityEditable] = useState(false);
+  const [customMaterialName, setCustomMaterialName] = useState('');
+  useEffect(() => {
+    const controller = new AbortController();
+    setError('');
+    fetch(`${baseURL}/catalog/calculator/`, { signal: controller.signal })
+      .then(async (res) => {
+        if (!res.ok) throw new Error('Не удалось загрузить справочники');
+        const data: References = await res.json();
+        if (controller.signal.aborted) return;
+        setReferences(data);
+        if (materialId) {
+          const material = data.materials.find((item) => item.id === materialId);
+          if (material) update({ materialId, density: getMaterialDensity(material), includeMass: true });
+        }
+        else if (!draft.capacity) update({ capacity: '20' });
+      }).catch((err) => { if (!controller.signal.aborted) setError(err.message); });
+    return () => controller.abort();
+  }, [attempt, draft.capacity, materialId, update]);
+
+  let result: ReturnType<typeof calculateBulk> | null = null;
+  let validation = '';
+  try {
+    result = calculateBulk({ ...draft, density: draft.density });
+  } catch (err) { validation = (err as Error).message; }
+  const material = references?.materials.find((item) => item.id === draft.materialId);
+  const isCustomMaterial = draft.materialId === CUSTOM_MATERIAL_ID;
+  const densityEditable = isCustomMaterial || isDensityEditable;
+  const inputClass = 'mt-1.5 w-full rounded-xl border border-slate-200 bg-white p-3 text-slate-900 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100';
+  const thicknessPresets = draft.thicknessUnit === 'm'
+    ? [{ value: '0.05', label: '0.05 м' }, { value: '0.1', label: '0.1 м' }, { value: '0.15', label: '0.15 м' }, { value: '0.2', label: '0.2 м' }]
+    : [{ value: '5', label: '5 см' }, { value: '10', label: '10 см' }, { value: '15', label: '15 см' }, { value: '20', label: '20 см' }];
+  const selectMaterial = (id: string) => {
+    if (id === CUSTOM_MATERIAL_ID) {
+      setIsDensityEditable(true);
+      update({ materialId: id, density: '1.5', includeMass: true });
+      return;
+    }
+    const selectedMaterial = references?.materials.find((item) => item.id === id);
+    setIsDensityEditable(false);
+    setCustomMaterialName('');
+    update({ materialId: id, density: getMaterialDensity(selectedMaterial), includeMass: true });
+  };
+  return <section role="dialog" aria-modal="true" aria-label="Калькулятор материалов" className="fixed inset-0 z-[100] overflow-y-auto bg-slate-50 pt-[max(env(safe-area-inset-top),2.5rem)] pb-[max(env(safe-area-inset-bottom),1rem)]">
+    <div className="mx-auto max-w-md px-4 py-4 sm:py-6">
+      <div className="space-y-5 rounded-2xl bg-white p-4 shadow-sm sm:p-6">
+      <button type="button" onClick={onClose} className="py-2 font-semibold text-sky-600">← Назад</button>
+      <header>
+        <span className="mb-3 inline-flex rounded-2xl bg-blue-50 p-3 text-sky-600"><Calculator className="h-6 w-6" /></span>
+        <h1 className="text-2xl font-black tracking-tight text-slate-900">Калькулятор материалов</h1>
+        <p className="mt-2 text-sm leading-5 text-slate-500">Введите размеры участка — объём, вес и количество машин рассчитаются автоматически.</p>
+      </header>
+      {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error} <button className="font-bold text-sky-600" onClick={() => setAttempt((value) => value + 1)}>Повторить</button></p>}
+      {!references && !error && <p className="text-sm text-slate-500">Загрузка справочников…</p>}
+
+      <section className="space-y-4">
+        <label className="block text-sm font-bold text-slate-700">Материал
+          <select aria-label="Материал" className={inputClass} value={draft.materialId} onChange={(event) => selectMaterial(event.target.value)}>
+            <option value="">Выберите материал</option>{references?.materials.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}<option value={CUSTOM_MATERIAL_ID}>Другой материал (ввести вручную)</option>
+          </select>
+        </label>
+        {isCustomMaterial ? <label className="block text-sm font-bold text-slate-700">Введите название материала
+          <input aria-label="Введите название материала" className={inputClass} value={customMaterialName} onChange={(event) => setCustomMaterialName(event.target.value)} placeholder="Асфальтная крошка" />
+        </label> : null}
+        {references?.materials.length === 0 && <p className="text-sm text-slate-500">Материалы для расчёта пока не настроены.</p>}
+        <div className="grid grid-cols-2 gap-3">
+          {([['length', 'Длина, м'], ['width', 'Ширина, м']] as const).map(([field, label]) => <label key={field} className="block text-sm font-bold text-slate-700">{label}<input aria-label={label} className={inputClass} inputMode="decimal" value={draft[field]} onChange={(event) => update({ [field]: event.target.value })} /></label>)}
+        </div>
+        <label className="block text-sm font-bold text-slate-700">Толщина слоя
+          <div className="mt-1.5 flex gap-2">
+            <input aria-label="Толщина слоя" className={inputClass.replace('mt-1.5 ', '')} inputMode="decimal" value={draft.thickness} onChange={(event) => update({ thickness: event.target.value })} />
+            <select aria-label="Единица толщины" className="w-28 rounded-xl border border-slate-200 bg-white px-2 text-sm font-semibold outline-none focus:border-sky-400" value={draft.thicknessUnit} onChange={(event) => update({ thicknessUnit: event.target.value as 'cm' | 'm' })}><option value="cm">см</option><option value="m">м</option></select>
+          </div>
+        </label>
+        <div className="flex flex-wrap gap-2" aria-label="Быстрый выбор толщины">
+          {thicknessPresets.map((preset) => <button key={preset.value} type="button" onClick={() => update({ thickness: preset.value })} className={`rounded-full px-3 py-1.5 text-sm font-bold transition ${draft.thickness === preset.value ? 'bg-sky-500 text-white' : 'bg-slate-100 text-slate-600 active:bg-slate-200'}`}>{preset.label}</button>)}
+        </div>
+        <label className="block text-sm font-bold text-slate-700">Кубатура машины, м³<input aria-label="Кубатура машины, м³" className={inputClass} inputMode="decimal" value={draft.capacity} onChange={(event) => update({ capacity: event.target.value })} /></label>
+        <select aria-label="Кубатура из справочника" className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 outline-none focus:border-sky-400" value="" onChange={(event) => { if (event.target.value) update({ capacity: event.target.value }); }}><option value="">Выбрать кубатуру из справочника</option>{references?.delivery_options.map((item) => <option key={item.id} value={item.capacity_m3}>{item.title} — {item.capacity_m3} м³</option>)}</select>
+        <div className="rounded-2xl bg-slate-50 p-3">
+          <div className="flex items-center justify-between gap-3">
+            <label className="text-sm font-bold text-slate-700" htmlFor="calculator-density">Плотность, т/м³</label>
+            <label className={`flex items-center gap-1.5 text-xs font-semibold text-sky-700 ${isCustomMaterial ? 'cursor-default opacity-70' : 'cursor-pointer'}`}><input type="checkbox" checked={densityEditable} disabled={isCustomMaterial} onChange={(event) => setIsDensityEditable(event.target.checked)} /><PencilLine className="h-3.5 w-3.5" /> Изменить вручную</label>
+          </div>
+          <input id="calculator-density" aria-label="Плотность, т/м³" className={`${inputClass} ${densityEditable ? '' : 'cursor-default bg-slate-100 text-slate-500'}`} inputMode="decimal" disabled={false} readOnly={!densityEditable} value={draft.density ?? ''} placeholder="Выберите материал" onChange={(event) => update({ density: event.target.value, includeMass: true })} />
+          <p className="mt-2 text-xs leading-4 text-slate-500">{isCustomMaterial ? 'Для другого материала укажите плотность вручную.' : 'Коэффициент подставляется для выбранного материала автоматически.'}</p>
+        </div>
+      </section>
+      {result ? <section aria-live="polite" className="space-y-4 rounded-3xl bg-blue-50 p-5 shadow-sm">
+        <h2 className="text-sm font-black uppercase tracking-wide text-sky-700">Итоги расчёта</h2>
+        <div><p className="text-sm font-medium text-slate-600">Объём</p><p className="text-2xl font-black text-slate-900">{formatBulk(result.volume)} м³</p></div>
+        <div><p className="text-sm font-medium text-slate-600">Примерный вес</p><p className="text-2xl font-black text-slate-900">{result.mass !== null ? `${formatBulk(result.mass)} тонн` : 'Укажите плотность'}</p></div>
+        <div><p className="text-sm font-medium text-slate-600">Потребуется машин (по {formatBulk(result.capacity)} м³)</p><p className="text-2xl font-black text-slate-900">{result.loads} шт.</p></div>
+        <p className="border-t border-blue-100 pt-3 text-sm leading-5 text-slate-600">Рейсы: {describeLoads(result)}. Итог не учитывает запас, уплотнение и влажность.</p>
+      </section> : <p aria-live="polite" className="text-sm text-slate-600">{validation}</p>}
+      <button disabled={!result || !material} className="w-full rounded-2xl bg-sky-500 p-4 font-black text-white shadow-sm transition hover:bg-sky-600 disabled:opacity-40" onClick={() => {
+        setContext({ ...draft, density: draft.density });
+        onChooseSupplier(draft.materialId);
+      }}>Выбрать поставщика</button>
+      <button type="button" onClick={onGoToCatalog} className="w-full rounded-2xl bg-sky-500 p-4 font-black text-white shadow-sm transition hover:bg-sky-600">Перейти в каталог</button>
+      <p className="mb-3 text-center text-sm leading-5 text-slate-500">Расчёт не добавляет товары в корзину. Оформите нужные машины в каталоге.</p>
+      </div>
+    </div>
+  </section>;
+}

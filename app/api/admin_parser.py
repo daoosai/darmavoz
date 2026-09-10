@@ -6,6 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
+from app.services.cities import ensure_owner_city
 from app.models.models import CrmStatus, PointAuditLog, Quarry, Role, User, WaterPoint
 from app.schemas.parser import CrmPointOut, CrmUpdateRequest, ParserPreviewItem, ParserPreviewResult, ParserRunRequest, ParserRunResult, ParserSaveRequest, PointAuditLogOut, PointKind, PointOwnerBindingRequest
 from app.security.auth import get_current_admin_user
@@ -49,7 +50,16 @@ async def run_parser(payload: ParserRunRequest, db: AsyncSession = Depends(get_d
     items = []
     for place in places:
         is_update = await db.scalar(select(model.id).where(model.twogis_id == place.twogis_id)) is not None
-        items.append(ParserPreviewItem(**place.__dict__, is_update=is_update))
+        items.append(ParserPreviewItem(
+            twogis_id=place.twogis_id,
+            name=place.name,
+            address=place.address,
+            lat=place.lat,
+            lon=place.lon,
+            phone=place.phone,
+            parsed_data=place.parsed_data,
+            is_update=is_update,
+        ))
     return ParserPreviewResult(items=items, skipped_items=skipped_items, truncated=truncated)
 
 
@@ -94,6 +104,9 @@ async def bind_point_owner(point_kind: PointKind, point_id: UUID, payload: Point
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Select a water type before linking an active owner")
     old_status = point.crm_status
     point.owner_user_id = owner.id
+    if point.city_id is None:
+        raise HTTPException(409, "Сначала укажите город точки")
+    await ensure_owner_city(db, owner.id, point.city_id, auto_sync=True)
     point.crm_status = CrmStatus.activated.value
     point.is_active = True
     await _add_status_audit_log(db, point=point, point_kind=point_kind, admin_id=current_admin.id, old_status=old_status, new_status=CrmStatus.activated.value)

@@ -9,6 +9,7 @@ from sqlalchemy import Select, and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.services.cities import resolve_city, ensure_same_city, driver_city_clause, ensure_driver_city
 from app.core.config import settings
 from app.models.models import (
     Client,
@@ -374,6 +375,7 @@ async def build_order(
     created_by_source: str,
     quantity: int,
     auto_dispatch: bool,
+    volume: float | None = None,
     pickup_address: str | None = None,
     pickup_lat: float | None = None,
     pickup_lon: float | None = None,
@@ -387,18 +389,22 @@ async def build_order(
     calculation_source: str | None = None,
     route_calculated_at: datetime | None = None,
     quarry_id: UUID | None = None,
+    city_id: UUID | None = None,
 ) -> Order:
-    volume = delivery_option.capacity_m3 * quantity
+    city = await resolve_city(session, city_id)
+    if quarry_id is not None:
+        ensure_same_city(city.id, await session.get(Quarry, quarry_id))
+    resolved_volume = volume if volume is not None else delivery_option.capacity_m3 * quantity
     unit_price = material.price
-    calculated_amount = volume * unit_price if unit_price is not None else None
+    calculated_amount = resolved_volume * unit_price if unit_price is not None else None
     resolved_total_amount = (
         round(total_amount, 2)
         if total_amount is not None
         else round(calculated_amount or 0.0, 2)
     )
     resolved_item_price = unit_price
-    if total_amount is not None and volume > 0:
-        resolved_item_price = round(resolved_total_amount / volume, 2)
+    if total_amount is not None and resolved_volume > 0:
+        resolved_item_price = round(resolved_total_amount / resolved_volume, 2)
     now = utcnow()
     clarification_reasons: list[str] = []
     if not (client.phone or "").strip(): clarification_reasons.append("client_phone_missing")
@@ -407,6 +413,7 @@ async def build_order(
     should_dispatch = auto_dispatch and not clarification_reasons
     delivery_address_value = delivery_address or address
     order = Order(
+        city_id=city.id,
         client_id=client.id,
         delivery_option_id=delivery_option.id,
         quarry_id=quarry_id,
@@ -440,7 +447,7 @@ async def build_order(
             order_id=order.id,
             material_id=material.id,
             quantity=quantity,
-            volume=volume,
+            volume=resolved_volume,
             price=resolved_item_price,
             amount=resolved_total_amount,
         )
@@ -475,13 +482,16 @@ async def create_checkout_order(
     notes: str | None,
     source: str | None,
     quantity: int,
+    volume: float | None = None,
     address_id: UUID | None = None,
     quarry_id: UUID | None = None,
+    city_id: UUID | None = None,
     delivery_lat: float | None = None,
     delivery_lon: float | None = None,
     mileage_km: float | None = None,
     expected_material_unit_price: float | None = None,
 ) -> Order:
+    city = await resolve_city(session, city_id)
     if client_id is None:
         client = await get_or_create_guest_client(session)
     else:
@@ -494,6 +504,13 @@ async def create_checkout_order(
         material_id=material_id,
         delivery_option_id=delivery_option_id,
     )
+    maximum_volume = float(delivery_option.capacity_m3) * quantity
+    requested_volume = maximum_volume if volume is None else float(volume)
+    if requested_volume > maximum_volume:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Requested volume exceeds the selected vehicle capacity.",
+        )
 
     resolved_delivery_address = delivery_address
     resolved_delivery_lat = delivery_lat
@@ -502,6 +519,7 @@ async def create_checkout_order(
     if address_id is not None:
         address_result = await session.execute(
             select(ClientAddress).where(
+                ClientAddress.city_id == city.id,
                 ClientAddress.id == address_id,
                 ClientAddress.client_id == client.id,
             )
@@ -549,11 +567,13 @@ async def create_checkout_order(
 
         pricing = await calculate_client_order_pricing(
             session,
+            city_id=city.id,
             material_id=material_id,
             delivery_option_id=delivery_option_id,
             delivery_lat=resolved_delivery_lat,
             delivery_lon=resolved_delivery_lon,
             quantity=quantity,
+            volume=requested_volume,
             quarry_id=quarry_id,
         )
         selected_quarry = pricing.quarry
@@ -585,7 +605,7 @@ async def create_checkout_order(
                     detail="MATERIAL_NOT_AVAILABLE_AT_POINT",
                 )
             point_material_total = round(
-                unit_price * float(delivery_option.capacity_m3) * quantity,
+                unit_price * requested_volume,
                 2,
             )
             point_unit_price = unit_price
@@ -602,11 +622,13 @@ async def create_checkout_order(
     ):
         pricing = await calculate_client_order_pricing(
             session,
+            city_id=city.id,
             material_id=material_id,
             delivery_option_id=delivery_option_id,
             delivery_lat=resolved_delivery_lat,
             delivery_lon=resolved_delivery_lon,
             quantity=quantity,
+            volume=requested_volume,
         )
         selected_quarry = pricing.quarry
         resolved_mileage_km = pricing.mileage_km
@@ -630,6 +652,7 @@ async def create_checkout_order(
 
     order = await build_order(
         session,
+        city_id=city.id,
         client=client,
         material=material,
         delivery_option=delivery_option,
@@ -638,6 +661,7 @@ async def create_checkout_order(
         source=source or "mobile",
         created_by_source="client_app",
         quantity=quantity,
+        volume=requested_volume,
         auto_dispatch=True,
         pickup_address=(selected_quarry.address or selected_quarry.name) if selected_quarry is not None else None,
         pickup_lat=selected_quarry.lat if selected_quarry is not None else None,
@@ -665,6 +689,7 @@ async def _resolve_logist_order_quarry(
     session: AsyncSession,
     *,
     material_id: UUID,
+    city_id: UUID,
     pickup_address: str | None,
 ) -> Quarry | None:
     result = await session.execute(
@@ -673,6 +698,7 @@ async def _resolve_logist_order_quarry(
         .where(
             *public_pickup_point_filters(),
             quarry_materials.c.material_id == material_id,
+            Quarry.city_id == city_id,
             quarry_materials.c.is_active.is_(True),
         )
         .order_by(Quarry.name.asc())
@@ -688,6 +714,7 @@ async def _resolve_logist_order_quarry(
 
 
 async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate) -> Order:
+    city = await resolve_city(session, payload.city_id)
     client = await get_or_create_client_by_phone(
         session, name=payload.client_name or payload.client_phone, phone=payload.client_phone
     )
@@ -722,6 +749,7 @@ async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate)
         if resolved_pickup_lat is None or resolved_pickup_lon is None:
             selected_quarry = await _resolve_logist_order_quarry(
                 session,
+                city_id=city.id,
                 material_id=payload.material_id,
                 pickup_address=payload.pickup_address,
             )
@@ -743,6 +771,7 @@ async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate)
         pricing = await calculate_client_order_pricing(
             session,
             material_id=payload.material_id,
+            city_id=city.id,
             delivery_option_id=payload.delivery_option_id,
             delivery_lat=resolved_delivery_lat,
             delivery_lon=resolved_delivery_lon,
@@ -766,6 +795,7 @@ async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate)
 
     order = await build_order(
         session,
+        city_id=payload.city_id,
         client=client,
         material=material,
         delivery_option=delivery_option,
@@ -789,6 +819,8 @@ async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate)
         calculation_source=resolved_calculation_source,
         route_calculated_at=route_calculated_at,
     )
+    if payload.driver_id is not None:
+        await ensure_driver_city(session, order, payload.driver_id)
     await session.commit()
     schedule_client_searching_driver_status_notification(order)
     if payload.driver_id is not None:
@@ -831,6 +863,7 @@ async def assign_order_to_driver_manually(session: AsyncSession, *, order_id: UU
         raise HTTPException(status_code=409, detail="Driver has no active vehicle")
     if driver.vehicle.moderation_status not in DISPATCH_ALLOWED_MODERATION_STATUSES:
         raise HTTPException(status_code=400, detail=MANUAL_ASSIGN_APPROVAL_ERROR)
+    await ensure_driver_city(session, order, driver.id)
     ensure_driver_vehicle_matches_order_volume(order, driver)
 
     matching = await smart_matching_service.calculate(
@@ -957,11 +990,15 @@ async def list_recent_orders(
     limit: int = 20,
     *,
     driver_id: UUID | None = None,
+    city_id: UUID | None = None,
     created_on: date | None = None,
     is_deleted: bool = False,
 ) -> list[Order]:
     stmt = select(Order).options(*order_load_options())
     stmt = stmt.where(Order.is_deleted.is_(is_deleted))
+    if city_id is not None:
+        await resolve_city(session, city_id, require_active=False)
+        stmt = stmt.where(Order.city_id == city_id)
 
     if driver_id is not None:
         stmt = stmt.where(Order.driver_id == driver_id)
@@ -1050,6 +1087,7 @@ async def update_order_by_logist(
 
     if "quarry_id" in provided_fields and payload.quarry_id is not None:
         quarry = await session.get(Quarry, payload.quarry_id)
+        ensure_same_city(order.city_id, quarry)
         if quarry is None or not quarry.is_active:
             raise HTTPException(status_code=404, detail="Quarry not found")
         order.quarry_id = quarry.id
@@ -1153,7 +1191,7 @@ async def delete_order_by_id(session: AsyncSession, order_id: UUID) -> None:
 def _matching_drivers_base_query(order: Order) -> Select[tuple[Driver]]:
     requested_volume = get_order_requested_volume(order)
     return (
-        select(Driver)
+        select(Driver).where(driver_city_clause(getattr(order, "city_id", None)))
         .join(Driver.vehicle)
         .options(selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option))
         .where(Driver.status == DriverStatus.available.value)
@@ -1398,6 +1436,7 @@ async def get_matching_drivers(
 
 
 async def create_offer_for_driver(session: AsyncSession, order: Order, driver: Driver) -> OrderOffer:
+    await ensure_driver_city(session, order, driver.id)
     now = utcnow()
     next_sequence_no = (
         await session.scalar(select(func.coalesce(func.max(OrderOffer.sequence_no), 0)).where(OrderOffer.order_id == order.id))
@@ -1528,6 +1567,7 @@ async def accept_offer(session: AsyncSession, *, offer_id: UUID, driver_id: UUID
         raise HTTPException(status_code=409, detail="Offer is no longer pending")
 
     order = offer.order
+    await ensure_driver_city(session, order, driver_id)
     if order.driver_id is not None and order.driver_id != driver_id:
         raise HTTPException(status_code=409, detail="Order is already assigned")
 

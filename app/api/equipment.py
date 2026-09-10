@@ -9,6 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.services.cities import resolve_city, ensure_owner_city, ensure_same_city
 from app.core.config import settings
 from app.db.database import get_db
 from app.models.models import (
@@ -194,6 +195,7 @@ async def _listing_payload(
     media = await _listing_media(db, listing.id)
     return {
         "id": listing.id,
+        "city_id": listing.city_id,
         "equipment_type": listing.equipment_type,
         "equipment_type_id": listing.equipment_type_id,
         "equipment_type_name": listing.equipment_type,
@@ -228,6 +230,7 @@ async def _application_payload(
     media = await _listing_media(db, application.listing_id)
     return {
         "id": application.id,
+        "city_id": application.city_id,
         "listing_id": application.listing_id,
         "client_id": application.client_id,
         "listing_title_snapshot": application.listing_title_snapshot,
@@ -333,6 +336,7 @@ async def _normalize_listing_update_data(
         payload_data["equipment_type"] = equipment_type
         payload_data["equipment_type_id"] = equipment_type_id
     for field in (
+        "city_id",
         "title",
         "description",
         "contact_phone",
@@ -509,10 +513,11 @@ async def list_public_equipment(
     city: str | None = Query(default=None, max_length=255),
     district: str | None = Query(default=None, max_length=255),
     search: str | None = Query(default=None, max_length=255),
-    db: AsyncSession = Depends(get_db),
+    city_id: UUID | None = None, db: AsyncSession = Depends(get_db),
 ):
+    selected_city = await resolve_city(db, city_id)
     stmt = (
-        select(SpecialEquipmentListing)
+        select(SpecialEquipmentListing).where(SpecialEquipmentListing.city_id == selected_city.id)
         .outerjoin(SpecialEquipmentListing.equipment_type_ref)
         .options(
             selectinload(SpecialEquipmentListing.equipment_type_ref),
@@ -563,8 +568,10 @@ async def list_public_equipment(
     response_model=EquipmentListingOut,
     include_in_schema=False,
 )
-async def get_public_equipment(listing_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_public_equipment(listing_id: UUID, city_id: UUID | None = None, db: AsyncSession = Depends(get_db)):
+    selected_city = await resolve_city(db, city_id)
     listing = await _get_listing(db, listing_id)
+    ensure_same_city(selected_city.id, listing)
     if (
         not is_publicly_available(listing)
         or (
@@ -671,12 +678,14 @@ async def list_admin_equipment(
     placement_status: PlacementStatus | None = None,
     owner_user_id: UUID | None = None,
     search: str | None = Query(default=None, max_length=255),
+    city_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_logist_user),
 ):
     del current_user
+    city_filter = (SpecialEquipmentListing.city_id == city_id) if city_id is not None else True
     stmt = (
-        select(SpecialEquipmentListing)
+        select(SpecialEquipmentListing).where(city_filter)
         .options(
             selectinload(SpecialEquipmentListing.equipment_type_ref),
             selectinload(SpecialEquipmentListing.owner),
@@ -737,6 +746,8 @@ async def create_equipment_listing(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_logist_user),
 ):
+    selected_city = await resolve_city(db, payload.city_id, require_active=False)
+    payload.city_id = selected_city.id
     equipment_type, equipment_type_id = await _resolve_equipment_type(
         db,
         equipment_type=payload.equipment_type,
@@ -796,6 +807,10 @@ async def update_equipment_listing(
     current_user: User = Depends(get_current_logist_user),
 ):
     listing = await _get_listing(db, listing_id)
+    if "city_id" in payload.model_fields_set:
+        selected_city = await resolve_city(db, payload.city_id, require_active=False)
+        await ensure_owner_city(db, listing.owner_user_id, selected_city.id)
+        payload.city_id = selected_city.id
     changed = payload.model_fields_set
     if changed.intersection({"equipment_type", "equipment_type_id"}):
         equipment_type, equipment_type_id = await _resolve_equipment_type(
@@ -806,6 +821,7 @@ async def update_equipment_listing(
         listing.equipment_type = equipment_type
         listing.equipment_type_id = equipment_type_id
     for field in (
+        "city_id",
         "title",
         "description",
         "contact_phone",
@@ -905,6 +921,9 @@ async def _create_owner_equipment(
     *,
     current_owner: User,
 ) -> dict:
+    selected_city = await resolve_city(db, payload.city_id, require_active=False)
+    await ensure_owner_city(db, current_owner.id, selected_city.id)
+    payload.city_id = selected_city.id
     equipment_type, equipment_type_id = await _resolve_equipment_type(
         db,
         equipment_type=payload.equipment_type,
@@ -968,6 +987,10 @@ async def _update_owner_equipment(
     *,
     current_owner: User,
 ) -> dict:
+    if "city_id" in payload.model_fields_set:
+        selected_city = await resolve_city(db, payload.city_id, require_active=False)
+        await ensure_owner_city(db, current_owner.id, selected_city.id)
+        payload.city_id = selected_city.id
     listing = await _get_listing(db, listing_id)
     if listing.owner_user_id == current_owner.id:
         previous_status = listing.moderation_status
@@ -1261,6 +1284,10 @@ async def approve_supplier_equipment(
     if staged_changes:
         pending_payload = EquipmentListingUpdate.model_validate(staged_changes)
         pending_data = await _normalize_listing_update_data(db, pending_payload)
+        if "city_id" in pending_data:
+            city = await resolve_city(db, pending_data["city_id"], require_active=False)
+            await ensure_owner_city(db, listing.owner_user_id, city.id)
+            pending_data["city_id"] = city.id
         _apply_listing_update_data(listing, pending_data)
         clear_entity_pending_changes(listing)
     await create_moderation_audit_log(
@@ -1340,7 +1367,9 @@ async def create_equipment_application(
     db: AsyncSession = Depends(get_db),
     current_client: Client = Depends(get_current_client),
 ):
+    selected_city = await resolve_city(db, payload.city_id)
     listing = await _get_listing(db, payload.listing_id)
+    ensure_same_city(selected_city.id, listing)
     if (
         not is_publicly_available(listing)
         or (
@@ -1364,6 +1393,7 @@ async def create_equipment_application(
             detail="Активная заявка на эту технику уже отправлена",
         )
     application = SpecialEquipmentApplication(
+        city_id=selected_city.id,
         listing_id=listing.id,
         client_id=current_client.id,
         listing_title_snapshot=listing.title,

@@ -1,3 +1,4 @@
+import { cityFetch, cityMapCenter, cityMapZoom, useCityStore } from './cityStore';
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Droplets, List, Map, MapPin, Phone, X } from "lucide-react";
 
@@ -24,24 +25,49 @@ interface WaterPoint {
   price_unit?: string | null;
   description?: string | null;
   primary_image_url?: string | null;
-  crm_status: "auto_added" | "invite_sent" | "response_received" | "interested" | "registered" | "registration_completed" | "activated" | "refused" | "call_later";
+  crm_status: string;
   is_active: boolean;
   is_ready: boolean;
 }
 
-const DEFAULT_CENTER: [number, number] = [65.534328, 57.152286];
+interface SepticProfile {
+  id: string;
+  phone: string;
+  address: string;
+  lat: number;
+  lon: number;
+  tank_volume_m3: number | string;
+  service_price: number | string;
+  primary_image_url?: string | null;
+  media_files?: { id: string; public_url: string; is_primary?: boolean }[];
+}
+
+type ServiceTab = "water" | "septic";
 
 const isFreePoint = (point: WaterPoint) =>
-  point.is_free === true || point.water_type === "free" || Number(point.price) === 0;
+  point.is_free === true || point.water_type === "free";
 
-const isPointReady = (point: WaterPoint) => point.crm_status === "activated";
+const isPointReady = (point: WaterPoint) =>
+  (point.crm_status === "activated" || point.crm_status === "agreed")
+  && point.is_active
+  && (isFreePoint(point) || (point.price !== null && point.price !== undefined && point.price > 0));
 
-export default function WaterMapScreen() {
+export default function WaterMapScreen({ initialTab = "water" }: { initialTab?: ServiceTab }) {
+  const cityId = useCityStore((state) => state.cityId);
+  const activeCity = useCityStore((state) =>
+    state.cities.find((city) => city.id === state.cityId && city.is_active) ?? null,
+  );
+  const [activeCenterLon, activeCenterLat] = cityMapCenter(activeCity);
+  const activeMapZoom = cityMapZoom(activeCity);
   const [points, setPoints] = useState<WaterPoint[]>([]);
+  const [septicProfiles, setSepticProfiles] = useState<SepticProfile[]>([]);
+  const [serviceTab, setServiceTab] = useState<ServiceTab>(initialTab);
   const [filter, setFilter] = useState<"" | WaterType>("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showList, setShowList] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadVersion, setReloadVersion] = useState(0);
   const [mapUnavailable, setMapUnavailable] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -58,27 +84,49 @@ export default function WaterMapScreen() {
     [selectedId, visiblePoints],
   );
 
+  const selectedSeptic = useMemo(
+    () => septicProfiles.find((profile) => profile.id === selectedId) ?? null,
+    [selectedId, septicProfiles],
+  );
+
   useEffect(() => {
-    if (selectedId && !visiblePoints.some((point) => point.id === selectedId)) {
+    setServiceTab(initialTab);
+    setSelectedId(null);
+    setShowList(false);
+  }, [initialTab]);
+
+  useEffect(() => {
+    const selectedItems = serviceTab === "water" ? visiblePoints : septicProfiles;
+    if (selectedId && !selectedItems.some((point) => point.id === selectedId)) {
       setSelectedId(null);
     }
-  }, [selectedId, visiblePoints]);
+  }, [selectedId, serviceTab, septicProfiles, visiblePoints]);
 
   useEffect(() => {
     let disposed = false;
     setLoading(true);
-    void fetch(`${baseURL}/water-points/map${filter ? `?water_type=${filter}` : ""}`, {
+    setLoadError(false);
+    const endpoint = serviceTab === "water"
+      ? `${baseURL}/water-points/map${filter ? `?water_type=${filter}` : ""}`
+      : `${baseURL}/septic-providers`;
+    void cityFetch(endpoint, {
       cache: "no-store",
     })
       .then(async (response) => {
-        if (!response.ok) throw new Error("Не удалось загрузить точки воды");
-        return response.json() as Promise<WaterPoint[]>;
+        if (!response.ok) throw new Error("Не удалось загрузить точки на карте");
+        return response.json() as Promise<WaterPoint[] | SepticProfile[]>;
       })
       .then((data) => {
-        if (!disposed) setPoints(Array.isArray(data) ? data : []);
+        if (disposed) return;
+        if (serviceTab === "water") setPoints(Array.isArray(data) ? data as WaterPoint[] : []);
+        else setSepticProfiles(Array.isArray(data) ? data as SepticProfile[] : []);
       })
       .catch(() => {
-        if (!disposed) setPoints([]);
+        if (!disposed) {
+          setLoadError(true);
+          if (serviceTab === "water") setPoints([]);
+          else setSepticProfiles([]);
+        }
       })
       .finally(() => {
         if (!disposed) setLoading(false);
@@ -86,7 +134,7 @@ export default function WaterMapScreen() {
     return () => {
       disposed = true;
     };
-  }, [filter]);
+  }, [cityId, filter, reloadVersion, serviceTab]);
 
   useEffect(() => {
     let disposed = false;
@@ -100,7 +148,7 @@ export default function WaterMapScreen() {
       .then((mapgl) => {
         if (disposed || !mapContainerRef.current || mapRef.current) return;
         const map = tryCreate2GisMap(
-          () => new mapgl.Map(mapContainerRef.current, { center: DEFAULT_CENTER, zoom: 10, key }),
+          () => new mapgl.Map(mapContainerRef.current, { center: [activeCenterLon, activeCenterLat], zoom: activeMapZoom, key }),
           () => setMapUnavailable(true),
         );
         if (!map || disposed) {
@@ -120,13 +168,52 @@ export default function WaterMapScreen() {
       mapRef.current = null;
       setMapReady(false);
     };
-  }, []);
+  }, [cityId]);
+
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return;
+    mapRef.current.setCenter?.([activeCenterLon, activeCenterLat]);
+    mapRef.current.setZoom?.(activeMapZoom);
+  }, [activeCenterLat, activeCenterLon, activeMapZoom, mapReady]);
 
   useEffect(() => {
     const mapgl = (window as any).mapgl;
     if (!mapReady || !mapRef.current || !mapgl?.HtmlMarker) return;
 
     markerRefs.current.forEach((marker) => marker.destroy?.());
+    if (serviceTab === "septic") {
+      markerRefs.current = septicProfiles
+        .filter((profile) => Number.isFinite(profile.lat) && Number.isFinite(profile.lon))
+        .map((profile) => {
+          const element = document.createElement("button");
+          element.type = "button";
+          element.className = "water-map-marker";
+          element.setAttribute("aria-label", "Откачка септика");
+
+          const label = document.createElement("span");
+          label.className = "water-map-marker__label";
+          label.textContent = `Откачка · ${Number(profile.tank_volume_m3).toLocaleString("ru-RU")} м³`;
+          element.appendChild(label);
+
+          const labelTail = document.createElement("span");
+          labelTail.className = "water-map-marker__label-tail";
+          element.appendChild(labelTail);
+
+          const pin = document.createElement("span");
+          pin.className = "water-map-marker__pin water-map-marker__pin--septic";
+          pin.textContent = "🚛";
+          element.appendChild(pin);
+          element.addEventListener("click", () => setSelectedId(profile.id));
+
+          return new mapgl.HtmlMarker(mapRef.current, {
+            coordinates: [profile.lon, profile.lat],
+            html: element,
+          });
+        });
+
+      return;
+    }
+
     markerRefs.current = visiblePoints
       .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon))
       .map((point) => {
@@ -156,12 +243,7 @@ export default function WaterMapScreen() {
         });
       });
 
-    const first = visiblePoints[0];
-    if (first && Number.isFinite(first.lat) && Number.isFinite(first.lon)) {
-      mapRef.current.setCenter?.([first.lon, first.lat]);
-      mapRef.current.setZoom?.(11);
-    }
-  }, [mapReady, visiblePoints]);
+  }, [mapReady, septicProfiles, serviceTab, visiblePoints]);
 
   const renderPointSummary = (point: WaterPoint) => (
     <button
@@ -181,6 +263,11 @@ export default function WaterMapScreen() {
     </button>
   );
 
+  const renderSepticSummary = (profile: SepticProfile) => {
+    const primaryImage = profile.primary_image_url || profile.media_files?.find((media) => media.is_primary)?.public_url;
+    return <button key={profile.id} type="button" onClick={() => setSelectedId(profile.id)} className="w-full overflow-hidden rounded-2xl bg-white text-left shadow-sm transition hover:shadow-md"><div className="flex gap-3 p-3">{primaryImage ? <img src={resolveMediaUrl(primaryImage)} alt="" className="h-20 w-24 shrink-0 rounded-xl object-cover" /> : <div className="grid h-20 w-24 shrink-0 place-items-center rounded-xl bg-sky-50 text-sky-300"><Droplets className="h-7 w-7" /></div>}<div className="min-w-0 flex-1"><h2 className="font-black text-slate-900">Откачка септика</h2><p className="mt-1 flex gap-1 text-sm text-slate-600"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" /><span className="line-clamp-2">{profile.address}</span></p><p className="mt-1 text-sm font-bold text-sky-600">{Number(profile.service_price).toLocaleString("ru-RU")} ₽</p></div></div></button>;
+  };
+
   return (
     <section className="relative flex h-full min-h-[480px] flex-1 overflow-hidden rounded-t-[28px] bg-slate-100 sm:rounded-[28px]">
       <div className="absolute inset-0 bg-slate-100">
@@ -190,17 +277,17 @@ export default function WaterMapScreen() {
 
       {showList ? (
         <div className="absolute inset-0 z-[5] overflow-y-auto bg-slate-100 px-4 pb-6 pt-44">
-          <div className="space-y-3">{visiblePoints.map(renderPointSummary)}</div>
+          <div className="space-y-3">{serviceTab === "water" ? visiblePoints.map(renderPointSummary) : septicProfiles.map(renderSepticSummary)}</div>
         </div>
       ) : null}
 
-      <header className="pointer-events-none absolute inset-x-0 top-0 z-10 pt-[max(env(safe-area-inset-top),0px)]">
-        <div className={`pointer-events-auto bg-white/95 backdrop-blur ${showList ? "m-0 w-full rounded-none border-b border-gray-200 px-4 py-3 shadow-sm" : "m-4 rounded-xl p-4 shadow-lg"}`}>
+      <header className="pointer-events-none absolute inset-x-0 top-0 z-10 pt-[max(env(safe-area-inset-top),0.5rem)]">
+        <div className={`pointer-events-auto bg-white/95 backdrop-blur ${showList ? "m-0 w-full rounded-none border-b border-gray-200 px-4 py-3 shadow-sm" : "mx-4 mb-4 rounded-xl p-4 shadow-lg"}`}>
         <div className="flex items-center gap-3">
           <span className="rounded-2xl bg-sky-100 p-3 text-sky-600"><Droplets /></span>
           <div className="min-w-0 flex-1">
-            <h1 className="text-xl font-black text-slate-900">{showList ? "Список воды" : "Карта воды"}</h1>
-              <p className="text-sm text-slate-500">{showList ? "Выберите точку воды из списка" : "Выберите каплю на карте"}</p>
+            <h1 className="text-xl font-black text-slate-900">Вода и Септики</h1>
+              <p className="text-sm text-slate-500">{showList ? "Выберите предложение из списка" : "Выберите метку на карте"}</p>
           </div>
           <button
             type="button"
@@ -211,7 +298,11 @@ export default function WaterMapScreen() {
             {showList ? "На карте" : "Списком"}
           </button>
         </div>
-        <div className="mt-4 flex gap-2" role="group" aria-label="Фильтр типа воды">
+        <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1" role="tablist" aria-label="Тип точек на карте">
+          <button type="button" role="tab" aria-selected={serviceTab === "water"} onClick={() => { setServiceTab("water"); setSelectedId(null); setShowList(false); }} className={`rounded-lg px-3 py-2 text-sm font-bold transition ${serviceTab === "water" ? "bg-white text-sky-600 shadow-sm" : "text-slate-500"}`}>Вода</button>
+          <button type="button" role="tab" aria-selected={serviceTab === "septic"} onClick={() => { setServiceTab("septic"); setSelectedId(null); setShowList(false); }} className={`rounded-lg px-3 py-2 text-sm font-bold transition ${serviceTab === "septic" ? "bg-white text-sky-600 shadow-sm" : "text-slate-500"}`}>Откачка септиков</button>
+        </div>
+        {serviceTab === "water" ? <div className="mt-3 flex gap-2" role="group" aria-label="Фильтр типа воды">
           {(["", "free", "paid"] as const).map((value) => (
             <button
               key={value || "all"}
@@ -222,15 +313,15 @@ export default function WaterMapScreen() {
               {value === "" ? "Все" : value === "free" ? "Бесплатная" : "Платная"}
             </button>
           ))}
-        </div>
+        </div> : null}
         </div>
       </header>
 
-      {loading ? <div className="pointer-events-none absolute inset-x-4 top-48 z-10 rounded-2xl bg-white p-4 text-sm font-medium text-slate-600 shadow-xl">Загружаем точки воды…</div> : null}
-      {!loading && visiblePoints.length === 0 ? <div className="pointer-events-none absolute inset-x-4 top-48 z-10 rounded-2xl bg-white p-4 text-sm font-medium text-slate-600 shadow-xl">Подходящих точек пока нет.</div> : null}
+      {loading ? <div className="pointer-events-none absolute inset-x-4 top-48 z-10 rounded-2xl bg-white p-4 text-sm font-medium text-slate-600 shadow-xl">Загружаем {serviceTab === "water" ? "точки воды" : "услуги откачки"}…</div> : null}
+      {!loading && loadError ? <div className="absolute inset-x-4 top-48 z-10 rounded-2xl bg-white p-4 text-sm font-medium text-slate-600 shadow-xl"><p>Не удалось загрузить данные карты.</p><button type="button" onClick={() => setReloadVersion((value) => value + 1)} className="mt-3 rounded-xl bg-sky-500 px-3 py-2 font-bold text-white">Повторить попытку</button></div> : !loading && (serviceTab === "water" ? visiblePoints.length : septicProfiles.length) === 0 ? <div className="pointer-events-none absolute inset-x-4 top-48 z-10 rounded-2xl bg-white p-4 text-sm font-medium text-slate-600 shadow-xl">{serviceTab === "water" ? "Подходящих точек пока нет." : "Одобренных предложений пока нет."}</div> : null}
 
       <SwipeableBottomSheet
-        isOpen={Boolean(selectedPoint)}
+        isOpen={serviceTab === "water" && Boolean(selectedPoint)}
         onClose={() => setSelectedId(null)}
         containerClassName="pointer-events-none absolute inset-0 z-[9999] flex items-end justify-center"
         sheetClassName="pointer-events-auto z-[9999] max-h-[70vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:mb-4 sm:rounded-2xl"
@@ -278,6 +369,16 @@ export default function WaterMapScreen() {
             </>}
           </div>
         ) : null}
+      </SwipeableBottomSheet>
+
+      <SwipeableBottomSheet
+        isOpen={serviceTab === "septic" && Boolean(selectedSeptic)}
+        onClose={() => setSelectedId(null)}
+        containerClassName="pointer-events-none absolute inset-0 z-[9999] flex items-end justify-center"
+        sheetClassName="pointer-events-auto z-[9999] max-h-[70vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:mb-4 sm:rounded-2xl"
+        showOverlay={false}
+      >
+        {selectedSeptic ? <div className="hide-scrollbar max-h-[70vh] overflow-y-auto px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"><div className="flex items-start justify-between gap-3 pb-4"><div><p className="text-xs font-bold uppercase tracking-wide text-sky-600">Услуга</p><h2 className="mt-1 text-xl font-black text-slate-900">Откачка септика</h2></div><button type="button" onClick={() => setSelectedId(null)} className="shrink-0 rounded-full bg-slate-100 p-2 text-slate-500 transition hover:bg-slate-200" aria-label="Закрыть детали септика"><X className="h-5 w-5" /></button></div>{selectedSeptic.primary_image_url ? <div className="overflow-hidden rounded-2xl bg-slate-100"><img src={resolveMediaUrl(selectedSeptic.primary_image_url)} alt={`Откачка септика: ${selectedSeptic.address}`} className="aspect-[16/9] w-full object-cover" /></div> : null}<div className="mt-4 space-y-3"><p className="flex gap-2 text-sm leading-relaxed text-slate-600"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" />{selectedSeptic.address}</p><div className="grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-4 text-sm"><p><span className="block text-xs text-slate-400">Объём цистерны</span><strong className="mt-1 block text-slate-800">{Number(selectedSeptic.tank_volume_m3).toLocaleString("ru-RU")} м³</strong></p><p><span className="block text-xs text-slate-400">Стоимость услуги</span><strong className="mt-1 block text-slate-800">{Number(selectedSeptic.service_price).toLocaleString("ru-RU")} ₽</strong></p></div>{selectedSeptic.phone ? <a href={`tel:${selectedSeptic.phone.replace(/[^+\d]/g, "")}`} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-sky-500 px-5 py-4 text-base font-black text-white shadow-sm transition hover:bg-sky-600"><Phone className="h-5 w-5" />Позвонить</a> : null}</div></div> : null}
       </SwipeableBottomSheet>
     </section>
   );

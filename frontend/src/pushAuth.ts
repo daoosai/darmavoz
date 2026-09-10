@@ -3,6 +3,7 @@ import { useAuthStore, UserRole } from "./store";
 import { baseURL } from "./utils";
 
 export const PUSH_SETTINGS_CHANGED_EVENT = "push-settings-changed";
+export const LOGOUT_COMPLETED_EVENT = "darmavoz:logout-completed";
 
 export const getPushTokenEndpoint = (
   role: UserRole | string | null | undefined,
@@ -87,6 +88,9 @@ export const logoutCurrentSession = async (): Promise<void> => {
   await detachPushToken(role, token);
   await clearLocalWebPushToken();
   logout();
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(LOGOUT_COMPLETED_EVENT));
+  }
 };
 
 export const switchAuthenticatedSession = async (

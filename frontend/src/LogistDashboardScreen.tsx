@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import PullToRefresh from "react-simple-pull-to-refresh";
 import { useAuthStore } from "./store";
 import { getOrderStatusText } from "./utils/statusMapper";
@@ -779,7 +779,6 @@ export default function LogistDashboardScreen({
         </div>
         </div>
       </header>
-
       {/* Main Content */}
       <div className="flex-1 overflow-y-auto p-6 lg:p-8 sm:pb-8 pb-24 relative">
         <UpdateBanner />

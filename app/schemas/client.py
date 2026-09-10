@@ -95,6 +95,7 @@ class ClientFcmTokenOut(BaseModel):
 
 
 class ClientAddressBase(BaseModel):
+    city_id: UUID | None = None
     full_address: str = Field(min_length=1, max_length=500)
     comment: str | None = None
     lat: float | None = None
@@ -131,6 +132,7 @@ class ClientAddressUpdate(ClientAddressBase):
 
 
 class ClientAddressOut(BaseModel):
+    city_id: UUID | None = None
     id: UUID
     client_id: UUID
     full_address: str

@@ -1,3 +1,6 @@
+import { currentCity } from './cityStore';
+import type { City } from './AdminCitiesScreen';
+import ServiceCityField from './ServiceCityField';
 import React, { useState, useEffect } from "react";
 import { Plus, Edit2, ImagePlus, Star, Trash2, Crown, MoreVertical, CalendarPlus, EyeOff, Archive, RotateCcw, Check, X } from "lucide-react";
 import toast from "react-hot-toast";
@@ -6,7 +9,7 @@ import {
   get2gisSuggestionAddress,
   get2gisSuggestionCoordinates,
   get2gisSuggestionLabel,
-  withTyumenBias,
+  withCityBias,
 } from "./addressSearch";
 import { useAuthStore, usePlacementStore } from "./store";
 import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
@@ -39,7 +42,7 @@ export interface Quarry extends PlacementFields {
   owner_user_id?: string | null;
   crm_status?: CrmStatus;
   material_ids?: string[];
-  material_offers?: { material_id: string; price: number; is_active: boolean }[];
+  material_offers?: { material_id: string; price: number; is_active: boolean; is_free?: boolean }[];
   delivery_option_ids?: string[];
   materials?: any[];
   owner_name?: string | null;
@@ -270,7 +273,7 @@ export default function AdminQuarriesScreen({
   const [rejectPointId, setRejectPointId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [crmStatusFilter, setCrmStatusFilter] = useState<CrmStatus | "">("");
-  const [parserCenter, setParserCenter] = useState({ lat: 57.1522, lon: 65.5272 });
+  const [parserCenter, setParserCenter] = useState({ lat: 0, lon: 0 });
   const { policy, loadPolicy, loadSummary } = usePlacementStore();
   const normalizedStatusFilter = ALLOWED_MODERATION_FILTERS.has(statusFilter)
     ? statusFilter
@@ -506,8 +509,8 @@ export default function AdminQuarriesScreen({
         description: "",
         contact_phone: "",
         subscription_end_date: "",
-        lat: 57.152223,
-        lon: 65.527202,
+        lat: null,
+        lon: null,
         is_vip: false,
         manual_priority: 0,
         is_active: false,
@@ -589,20 +592,23 @@ export default function AdminQuarriesScreen({
         </select>
       </div>
 
-      <section className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
-        <div className="mb-3 flex items-center justify-between gap-3 px-1">
+      <section className="w-full max-w-full overflow-hidden rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
+        <div className="mb-3 flex flex-col gap-2 px-1 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h3 className="text-base font-bold text-slate-800">Карта точек</h3>
           </div>
-          <div className="flex shrink-0 items-center gap-3 text-xs font-semibold text-slate-500">
-            <span className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-gray-600 px-1">
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
               <span className="h-3 w-3 rounded-full bg-yellow-400" /> Добавлена / приглашение
             </span>
-            <span className="flex items-center gap-1.5">
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
               <span className="h-3 w-3 rounded-full bg-slate-400" /> Воронка CRM
             </span>
-            <span className="flex items-center gap-1.5">
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
               <span className="h-3 w-3 rounded-full bg-green-600" /> Активирована
+            </span>
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+              <span className="h-3 w-3 rounded-full bg-slate-700" /> Скрыта
             </span>
           </div>
         </div>
@@ -919,6 +925,8 @@ function EditQuarryModal({
   onSave: (savedQuarry: Quarry) => void;
 }) {
   const { token } = useAuthStore();
+  const [serviceCityId, setServiceCityId] = useState((quarry as any)?.city_id || '');
+  const [mapCity, setMapCity] = useState<City | null>(null);
   const [formData, setFormData] = useState<QuarryFormData>(() => buildQuarryFormData(quarry));
   const [isSaving, setIsSaving] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
@@ -969,7 +977,7 @@ function EditQuarryModal({
   React.useEffect(() => {
     const mapgl = (window as any).mapgl;
     const key = import.meta.env.VITE_2GIS_KEY;
-    if (!mapgl || !key || !mapContainerRef.current || mapRef.current) return;
+    if (!mapCity || !mapgl || !key || !mapContainerRef.current || mapRef.current) return;
 
     const initialCoordinates = getParsedCoordinates();
     const mapInstance = tryCreate2GisMap(
@@ -977,8 +985,8 @@ function EditQuarryModal({
         new mapgl.Map(mapContainerRef.current, {
           center: initialCoordinates
             ? [initialCoordinates.lon, initialCoordinates.lat]
-            : [65.527202, 57.152223],
-          zoom: 12,
+            : [mapCity.center_lon, mapCity.center_lat],
+          zoom: mapCity.map_zoom,
           key,
         }),
       () => setIsMapUnavailable(true),
@@ -1008,7 +1016,7 @@ function EditQuarryModal({
         markerRef.current = null;
       }
     };
-  }, []);
+  }, [mapCity?.id]);
 
   React.useEffect(() => {
     const handleDocumentMouseDown = (event: MouseEvent) => {
@@ -1064,7 +1072,7 @@ function EditQuarryModal({
 
     try {
       const res = await fetch(
-        `${baseURL}/geo/geocode?address=${encodeURIComponent(withTyumenBias(address))}`,
+        `${baseURL}/geo/geocode?city_id=${serviceCityId}&address=${encodeURIComponent(withCityBias(address, mapCity || currentCity()))}`,
         {
           headers: { Authorization: `Bearer ${token}` },
         },
@@ -1183,8 +1191,9 @@ function EditQuarryModal({
             ...(prev.material_offers || []),
             {
               material_id: id,
-              price: Number(material?.price || 0),
+              price: material?.is_free ? 0 : Number(material?.price || 0),
               is_active: true,
+              is_free: Boolean(material?.is_free),
             },
           ],
         };
@@ -1247,8 +1256,9 @@ function EditQuarryModal({
         .filter((item) => item.material_id)
         .map((item) => ({
           material_id: item.material_id,
-          price: Number(item.price || 0),
+          price: item.is_free ? 0 : Number(item.price || 0),
           is_active: Boolean(item.is_active),
+          is_free: Boolean(item.is_free),
         }));
 
       const payload = {
@@ -1264,6 +1274,7 @@ function EditQuarryModal({
         manual_priority: normalizeManualPriority(formData.manual_priority),
         material_ids: Array.from(new Set((formData.material_ids || []).filter(Boolean))),
         material_offers: normalizedMaterialOffers,
+        moderation_status: formData.moderation_status || "incomplete",
         ...(usesOwnerPhone ? {} : { contact_phone: normalizeOptionalText(formData.contact_phone) }),
       };
 
@@ -1273,7 +1284,7 @@ function EditQuarryModal({
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, city_id: serviceCityId }),
       });
 
       const responseData = await res.json().catch(() => ({}));
@@ -1515,6 +1526,7 @@ function EditQuarryModal({
           onSubmit={handleSave}
           className="flex flex-col gap-5 overflow-y-auto p-6 pb-36"
         >
+          <ServiceCityField admin value={serviceCityId} onChange={setServiceCityId} onCityChange={setMapCity} />
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
               Название
@@ -1695,18 +1707,32 @@ function EditQuarryModal({
                     {m.name}
                   </span>
                   {offer && (
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={offer.price ?? ""}
-                      onChange={(event) => setFormData({
-                        ...formData,
-                        material_offers: (formData.material_offers || []).map((item) => item.material_id === m.id ? { ...item, price: Number(event.target.value) } : item),
-                      })}
-                      className="ml-auto w-28 bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-sm"
-                      placeholder="Цена"
-                    />
+                    <div className="ml-auto flex items-center gap-3">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        disabled={Boolean(offer.is_free)}
+                        value={offer.is_free ? 0 : offer.price ?? ""}
+                        onChange={(event) => setFormData({
+                          ...formData,
+                          material_offers: (formData.material_offers || []).map((item) => item.material_id === m.id ? { ...item, price: Number(event.target.value) } : item),
+                        })}
+                        className="w-28 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                        placeholder="Цена"
+                      />
+                      <label className="flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold text-emerald-700">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(offer.is_free)}
+                          onChange={(event) => setFormData({
+                            ...formData,
+                            material_offers: (formData.material_offers || []).map((item) => item.material_id === m.id ? { ...item, is_free: event.target.checked, price: event.target.checked ? 0 : item.price } : item),
+                          })}
+                        />
+                        Бесплатно
+                      </label>
+                    </div>
                   )}
                 </div>
               )})}
@@ -1773,6 +1799,21 @@ function EditQuarryModal({
             </div>
           )}
 
+          <label className="block text-sm font-bold text-slate-800">
+            Модерация
+            <select
+              value={formData.moderation_status || "incomplete"}
+              onChange={(event) => setFormData({ ...formData, moderation_status: event.target.value })}
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 font-normal"
+            >
+              <option value="incomplete">Черновик</option>
+              <option value="pending_moderation">На модерации</option>
+              <option value="approved">Одобрен</option>
+              <option value="rejected">Отклонен</option>
+              <option value="suspended">Приостановлен</option>
+            </select>
+          </label>
+
           <div className="flex items-center gap-3 pt-2">
             <label className="relative inline-flex items-center cursor-pointer">
               <input
@@ -1824,6 +1865,8 @@ function EnhancedEditQuarryModal({
   onSave: (savedQuarry: Quarry) => void;
 }) {
   const { token } = useAuthStore();
+  const [serviceCityId, setServiceCityId] = useState((quarry as any)?.city_id || '');
+  const [mapCity, setMapCity] = useState<City | null>(null);
   const [formData, setFormData] = useState<QuarryFormData>(() => buildQuarryFormData(quarry));
   const [isSaving, setIsSaving] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
@@ -1877,7 +1920,7 @@ function EnhancedEditQuarryModal({
   React.useEffect(() => {
     const mapgl = (window as any).mapgl;
     const key = import.meta.env.VITE_2GIS_KEY;
-    if (!mapgl || !key || !mapContainerRef.current || mapRef.current) return;
+    if (!mapCity || !mapgl || !key || !mapContainerRef.current || mapRef.current) return;
 
     const initialCoordinates = getParsedCoordinates();
     const mapInstance = tryCreate2GisMap(
@@ -1885,8 +1928,8 @@ function EnhancedEditQuarryModal({
         new mapgl.Map(mapContainerRef.current, {
           center: initialCoordinates
             ? [initialCoordinates.lon, initialCoordinates.lat]
-            : [65.527202, 57.152223],
-          zoom: 12,
+            : [mapCity.center_lon, mapCity.center_lat],
+          zoom: mapCity.map_zoom,
           key,
         }),
       () => setIsMapUnavailable(true),
@@ -1914,7 +1957,7 @@ function EnhancedEditQuarryModal({
         markerRef.current = null;
       }
     };
-  }, []);
+  }, [mapCity?.id]);
 
   React.useEffect(() => {
     const handleDocumentMouseDown = (event: MouseEvent) => {
@@ -1945,7 +1988,7 @@ function EnhancedEditQuarryModal({
     setIsGeocoding(true);
     try {
       const response = await fetch(
-        `${baseURL}/geo/geocode?address=${encodeURIComponent(withTyumenBias(address))}`,
+        `${baseURL}/geo/geocode?city_id=${serviceCityId}&address=${encodeURIComponent(withCityBias(address, mapCity || currentCity()))}`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
       const data = await response.json().catch(() => ({}));
@@ -2076,8 +2119,9 @@ function EnhancedEditQuarryModal({
           ...(current.material_offers || []),
           {
             material_id: id,
-            price: Number(material?.price || 0),
+            price: material?.is_free ? 0 : Number(material?.price || 0),
             is_active: true,
+            is_free: Boolean(material?.is_free),
           },
         ],
       };
@@ -2246,11 +2290,6 @@ function EnhancedEditQuarryModal({
       toast.error("Укажите адрес или координаты точки");
       return;
     }
-    if (formData.is_active && totalPhotoCount === 0) {
-      toast.error("Для активации добавьте хотя бы одну фотографию");
-      return;
-    }
-
     setIsSaving(true);
     try {
       let lat = parsedCoordinates?.lat ?? null;
@@ -2273,8 +2312,9 @@ function EnhancedEditQuarryModal({
         .filter((item) => item.material_id)
         .map((item) => ({
           material_id: item.material_id,
-          price: Number(item.price || 0),
+          price: item.is_free ? 0 : Number(item.price || 0),
           is_active: Boolean(item.is_active),
+          is_free: Boolean(item.is_free),
         }));
 
       const payload = {
@@ -2290,6 +2330,7 @@ function EnhancedEditQuarryModal({
         manual_priority: normalizeManualPriority(formData.manual_priority),
         material_ids: Array.from(new Set((formData.material_ids || []).filter(Boolean))),
         material_offers: normalizedMaterialOffers,
+        moderation_status: formData.moderation_status || "incomplete",
         ...(usesOwnerPhone ? {} : { contact_phone: normalizeOptionalText(formData.contact_phone) }),
       };
 
@@ -2301,7 +2342,7 @@ function EnhancedEditQuarryModal({
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({ ...payload, city_id: serviceCityId }),
         },
       );
       const data = await response.json().catch(() => ({}));
@@ -2388,6 +2429,7 @@ function EnhancedEditQuarryModal({
           onSubmit={handleSave}
           className="flex flex-col gap-5 overflow-y-auto p-6 pb-36"
         >
+          <ServiceCityField admin value={serviceCityId} onChange={setServiceCityId} onCityChange={setMapCity} />
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Название</label>
             <input
@@ -2553,24 +2595,44 @@ function EnhancedEditQuarryModal({
                     />
                     <span className="text-sm font-medium text-slate-700">{material.name}</span>
                     {offer ? (
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={offer.price ?? ""}
-                        onChange={(event) =>
-                          setFormData({
-                            ...formData,
-                            material_offers: (formData.material_offers || []).map((item) =>
-                              item.material_id === material.id
-                                ? { ...item, price: Number(event.target.value) }
-                                : item,
-                            ),
-                          })
-                        }
-                        className="ml-auto w-28 bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-sm"
-                        placeholder="Цена"
-                      />
+                      <div className="ml-auto flex items-center gap-3">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          disabled={Boolean(offer.is_free)}
+                          value={offer.is_free ? 0 : offer.price ?? ""}
+                          onChange={(event) =>
+                            setFormData({
+                              ...formData,
+                              material_offers: (formData.material_offers || []).map((item) =>
+                                item.material_id === material.id
+                                  ? { ...item, price: Number(event.target.value) }
+                                  : item,
+                              ),
+                            })
+                          }
+                          className="w-28 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                          placeholder="Цена"
+                        />
+                        <label className="flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold text-emerald-700">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(offer.is_free)}
+                            onChange={(event) =>
+                              setFormData({
+                                ...formData,
+                                material_offers: (formData.material_offers || []).map((item) =>
+                                  item.material_id === material.id
+                                    ? { ...item, is_free: event.target.checked, price: event.target.checked ? 0 : item.price }
+                                    : item,
+                                ),
+                              })
+                            }
+                          />
+                          Бесплатно
+                        </label>
+                      </div>
                     ) : null}
                   </div>
                 );
@@ -2706,6 +2768,21 @@ function EnhancedEditQuarryModal({
               />
             </label>
           </div>
+
+          <label className="block text-sm font-bold text-slate-800">
+            Модерация
+            <select
+              value={formData.moderation_status || "incomplete"}
+              onChange={(event) => setFormData({ ...formData, moderation_status: event.target.value })}
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 font-normal"
+            >
+              <option value="incomplete">Черновик</option>
+              <option value="pending_moderation">На модерации</option>
+              <option value="approved">Одобрен</option>
+              <option value="rejected">Отклонен</option>
+              <option value="suspended">Приостановлен</option>
+            </select>
+          </label>
 
           <div className="flex items-center gap-3 pt-2">
             <label className="relative inline-flex items-center cursor-pointer">

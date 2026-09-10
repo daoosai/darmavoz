@@ -1,16 +1,14 @@
+import { currentCity, useCityStore } from './cityStore';
+import type { City } from './AdminCitiesScreen';
 const DGIS_KEY = import.meta.env.VITE_2GIS_KEY;
-const TYUMEN_CITY = "Тюмень";
-const TYUMEN_LOCATION = "65.534328,57.152286";
 const TWOGIS_SUGGEST_URL = "https://catalog.api.2gis.com/3.0/suggests";
 const TWOGIS_ADDRESS_SUGGEST_TYPES = [
-  "building",
-  "street",
   "adm_div.city",
   "adm_div.settlement",
-  "adm_div.district",
-  "adm_div.division",
-  "adm_div.living_area",
+  "building",
+  "street",
   "adm_div.place",
+  "adm_div.living_area",
 ].join(",");
 
 type SuggestApiError = Error & {
@@ -36,7 +34,10 @@ const getRequestUrlForLog = (requestUrl: URL) => {
 const getText = (value: unknown): string =>
   typeof value === "string" ? value.trim() : "";
 
-const getAdministrativeNames = (item: any): string[] => {
+const normalizeLocalityName = (value: string): string =>
+  value.trim().toLocaleLowerCase().replace(/ё/g, "е");
+
+export const get2gisSuggestionAdministrativeNames = (item: any): string[] => {
   const divisions = Array.isArray(item?.adm_div)
     ? item.adm_div
     : item?.adm_div
@@ -46,6 +47,48 @@ const getAdministrativeNames = (item: any): string[] => {
   return divisions
     .map((division: any) => getText(division?.name || division?.caption))
     .filter(Boolean);
+};
+
+export const get2gisSuggestionLocalityNames = (item: any): string[] => {
+  const divisions = Array.isArray(item?.adm_div)
+    ? item.adm_div
+    : item?.adm_div
+      ? [item.adm_div]
+      : [];
+  const localityNames = divisions
+    .filter((division: any) => /city|settlement|locality|village|town/i.test(
+      getText(division?.type || division?.kind || division?.scope),
+    ))
+    .map((division: any) => getText(division?.name || division?.caption))
+    .filter(Boolean);
+  const fallbackNames = get2gisSuggestionAdministrativeNames(item);
+  return [...localityNames, ...fallbackNames].filter(
+    (name, index, names) =>
+      names.findIndex(
+        (candidate) => normalizeLocalityName(candidate) === normalizeLocalityName(name),
+      ) === index,
+  );
+};
+
+export const get2gisSuggestionCityName = (item: any): string => {
+  const divisions = Array.isArray(item?.adm_div)
+    ? item.adm_div
+    : item?.adm_div
+      ? [item.adm_div]
+      : [];
+  const city = divisions.find((division: any) => {
+    const type = getText(division?.type);
+    return (
+      type === "city" ||
+      type === "settlement" ||
+      type === "adm_div.city" ||
+      type === "adm_div.settlement"
+    );
+  });
+  const fallbackName = getText(item?.name);
+
+  return getText(city?.name || city?.caption) ||
+    (/^(россия|российская федерация)$/i.test(fallbackName) ? "" : fallbackName);
 };
 
 const appendUniqueParts = (address: string, parts: string[]): string => {
@@ -71,11 +114,20 @@ export const get2gisSuggestionAddress = (item: any): string => {
     getText(item?.name) ||
     getText(item?.search_attributes?.suggested_text);
 
-  return appendUniqueParts(baseAddress, getAdministrativeNames(item));
+  return appendUniqueParts(baseAddress, get2gisSuggestionAdministrativeNames(item));
 };
 
 export const get2gisSuggestionLabel = (item: any): string =>
   get2gisSuggestionAddress(item);
+
+export const get2gisCitySuggestionName = (item: any): string =>
+  getText(item?.name) || getText(item?.address?.name) || get2gisSuggestionAddress(item).split(",")[0];
+
+export const get2gisCitySuggestionRegion = (item: any): string => {
+  const city = get2gisCitySuggestionName(item).toLowerCase();
+  const divisions = get2gisSuggestionAdministrativeNames(item).filter((name) => name.toLowerCase() !== city);
+  return getText(item?.region?.name) || divisions.find((name) => /област|край|республик|округ/i.test(name)) || divisions.at(-1) || "";
+};
 
 export const get2gisSuggestionCoordinates = (
   item: any,
@@ -102,19 +154,26 @@ export const get2gisSuggestionCoordinates = (
   return {};
 };
 
-export const withTyumenBias = (address: string): string => {
+export const withCityBias = (address: string, city: City = currentCity()): string => {
   const normalized = address.trim();
   if (!normalized) {
     return "";
   }
-  if (normalized.toLowerCase().includes(TYUMEN_CITY.toLowerCase())) {
+  const normalizedAddress = normalizeLocalityName(normalized);
+  const includesSupportedCity = useCityStore
+    .getState()
+    .cities
+    .some((availableCity) => normalizedAddress.includes(normalizeLocalityName(availableCity.name)));
+  if (includesSupportedCity || normalizedAddress.includes(normalizeLocalityName(city.name))) {
     return normalized;
   }
-  return `${TYUMEN_CITY} ${normalized}`;
+  return `${city.name}, ${city.region}, ${normalized}`;
 };
 
 export const fetch2gisAddressSuggestions = async (
   query: string,
+  city: City = currentCity(),
+  options: { searchAllCities?: boolean } = {},
 ): Promise<any[]> => {
   const normalized = query.trim();
   if (normalized.length < 3) {
@@ -127,15 +186,18 @@ export const fetch2gisAddressSuggestions = async (
   }
 
   const requestUrl = new URL(TWOGIS_SUGGEST_URL);
-  requestUrl.search = new URLSearchParams({
-    q: normalized,
+  const params = new URLSearchParams({
+    q: options.searchAllCities ? normalized : withCityBias(normalized, city),
     key: DGIS_KEY,
     type: TWOGIS_ADDRESS_SUGGEST_TYPES,
     fields: "items.point,items.address,items.adm_div,items.full_address_name",
-    location: TYUMEN_LOCATION,
     page_size: "20",
     locale: "ru_RU",
-  }).toString();
+  });
+  if (!options.searchAllCities) {
+    params.set("location", `${city.center_lon},${city.center_lat}`);
+  }
+  requestUrl.search = params.toString();
 
   try {
     const response = await fetch(requestUrl);
@@ -161,6 +223,28 @@ export const fetch2gisAddressSuggestions = async (
     }
 
     return items;
+  } catch (error) {
+    logSuggestError(error);
+    return [];
+  }
+};
+
+export const fetch2gisCitySuggestions = async (query: string): Promise<any[]> => {
+  const normalized = query.trim();
+  if (normalized.length < 3 || !DGIS_KEY) return [];
+  const requestUrl = new URL(TWOGIS_SUGGEST_URL);
+  requestUrl.search = new URLSearchParams({
+    q: normalized,
+    key: DGIS_KEY,
+    type: "adm_div.city,adm_div.settlement",
+    fields: "items.point,items.address,items.adm_div,items.full_address_name",
+    page_size: "10",
+    locale: "ru_RU",
+  }).toString();
+  try {
+    const response = await fetch(requestUrl);
+    const data = await response.json();
+    return response.ok && Array.isArray(data?.result?.items) ? data.result.items : [];
   } catch (error) {
     logSuggestError(error);
     return [];

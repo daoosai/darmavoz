@@ -3,6 +3,8 @@ export interface MediaFile {
 }
 
 export interface MaterialProps {
+  calculator_enabled?: boolean;
+  bulk_density_t_m3?: number | null;
   id: string;
   name: string;
   description?: string;

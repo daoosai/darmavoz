@@ -22,14 +22,64 @@ from sqlalchemy import (
     Time,
     UniqueConstraint,
     text,
+    select,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, declared_attr, column_property
 from sqlalchemy.sql import func
 
 
 class Base(DeclarativeBase):
     pass
+
+
+class City(Base):
+    __tablename__ = "cities"
+    legacy_backfill_completed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255))
+    region: Mapped[str] = mapped_column(String(255))
+    code: Mapped[str] = mapped_column(String(64), unique=True)
+    center_lat: Mapped[float] = mapped_column(Float)
+    center_lon: Mapped[float] = mapped_column(Float)
+    map_zoom: Mapped[float] = mapped_column(Float)
+    min_lat: Mapped[float] = mapped_column(Float)
+    min_lon: Mapped[float] = mapped_column(Float)
+    max_lat: Mapped[float] = mapped_column(Float)
+    max_lon: Mapped[float] = mapped_column(Float)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+    __table_args__ = (
+        CheckConstraint("center_lat BETWEEN -90 AND 90 AND center_lon BETWEEN -180 AND 180", name="ck_city_center"),
+        CheckConstraint("min_lat >= -90 AND max_lat <= 90 AND min_lat < max_lat AND min_lon >= -180 AND max_lon <= 180 AND min_lon < max_lon", name="ck_city_bounds"),
+        CheckConstraint("map_zoom BETWEEN 1 AND 20", name="ck_city_zoom"),
+        CheckConstraint("NOT is_default OR is_active", name="ck_city_default_active"),
+        Index("uq_city_default", "is_default", unique=True, postgresql_where=text("is_default")),
+    )
+
+
+user_cities = Table(
+    "user_cities", Base.metadata,
+    Column("user_id", UUID(as_uuid=True), ForeignKey("users.id"), primary_key=True),
+    Column("city_id", UUID(as_uuid=True), ForeignKey("cities.id"), primary_key=True, index=True),
+)
+driver_cities = Table(
+    "driver_cities", Base.metadata,
+    Column("driver_id", UUID(as_uuid=True), ForeignKey("drivers.id"), primary_key=True),
+    Column("city_id", UUID(as_uuid=True), ForeignKey("cities.id"), primary_key=True, index=True),
+)
+
+
+class CityScoped:
+    # Nullable only for legacy records awaiting an explicit migration decision.
+    city_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("cities.id"), nullable=True, index=True)
+
+    @declared_attr
+    def city_name(cls):
+        return column_property(select(City.name).where(City.id == cls.city_id).correlate_except(City).scalar_subquery())
 
 
 quarry_materials = Table(
@@ -70,6 +120,11 @@ class Role(Base):
 
 class User(Base):
     __tablename__ = "users"
+    service_cities: Mapped[List["City"]] = relationship("City", secondary=user_cities, lazy="selectin")
+
+    @property
+    def city_ids(self) -> list[uuid.UUID]:
+        return [city.id for city in self.service_cities]
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     username: Mapped[str] = mapped_column(String(50), unique=True, index=True)
@@ -133,7 +188,7 @@ class Client(Base):
     )
 
 
-class ClientAddress(Base):
+class ClientAddress(CityScoped, Base):
     __tablename__ = "client_addresses"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -150,6 +205,11 @@ class ClientAddress(Base):
 
 class Driver(Base):
     __tablename__ = "drivers"
+    service_cities: Mapped[List["City"]] = relationship("City", secondary=driver_cities, lazy="selectin")
+
+    @property
+    def city_ids(self) -> list[uuid.UUID]:
+        return [city.id for city in self.service_cities]
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255))
@@ -286,6 +346,10 @@ class Category(Base):
 class Material(Base):
     __tablename__ = "materials"
 
+    calculator_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    bulk_density_t_m3: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    __table_args__ = (CheckConstraint("bulk_density_t_m3 > 0 AND bulk_density_t_m3 < 'Infinity'::float8", name="ck_material_density"),)
+
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     category_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("categories.id"), nullable=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -336,7 +400,7 @@ class CrmStatus(str, Enum):
 CRM_STATUS_VALUES = tuple(status.value for status in CrmStatus)
 
 
-class Quarry(Base):
+class Quarry(CityScoped, Base):
     __tablename__ = "quarries"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -562,7 +626,7 @@ class WaterPointType(str, Enum):
     unknown = "unknown"
 
 
-class WaterPoint(Base):
+class WaterPoint(CityScoped, Base):
     __tablename__ = "water_points"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -608,7 +672,7 @@ class WaterPoint(Base):
     )
 
 
-class SepticProviderProfile(Base):
+class SepticProviderProfile(CityScoped, Base):
     __tablename__ = "septic_provider_profiles"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -671,7 +735,7 @@ class SpecialEquipmentType(Base):
     )
 
 
-class SpecialEquipmentListing(Base):
+class SpecialEquipmentListing(CityScoped, Base):
     __tablename__ = "special_equipment_listings"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -782,7 +846,7 @@ class SpecialEquipmentListing(Base):
     )
 
 
-class SpecialEquipmentApplication(Base):
+class SpecialEquipmentApplication(CityScoped, Base):
     __tablename__ = "special_equipment_applications"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -1027,7 +1091,7 @@ class OrderOfferStatus(str, Enum):
     cancelled = "cancelled"
 
 
-class Order(Base):
+class Order(CityScoped, Base):
     __tablename__ = "orders"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

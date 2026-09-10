@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
@@ -12,6 +12,12 @@ from app.schemas.order import (
 )
 from app.security.auth import get_optional_current_client
 from app.services.dispatch_service import create_checkout_order
+from app.services.dispatch_service import get_order_by_id
+from app.services.order_idempotency import (
+    complete_order_idempotency_key,
+    release_order_idempotency_key,
+    reserve_order_idempotency_key,
+)
 from app.services.order_pricing import ClientOrderPricing, calculate_client_order_options
 
 router = APIRouter(prefix="/client/orders")
@@ -41,10 +47,12 @@ async def calculate_order(
     pricing_options = await calculate_client_order_options(
         db,
         material_id=payload.material_id,
+        city_id=payload.city_id,
         delivery_option_id=payload.delivery_option_id,
         delivery_lat=payload.delivery_lat,
         delivery_lon=payload.delivery_lon,
         quantity=payload.quantity,
+        volume=payload.volume,
         quarry_id=payload.quarry_id,
     )
     best_pricing = pricing_options[0]
@@ -64,20 +72,32 @@ async def checkout_order(
     payload: CheckoutRequest,
     db: AsyncSession = Depends(get_db),
     current_client: Client | None = Depends(get_optional_current_client),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> Order:
-    return await create_checkout_order(
-        db,
-        client_id=current_client.id if current_client is not None else payload.client_id,
-        material_id=payload.material_id,
-        delivery_option_id=payload.delivery_option_id,
-        delivery_address=payload.delivery_address,
-        notes=payload.notes,
-        source=payload.source,
-        quantity=payload.quantity,
-        address_id=payload.address_id,
-        quarry_id=payload.quarry_id,
-        delivery_lat=payload.delivery_lat,
-        delivery_lon=payload.delivery_lon,
-        mileage_km=payload.mileage_km,
-        expected_material_unit_price=payload.expected_material_unit_price,
-    )
+    reservation = await reserve_order_idempotency_key(idempotency_key)
+    if reservation and reservation.existing_order_id:
+        return await get_order_by_id(db, reservation.existing_order_id)
+    try:
+        order = await create_checkout_order(
+            db,
+            client_id=current_client.id if current_client is not None else payload.client_id,
+            material_id=payload.material_id,
+            city_id=payload.city_id,
+            delivery_option_id=payload.delivery_option_id,
+            delivery_address=payload.delivery_address,
+            notes=payload.notes,
+            source=payload.source,
+            quantity=payload.quantity,
+            volume=payload.volume,
+            address_id=payload.address_id,
+            quarry_id=payload.quarry_id,
+            delivery_lat=payload.delivery_lat,
+            delivery_lon=payload.delivery_lon,
+            mileage_km=payload.mileage_km,
+            expected_material_unit_price=payload.expected_material_unit_price,
+        )
+    except Exception:
+        await release_order_idempotency_key(reservation)
+        raise
+    await complete_order_idempotency_key(reservation, order.id)
+    return order

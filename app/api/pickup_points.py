@@ -1,7 +1,8 @@
+from app.services.cities import resolve_city, ensure_same_city
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from sqlalchemy import and_, literal, or_, select
+from sqlalchemy import String, and_, cast, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
@@ -16,10 +17,26 @@ from app.schemas.quarry import GlobalPickupPointOut, PickupPointMarkerOut, Quarr
 from app.services.pickup_points import (
     is_pickup_point_publicly_available,
     pickup_point_payload,
-    public_pickup_point_filters,
 )
 
 router = APIRouter()
+
+# Parsed and refused points are internal CRM records.  Every other CRM stage
+# remains useful on the client map as a muted marker, even before ordering is
+# available.  The current database enum represents legacy `parsed` as
+# `auto_added` and a hidden/refused record as `refused`.
+CLIENT_MAP_HIDDEN_CRM_STATUSES = (
+    "auto_added",
+    "parsed",
+    "hidden",
+    "refused",
+)
+
+
+def _client_map_crm_filter():
+    # Cast keeps this exclusion compatible with legacy/new PostgreSQL enum
+    # values even when a status is not yet present in the Python enum.
+    return cast(Quarry.crm_status, String).notin_(CLIENT_MAP_HIDDEN_CRM_STATUSES)
 
 
 def _disable_map_cache(response: Response) -> None:
@@ -47,8 +64,10 @@ async def list_pickup_points(
     bbox: str | None = None,
     point_type: str | None = None,
     limit: int = Query(default=300, ge=1, le=1000),
+    city_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> list[dict]:
+    city = await resolve_city(db, city_id)
     _disable_map_cache(response)
     material = await db.get(Material, material_id)
     if material is None or not material.is_active:
@@ -63,6 +82,7 @@ async def list_pickup_points(
     stmt = (
         select(
             Quarry.id,
+            Quarry.city_id,
             Quarry.name,
             Quarry.short_name,
             Quarry.point_type,
@@ -83,20 +103,11 @@ async def list_pickup_points(
             ),
         )
         .where(
+            Quarry.city_id == city.id,
             Quarry.lat.is_not(None),
             Quarry.lon.is_not(None),
-            or_(
-                and_(
-                    Quarry.crm_status == CrmStatus.activated.value,
-                    *public_pickup_point_filters(),
-                    quarry_materials.c.is_active.is_(True),
-                    or_(
-                        quarry_materials.c.price.is_not(None),
-                        literal(material.is_free).is_(True),
-                    ),
-                ),
-                Quarry.crm_status == CrmStatus.invite_sent.value,
-            ),
+            _client_map_crm_filter(),
+            quarry_materials.c.is_active.is_(True),
         )
         .order_by(Quarry.name.asc())
         .limit(limit)
@@ -114,6 +125,7 @@ async def list_pickup_points(
     return [
         {
             "id": row.id,
+            "city_id": row.city_id,
             "name": row.name,
             "short_name": row.short_name or row.name,
             "point_type": row.point_type,
@@ -134,18 +146,16 @@ async def list_pickup_points(
 @router.get("/global", response_model=list[GlobalPickupPointOut])
 async def list_global_pickup_points(
     response: Response,
+    city_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> list[dict]:
+    city = await resolve_city(db, city_id)
     _disable_map_cache(response)
     result = await db.execute(
         select(Quarry)
         .where(
-            Quarry.crm_status.in_(
-                [
-                    CrmStatus.invite_sent.value,
-                    CrmStatus.activated.value,
-                ]
-            ),
+            _client_map_crm_filter(),
+            Quarry.city_id == city.id,
             Quarry.lat.is_not(None),
             Quarry.lon.is_not(None),
         )
@@ -172,6 +182,7 @@ async def list_global_pickup_points(
         items.append(
             {
                 "id": payload["id"],
+                "city_id": point.city_id,
                 "name": payload["name"],
                 "short_name": payload["short_name"],
                 "point_type": payload["point_type"],
@@ -195,9 +206,12 @@ async def list_global_pickup_points(
 async def get_pickup_point(
     point_id: UUID,
     material_id: UUID | None = None,
+    city_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
+    city = await resolve_city(db, city_id)
     point = await db.get(Quarry, point_id)
+    ensure_same_city(city.id, point)
     if point is None or (
         point.crm_status == CrmStatus.activated.value
         and not is_pickup_point_publicly_available(point)

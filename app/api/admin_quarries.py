@@ -1,9 +1,10 @@
+from app.services.cities import resolve_city, ensure_owner_city
 import logging
 from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import delete, select, update
+from sqlalchemy import and_, delete, or_, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -88,6 +89,8 @@ async def _apply_point_changes(
     db: AsyncSession,
     point: Quarry,
     payload_data: dict,
+    *,
+    auto_sync_owner_city: bool = False,
 ) -> None:
     for nullable_field in ("description", "contact_phone", "subscription_end_date", "short_name"):
         if nullable_field in payload_data and isinstance(payload_data[nullable_field], str):
@@ -97,8 +100,18 @@ async def _apply_point_changes(
         payload_data["short_name"] = payload_data["name"]
     elif "short_name" in payload_data and not payload_data["short_name"]:
         payload_data["short_name"] = payload_data.get("name") or point.name
+    if "city_id" in payload_data:
+        city = await resolve_city(db, payload_data["city_id"], require_active=False)
+        await ensure_owner_city(
+            db,
+            point.owner_user_id,
+            city.id,
+            auto_sync=auto_sync_owner_city,
+        )
+        payload_data["city_id"] = city.id
     changed = set(payload_data)
     for field in (
+        "city_id",
         "name",
         "short_name",
         "point_type",
@@ -112,6 +125,7 @@ async def _apply_point_changes(
         "is_vip",
         "manual_priority",
         "is_active",
+        "moderation_status",
     ):
         if field in changed:
             setattr(point, field, payload_data[field])
@@ -150,19 +164,33 @@ async def list_pickup_points(
     point_type: str | None = None,
     material_id: UUID | None = None,
     search: str | None = Query(default=None, max_length=100),
+    city_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_logist_user),
 ) -> list[dict]:
     del current_user
-    stmt = select(Quarry)
+    city_filter = (Quarry.city_id == city_id) if city_id is not None else True
+    # Parsed points do not have an owner yet. Keep the owner lookup optional so
+    # administrative filters still return those points.
+    stmt = select(Quarry).outerjoin(User, Quarry.owner_user_id == User.id).where(city_filter)
     if moderation_status:
         if moderation_status == ModerationStatus.pending_moderation.value:
             stmt = stmt.where(
-                Quarry.moderation_status.in_(
-                    [
-                        ModerationStatus.pending_moderation.value,
-                        ModerationStatus.has_pending_changes.value,
-                    ]
+                or_(
+                    Quarry.moderation_status.in_(
+                        [
+                            ModerationStatus.pending_moderation.value,
+                            ModerationStatus.has_pending_changes.value,
+                        ]
+                    ),
+                    # Before the parser used pending_moderation, imported
+                    # points were saved as incomplete. Include only those
+                    # legacy imports, never supplier drafts.
+                    and_(
+                        Quarry.moderation_status == ModerationStatus.incomplete.value,
+                        Quarry.crm_status == CrmStatus.auto_added.value,
+                        Quarry.owner_user_id.is_(None),
+                    ),
                 )
             )
         else:
@@ -204,11 +232,13 @@ async def create_pickup_point(
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin_user),
 ) -> dict:
+    city = await resolve_city(db, payload.city_id, require_active=False)
     min_price = payload.min_delivery_price
     if min_price is None:
         min_price = default_min_delivery_price(payload.point_type)
     short_name = payload.short_name or payload.name
     point = Quarry(
+        city_id=city.id,
         name=payload.name,
         short_name=short_name,
         point_type=payload.point_type,
@@ -271,8 +301,14 @@ async def update_pickup_point(
     current_user: User = Depends(get_current_logist_user),
 ) -> dict:
     point = await _get_point_or_404(db, point_id)
+    is_admin = current_user.role is not None and current_user.role.name == "admin"
     payload_data = payload.model_dump(exclude_unset=True)
-    await _apply_point_changes(db, point, payload_data)
+    await _apply_point_changes(
+        db,
+        point,
+        payload_data,
+        auto_sync_owner_city=is_admin,
+    )
     changed = set(payload_data)
     if "subscription_end_date" in changed:
         await apply_manual_placement_end_date(
@@ -281,7 +317,7 @@ async def update_pickup_point(
             ends_at=point.subscription_end_date,
             actor_user_id=current_user.id,
         )
-        if point.is_active:
+        if point.is_active and not is_admin:
             try:
                 await _validate_point_activation(db, point)
             except HTTPException:
@@ -295,7 +331,7 @@ async def update_pickup_point(
         "material_ids",
         "delivery_option_ids",
     }
-    if point.is_active and changed.intersection(publication_fields):
+    if point.is_active and changed.intersection(publication_fields) and not is_admin:
         try:
             await _validate_point_activation(db, point)
             point.moderation_status = ModerationStatus.approved.value
@@ -307,6 +343,9 @@ async def update_pickup_point(
         except HTTPException:
             await db.rollback()
             raise
+    if is_admin and "moderation_status" in changed:
+        point.moderated_at = datetime.now(timezone.utc)
+        point.moderated_by_user_id = current_user.id
     await recalculate_status(
         db,
         point,
@@ -369,6 +408,7 @@ async def approve_pickup_point(
 ) -> dict:
     point = await _get_point_or_404(db, point_id)
     try:
+        is_admin = current_user.role is not None and current_user.role.name == "admin"
         staged_changes = point.pending_changes if point.moderation_status == ModerationStatus.has_pending_changes.value else None
         if staged_changes:
             pending_payload = QuarryUpdate.model_validate(staged_changes)
@@ -376,8 +416,10 @@ async def approve_pickup_point(
                 db,
                 point,
                 pending_payload.model_dump(exclude_unset=True),
+                auto_sync_owner_city=current_user.role is not None and current_user.role.name == "admin",
             )
-        await validate_point_can_be_approved(db, point)
+        if not is_admin:
+            await validate_point_can_be_approved(db, point)
         point.moderation_status = ModerationStatus.approved.value
         point.moderation_comment = payload.comment
         point.moderated_at = datetime.now(timezone.utc)

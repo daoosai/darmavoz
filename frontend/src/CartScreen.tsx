@@ -1,3 +1,4 @@
+import { cityFetch } from './cityStore';
 import React, { useState, useEffect, useRef } from "react";
 import {
   ShoppingCart,
@@ -28,7 +29,7 @@ interface MarketplaceOption {
   quarry_name: string;
   point_type: string;
   distance: number;
-  delivery_cost: number;
+  delivery_cost: number | null | undefined;
   material_cost: number;
   total_amount: number;
   primary_image_url?: string | null;
@@ -127,8 +128,8 @@ export default function CartScreen({
     cartItems,
     removeFromCart,
     getTotalPrice,
-    clearCart,
     updateItemVolume,
+    setItemIdempotencyKey,
   } = useCartStore();
   const { role, token } = useAuthStore();
   const setOrders = useClientOrdersStore((state) => state.setOrders);
@@ -249,7 +250,7 @@ export default function CartScreen({
           lat = Number(storedCoordinates.lat);
           lon = Number(storedCoordinates.lon);
         } else {
-          const geoRes = await fetch(
+          const geoRes = await cityFetch(
             `${baseURL}/geo/geocode?address=${encodeURIComponent(globalAddress)}`,
             {
               headers: { Authorization: `Bearer ${token}` },
@@ -280,7 +281,7 @@ export default function CartScreen({
         const newResults: Record<string, CalculationResult> = {};
         for (const item of cartItems) {
           const selectedQuarryId = preferredPointIds[item.id] || item.pickupPoint?.id;
-          const res = await fetch(`${baseURL}/client/orders/calculate`, {
+          const res = await cityFetch(`${baseURL}/client/orders/calculate`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -293,6 +294,7 @@ export default function CartScreen({
               delivery_lat: lat,
               delivery_lon: lon,
               quantity: item.quantity,
+              volume: getCartItemVolume(item),
               quarry_id: selectedQuarryId || undefined,
             }),
           });
@@ -393,43 +395,52 @@ export default function CartScreen({
     try {
       setIsSubmitting(true);
 
-      const requests = cartItems.map((item) => {
+      let completedOrders = 0;
+      for (const item of cartItems) {
         const calculation = calcResults[item.id];
         const selectedOption = isMarketplaceCalculation(calculation)
           ? calculation.best_option
           : null;
-        const orderedVolume = item.deliveryOption.capacity_m3 * item.quantity;
+        const orderedVolume = getCartItemVolume(item);
         const expectedMaterialUnitPrice = selectedOption && orderedVolume > 0
           ? selectedOption.material_cost / orderedVolume
           : item.pickupPoint?.price;
-        return fetch(`${baseURL}/orders/checkout`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            material_id: item.material.id,
-            delivery_option_id: item.deliveryOption.id,
-            address: globalAddress,
-            notes: item.comment || "",
-            source: "web",
-            quantity: item.quantity,
-            quarry_id: selectedOption?.quarry_id || item.pickupPoint?.id,
-            mileage_km: selectedOption?.distance,
-            delivery_lat: deliveryCoords?.lat,
-            delivery_lon: deliveryCoords?.lon,
-            expected_material_unit_price: expectedMaterialUnitPrice,
-          }),
-        });
-      });
-
-      const responses = await Promise.all(requests);
-      const hasErrors = responses.some((res) => !res.ok);
-
-      if (!hasErrors) {
+        const idempotencyKey = item.idempotencyKey || crypto.randomUUID();
+        if (!item.idempotencyKey) setItemIdempotencyKey(item.id, idempotencyKey);
         try {
-          const ordersResponse = await fetch(`${baseURL}/clients/me/orders`, {
+          const response = await cityFetch(`${baseURL}/orders/checkout`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+              "Idempotency-Key": idempotencyKey,
+            },
+            body: JSON.stringify({
+              material_id: item.material.id,
+              delivery_option_id: item.deliveryOption.id,
+              address: globalAddress,
+              notes: item.comment || "",
+              source: "web",
+              quantity: item.quantity,
+              volume: orderedVolume,
+              quarry_id: selectedOption?.quarry_id || item.pickupPoint?.id,
+              mileage_km: selectedOption?.distance,
+              delivery_lat: deliveryCoords?.lat,
+              delivery_lon: deliveryCoords?.lon,
+              expected_material_unit_price: expectedMaterialUnitPrice,
+            }),
+          });
+          if (!response.ok) continue;
+          removeFromCart(item.id);
+          completedOrders += 1;
+        } catch (error) {
+          console.error("Checkout item error", error);
+        }
+      }
+
+      if (completedOrders === cartItems.length) {
+        try {
+          const ordersResponse = await cityFetch(`${baseURL}/clients/me/orders`, {
             headers: {
               Authorization: `Bearer ${token}`,
             },
@@ -446,13 +457,12 @@ export default function CartScreen({
           console.error("Orders refresh error", refreshError);
         }
         toast.success("Заказ успешно оформлен");
-        clearCart();
         setGlobalAddress("");
         onGoToOrders();
+      } else if (completedOrders > 0) {
+        toast("Часть заказов оформлена. Проверьте оставшиеся позиции", { icon: "⚠️" });
       } else {
-        alert(
-          "Некоторые заказы не удалось оформить. Пожалуйста, попробуйте еще раз.",
-        );
+        toast.error("Не удалось оформить заказы. Проверьте данные и попробуйте ещё раз.");
       }
     } catch (err) {
       console.error(err);
@@ -483,9 +493,14 @@ export default function CartScreen({
     && deliveryCoords !== null
     && cartItems.every((item) => {
       const result = calcResults[item.id];
+      const deliveryCost = isMarketplaceCalculation(result)
+        ? result.best_option.delivery_cost
+        : null;
       return isMarketplaceCalculation(result)
-        && Number.isFinite(Number(result.best_option.delivery_cost))
-        && Number(result.best_option.delivery_cost) > 0;
+        && deliveryCost !== null
+        && deliveryCost !== undefined
+        && Number.isFinite(Number(deliveryCost))
+        && Number(deliveryCost) >= 0;
     });
   const isCheckoutDisabled = isSubmitting || !globalAddress.trim() || !hasValidDeliveryCalculation;
 

@@ -1,15 +1,18 @@
+from app.services.cities import initialize_service_cities
 from datetime import UTC, datetime
 import logging
 from uuid import UUID
 
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy import select
+from sqlalchemy import String, cast, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.cities import resolve_city, ensure_owner_city
+from app.services.cities import resolve_city, ensure_same_city
 from app.db.database import get_db
 from app.models.models import CrmStatus, MediaFile, User, WaterPoint
-from app.schemas.sprint19 import WaterPointIn, WaterPointOut
+from app.schemas.sprint19 import WaterPointAdminUpdate, WaterPointIn, WaterPointOut
 from app.schemas.bulk import BulkDeleteRequest, BulkDeleteResult
 from app.security.auth import get_current_logist_user, get_current_water_septic_partner_user
 from app.services.notifications import create_operator_notifications
@@ -19,12 +22,28 @@ router = APIRouter()
 water_septic_partner_router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# Parsed (`auto_added`) and refused/hidden records stay in the admin CRM only.
+# The remaining stages are shown to clients as muted points until ready.
+CLIENT_MAP_HIDDEN_CRM_STATUSES = (
+    "auto_added",
+    "parsed",
+    "hidden",
+    "refused",
+)
+
+
+def _client_map_crm_filter():
+    return cast(WaterPoint.crm_status, String).notin_(CLIENT_MAP_HIDDEN_CRM_STATUSES)
+
 
 def _is_water_point_ready(point: WaterPoint) -> bool:
-    # The admin activation toggle is authoritative for the client map.  A point
-    # can be managed directly and therefore must not require an owner or price
-    # before it is shown as available.
-    return point.is_active
+    is_free = point.is_free or point.water_type == "free"
+    has_price = is_free or (point.price is not None and point.price > 0)
+    return (
+        point.crm_status == CrmStatus.activated.value
+        and point.is_active
+        and has_price
+    )
 
 
 def _public_stmt():
@@ -99,8 +118,9 @@ async def _hard_delete_water_point(point: WaterPoint, db: AsyncSession) -> None:
 
 
 @router.get("/water-points", response_model=list[WaterPointOut])
-async def list_water_points(water_type: str | None = None, db: AsyncSession = Depends(get_db)):
-    stmt = _public_stmt()
+async def list_water_points(water_type: str | None = None, city_id: UUID | None = None, db: AsyncSession = Depends(get_db)):
+    selected_city = await resolve_city(db, city_id)
+    stmt = _public_stmt().where(WaterPoint.city_id == selected_city.id)
     if water_type in {"free", "paid"}:
         stmt = stmt.where(WaterPoint.water_type == water_type)
     points = (await db.execute(stmt.order_by(WaterPoint.created_at.desc()))).scalars().all()
@@ -111,17 +131,13 @@ async def list_water_points(water_type: str | None = None, db: AsyncSession = De
 async def list_water_points_for_map(
     response: Response,
     water_type: str | None = None,
-    db: AsyncSession = Depends(get_db),
+    city_id: UUID | None = None, db: AsyncSession = Depends(get_db),
 ):
+    selected_city = await resolve_city(db, city_id)
     response.headers["Cache-Control"] = "no-store, max-age=0"
-    stmt = select(WaterPoint).where(
+    stmt = select(WaterPoint).where(WaterPoint.city_id == selected_city.id).where(
         WaterPoint.is_deleted.is_(False),
-        WaterPoint.crm_status.in_(
-            [
-                CrmStatus.invite_sent.value,
-                CrmStatus.activated.value,
-            ]
-        ),
+        _client_map_crm_filter(),
     )
     if water_type in {"free", "paid", "unknown"}:
         stmt = stmt.where(WaterPoint.water_type == water_type)
@@ -133,13 +149,25 @@ async def list_water_points_for_map(
 async def list_water_points_for_moderation(
     moderation_status: str | None = None,
     status: str | None = None,
+    crm_status: CrmStatus | None = None,
+    city_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_logist_user),
 ):
-    stmt = select(WaterPoint).where(WaterPoint.is_deleted.is_(False))
+    city_filter = (WaterPoint.city_id == city_id) if city_id is not None else True
+    # Parser-created points have no owner. Keep the owner relation optional so
+    # moderation and CRM filters do not hide those points.
+    stmt = (
+        select(WaterPoint)
+        .outerjoin(User, WaterPoint.owner_user_id == User.id)
+        .where(city_filter)
+        .where(WaterPoint.is_deleted.is_(False))
+    )
     selected_status = moderation_status or status
     if selected_status and selected_status.lower() not in {"all", "все"}:
         stmt = stmt.where(WaterPoint.moderation_status == selected_status)
+    if crm_status is not None:
+        stmt = stmt.where(WaterPoint.crm_status == crm_status.value)
     points = (await db.execute(stmt.order_by(WaterPoint.created_at.desc()))).scalars().all()
     return await _serialize_points(list(points), db)
 
@@ -150,6 +178,10 @@ async def create_water_point_by_admin(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_logist_user),
 ):
+    selected_city = await resolve_city(db, payload.city_id, require_active=False)
+    await ensure_owner_city(db, None, selected_city.id)
+    await initialize_service_cities(db, user_id=current_user.id, city_ids=[selected_city.id], require_active=False)
+    payload.city_id = selected_city.id
     point = WaterPoint(
         **payload.model_dump(),
         owner_user_id=current_user.id,
@@ -164,8 +196,9 @@ async def create_water_point_by_admin(
 
 
 @router.get("/water-points/{point_id}", response_model=WaterPointOut)
-async def get_water_point(point_id: UUID, db: AsyncSession = Depends(get_db)):
-    point = await db.scalar(_public_stmt().where(WaterPoint.id == point_id))
+async def get_water_point(point_id: UUID, city_id: UUID | None = None, db: AsyncSession = Depends(get_db)):
+    selected_city = await resolve_city(db, city_id)
+    point = await db.scalar(_public_stmt().where(WaterPoint.city_id == selected_city.id).where(WaterPoint.id == point_id))
     if point is None: raise HTTPException(status_code=404, detail="Точка воды не найдена")
     return await _serialize_point(point, db)
 
@@ -178,6 +211,9 @@ async def my_water_points(db: AsyncSession = Depends(get_db), current_user: User
 
 @water_septic_partner_router.post("/water-points", response_model=WaterPointOut, status_code=status.HTTP_201_CREATED)
 async def create_water_point(payload: WaterPointIn, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_water_septic_partner_user)):
+    selected_city = await resolve_city(db, payload.city_id, require_active=False)
+    await ensure_owner_city(db, current_user.id, selected_city.id)
+    payload.city_id = selected_city.id
     point = WaterPoint(**payload.model_dump(), owner_user_id=current_user.id, moderation_status="pending_moderation")
     db.add(point)
     await db.flush()
@@ -195,6 +231,9 @@ async def create_water_point(payload: WaterPointIn, db: AsyncSession = Depends(g
 
 @water_septic_partner_router.patch("/water-points/{point_id}", response_model=WaterPointOut)
 async def update_water_point(point_id: UUID, payload: WaterPointIn, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_water_septic_partner_user)):
+    selected_city = await resolve_city(db, payload.city_id, require_active=False)
+    await ensure_owner_city(db, current_user.id, selected_city.id)
+    payload.city_id = selected_city.id
     point = await db.scalar(select(WaterPoint).where(WaterPoint.id == point_id, WaterPoint.owner_user_id == current_user.id, WaterPoint.is_deleted.is_(False)))
     if point is None: raise HTTPException(status_code=404, detail="Точка воды не найдена")
     for field, value in payload.model_dump().items(): setattr(point, field, value)
@@ -222,7 +261,7 @@ async def delete_water_point(point_id: UUID, db: AsyncSession = Depends(get_db),
 @router.patch("/admin/water-points/{point_id}", response_model=WaterPointOut)
 async def update_water_point_by_admin(
     point_id: UUID,
-    payload: WaterPointIn,
+    payload: WaterPointAdminUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_logist_user),
 ):
@@ -230,8 +269,21 @@ async def update_water_point_by_admin(
     if point is None or point.is_deleted:
         raise HTTPException(status_code=404, detail="Точка воды не найдена")
 
-    for field, value in payload.model_dump().items():
+    selected_city = await resolve_city(db, payload.city_id if "city_id" in payload.model_fields_set else point.city_id, require_active=False)
+    await ensure_owner_city(
+        db,
+        point.owner_user_id,
+        selected_city.id,
+        auto_sync=current_user.role is not None and current_user.role.name == "admin",
+    )
+    payload.city_id = selected_city.id
+
+    payload_data = payload.model_dump(exclude_unset=True)
+    for field, value in payload_data.items():
         setattr(point, field, value)
+    if "moderation_status" in payload_data:
+        point.moderated_at = datetime.now(UTC)
+        point.moderated_by_user_id = current_user.id
     await db.commit()
     await db.refresh(point)
     return await _serialize_point(point, db)

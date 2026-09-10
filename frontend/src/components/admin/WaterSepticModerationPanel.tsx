@@ -1,3 +1,6 @@
+import { useAuthStore } from '../../store';
+import ServiceCityField from '../../ServiceCityField';
+import type { City } from '../../AdminCitiesScreen';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import {
   Archive,
@@ -167,6 +170,7 @@ const createSepticEditForm = (profile: SepticProfile) => ({
 const normalizePhoneForApi = (value: string) => value.replace(/[^\d+]/g, "").trim();
 
 export default function WaterSepticModerationPanel({ token }: { token: string | null }) {
+  const role = useAuthStore((state) => state.role);
   const [tab, setTab] = useState<ManagementTab>("water");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("pending_moderation");
   const [waterPoints, setWaterPoints] = useState<WaterPoint[]>([]);
@@ -179,7 +183,10 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
   const [rejectTarget, setRejectTarget] = useState<RejectTarget | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
+  const [serviceCityId, setServiceCityId] = useState("");
+  const [mapCity, setMapCity] = useState<City | null>(null);
   const [createTarget, setCreateTarget] = useState<ManagementTab | null>(null);
+  useEffect(() => { setServiceCityId((editTarget?.data as any)?.city_id || ""); setMapCity(null); }, [editTarget, createTarget]);
   const [editMedia, setEditMedia] = useState<MediaFile[]>([]);
   const [mediaActionId, setMediaActionId] = useState<string | null>(null);
   const [waterEditForm, setWaterEditForm] = useState(() => createWaterEditForm({
@@ -205,7 +212,7 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
     setLoading(true);
     try {
       const headers = { Authorization: `Bearer ${token}` };
-      const query = statusFilter === "all" ? "" : `?moderation_status=${statusFilter}`;
+      const query = `?${new URLSearchParams({ ...(statusFilter !== "all" ? { moderation_status: statusFilter } : {}) })}`;
       const [waterResponse, septicResponse, countsResponse] = await Promise.all([
         fetch(`${baseURL}/admin/water-points${query}`, { headers }),
         fetch(`${baseURL}/admin/septic-providers${query}`, { headers }),
@@ -595,7 +602,7 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
       const response = await fetch(`${baseURL}${resource}${isCreating ? "" : `/${editTarget.data.id}`}`, {
         method: isCreating ? "POST" : "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, city_id: serviceCityId }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось сохранить изменения"));
@@ -714,6 +721,9 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
                 <X className="h-5 w-5" />
               </button>
             </div>
+            <div className="mt-4">
+              <ServiceCityField admin value={serviceCityId} onChange={setServiceCityId} onCityChange={setMapCity} />
+            </div>
 
             {modalKind === "water" ? (
               <div className="mt-4 space-y-3">
@@ -729,7 +739,8 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
                 <label className="block text-sm font-bold">Источник
                   <input required value={waterEditForm.source} onChange={(event) => setWaterEditForm((current) => ({ ...current, source: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal" />
                 </label>
-                <AddressMapPicker
+                {mapCity && (<AddressMapPicker
+                  city={mapCity}
                   token={token}
                   inputId="admin-water-address"
                   address={waterEditForm.address}
@@ -737,7 +748,7 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
                   lon={waterEditForm.lon}
                   addressRequired={false}
                   onChange={(location) => setWaterEditForm((current) => ({ ...current, ...location }))}
-                />
+                />)}
                 {editTarget ? renderMediaManager() : <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">Фотографии можно добавить после сохранения.</p>}
                 <label className="block text-sm font-bold">Телефон
                   <input type="tel" inputMode="tel" autoComplete="tel" maxLength={18} value={waterEditForm.phone} onChange={(event) => setWaterEditForm((current) => ({ ...current, phone: formatPhoneNumber(event.target.value) }))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal" placeholder="+7 (999) 999-99-99" />
@@ -765,14 +776,15 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
                 <label className="block text-sm font-bold">Телефон
                   <input required type="tel" inputMode="tel" autoComplete="tel" maxLength={18} value={septicEditForm.phone} onChange={(event) => setSepticEditForm((current) => ({ ...current, phone: formatPhoneNumber(event.target.value) }))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal" placeholder="+7 (999) 999-99-99" />
                 </label>
-                <AddressMapPicker
+                {mapCity && (<AddressMapPicker
+                  city={mapCity}
                   token={token}
                   inputId="admin-septic-address"
                   address={septicEditForm.address}
                   lat={septicEditForm.lat}
                   lon={septicEditForm.lon}
                   onChange={(location) => setSepticEditForm((current) => ({ ...current, ...location }))}
-                />
+                />)}
                 {editTarget ? renderMediaManager() : <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">Фотографии можно добавить после сохранения.</p>}
                 <div className="grid grid-cols-2 gap-3">
                   <label className="text-sm font-bold">Объём, м³

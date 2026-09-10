@@ -55,6 +55,7 @@ class PhonePasswordResetComplete(PhonePasswordResetRequest):
 
 
 class WaterPointIn(BaseModel):
+    city_id: UUID | None = None
     water_type: Literal["free", "paid", "unknown"]
     name: str | None = Field(default=None, max_length=255)
     source: str = Field(min_length=1, max_length=255)
@@ -99,7 +100,15 @@ class WaterPointIn(BaseModel):
         return self
 
 
+class WaterPointAdminUpdate(WaterPointIn):
+    moderation_status: Literal[
+        "incomplete", "pending_moderation", "has_pending_changes", "approved", "rejected", "suspended"
+    ] | None = None
+    is_active: bool | None = None
+
+
 class WaterPointOut(WaterPointIn):
+    city_id: UUID | None = None
     id: UUID
     owner_user_id: UUID | None = None
     moderation_status: str
@@ -117,12 +126,20 @@ class WaterPointOut(WaterPointIn):
 
 
 class SepticProfileIn(BaseModel):
+    city_id: UUID | None = None
     phone: str = Field(min_length=5, max_length=20)
     address: str = Field(min_length=1, max_length=2000)
     lat: float = Field(ge=-90, le=90)
     lon: float = Field(ge=-180, le=180)
     tank_volume_m3: float = Field(gt=0)
     service_price: float = Field(gt=0)
+
+
+class SepticProfileAdminUpdate(SepticProfileIn):
+    moderation_status: Literal[
+        "incomplete", "pending_moderation", "has_pending_changes", "approved", "rejected", "suspended"
+    ] | None = None
+    is_active: bool | None = None
 
 
 class SepticMediaOut(BaseModel):
@@ -136,6 +153,7 @@ class SepticMediaOut(BaseModel):
 
 
 class SepticProfileOut(SepticProfileIn):
+    city_id: UUID | None = None
     id: UUID
     owner_user_id: UUID | None = None
     moderation_status: str

@@ -33,6 +33,7 @@ class OrderItemOut(BaseModel):
 
 
 class CheckoutRequest(BaseModel):
+    city_id: UUID | None = None
     client_id: UUID | None = Field(default=None, validation_alias=AliasChoices("client_id", "clientId"))
     material_id: UUID = Field(validation_alias=AliasChoices("material_id", "materialId"))
     delivery_option_id: UUID = Field(
@@ -57,6 +58,7 @@ class CheckoutRequest(BaseModel):
     notes: str | None = None
     source: str | None = "mobile"
     quantity: int = Field(default=1, ge=1)
+    volume: float | None = Field(default=None, gt=0)
 
     model_config = ConfigDict(
         str_strip_whitespace=True,
@@ -122,12 +124,14 @@ class CheckoutRequest(BaseModel):
 
 
 class ClientOrderCalculationRequest(BaseModel):
+    city_id: UUID | None = None
     material_id: UUID
     quarry_id: UUID | None = None
     delivery_option_id: UUID
     delivery_lat: float
     delivery_lon: float
     quantity: int = Field(default=1, ge=1)
+    volume: float | None = Field(default=None, gt=0)
 
     model_config = ConfigDict(extra="forbid")
 
@@ -172,6 +176,7 @@ class ClientOrderCalculationOut(BaseModel):
 
 
 class LogistOrderCreate(BaseModel):
+    city_id: UUID | None = None
     client_name: str | None = Field(default=None, max_length=255)
     client_phone: str = Field(min_length=11, max_length=20)
     driver_id: UUID | None = Field(default=None, validation_alias=AliasChoices("driver_id", "driverId"))
@@ -509,6 +514,8 @@ class OrderHistoryOut(BaseModel):
 
 
 class OrderOut(BaseModel):
+    city_name: str | None = None
+    city_id: UUID | None = None
     id: UUID
     client_id: UUID
     client_name: str | None = None
@@ -563,6 +570,7 @@ class OrderOut(BaseModel):
 
 
 class DriverOrderOut(OrderOut):
+    city_id: UUID | None = None
     client_phone: str | None = None
     client_name: str | None = None
     quarry_name: str | None = None

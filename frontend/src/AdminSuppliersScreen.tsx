@@ -234,7 +234,7 @@ export default function AdminSuppliersScreen() {
   };
 
   return (
-    <section className="flex flex-col gap-5 pb-[calc(6rem+env(safe-area-inset-bottom,0px))]">
+    <section className="flex flex-col gap-5 pt-16 pb-[calc(6rem+env(safe-area-inset-bottom,0px))]">
       <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-500">
           Поставщики

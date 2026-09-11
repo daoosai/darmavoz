@@ -207,9 +207,9 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
 
   const filteredItems = tab === "water" ? waterPoints : septicProfiles;
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (preserveContent = false) => {
     if (!token) return;
-    setLoading(true);
+    if (!preserveContent) setLoading(true);
     try {
       const headers = { Authorization: `Bearer ${token}` };
       const query = `?${new URLSearchParams({ ...(statusFilter !== "all" ? { moderation_status: statusFilter } : {}) })}`;
@@ -256,7 +256,7 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Не удалось загрузить записи");
     } finally {
-      setLoading(false);
+      if (!preserveContent) setLoading(false);
     }
   }, [statusFilter, token]);
 
@@ -294,7 +294,7 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
               ? "Запись восстановлена из архива"
               : "Запись перенесена в архив",
       );
-      await load();
+      await load(true);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Не удалось обновить запись");
     } finally {
@@ -631,7 +631,7 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
       if (isCreating) setStatusFilter("all");
       closeEdit();
       toast.success("Изменения сохранены");
-      await load();
+      await load(true);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Не удалось сохранить изменения");
     } finally {
@@ -642,7 +642,7 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
   const modalKind = editTarget?.kind ?? createTarget;
 
   return (
-    <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+    <section className="rounded-2xl border border-slate-100 bg-white p-5 pt-16 shadow-sm">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold text-slate-800">Вода и септики</h2>

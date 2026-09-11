@@ -101,7 +101,11 @@ jobs:
             echo "GOOGLE_SERVICES_JSON_TEST secret is not configured" >&2
             exit 1
           fi
-          printf '%s' "${GOOGLE_SERVICES_JSON_TEST}" | base64 --decode > android/app/google-services.json
+          if printf '%s' "${GOOGLE_SERVICES_JSON_TEST}" | base64 --decode 2>/dev/null | jq -e '.' > android/app/google-services.json; then
+            echo "Decoded Base64 Firebase configuration for test APK"
+          else
+            printf '%s' "${GOOGLE_SERVICES_JSON_TEST}" > android/app/google-services.json
+          fi
           jq -e '.project_info and (.client | length > 0)' android/app/google-services.json > /dev/null
 
       - name: Build debug APK

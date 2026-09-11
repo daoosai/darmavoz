@@ -1,6 +1,6 @@
 apply plugin: 'com.android.application'
 
-def appVersionCode = (System.getenv("DARMAVOZ_VERSION_CODE") ?: "262").toInteger()
+def appVersionCode = (System.getenv("DARMAVOZ_VERSION_CODE") ?: "310").toInteger()
 def appVersionName = System.getenv("DARMAVOZ_VERSION_NAME") ?: "3.1.0"
 
 android {

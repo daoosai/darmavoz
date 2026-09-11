@@ -28,6 +28,7 @@ interface WaterPoint {
   crm_status: string;
   is_active: boolean;
   is_ready: boolean;
+  twogis_id?: string | null;
 }
 
 interface SepticProfile {
@@ -349,6 +350,16 @@ export default function WaterMapScreen({ initialTab = "water" }: { initialTab?: 
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <p className="font-black text-slate-900">Временно без доставки</p>
                   <p className="mt-1 text-sm text-slate-600">Точка ещё не готова принимать заказы.</p>
+                  {selectedPoint.twogis_id ? (
+                    <a
+                      href={`https://2gis.ru/firm/${selectedPoint.twogis_id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center rounded-xl bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700 transition hover:bg-emerald-100"
+                    >
+                      Посмотреть контакты в 2ГИС ↗
+                    </a>
+                  ) : null}
                 </div>
               </div>
             ) : <>

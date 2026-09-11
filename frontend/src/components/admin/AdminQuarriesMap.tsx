@@ -219,6 +219,26 @@ const createMarkerElement = (
     );
     card.appendChild(details);
 
+    const twogisId = point.twogis_id?.trim();
+    if (twogisId) {
+      const twogisLink = document.createElement("a");
+      twogisLink.href = `https://2gis.ru/firm/${twogisId}`;
+      twogisLink.target = "_blank";
+      twogisLink.rel = "noopener noreferrer";
+      twogisLink.textContent = "В 2ГИС ↗";
+      twogisLink.style.display = "inline-flex";
+      twogisLink.style.marginTop = "12px";
+      twogisLink.style.padding = "8px 10px";
+      twogisLink.style.borderRadius = "10px";
+      twogisLink.style.background = "#ecfdf5";
+      twogisLink.style.color = "#047857";
+      twogisLink.style.fontSize = "12px";
+      twogisLink.style.fontWeight = "800";
+      twogisLink.style.textDecoration = "none";
+      twogisLink.addEventListener("click", (event) => event.stopPropagation());
+      card.appendChild(twogisLink);
+    }
+
     const editButton = document.createElement("button");
     editButton.type = "button";
     editButton.textContent = "✏️ Редактировать";

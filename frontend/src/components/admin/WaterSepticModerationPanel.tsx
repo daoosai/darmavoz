@@ -749,6 +749,7 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
                   addressRequired={false}
                   onChange={(location) => setWaterEditForm((current) => ({ ...current, ...location }))}
                 />)}
+                {editTarget?.data.twogis_id ? <a href={`https://2gis.ru/firm/${editTarget.data.twogis_id}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center rounded-xl bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700 transition hover:bg-emerald-100">Открыть карточку в 2ГИС ↗</a> : null}
                 {editTarget ? renderMediaManager() : <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">Фотографии можно добавить после сохранения.</p>}
                 <label className="block text-sm font-bold">Телефон
                   <input type="tel" inputMode="tel" autoComplete="tel" maxLength={18} value={waterEditForm.phone} onChange={(event) => setWaterEditForm((current) => ({ ...current, phone: formatPhoneNumber(event.target.value) }))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal" placeholder="+7 (999) 999-99-99" />

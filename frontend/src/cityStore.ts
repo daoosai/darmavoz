@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { City } from './AdminCitiesScreen';
+import { useAddressStore, useCartStore } from './store';
 import { baseURL } from './utils';
 
 interface CityState {
@@ -8,21 +9,36 @@ interface CityState {
   cities: City[];
   loaded: boolean;
   error: string;
-  preserveAddressOnNextCitySwitch: boolean;
-  choose: (id: string, options?: { preserveAddress?: boolean }) => void;
-  completeCitySwitch: () => void;
+  choose: (id: string) => void;
   refresh: () => Promise<void>;
 }
 let revision = 0;
 const FALLBACK_MAP_CENTER: [number, number] = [65.534328, 57.152286];
 const FALLBACK_MAP_ZOOM = 11;
+
+function fallbackCity(cities: City[]): City | null {
+  return cities.find((city) => city.is_active && city.code === 'tyumen')
+    ?? cities.find((city) => city.is_active && city.is_default)
+    ?? cities.find((city) => city.is_active)
+    ?? null;
+}
+
+function syncCityScopedState(city: City): void {
+  const cart = useCartStore.getState();
+  if (cart.cartCityId === city.id) return;
+
+  cart.switchCityCart(city.id, city.code === 'tyumen');
+  useAddressStore.getState().clearSelectedAddress();
+}
+
 export const useCityStore = create<CityState>()(persist((set, get) => ({
-  cityId: null, cities: [], loaded: false, error: '', preserveAddressOnNextCitySwitch: false,
-  choose: (id, options = {}) => {
-    if (!get().cities.some((city) => city.id === id && city.is_active)) throw new Error('Город недоступен');
-    set({ cityId: id, preserveAddressOnNextCitySwitch: Boolean(options.preserveAddress) });
+  cityId: null, cities: [], loaded: false, error: '',
+  choose: (id) => {
+    const city = get().cities.find((item) => item.id === id && item.is_active);
+    if (!city) throw new Error('Город недоступен');
+    set({ cityId: city.id });
+    syncCityScopedState(city);
   },
-  completeCitySwitch: () => set({ preserveAddressOnNextCitySwitch: false }),
   refresh: async () => {
     const request = ++revision;
     try {
@@ -30,7 +46,10 @@ export const useCityStore = create<CityState>()(persist((set, get) => ({
       if (!response.ok) throw new Error('Не удалось загрузить города');
       const cities: City[] = await response.json();
       if (request !== revision) return;
-      set({ cities, loaded: true, error: '', cityId: get().cityId ?? cities.find((city) => city.code === 'tyumen')?.id ?? null });
+      const selectedCity = cities.find((city) => city.id === get().cityId && city.is_active)
+        ?? fallbackCity(cities);
+      set({ cities, loaded: true, error: '', cityId: selectedCity?.id ?? null });
+      if (selectedCity) syncCityScopedState(selectedCity);
     } catch {
       if (request === revision) set({ error: 'Не удалось обновить список городов. Повторите попытку.' });
     }

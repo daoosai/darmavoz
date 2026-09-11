@@ -17,7 +17,6 @@ import {
 } from "lucide-react";
 import { MaterialProps } from "./MaterialDetailScreen";
 import BulkCalculatorScreen from './BulkCalculatorScreen';
-import CityBoundary from './CityBoundary';
 import { cityFetch, useCityStore } from './cityStore';
 import OrdersScreen from "./OrdersScreen";
 import WelcomeScreen from "./WelcomeScreen";
@@ -390,7 +389,7 @@ export default function App() {
     }
 
     return (
-      <CityBoundary><MainContent
+      <MainContent
         currentRoute={currentRoute}
         setCurrentRoute={setCurrentRoute}
         activeTab={activeTab}
@@ -416,7 +415,7 @@ export default function App() {
         onReturnToWelcome={returnToWelcome}
         currentPath={currentPath}
         setCurrentPath={setCurrentPath}
-      /></CityBoundary>
+      />
     );
   };
 

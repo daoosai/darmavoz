@@ -130,7 +130,9 @@ jobs:
           rm -rf /opt/daoos-kit/sites/darmavoz/frontend/*
           tar -xf /tmp/frontend-prod.tar -C /opt/daoos-kit/sites/darmavoz/frontend
           rm -f /tmp/frontend-prod.tar
-          cp -a "${DEPLOY_DIR}/static/." /opt/daoos-kit/sites/darmavoz/static/
+          # darmavoz.apk is published and verified by the Build Android APK workflow.
+          # Do not overwrite it with the legacy APK tracked in the Git worktree.
+          find "${DEPLOY_DIR}/static" -mindepth 1 -maxdepth 1 ! -name 'darmavoz.apk' -exec cp -a {} /opt/daoos-kit/sites/darmavoz/static/ \;
 
           # Обновление Backend и Миграции
           docker compose -f "${COMPOSE_FILE}" build backend

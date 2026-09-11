@@ -10,7 +10,7 @@ jobs:
   build-android:
     runs-on: ubuntu-latest
     env:
-      APK_REMOTE_DIR: /opt/darmavoz_deploy/static
+      APK_REMOTE_DIR: /opt/daoos-kit/sites/darmavoz/static
       APK_BUILD_PATH: frontend/android/app/build/outputs/apk/debug/app-debug.apk
       VITE_2GIS_KEY: ${{ secrets.VITE_2GIS_KEY }}
 
@@ -78,7 +78,14 @@ jobs:
           chmod +x gradlew
           export DARMAVOZ_VERSION_NAME="${RELEASE_VERSION}"
           export DARMAVOZ_VERSION_CODE="${RELEASE_VERSION_CODE}"
-          ./gradlew assembleDebug
+          ./gradlew clean assembleDebug
+
+      - name: Verify production APK metadata
+        run: |
+          set -euo pipefail
+          APK_MANIFEST="$(unzip -p "${APK_BUILD_PATH}" AndroidManifest.xml | strings -e l)"
+          printf '%s\n' "${APK_MANIFEST}" | grep -Fxq "ru.darmavoz.app"
+          printf '%s\n' "${APK_MANIFEST}" | grep -Fxq "${RELEASE_VERSION}"
 
       - name: Decode Android release keystore
         env:
@@ -131,7 +138,7 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: "${{ env.APK_BUILD_PATH }}"
-          target: "/opt/darmavoz_deploy/static/"
+          target: "${{ env.APK_REMOTE_DIR }}/"
           strip_components: 7
           overwrite: true
 
@@ -141,8 +148,13 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: APK_REMOTE_DIR,RELEASE_VERSION
           script: |
             set -euo pipefail
-            mv /opt/darmavoz_deploy/static/app-debug.apk /opt/darmavoz_deploy/static/darmavoz.apk
+            APK_PATH="${APK_REMOTE_DIR}/darmavoz.apk"
+            mv "${APK_REMOTE_DIR}/app-debug.apk" "${APK_PATH}"
+            APK_MANIFEST="$(unzip -p "${APK_PATH}" AndroidManifest.xml | strings -e l)"
+            printf '%s\n' "${APK_MANIFEST}" | grep -Fxq "ru.darmavoz.app"
+            printf '%s\n' "${APK_MANIFEST}" | grep -Fxq "${RELEASE_VERSION}"
             cd /opt/darmavoz_deploy
             docker compose up -d --build backend

@@ -77,7 +77,7 @@ export default function AdminProfileScreen({
   }
 
   return (
-    <div className="max-w-md mx-auto w-full p-4 flex flex-col gap-6 relative">
+    <div className="max-w-md mx-auto w-full p-4 pt-16 flex flex-col gap-6 relative">
       <button className="rounded-xl bg-sky-50 p-3 text-sky-700" onClick={() => setShowCities(true)}>Управление городами</button>
       {showCities && <AdminCitiesScreen modal onClose={() => setShowCities(false)} />}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">

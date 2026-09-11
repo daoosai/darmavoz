@@ -285,12 +285,12 @@ export default function AdminQuarriesScreen({
     ? typeFilter
     : "";
 
-  const fetchQuarries = async () => {
+  const fetchQuarries = async ({ preserveContent = false }: { preserveContent?: boolean } = {}) => {
     if (!token) {
       return;
     }
     try {
-      setIsLoading(true);
+      if (!preserveContent) setIsLoading(true);
       const params = new URLSearchParams();
       if (normalizedStatusFilter) {
         params.set("moderation_status", normalizedStatusFilter);
@@ -328,12 +328,12 @@ export default function AdminQuarriesScreen({
       setQuarries(loadedPoints);
     } catch (e) {
       console.error("Error fetching quarries", e);
-      setQuarries([]);
+      if (!preserveContent) setQuarries([]);
       toast.error(
         e instanceof Error ? e.message : "Не удалось загрузить список точек",
       );
     } finally {
-      setIsLoading(false);
+      if (!preserveContent) setIsLoading(false);
     }
   };
 
@@ -387,7 +387,7 @@ export default function AdminQuarriesScreen({
         return false;
       }
       toast.success(action === "approve" ? "Точка одобрена" : "Заявка отклонена");
-      await fetchQuarries();
+      await fetchQuarries({ preserveContent: true });
       await onPointsChanged?.();
       return true;
     } catch {
@@ -535,7 +535,7 @@ export default function AdminQuarriesScreen({
   }
 
   return (
-    <div className="flex flex-col gap-4 pb-[calc(6rem+env(safe-area-inset-bottom,0px))]">
+    <div className="flex flex-col gap-4 pt-16 pb-[calc(6rem+env(safe-area-inset-bottom,0px))]">
       <div className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
         <div className="flex items-center gap-3">
           <div>
@@ -864,7 +864,7 @@ export default function AdminQuarriesScreen({
               current.map((item) => (item.id === savedQuarry.id ? savedQuarry : item)),
             );
             setIsModalOpen(false);
-            void fetchQuarries();
+            void fetchQuarries({ preserveContent: true });
             void onPointsChanged?.();
           }}
         />

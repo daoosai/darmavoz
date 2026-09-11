@@ -9,7 +9,7 @@ interface CityState {
   cities: City[];
   loaded: boolean;
   error: string;
-  choose: (id: string) => void;
+  choose: (id: string, options?: { preserveAddress?: boolean }) => void;
   refresh: () => Promise<void>;
 }
 let revision = 0;
@@ -23,21 +23,21 @@ function fallbackCity(cities: City[]): City | null {
     ?? null;
 }
 
-function syncCityScopedState(city: City): void {
+function syncCityScopedState(city: City, preserveAddress = false): void {
   const cart = useCartStore.getState();
   if (cart.cartCityId === city.id) return;
 
   cart.switchCityCart(city.id, city.code === 'tyumen');
-  useAddressStore.getState().clearSelectedAddress();
+  if (!preserveAddress) useAddressStore.getState().clearSelectedAddress();
 }
 
 export const useCityStore = create<CityState>()(persist((set, get) => ({
   cityId: null, cities: [], loaded: false, error: '',
-  choose: (id) => {
+  choose: (id, options = {}) => {
     const city = get().cities.find((item) => item.id === id && item.is_active);
     if (!city) throw new Error('Город недоступен');
     set({ cityId: city.id });
-    syncCityScopedState(city);
+    syncCityScopedState(city, Boolean(options.preserveAddress));
   },
   refresh: async () => {
     const request = ++revision;

@@ -61,9 +61,12 @@ jobs:
           VITE_APP_VERSION=${RELEASE_VERSION}
           EOF
 
-          # Override app id only inside CI for the test APK package name.
-          sed -i 's/ru\.darmavoz\.app/com.darmavoz.app.test/g' capacitor.config.ts || true
-          sed -i 's/ru\.darmavoz\.app/com.darmavoz.app.test/g' capacitor.config.json || true
+          # These edits exist only in the GitHub Actions checkout. They keep the
+          # repository's production package identity intact after merging to main.
+          sed -i "s/appId: 'ru\.darmavoz\.app'/appId: 'ru.darmavoz.app.test'/" capacitor.config.ts
+          sed -i "s/appName: '.*'/appName: 'Дармавоз ТЕСТ'/" capacitor.config.ts
+          grep -q "appId: 'ru.darmavoz.app.test'" capacitor.config.ts
+          grep -q "appName: 'Дармавоз ТЕСТ'" capacitor.config.ts
 
       - name: Build frontend
         working-directory: frontend
@@ -80,17 +83,30 @@ jobs:
         working-directory: frontend
         run: |
           set -euo pipefail
-          sed -i 's/applicationId "com\.darmavoz\.app"/applicationId "com.darmavoz.app.test"/' android/app/build.gradle
-          sed -i 's#<string name="app_name">.*</string>#<string name="app_name">Тест Дармавоз</string>#' android/app/src/main/res/values/strings.xml
-          sed -i 's#<string name="title_activity_main">.*</string>#<string name="title_activity_main">Тест Дармавоз</string>#' android/app/src/main/res/values/strings.xml
-          sed -i 's#<string name="package_name">com\.darmavoz\.app</string>#<string name="package_name">com.darmavoz.app.test</string>#' android/app/src/main/res/values/strings.xml
-          sed -i 's#<string name="custom_url_scheme">com\.darmavoz\.app</string>#<string name="custom_url_scheme">com.darmavoz.app.test</string>#' android/app/src/main/res/values/strings.xml
+          sed -i 's/applicationId "ru\.darmavoz\.app"/applicationId "ru.darmavoz.app.test"/' android/app/build.gradle
+          sed -i 's#<string name="app_name">.*</string>#<string name="app_name">Дармавоз ТЕСТ</string>#' android/app/src/main/res/values/strings.xml
+          sed -i 's#<string name="title_activity_main">.*</string>#<string name="title_activity_main">Дармавоз ТЕСТ</string>#' android/app/src/main/res/values/strings.xml
+          sed -i 's#<string name="package_name">ru\.darmavoz\.app</string>#<string name="package_name">ru.darmavoz.app.test</string>#' android/app/src/main/res/values/strings.xml
+          sed -i 's#<string name="custom_url_scheme">ru\.darmavoz\.app</string>#<string name="custom_url_scheme">ru.darmavoz.app.test</string>#' android/app/src/main/res/values/strings.xml
+          grep -q 'applicationId "ru.darmavoz.app.test"' android/app/build.gradle
+          grep -q '<string name="app_name">Дармавоз ТЕСТ</string>' android/app/src/main/res/values/strings.xml
 
       - name: Setup Firebase for Test APK
         working-directory: frontend
         env:
           GOOGLE_SERVICES_JSON_TEST: ${{ secrets.GOOGLE_SERVICES_JSON_TEST }}
-        run: echo "$GOOGLE_SERVICES_JSON_TEST" > android/app/google-services.json
+        run: |
+          set -euo pipefail
+          if [ -z "${GOOGLE_SERVICES_JSON_TEST}" ]; then
+            echo "GOOGLE_SERVICES_JSON_TEST secret is not configured" >&2
+            exit 1
+          fi
+          if printf '%s' "${GOOGLE_SERVICES_JSON_TEST}" | base64 --decode 2>/dev/null | jq -e '.' > android/app/google-services.json; then
+            echo "Decoded Base64 Firebase configuration for test APK"
+          else
+            printf '%s' "${GOOGLE_SERVICES_JSON_TEST}" > android/app/google-services.json
+          fi
+          jq -e '.project_info and (.client | length > 0)' android/app/google-services.json > /dev/null
 
       - name: Build debug APK
         working-directory: frontend/android

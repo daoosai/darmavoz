@@ -506,7 +506,7 @@ export default function AdminEquipmentScreen({
   }
 
   return (
-    <div className="space-y-5 pb-[calc(6rem+env(safe-area-inset-bottom,0px))]">
+    <div className="space-y-5 pt-16 pb-[calc(6rem+env(safe-area-inset-bottom,0px))]">
       <div className="flex gap-2 overflow-x-auto rounded-2xl bg-white p-2 shadow-sm">
         {[
           ["listings", "Объявления"],

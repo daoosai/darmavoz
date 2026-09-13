@@ -7,12 +7,6 @@ android {
     namespace = "ru.darmavoz.app"
     compileSdk = rootProject.ext.compileSdkVersion
     signingConfigs {
-        debug {
-            storeFile file('darmavoz.keystore')
-            storePassword 'darmavoz123'
-            keyAlias 'darmavoz'
-            keyPassword 'darmavoz123'
-        }
         release {
             storeFile file(System.getenv("KEYSTORE_FILE") ?: "darmavoz-release.keystore")
             storePassword System.getenv("KEYSTORE_PASSWORD") ?: System.getenv("KEY_PASSWORD")
@@ -34,9 +28,6 @@ android {
         }
     }
     buildTypes {
-        debug {
-            signingConfig signingConfigs.debug
-        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'

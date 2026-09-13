@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       APK_REMOTE_DIR: /opt/daoos-kit/sites/darmavoz/static
-      APK_BUILD_PATH: frontend/android/app/build/outputs/apk/debug/app-debug.apk
+      APK_BUILD_PATH: frontend/android/app/build/outputs/apk/release/app-release.apk
       VITE_2GIS_KEY: ${{ secrets.VITE_2GIS_KEY }}
 
     steps:
@@ -71,46 +71,41 @@ jobs:
           npx capacitor-assets generate --android
           npx cap sync android
 
-      - name: Build debug APK
-        working-directory: frontend/android
-        run: |
-          set -euo pipefail
-          chmod +x gradlew
-          export DARMAVOZ_VERSION_NAME="${RELEASE_VERSION}"
-          export DARMAVOZ_VERSION_CODE="${RELEASE_VERSION_CODE}"
-          ./gradlew clean assembleDebug
-
-      - name: Verify production APK metadata
-        run: |
-          set -euo pipefail
-          APK_MANIFEST="$(unzip -p "${APK_BUILD_PATH}" AndroidManifest.xml | strings -e l)"
-          printf '%s\n' "${APK_MANIFEST}" | grep -Fxq "ru.darmavoz.app"
-          printf '%s\n' "${APK_MANIFEST}" | grep -Fxq "${RELEASE_VERSION}"
-
       - name: Decode Android release keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          if [ -z "${KEYSTORE_BASE64}" ]; then
-            echo "KEYSTORE_BASE64 secret is not configured" >&2
+          if [ -z "${KEYSTORE_BASE64}" ] || [ -z "${KEYSTORE_PASSWORD}" ] || [ -z "${KEY_ALIAS}" ] || [ -z "${KEY_PASSWORD}" ]; then
+            echo "Release signing secrets are not fully configured" >&2
             exit 1
           fi
           printf '%s' "${KEYSTORE_BASE64}" | base64 --decode > frontend/android/app/darmavoz-release.keystore
           chmod 600 frontend/android/app/darmavoz-release.keystore
 
-      - name: Build signed Android App Bundle
+      - name: Build signed release APK and Android App Bundle
         working-directory: frontend/android
         env:
           KEYSTORE_FILE: ${{ github.workspace }}/frontend/android/app/darmavoz-release.keystore
-          KEYSTORE_PASSWORD: darmavoz2026
-          KEY_ALIAS: darmavoz
-          KEY_PASSWORD: darmavoz2026
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           DARMAVOZ_VERSION_NAME: ${{ env.RELEASE_VERSION }}
           DARMAVOZ_VERSION_CODE: ${{ env.RELEASE_VERSION_CODE }}
         run: |
           set -euo pipefail
-          ./gradlew bundleRelease
+          ./gradlew clean assembleRelease bundleRelease
+
+      - name: Verify signed release APK metadata
+        run: |
+          set -euo pipefail
+          apksigner verify --verbose --print-certs "${APK_BUILD_PATH}"
+          APK_MANIFEST="$(unzip -p "${APK_BUILD_PATH}" AndroidManifest.xml | strings -e l)"
+          printf '%s\n' "${APK_MANIFEST}" | grep -Fxq "ru.darmavoz.app"
+          printf '%s\n' "${APK_MANIFEST}" | grep -Fxq "${RELEASE_VERSION}"
 
       - name: Upload signed Android App Bundle
         uses: actions/upload-artifact@v4
@@ -152,7 +147,7 @@ jobs:
           script: |
             set -euo pipefail
             APK_PATH="${APK_REMOTE_DIR}/darmavoz.apk"
-            mv "${APK_REMOTE_DIR}/app-debug.apk" "${APK_PATH}"
+            mv "${APK_REMOTE_DIR}/app-release.apk" "${APK_PATH}"
             APK_MANIFEST="$(unzip -p "${APK_PATH}" AndroidManifest.xml | strings -e l)"
             printf '%s\n' "${APK_MANIFEST}" | grep -Fxq "ru.darmavoz.app"
             printf '%s\n' "${APK_MANIFEST}" | grep -Fxq "${RELEASE_VERSION}"

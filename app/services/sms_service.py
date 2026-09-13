@@ -4,6 +4,7 @@ from typing import NoReturn
 
 import httpx
 from fastapi import HTTPException, status
+from redis.asyncio import Redis
 
 from app.core.config import settings
 from app.utils.phones import normalize_otp_phone
@@ -13,6 +14,11 @@ SANDBOX_OTP_CODE = "0000"
 SMSRU_SEND_URL = "https://sms.ru/sms/send"
 SMSRU_SENDER = "DARMAVOZ.RU"
 SMS_DELIVERY_ERROR_DETAIL = "Не удалось отправить SMS-код. Попробуйте ещё раз."
+SMS_COOLDOWN_SECONDS = 60
+SMS_HOURLY_LIMIT = 5
+SMS_HOURLY_WINDOW_SECONDS = 60 * 60
+OTP_MAX_ATTEMPTS = 3
+OTP_LOCK_SECONDS = 15 * 60
 
 
 def generate_otp_code() -> str:
@@ -24,6 +30,84 @@ def verify_sms_otp_code(*, submitted_code: str, stored_code: str) -> bool:
     if settings.USE_REAL_SMS and submitted_code == SANDBOX_OTP_CODE:
         return False
     return secrets.compare_digest(submitted_code, stored_code)
+
+
+def _phone_rate_limit_suffix(phone_number: str) -> str:
+    return normalize_otp_phone(phone_number)
+
+
+async def enforce_sms_rate_limit(redis: Redis, phone_number: str) -> None:
+    """Limit SMS sends per phone without persisting unauthenticated users."""
+    suffix = _phone_rate_limit_suffix(phone_number)
+    lock_key = f"otp_lock:{suffix}"
+    cooldown_key = f"ratelimit:sms_cooldown:{suffix}"
+    hourly_key = f"ratelimit:sms_hourly:{suffix}"
+
+    if await redis.get(lock_key):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Слишком много неверных попыток. Попробуйте через 15 минут.",
+        )
+    if await redis.get(cooldown_key):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Повторная отправка возможна через минуту.",
+        )
+
+    try:
+        hourly_count = int(await redis.get(hourly_key) or "0")
+    except (TypeError, ValueError):
+        hourly_count = 0
+    if hourly_count >= SMS_HOURLY_LIMIT:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Превышен лимит SMS для этого номера. Попробуйте позже.",
+        )
+
+    await redis.setex(cooldown_key, SMS_COOLDOWN_SECONDS, "1")
+    # A rolling one-hour window is deliberately stricter than a fixed window.
+    await redis.setex(hourly_key, SMS_HOURLY_WINDOW_SECONDS, str(hourly_count + 1))
+
+
+async def validate_sms_otp(
+    *,
+    redis: Redis,
+    phone_number: str,
+    otp_key: str,
+    submitted_code: str,
+    stored_code: str,
+    additional_otp_keys: tuple[str, ...] = (),
+) -> bool:
+    """Validate OTP and invalidate it after three bad guesses."""
+    suffix = _phone_rate_limit_suffix(phone_number)
+    lock_key = f"otp_lock:{suffix}"
+    attempts_key = f"otp_attempts:{suffix}"
+
+    if await redis.get(lock_key):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Слишком много неверных попыток. Попробуйте через 15 минут.",
+        )
+
+    if verify_sms_otp_code(submitted_code=submitted_code, stored_code=stored_code):
+        await redis.delete(attempts_key)
+        return True
+
+    try:
+        attempts = int(await redis.get(attempts_key) or "0") + 1
+    except (TypeError, ValueError):
+        attempts = 1
+    if attempts >= OTP_MAX_ATTEMPTS:
+        for key in (otp_key, *additional_otp_keys, attempts_key):
+            await redis.delete(key)
+        await redis.setex(lock_key, OTP_LOCK_SECONDS, "1")
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Слишком много неверных попыток. Попробуйте через 15 минут.",
+        )
+
+    await redis.setex(attempts_key, OTP_LOCK_SECONDS, str(attempts))
+    return False
 
 
 def raise_sms_delivery_error() -> NoReturn:

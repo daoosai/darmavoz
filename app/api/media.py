@@ -271,7 +271,7 @@ async def presign_upload(
 
     object_key = storage.build_object_key(entity_type, payload.file_name)
     upload_url = storage.generate_presigned_put(object_key, payload.content_type)
-    logger.info("Generated upload URL: %s", upload_url)
+    logger.info("Generated upload URL for object_key=%s", object_key)
     return PresignUploadResponse(
         bucket=storage.bucket,
         object_key=object_key,

@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -21,6 +22,12 @@ DISPATCH_ALLOWED_MODERATION_STATUSES = {
     ModerationStatus.approved.value,
     ModerationStatus.incomplete.value,
 }
+
+
+@dataclass(frozen=True)
+class OrderAccessActor:
+    client: Client | None = None
+    user: User | None = None
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -106,6 +113,26 @@ async def get_optional_current_client(
     if token is None:
         return None
     return await get_current_client(token=token, db=db)
+
+
+async def get_current_order_actor(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> OrderAccessActor:
+    """Resolve either a client or employee JWT for order read RBAC."""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+    except JWTError:
+        raise credentials_exception
+
+    if payload.get("role") == "client":
+        return OrderAccessActor(client=await get_current_client(token=token, db=db))
+    return OrderAccessActor(user=await get_current_user(token=token, db=db))
 
 
 def require_roles(*allowed_roles: str) -> Callable:

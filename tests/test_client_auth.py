@@ -43,19 +43,18 @@ async def test_send_code_returns_is_new_user_and_persists_code(client, session_f
     assert existing_response.json() == {"ok": True, "is_new_user": False}
     assert new_response.status_code == 200
     assert new_response.json() == {"ok": True, "is_new_user": True}
-    assert fake_redis.storage["client_auth_code:+79990000001"] == "0000"
-    assert fake_redis.ttl_by_key["client_auth_code:+79990000001"] == 300
-    assert fake_redis.storage["client_auth_code:+79990000002"] == "0000"
+    assert fake_redis.storage["otp:client:79990000001"] == "0000"
+    assert fake_redis.ttl_by_key["otp:client:79990000001"] == 300
+    assert fake_redis.storage["otp:client:79990000002"] == "0000"
 
     async with session_factory() as session:
         created = await session.scalar(select(Client).where(Client.phone == "+79990000002"))
 
-    assert created is not None
-    assert created.name == "Клиент 0002"
+    assert created is None
 
 
 @pytest.mark.asyncio
-async def test_register_creates_client_and_rejects_duplicate_phone(client, session_factory, monkeypatch):
+async def test_register_creates_client_only_after_otp_verification(client, session_factory, monkeypatch):
     fake_redis = FakeRedis()
     monkeypatch.setattr("app.api.client_auth.get_redis", lambda: fake_redis)
 
@@ -70,25 +69,27 @@ async def test_register_creates_client_and_rejects_duplicate_phone(client, sessi
     async with session_factory() as session:
         created = await session.scalar(select(Client).where(Client.phone == "+79990000012"))
 
+    assert created is None
+
+    verify_response = await client.post(
+        "/api/v1/auth/client/verify-code",
+        json={"phone_number": "+79990000012", "code": "0000"},
+    )
+    assert verify_response.status_code == 200
+
+    async with session_factory() as session:
+        created = await session.scalar(select(Client).where(Client.phone == "+79990000012"))
+
     assert created is not None
-    assert created.phone == "+79990000012"
     assert created.email == "fresh@example.com"
     assert created.name == "Fresh Client"
-
-    duplicate_response = await client.post(
-        "/api/v1/auth/client/register",
-        json={"email": "other@example.com", "phone_number": "+79990000012", "name": "Other Client"},
-    )
-
-    assert duplicate_response.status_code == 409
-    assert duplicate_response.json()["detail"] == "Client with this phone already exists"
 
 
 @pytest.mark.asyncio
 async def test_verify_code_accepts_mocked_code_and_returns_client_token(client, session_factory, monkeypatch):
     fake_redis = FakeRedis()
-    fake_redis.storage["client_auth_code:+79990000003"] = "0000"
-    fake_redis.ttl_by_key["client_auth_code:+79990000003"] = 300
+    fake_redis.storage["otp:client:79990000003"] = "0000"
+    fake_redis.ttl_by_key["otp:client:79990000003"] = 300
     monkeypatch.setattr("app.api.client_auth.get_redis", lambda: fake_redis)
 
     async with session_factory() as session:
@@ -108,7 +109,7 @@ async def test_verify_code_accepts_mocked_code_and_returns_client_token(client, 
     assert payload["client_id"] == str(client_record.id)
     assert payload["token_type"] == "bearer"
     assert payload["access_token"]
-    assert "client_auth_code:+79990000003" not in fake_redis.storage
+    assert "otp:client:79990000003" not in fake_redis.storage
 
 
 @pytest.mark.asyncio

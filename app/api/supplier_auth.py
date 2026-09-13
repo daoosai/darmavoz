@@ -18,7 +18,13 @@ from app.schemas.quarry import (
 from app.security.auth import get_password_hash
 from app.security.jwt import create_access_token
 from app.services.redis_client import get_redis
-from app.services.sms_service import generate_otp_code, normalize_sms_phone, send_auth_sms_code, verify_sms_otp_code
+from app.services.sms_service import (
+    enforce_sms_rate_limit,
+    generate_otp_code,
+    normalize_sms_phone,
+    send_auth_sms_code,
+    validate_sms_otp,
+)
 from app.utils.phones import normalize_otp_phone, normalize_phone
 
 router = APIRouter()
@@ -46,13 +52,14 @@ async def register_supplier(
     existing_supplier = await _get_supplier_user(db, phone)
     if existing_user is not None and existing_supplier is None:
         raise HTTPException(status_code=409, detail="PHONE_ALREADY_USED_BY_ANOTHER_ROLE")
+    redis = get_redis()
+    await enforce_sms_rate_limit(redis, phone)
     code = generate_otp_code()
     stored_code = await send_auth_sms_code(
         phone_number=normalize_sms_phone(phone),
         code=code,
         log_prefix="supplier_register_sms_auth",
     )
-    redis = get_redis()
     await redis.setex(_code_key(phone), TTL_SECONDS, stored_code)
     await redis.setex(_code_key(phone) + ":cities", TTL_SECONDS, json.dumps([str(value) for value in payload.city_ids] if payload.city_ids is not None else None))
     return SupplierSmsChallengeOut(phone=phone)
@@ -68,7 +75,14 @@ async def verify_supplier_registration(
     saved_code = await redis.get(_code_key(phone))
     if saved_code is None:
         raise HTTPException(status_code=400, detail="OTP_EXPIRED")
-    if not verify_sms_otp_code(submitted_code=payload.code.strip(), stored_code=saved_code):
+    if not await validate_sms_otp(
+        redis=redis,
+        phone_number=phone,
+        otp_key=_code_key(phone),
+        submitted_code=payload.code.strip(),
+        stored_code=saved_code,
+        additional_otp_keys=(_code_key(phone) + ":cities",),
+    ):
         raise HTTPException(status_code=400, detail="INVALID_OTP")
     user = await _get_supplier_user(db, phone)
     if user is None:

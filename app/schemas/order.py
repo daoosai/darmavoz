@@ -34,7 +34,6 @@ class OrderItemOut(BaseModel):
 
 class CheckoutRequest(BaseModel):
     city_id: UUID | None = None
-    client_id: UUID | None = Field(default=None, validation_alias=AliasChoices("client_id", "clientId"))
     material_id: UUID = Field(validation_alias=AliasChoices("material_id", "materialId"))
     delivery_option_id: UUID = Field(
         validation_alias=AliasChoices("delivery_option_id", "deliveryOptionId")
@@ -63,7 +62,7 @@ class CheckoutRequest(BaseModel):
     model_config = ConfigDict(
         str_strip_whitespace=True,
         populate_by_name=True,
-        extra="ignore",
+        extra="forbid",
     )
 
     @field_validator("notes", "source", mode="before")

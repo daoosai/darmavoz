@@ -19,6 +19,9 @@ SMS_HOURLY_LIMIT = 5
 SMS_HOURLY_WINDOW_SECONDS = 60 * 60
 OTP_MAX_ATTEMPTS = 3
 OTP_LOCK_SECONDS = 15 * 60
+EMAIL_COOLDOWN_SECONDS = 60
+EMAIL_HOURLY_LIMIT = 5
+EMAIL_HOURLY_WINDOW_SECONDS = 60 * 60
 
 
 def generate_otp_code() -> str:
@@ -48,25 +51,73 @@ async def enforce_sms_rate_limit(redis: Redis, phone_number: str) -> None:
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Слишком много неверных попыток. Попробуйте через 15 минут.",
         )
-    if await redis.get(cooldown_key):
+    cooldown_reserved = await redis.set(
+        cooldown_key,
+        "1",
+        ex=SMS_COOLDOWN_SECONDS,
+        nx=True,
+    )
+    if not cooldown_reserved:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Повторная отправка возможна через минуту.",
         )
 
-    try:
-        hourly_count = int(await redis.get(hourly_key) or "0")
-    except (TypeError, ValueError):
-        hourly_count = 0
-    if hourly_count >= SMS_HOURLY_LIMIT:
+    hourly_count = await redis.incr(hourly_key)
+    if hourly_count == 1:
+        await redis.expire(hourly_key, SMS_HOURLY_WINDOW_SECONDS)
+    if hourly_count > SMS_HOURLY_LIMIT:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Превышен лимит SMS для этого номера. Попробуйте позже.",
         )
 
-    await redis.setex(cooldown_key, SMS_COOLDOWN_SECONDS, "1")
-    # A rolling one-hour window is deliberately stricter than a fixed window.
-    await redis.setex(hourly_key, SMS_HOURLY_WINDOW_SECONDS, str(hourly_count + 1))
+
+def mask_email(email: str) -> str:
+    normalized = email.strip().lower()
+    local_part, separator, domain = normalized.partition("@")
+    if not separator:
+        return "***"
+    if len(local_part) <= 1:
+        masked_local = f"{local_part}***"
+    else:
+        masked_local = f"{local_part[0]}***{local_part[-1]}"
+    return f"{masked_local}@{domain}"
+
+
+async def enforce_email_rate_limit(redis: Redis, email: str) -> None:
+    """Atomically reserve a limited email OTP send for one address."""
+    normalized_email = email.strip().lower()
+    lock_key = f"email_otp_lock:{normalized_email}"
+    cooldown_key = f"ratelimit:email_cooldown:{normalized_email}"
+    hourly_key = f"ratelimit:email_hourly:{normalized_email}"
+
+    if await redis.get(lock_key):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Слишком много неверных попыток. Попробуйте через 15 минут.",
+        )
+
+    cooldown_reserved = await redis.set(
+        cooldown_key,
+        "1",
+        ex=EMAIL_COOLDOWN_SECONDS,
+        nx=True,
+    )
+    if not cooldown_reserved:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Повторная отправка возможна через минуту.",
+        )
+
+    hourly_count = await redis.incr(hourly_key)
+    if hourly_count == 1:
+        await redis.expire(hourly_key, EMAIL_HOURLY_WINDOW_SECONDS)
+    if hourly_count > EMAIL_HOURLY_LIMIT:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Превышен лимит кодов для этого email. Попробуйте позже.",
+        )
 
 
 async def validate_sms_otp(
@@ -93,10 +144,9 @@ async def validate_sms_otp(
         await redis.delete(attempts_key)
         return True
 
-    try:
-        attempts = int(await redis.get(attempts_key) or "0") + 1
-    except (TypeError, ValueError):
-        attempts = 1
+    attempts = await redis.incr(attempts_key)
+    if attempts == 1:
+        await redis.expire(attempts_key, OTP_LOCK_SECONDS)
     if attempts >= OTP_MAX_ATTEMPTS:
         for key in (otp_key, *additional_otp_keys, attempts_key):
             await redis.delete(key)
@@ -106,7 +156,47 @@ async def validate_sms_otp(
             detail="Слишком много неверных попыток. Попробуйте через 15 минут.",
         )
 
-    await redis.setex(attempts_key, OTP_LOCK_SECONDS, str(attempts))
+    return False
+
+
+async def validate_email_otp(
+    *,
+    redis: Redis,
+    email: str,
+    otp_key: str,
+    submitted_code: str,
+    stored_code: str | None,
+    additional_otp_keys: tuple[str, ...] = (),
+) -> bool:
+    """Validate email OTPs with a shared, atomic three-attempt lockout."""
+    normalized_email = email.strip().lower()
+    lock_key = f"email_otp_lock:{normalized_email}"
+    attempts_key = f"email_otp_attempts:{normalized_email}"
+
+    if await redis.get(lock_key):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Слишком много неверных попыток. Попробуйте через 15 минут.",
+        )
+
+    if stored_code is None:
+        return False
+
+    if secrets.compare_digest(submitted_code, stored_code):
+        await redis.delete(attempts_key)
+        return True
+
+    attempts = await redis.incr(attempts_key)
+    if attempts == 1:
+        await redis.expire(attempts_key, OTP_LOCK_SECONDS)
+    if attempts >= OTP_MAX_ATTEMPTS:
+        for key in (otp_key, *additional_otp_keys, attempts_key):
+            await redis.delete(key)
+        await redis.setex(lock_key, OTP_LOCK_SECONDS, "1")
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Слишком много неверных попыток. Попробуйте через 15 минут.",
+        )
     return False
 
 

@@ -112,9 +112,15 @@ async def checkout_order(
     current_client: Client = Depends(get_current_client),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> Order:
-    reservation = await reserve_order_idempotency_key(idempotency_key)
+    reservation = await reserve_order_idempotency_key(
+        idempotency_key,
+        client_id=current_client.id,
+    )
     if reservation and reservation.existing_order_id:
-        return await get_order_by_id(db, reservation.existing_order_id)
+        existing_order = await get_order_by_id(db, reservation.existing_order_id)
+        if existing_order.client_id != current_client.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        return existing_order
     try:
         order = await create_checkout_order(
             db,

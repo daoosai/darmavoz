@@ -19,9 +19,9 @@ class OrderIdempotencyReservation:
     existing_order_id: UUID | None = None
 
 
-def _cache_key(idempotency_key: str) -> str:
+def _cache_key(client_id: UUID, idempotency_key: str) -> str:
     try:
-        return f"{ORDER_IDEMPOTENCY_PREFIX}{UUID(idempotency_key.strip())}"
+        return f"{ORDER_IDEMPOTENCY_PREFIX}{client_id}:{UUID(idempotency_key.strip())}"
     except (AttributeError, ValueError) as error:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -31,11 +31,13 @@ def _cache_key(idempotency_key: str) -> str:
 
 async def reserve_order_idempotency_key(
     idempotency_key: str | None,
+    *,
+    client_id: UUID,
 ) -> OrderIdempotencyReservation | None:
     if not idempotency_key:
         return None
 
-    cache_key = _cache_key(idempotency_key)
+    cache_key = _cache_key(client_id, idempotency_key)
     redis = get_redis()
     try:
         existing = await redis.get(cache_key)

@@ -19,6 +19,7 @@ from app.services.redis_client import get_redis
 from app.services.sms_service import (
     enforce_sms_rate_limit,
     generate_otp_code,
+    mask_sms_phone,
     normalize_sms_phone,
     send_auth_sms_code,
     validate_sms_otp,
@@ -77,7 +78,7 @@ async def send_code(
 
     logger.info(
         "client_auth_code_generated phone=%s ttl_seconds=%s",
-        normalized_phone,
+        mask_sms_phone(normalized_phone),
         CLIENT_CODE_TTL_SECONDS,
     )
 

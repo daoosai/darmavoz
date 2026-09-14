@@ -31,12 +31,13 @@ async def test_order_idempotency_returns_saved_order_for_repeated_key(monkeypatc
     request_key = str(uuid4())
     order_id = uuid4()
 
-    reservation = await order_idempotency.reserve_order_idempotency_key(request_key)
+    client_id = uuid4()
+    reservation = await order_idempotency.reserve_order_idempotency_key(request_key, client_id=client_id)
     assert reservation is not None
     assert reservation.existing_order_id is None
 
     await order_idempotency.complete_order_idempotency_key(reservation, order_id)
-    repeated = await order_idempotency.reserve_order_idempotency_key(request_key)
+    repeated = await order_idempotency.reserve_order_idempotency_key(request_key, client_id=client_id)
 
     assert repeated is not None
     assert repeated.existing_order_id == order_id
@@ -48,8 +49,32 @@ async def test_order_idempotency_blocks_parallel_request(monkeypatch):
     monkeypatch.setattr(order_idempotency, "get_redis", lambda: redis)
     request_key = str(uuid4())
 
-    await order_idempotency.reserve_order_idempotency_key(request_key)
+    client_id = uuid4()
+    await order_idempotency.reserve_order_idempotency_key(request_key, client_id=client_id)
 
     with pytest.raises(HTTPException) as error:
-        await order_idempotency.reserve_order_idempotency_key(request_key)
+        await order_idempotency.reserve_order_idempotency_key(request_key, client_id=client_id)
     assert error.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_order_idempotency_is_scoped_to_client(monkeypatch):
+    redis = FakeRedis()
+    monkeypatch.setattr(order_idempotency, "get_redis", lambda: redis)
+    request_key = str(uuid4())
+    first_client_id = uuid4()
+    second_client_id = uuid4()
+
+    reservation = await order_idempotency.reserve_order_idempotency_key(
+        request_key,
+        client_id=first_client_id,
+    )
+    assert reservation is not None
+    await order_idempotency.complete_order_idempotency_key(reservation, uuid4())
+
+    second_client_reservation = await order_idempotency.reserve_order_idempotency_key(
+        request_key,
+        client_id=second_client_id,
+    )
+    assert second_client_reservation is not None
+    assert second_client_reservation.existing_order_id is None

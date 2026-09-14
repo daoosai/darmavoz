@@ -41,7 +41,15 @@ from app.security.auth import get_password_hash, verify_password
 from app.security.jwt import create_access_token
 from app.services.auth_email_service import send_auth_email_code
 from app.services.redis_client import get_redis
-from app.services.sms_service import generate_otp_code, normalize_sms_phone, send_auth_sms_code, verify_sms_otp_code
+from app.services.sms_service import (
+    enforce_email_rate_limit,
+    enforce_sms_rate_limit,
+    generate_otp_code,
+    normalize_sms_phone,
+    send_auth_sms_code,
+    validate_email_otp,
+    validate_sms_otp,
+)
 from app.utils.phones import normalize_otp_phone, normalize_phone, normalize_phone_like_username
 
 router = APIRouter()
@@ -113,6 +121,13 @@ def _password_reset_code_key(email: str) -> str:
     return f"{PASSWORD_RESET_CODE_PREFIX}:{email}"
 
 
+def _all_email_otp_keys(email: str) -> tuple[str, ...]:
+    return (
+        _password_reset_code_key(email),
+        *(_email_auth_code_key(scope, email) for scope in ("client", "user", "supplier")),
+    )
+
+
 def _phone_password_reset_otp_key(phone: str) -> str:
     return f"{PHONE_PASSWORD_RESET_OTP_PREFIX}:{normalize_otp_phone(phone)}"
 
@@ -132,11 +147,12 @@ def _can_reset_password_by_phone(user: User | None) -> bool:
 @router.post("/password-reset/request", status_code=status.HTTP_202_ACCEPTED)
 async def request_password_reset(payload: PasswordResetRequest, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
     email = payload.email.strip().lower()
+    redis = get_redis()
+    await enforce_email_rate_limit(redis, email)
     user = await _get_user_by_email(db, email)
     if user and user.is_active and not user.is_deleted and user.role and user.role.name in {"admin", "logist"}:
         code = generate_otp_code()
-        await get_redis().setex(_password_reset_code_key(email), 300, code)
-        logger.warning("Password reset OTP for %s: %s", email, code)
+        await redis.setex(_password_reset_code_key(email), 300, code)
         background_tasks.add_task(send_auth_email_code, to_email=email, code=code)
     return {"ok": True, "status": "email_sent"}
 
@@ -146,7 +162,16 @@ async def verify_password_reset(payload: PasswordResetVerify, db: AsyncSession =
     email = payload.email.strip().lower(); redis = get_redis()
     code = await redis.get(_password_reset_code_key(email))
     user = await _get_user_by_email(db, email)
-    if code is None or payload.code.strip() != code or user is None or not user.role or user.role.name not in {"admin", "logist"}:
+    if user is None or not user.role or user.role.name not in {"admin", "logist"}:
+        raise HTTPException(status_code=400, detail="Неверный или истёкший код")
+    if not await validate_email_otp(
+        redis=redis,
+        email=email,
+        otp_key=_password_reset_code_key(email),
+        submitted_code=payload.code.strip(),
+        stored_code=code,
+        additional_otp_keys=_all_email_otp_keys(email),
+    ):
         raise HTTPException(status_code=400, detail="Неверный или истёкший код")
     token = secrets.token_urlsafe(32)
     await redis.delete(_password_reset_code_key(email))
@@ -197,13 +222,15 @@ async def request_phone_password_reset(
     phone = normalize_phone(payload.phone)
     user = await _get_user_by_phone(db, phone)
     if _can_reset_password_by_phone(user):
+        redis = get_redis()
+        await enforce_sms_rate_limit(redis, phone)
         code = generate_otp_code()
         stored_code = await send_auth_sms_code(
             phone_number=normalize_sms_phone(phone),
             code=code,
             log_prefix="phone_password_reset_sms",
         )
-        await get_redis().setex(
+        await redis.setex(
             _phone_password_reset_otp_key(phone),
             PHONE_PASSWORD_RESET_OTP_TTL_SECONDS,
             stored_code,
@@ -220,7 +247,15 @@ async def verify_phone_password_reset(
     redis = get_redis()
     code = await redis.get(_phone_password_reset_otp_key(phone))
     user = await _get_user_by_phone(db, phone)
-    if code is None or not verify_sms_otp_code(submitted_code=payload.code, stored_code=code) or not _can_reset_password_by_phone(user):
+    if code is None or not _can_reset_password_by_phone(user):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неверный или истёкший код")
+    if not await validate_sms_otp(
+        redis=redis,
+        phone_number=phone,
+        otp_key=_phone_password_reset_otp_key(phone),
+        submitted_code=payload.code,
+        stored_code=code,
+    ):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неверный или истёкший код")
 
     reset_token = secrets.token_urlsafe(32)
@@ -414,11 +449,12 @@ def _build_driver_registration_response(*, role: Role, user: User, driver: Drive
 
 
 async def _issue_driver_login_code(*, normalized_phone: str, user_id: str) -> DriverSmsChallengeResponse:
+    redis = get_redis()
+    await enforce_sms_rate_limit(redis, normalized_phone)
     code = generate_otp_code()
     sms_phone = normalize_sms_phone(normalized_phone)
     stored_code = await send_auth_sms_code(phone_number=sms_phone, code=code, log_prefix="driver_login_sms_auth")
 
-    redis = get_redis()
     await redis.setex(_driver_login_code_key(normalized_phone), DRIVER_AUTH_CODE_TTL_SECONDS, stored_code)
     await redis.setex(_driver_login_pending_key(normalized_phone), DRIVER_AUTH_CODE_TTL_SECONDS, user_id)
     return DriverSmsChallengeResponse(status="sms_sent", phone=normalized_phone)
@@ -432,6 +468,8 @@ async def send_email_code(
 ) -> EmailSendCodeResponse:
     normalized_email = payload.email
     is_new_user: bool | None = None
+    redis = get_redis()
+    await enforce_email_rate_limit(redis, normalized_email)
 
     if payload.auth_scope == "client":
         client = await _get_client_by_email(db, normalized_email)
@@ -450,7 +488,7 @@ async def send_email_code(
         _ensure_user_can_authenticate(user)
 
     code = generate_otp_code()
-    await get_redis().setex(
+    await redis.setex(
         _email_auth_code_key(payload.auth_scope, normalized_email),
         EMAIL_AUTH_CODE_TTL_SECONDS,
         code,
@@ -472,9 +510,14 @@ async def verify_email_code(
     redis = get_redis()
     saved_code = await redis.get(_email_auth_code_key(payload.auth_scope, normalized_email))
 
-    if saved_code is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Код истек или не запрашивался")
-    if payload.code.strip() != saved_code:
+    if not await validate_email_otp(
+        redis=redis,
+        email=normalized_email,
+        otp_key=_email_auth_code_key(payload.auth_scope, normalized_email),
+        submitted_code=payload.code.strip(),
+        stored_code=saved_code,
+        additional_otp_keys=_all_email_otp_keys(normalized_email),
+    ):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неверный код")
 
     if payload.auth_scope == "client":
@@ -548,11 +591,12 @@ async def driver_register(
     normalized_phone = normalize_phone(payload.phone)
     await _ensure_driver_phone_is_available(db, normalized_phone)
 
+    redis = get_redis()
+    await enforce_sms_rate_limit(redis, normalized_phone)
     code = generate_otp_code()
     sms_phone = normalize_sms_phone(normalized_phone)
     stored_code = await send_auth_sms_code(phone_number=sms_phone, code=code, log_prefix="driver_register_sms_auth")
 
-    redis = get_redis()
     await redis.setex(_driver_register_code_key(normalized_phone), DRIVER_AUTH_CODE_TTL_SECONDS, stored_code)
     await redis.setex(
         _driver_register_pending_key(normalized_phone),
@@ -622,7 +666,14 @@ async def verify_driver_login(
 
     if saved_code is None or pending_user_id is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Код истек или не запрашивался")
-    if not verify_sms_otp_code(submitted_code=payload.code.strip(), stored_code=saved_code):
+    if not await validate_sms_otp(
+        redis=redis,
+        phone_number=normalized_phone,
+        otp_key=_driver_login_code_key(normalized_phone),
+        submitted_code=payload.code.strip(),
+        stored_code=saved_code,
+        additional_otp_keys=(_driver_login_pending_key(normalized_phone),),
+    ):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неверный код")
 
     result = await db.execute(
@@ -668,7 +719,14 @@ async def verify_driver_register(
 
     if saved_code is None or pending_payload_raw is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Код истек или не запрашивался")
-    if not verify_sms_otp_code(submitted_code=payload.code.strip(), stored_code=saved_code):
+    if not await validate_sms_otp(
+        redis=redis,
+        phone_number=normalized_phone,
+        otp_key=_driver_register_code_key(normalized_phone),
+        submitted_code=payload.code.strip(),
+        stored_code=saved_code,
+        additional_otp_keys=(_driver_register_pending_key(normalized_phone),),
+    ):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неверный код")
 
     try:

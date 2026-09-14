@@ -108,10 +108,16 @@ jobs:
             echo "Server source commit is not an ancestor of ${GITHUB_SHA}" >&2
             exit 1
           fi
-          git bundle create darmavoz-test.bundle HEAD "^${DEPLOY_BASE}"
-          git bundle verify darmavoz-test.bundle
+          if [ "${DEPLOY_BASE}" = "${GITHUB_SHA}" ]; then
+            echo "Server source is already at ${GITHUB_SHA}; frontend-only deployment"
+            echo "SOURCE_BUNDLE_REQUIRED=false" >> "${GITHUB_ENV}"
+          else
+            git bundle create darmavoz-test.bundle HEAD "^${DEPLOY_BASE}"
+            git bundle verify darmavoz-test.bundle
+            echo "SOURCE_BUNDLE_REQUIRED=true" >> "${GITHUB_ENV}"
+          fi
 
-      - name: Upload deployment bundles
+      - name: Upload frontend bundle
         run: |
           set -euo pipefail
           ssh_opts=(
@@ -122,24 +128,41 @@ jobs:
           )
           cat frontend-dist.tar | ssh "${ssh_opts[@]}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
             "cat > /tmp/frontend-dist.tar"
+
+      - name: Upload source bundle
+        if: env.SOURCE_BUNDLE_REQUIRED == 'true'
+        run: |
+          set -euo pipefail
+          ssh_opts=(
+            -o BatchMode=yes
+            -o ConnectTimeout=30
+            -o ServerAliveInterval=15
+            -o ServerAliveCountMax=4
+          )
           cat darmavoz-test.bundle | ssh "${ssh_opts[@]}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
             "cat > /tmp/darmavoz-test.bundle"
           sha256sum darmavoz-test.bundle | ssh "${ssh_opts[@]}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
             "cd /tmp && sha256sum -c -"
 
       - name: Deploy staging on server
+        env:
+          SOURCE_BUNDLE_REQUIRED: ${{ env.SOURCE_BUNDLE_REQUIRED }}
         run: |
           set -euo pipefail
           ssh -o BatchMode=yes -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
-            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" <<'EOF'
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" "SOURCE_BUNDLE_REQUIRED='${SOURCE_BUNDLE_REQUIRED}' bash -s" <<'EOF'
           set -euo pipefail
           SOURCE_DIR=/opt/darmavoz_test
           DEPLOY_DIR=/opt/darmavoz_test_deploy
 
           cd "${SOURCE_DIR}"
-          git bundle verify /tmp/darmavoz-test.bundle
-          git fetch --no-tags /tmp/darmavoz-test.bundle HEAD
-          DEPLOY_REF="$(git rev-parse FETCH_HEAD)"
+          if [ "${SOURCE_BUNDLE_REQUIRED}" = "true" ]; then
+            git bundle verify /tmp/darmavoz-test.bundle
+            git fetch --no-tags /tmp/darmavoz-test.bundle HEAD
+            DEPLOY_REF="$(git rev-parse FETCH_HEAD)"
+          else
+            DEPLOY_REF="$(git rev-parse HEAD)"
+          fi
           echo "Deploying commit ${DEPLOY_REF}"
 
           # Never discard local runtime changes or remove a worktree during deploy.

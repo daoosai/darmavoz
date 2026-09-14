@@ -28,3 +28,8 @@ mobile/build
 
 # Logs
 *.log
+
+# Secrets must never be sent to the Docker build context.
+*firebase*.json
+*.keystore
+keystore_base64.txt

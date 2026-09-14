@@ -387,9 +387,9 @@ export default function CartScreen({
   const handleCheckout = async () => {
     if (cartItems.length === 0 || !globalAddress.trim()) return;
 
-    if (role !== "client") {
-      onOpenAuth();
-      return;
+    if (role !== "client" || !token) {
+        onOpenAuth();
+        return;
     }
 
     try {

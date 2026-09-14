@@ -10,7 +10,7 @@ from app.schemas.order import (
     ClientOrderCalculationRequest,
     OrderOut,
 )
-from app.security.auth import get_optional_current_client
+from app.security.auth import get_current_client
 from app.services.dispatch_service import create_checkout_order
 from app.services.dispatch_service import get_order_by_id
 from app.services.order_idempotency import (
@@ -71,16 +71,22 @@ async def calculate_order(
 async def checkout_order(
     payload: CheckoutRequest,
     db: AsyncSession = Depends(get_db),
-    current_client: Client | None = Depends(get_optional_current_client),
+    current_client: Client = Depends(get_current_client),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> Order:
-    reservation = await reserve_order_idempotency_key(idempotency_key)
+    reservation = await reserve_order_idempotency_key(
+        idempotency_key,
+        client_id=current_client.id,
+    )
     if reservation and reservation.existing_order_id:
-        return await get_order_by_id(db, reservation.existing_order_id)
+        existing_order = await get_order_by_id(db, reservation.existing_order_id)
+        if existing_order.client_id != current_client.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        return existing_order
     try:
         order = await create_checkout_order(
             db,
-            client_id=current_client.id if current_client is not None else payload.client_id,
+            client_id=current_client.id,
             material_id=payload.material_id,
             city_id=payload.city_id,
             delivery_option_id=payload.delivery_option_id,

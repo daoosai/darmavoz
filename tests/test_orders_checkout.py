@@ -1,7 +1,7 @@
 import pytest
 from sqlalchemy import select
 
-from app.models.models import Category, DeliveryOption, Order, OrderItem, OrderStatus, Material
+from app.models.models import Category, City, Client, DeliveryOption, Order, OrderItem, OrderStatus, Material
 from app.security.jwt import create_access_token
 
 
@@ -33,10 +33,12 @@ async def test_checkout_persists_and_returns_quantity(client, session_factory):
     )
 
     async with session_factory() as session:
-        session.add_all([category, material, delivery_option])
+        client_record = Client(name="Checkout Client", phone="+79990000021")
+        session.add_all([category, material, delivery_option, client_record])
         await session.commit()
         await session.refresh(material)
         await session.refresh(delivery_option)
+        await session.refresh(client_record)
 
     response = await client.post(
         "/api/v1/orders/checkout",
@@ -48,6 +50,7 @@ async def test_checkout_persists_and_returns_quantity(client, session_factory):
             "delivery_lon": 37.618,
             "quantity": 3,
         },
+        headers=client_auth_headers(email="checkout-1@example.com", client_id=client_record.id),
     )
 
     assert response.status_code == 201
@@ -61,7 +64,7 @@ async def test_checkout_persists_and_returns_quantity(client, session_factory):
     assert payload["items"][0]["quantity"] == 3
     assert payload["items"][0]["volume"] == 30.0
     assert payload["items"][0]["amount"] == 75000.0
-    assert payload["status"] == OrderStatus.searching_driver.value
+    assert payload["status"] == OrderStatus.requires_clarification.value
 
     async with session_factory() as session:
         order = await session.scalar(select(Order).where(Order.id == payload["id"]))
@@ -101,10 +104,12 @@ async def test_checkout_persists_requested_volume(client, session_factory):
     )
 
     async with session_factory() as session:
-        session.add_all([category, material, delivery_option])
+        client_record = Client(name="Volume Client", phone="+79990000022")
+        session.add_all([category, material, delivery_option, client_record])
         await session.commit()
         await session.refresh(material)
         await session.refresh(delivery_option)
+        await session.refresh(client_record)
 
     response = await client.post(
         "/api/v1/orders/checkout",
@@ -117,6 +122,7 @@ async def test_checkout_persists_requested_volume(client, session_factory):
             "quantity": 1,
             "volume": 6,
         },
+        headers=client_auth_headers(email="checkout-2@example.com", client_id=client_record.id),
     )
 
     assert response.status_code == 201
@@ -161,10 +167,11 @@ async def test_checkout_uses_client_from_jwt_when_present(client, session_factor
     response = await client.post(
         "/api/v1/orders/checkout",
         json={
-            "client_id": None,
             "material_id": str(material.id),
             "delivery_option_id": str(delivery_option.id),
             "address": "Адрес клиента",
+            "delivery_lat": 55.751,
+            "delivery_lon": 37.618,
             "quantity": 2,
         },
         headers=client_auth_headers(email="jwt-client@example.com", client_id=client_record.id),
@@ -179,6 +186,12 @@ async def test_checkout_uses_client_from_jwt_when_present(client, session_factor
 
     assert order is not None
     assert order.client_id == client_record.id
+
+
+@pytest.mark.asyncio
+async def test_checkout_rejects_anonymous_request(client):
+    response = await client.post("/api/v1/orders/checkout", json={})
+    assert response.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -206,11 +219,14 @@ async def test_checkout_supports_address_id_and_delivery_address_alias(client, s
     )
 
     async with session_factory() as session:
+        city = await session.scalar(select(City).where(City.code == "tyumen"))
+        assert city is not None
         client_record = Client(name="Addressed Client", email="address-checkout@example.com", phone="+79990003030")
         session.add_all([category, material, delivery_option, client_record])
         await session.flush()
         address = ClientAddress(
             client_id=client_record.id,
+            city_id=city.id,
             full_address="Москва, Ленинградский 12",
             comment="Около шлагбаума",
             lat=55.82,

@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -72,7 +70,11 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str | None = None
     SMTP_FROM_EMAIL: str | None = None
     ADMIN_EMAIL: str | None = None
-    FIREBASE_CREDENTIALS_PATH: str = "/app/firebase-key.json"
+    FIREBASE_KEY_PATH: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("FIREBASE_KEY_PATH", "FIREBASE_CREDENTIALS_PATH"),
+    )
+    FIREBASE_CREDENTIALS_BASE64: str | None = None
     SMSRU_API_KEY: str | None = None
     USE_REAL_SMS: bool = False
     TWOGIS_API_KEY: str | None = Field(
@@ -113,13 +115,5 @@ class Settings(BaseSettings):
         if not self.S3_PUBLIC_BASE_URL:
             return ""
         return self.S3_PUBLIC_BASE_URL.rstrip("/") + "/"
-
-    @property
-    def firebase_credentials_candidates(self) -> list[Path]:
-        candidates = [Path(self.FIREBASE_CREDENTIALS_PATH)]
-        fallback = Path("/opt/darmavoz/firebase-key.json")
-        if fallback not in candidates:
-            candidates.append(fallback)
-        return candidates
 
 settings = Settings()

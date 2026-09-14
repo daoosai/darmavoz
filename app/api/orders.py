@@ -1,19 +1,27 @@
 from datetime import date as date_type
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
 from app.models.models import Client, Driver, Order, User
 from app.schemas.order import CheckoutRequest, DriverCancelOrderRequest, ManualOrderAssignIn, OrderDeleteOut, OrderOut
-from app.security.auth import get_current_approved_driver, get_current_logist_user, get_current_user, get_optional_current_client
+from app.security.auth import (
+    OrderAccessActor,
+    get_current_approved_driver,
+    get_current_client,
+    get_current_logist_user,
+    get_current_order_actor,
+)
 from app.services.dispatch_service import (
     assign_order_to_driver_manually,
     cancel_driver_assigned_order,
     create_checkout_order,
     delete_order_by_id,
     get_order_by_id,
+    list_orders_for_client,
+    list_orders_for_driver,
     list_recent_orders,
     restart_dispatch_for_order,
 )
@@ -30,12 +38,20 @@ router = APIRouter()
 async def list_orders(
     is_deleted: bool = False,
     show_deleted: bool | None = None,
-    current_user: User = Depends(get_current_user),
+    actor: OrderAccessActor = Depends(get_current_order_actor),
     db: AsyncSession = Depends(get_db),
 ) -> list[Order]:
-    del current_user
-    deleted_filter = show_deleted if show_deleted is not None else is_deleted
-    return await list_recent_orders(db, is_deleted=deleted_filter)
+    if actor.client is not None:
+        return await list_orders_for_client(db, actor.client.id)
+
+    current_user = actor.user
+    role_name = current_user.role.name if current_user and current_user.role else None
+    if role_name in {"admin", "logist"}:
+        deleted_filter = show_deleted if show_deleted is not None else is_deleted
+        return await list_recent_orders(db, is_deleted=deleted_filter)
+    if role_name == "driver" and current_user and current_user.driver_profile is not None:
+        return await list_orders_for_driver(db, current_user.driver_profile.id)
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions to view orders")
 
 
 @router.get("/admin", response_model=list[OrderOut])
@@ -93,16 +109,22 @@ async def restart_dispatch(
 async def checkout_order(
     payload: CheckoutRequest,
     db: AsyncSession = Depends(get_db),
-    current_client: Client | None = Depends(get_optional_current_client),
+    current_client: Client = Depends(get_current_client),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> Order:
-    reservation = await reserve_order_idempotency_key(idempotency_key)
+    reservation = await reserve_order_idempotency_key(
+        idempotency_key,
+        client_id=current_client.id,
+    )
     if reservation and reservation.existing_order_id:
-        return await get_order_by_id(db, reservation.existing_order_id)
+        existing_order = await get_order_by_id(db, reservation.existing_order_id)
+        if existing_order.client_id != current_client.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        return existing_order
     try:
         order = await create_checkout_order(
             db,
-            client_id=current_client.id if current_client is not None else payload.client_id,
+            client_id=current_client.id,
             material_id=payload.material_id,
             city_id=payload.city_id,
             delivery_option_id=payload.delivery_option_id,
@@ -143,8 +165,20 @@ async def driver_cancel_order(
 @router.get("/{order_id}", response_model=OrderOut)
 async def get_order(
     order_id: UUID,
-    current_user: User = Depends(get_current_user),
+    actor: OrderAccessActor = Depends(get_current_order_actor),
     db: AsyncSession = Depends(get_db),
 ) -> Order:
-    del current_user
-    return await get_order_by_id(db, order_id)
+    order = await get_order_by_id(db, order_id)
+    if actor.client is not None:
+        if order.client_id != actor.client.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions to view this order")
+        return order
+
+    current_user = actor.user
+    role_name = current_user.role.name if current_user and current_user.role else None
+    if role_name in {"admin", "logist"}:
+        return order
+    if role_name == "driver" and current_user and current_user.driver_profile is not None:
+        if order.driver_id == current_user.driver_profile.id:
+            return order
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions to view this order")

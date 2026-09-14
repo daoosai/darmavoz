@@ -2797,6 +2797,17 @@ function EnhancedEditQuarryModal({
             </label>
           </div>
 
+          {formData.twogis_id ? (
+            <a
+              href={`https://2gis.ru/firm/${formData.twogis_id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center rounded-xl bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700 transition hover:bg-emerald-100"
+            >
+              Открыть карточку в 2ГИС ↗
+            </a>
+          ) : null}
+
           {formData.id ? <CrmPanel
             token={token}
             pointKind="quarry"

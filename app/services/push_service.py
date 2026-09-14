@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import json
 import logging
 from pathlib import Path
 from uuid import UUID
@@ -27,16 +29,33 @@ def _token_debug_suffix(token: str | None) -> str | None:
 
 
 def _get_firebase_credentials_path() -> Path | None:
-    for candidate in settings.firebase_credentials_candidates:
-        if candidate.exists():
-            return candidate
-    return None
+    configured_path = (settings.FIREBASE_KEY_PATH or "").strip()
+    if not configured_path:
+        return None
+    candidate = Path(configured_path)
+    return candidate if candidate.is_file() else None
+
+
+def _get_firebase_credentials_info() -> dict | None:
+    encoded_credentials = (settings.FIREBASE_CREDENTIALS_BASE64 or "").strip()
+    if not encoded_credentials:
+        return None
+    try:
+        decoded = base64.b64decode(encoded_credentials, validate=True)
+        credentials_info = json.loads(decoded.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
+        logger.warning("firebase_credentials_base64_invalid")
+        return None
+    return credentials_info if isinstance(credentials_info, dict) else None
 
 
 def _get_firebase_app():
     try:
         return firebase_admin.get_app()
     except ValueError:
+        credentials_info = _get_firebase_credentials_info()
+        if credentials_info is not None:
+            return firebase_admin.initialize_app(credentials.Certificate(credentials_info))
         credentials_path = _get_firebase_credentials_path()
         if credentials_path is None:
             logger.warning("firebase_credentials_missing")

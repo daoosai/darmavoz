@@ -97,6 +97,7 @@ jobs:
           DARMAVOZ_VERSION_CODE: ${{ env.RELEASE_VERSION_CODE }}
         run: |
           set -euo pipefail
+          chmod +x gradlew
           ./gradlew clean assembleRelease bundleRelease
 
       - name: Verify signed release APK metadata

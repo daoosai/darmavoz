@@ -34,7 +34,7 @@ if (!/^\d+(\.\d+)*$/.test(version)) {
   throw new Error(`Unsupported version format: ${version}`);
 }
 
-const versionCode = Number(version.replace(/\./g, ''));
+const versionCode = Number(packageJson.versionCode ?? version.replace(/\./g, ''));
 
 if (!Number.isInteger(versionCode) || versionCode <= 0) {
   throw new Error(`Invalid computed versionCode: ${versionCode}`);

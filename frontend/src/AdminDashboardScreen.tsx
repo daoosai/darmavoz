@@ -55,6 +55,7 @@ import SupportScreen from "./SupportScreen";
 import { type PlacementStatus } from "./placement";
 import NotificationCenter from "./components/shared/NotificationCenter";
 import DriverMapComponent from "./components/DriverMapComponent";
+import TransportTariffsPanel from "./components/admin/TransportTariffsPanel";
 
 interface AdminCategory {
   id: string;
@@ -2582,6 +2583,8 @@ export default function AdminDashboardScreen({
                 </>
               ) : (
                 <>
+                  <TransportTariffsPanel token={token} />
+                  <div className="pt-2">
                   {/* Delivery Options Tab */}
                   <div className="flex justify-between items-center bg-white p-5 rounded-2xl shadow-sm border border-slate-100 mb-2">
                     <h2 className="text-xl font-bold text-slate-800">
@@ -2803,6 +2806,7 @@ export default function AdminDashboardScreen({
                       )}
                     </div>
                   )}
+                  </div>
                 </>
               )}
             </div>

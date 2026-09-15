@@ -30,6 +30,9 @@ interface MarketplaceOption {
   point_type: string;
   distance: number;
   delivery_cost: number | null | undefined;
+  delivery_cost_per_trip?: number | null;
+  trip_count?: number | null;
+  trip_capacity_m3?: number | null;
   material_cost: number;
   total_amount: number;
   primary_image_url?: string | null;
@@ -563,6 +566,10 @@ export default function CartScreen({
             ]);
             const displayedOption = findDeliveryOptionForVolume(deliveryOptions, draftVolume) || item.deliveryOption;
             const maxVolume = Number(deliveryOptions.at(-1)?.capacity_m3 || displayedOption.capacity_m3);
+            const calculation = calcResults[item.id];
+            const tripCount = isMarketplaceCalculation(calculation)
+              ? calculation.best_option.trip_count
+              : null;
             const vehicleImageUrl = resolveMediaUrl(
               displayedOption.primary_image_url
                 || displayedOption.media_files?.[0]?.public_url
@@ -600,6 +607,19 @@ export default function CartScreen({
 
                   <div className="line-clamp-1 text-[14px] text-slate-500">
                     {displayedOption.title} (машина до {displayedOption.capacity_m3} м³)
+                  </div>
+
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    {displayedOption.transport_category?.title && (
+                      <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700">
+                        {displayedOption.transport_category.title}
+                      </span>
+                    )}
+                    {tripCount && (
+                      <span className="text-xs font-medium text-slate-500">
+                        {tripCount} {tripCount === 1 ? "рейс" : "рейсов"}
+                      </span>
+                    )}
                   </div>
 
                   {item.comment && (

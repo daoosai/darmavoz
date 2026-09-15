@@ -384,6 +384,14 @@ async def build_order(
     delivery_lon: float | None = None,
     mileage_km: float | None = None,
     delivery_rate_per_km_snapshot: float | None = None,
+    transport_category_id: UUID | None = None,
+    delivery_tariff_id: UUID | None = None,
+    trip_count: int | None = None,
+    trip_capacity_m3_snapshot: float | None = None,
+    tariff_distance_from_km_snapshot: float | None = None,
+    tariff_distance_to_km_snapshot: float | None = None,
+    min_delivery_price_snapshot: float | None = None,
+    delivery_cost_per_trip: float | None = None,
     delivery_cost: float | None = None,
     total_amount: float | None = None,
     calculation_source: str | None = None,
@@ -416,6 +424,8 @@ async def build_order(
         city_id=city.id,
         client_id=client.id,
         delivery_option_id=delivery_option.id,
+        transport_category_id=transport_category_id or delivery_option.transport_category_id,
+        delivery_tariff_id=delivery_tariff_id,
         quarry_id=quarry_id,
         address=address,
         pickup_address=pickup_address,
@@ -426,6 +436,12 @@ async def build_order(
         delivery_lon=delivery_lon,
         mileage_km=round(mileage_km, 2) if mileage_km is not None else None,
         delivery_rate_per_km_snapshot=delivery_rate_per_km_snapshot,
+        trip_count=trip_count,
+        trip_capacity_m3_snapshot=trip_capacity_m3_snapshot,
+        tariff_distance_from_km_snapshot=tariff_distance_from_km_snapshot,
+        tariff_distance_to_km_snapshot=tariff_distance_to_km_snapshot,
+        min_delivery_price_snapshot=min_delivery_price_snapshot,
+        delivery_cost_per_trip=delivery_cost_per_trip,
         delivery_cost=round(delivery_cost, 2) if delivery_cost is not None else None,
         calculation_source=calculation_source,
         route_calculated_at=route_calculated_at,
@@ -504,12 +520,11 @@ async def create_checkout_order(
         material_id=material_id,
         delivery_option_id=delivery_option_id,
     )
-    maximum_volume = float(delivery_option.capacity_m3) * quantity
-    requested_volume = maximum_volume if volume is None else float(volume)
-    if requested_volume > maximum_volume:
+    requested_volume = float(delivery_option.capacity_m3) * quantity if volume is None else float(volume)
+    if requested_volume <= 0:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Requested volume exceeds the selected vehicle capacity.",
+            detail="Requested volume must be greater than zero.",
         )
 
     resolved_delivery_address = delivery_address
@@ -552,6 +567,13 @@ async def create_checkout_order(
     resolved_mileage_km: float | None = None
     delivery_rate_per_km_snapshot: float | None = None
     delivery_cost: float | None = None
+    trip_count: int | None = None
+    trip_capacity_m3_snapshot: float | None = None
+    delivery_tariff_id: UUID | None = None
+    tariff_distance_from_km_snapshot: float | None = None
+    tariff_distance_to_km_snapshot: float | None = None
+    min_delivery_price_snapshot: float | None = None
+    delivery_cost_per_trip: float | None = None
     route_calculated_at: datetime | None = None
     calculation_source: str | None = None
     pricing = None
@@ -579,17 +601,25 @@ async def create_checkout_order(
         selected_quarry = pricing.quarry
         resolved_mileage_km = pricing.mileage_km
 
-        if delivery_option.delivery_rate_per_km is None:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Delivery rate is not configured",
-            )
-
-        delivery_rate_per_km_snapshot = round(float(delivery_option.delivery_rate_per_km), 2)
         if pricing is not None:
             delivery_cost = pricing.delivery_cost
             point_material_total = pricing.material_cost
             point_unit_price = pricing.material_unit_price
+            trip_count = pricing.trip_count
+            trip_capacity_m3_snapshot = pricing.trip_capacity_m3
+            delivery_cost_per_trip = pricing.delivery_cost_per_trip
+            delivery_tariff_id = pricing.delivery_tariff.id if pricing.delivery_tariff else None
+            tariff_distance_from_km_snapshot = (
+                pricing.delivery_tariff.distance_from_km if pricing.delivery_tariff else None
+            )
+            tariff_distance_to_km_snapshot = (
+                pricing.delivery_tariff.distance_to_km if pricing.delivery_tariff else None
+            )
+            min_delivery_price_snapshot = pricing.minimum_delivery_price
+            delivery_rate_per_km_snapshot = (
+                float(pricing.delivery_tariff.rate_per_km)
+                if pricing.delivery_tariff else float(delivery_option.delivery_rate_per_km or 0)
+            )
         else:
             offer_price = await session.scalar(
                 select(quarry_materials.c.price).where(
@@ -615,11 +645,7 @@ async def create_checkout_order(
             )
         route_calculated_at = utcnow()
         calculation_source = "yandex_auto"
-    elif (
-        resolved_delivery_lat is not None
-        and resolved_delivery_lon is not None
-        and delivery_option.delivery_rate_per_km is not None
-    ):
+    elif resolved_delivery_lat is not None and resolved_delivery_lon is not None:
         pricing = await calculate_client_order_pricing(
             session,
             city_id=city.id,
@@ -634,9 +660,18 @@ async def create_checkout_order(
         resolved_mileage_km = pricing.mileage_km
         point_material_total = pricing.material_cost
         point_unit_price = pricing.material_unit_price
-        if pricing.delivery_option.delivery_rate_per_km is not None:
-            delivery_rate_per_km_snapshot = round(float(pricing.delivery_option.delivery_rate_per_km), 2)
-            delivery_cost = pricing.delivery_cost
+        delivery_rate_per_km_snapshot = (
+            float(pricing.delivery_tariff.rate_per_km)
+            if pricing.delivery_tariff else float(pricing.delivery_option.delivery_rate_per_km or 0)
+        )
+        delivery_cost = pricing.delivery_cost
+        trip_count = pricing.trip_count
+        trip_capacity_m3_snapshot = pricing.trip_capacity_m3
+        delivery_cost_per_trip = pricing.delivery_cost_per_trip
+        delivery_tariff_id = pricing.delivery_tariff.id if pricing.delivery_tariff else None
+        tariff_distance_from_km_snapshot = pricing.delivery_tariff.distance_from_km if pricing.delivery_tariff else None
+        tariff_distance_to_km_snapshot = pricing.delivery_tariff.distance_to_km if pricing.delivery_tariff else None
+        min_delivery_price_snapshot = pricing.minimum_delivery_price
         route_calculated_at = utcnow()
         calculation_source = "yandex_auto"
 
@@ -671,6 +706,14 @@ async def create_checkout_order(
         delivery_lon=resolved_delivery_lon,
         mileage_km=resolved_mileage_km,
         delivery_rate_per_km_snapshot=delivery_rate_per_km_snapshot,
+        transport_category_id=delivery_option.transport_category_id,
+        delivery_tariff_id=delivery_tariff_id,
+        trip_count=trip_count,
+        trip_capacity_m3_snapshot=trip_capacity_m3_snapshot,
+        tariff_distance_from_km_snapshot=tariff_distance_from_km_snapshot,
+        tariff_distance_to_km_snapshot=tariff_distance_to_km_snapshot,
+        min_delivery_price_snapshot=min_delivery_price_snapshot,
+        delivery_cost_per_trip=delivery_cost_per_trip,
         delivery_cost=delivery_cost,
         total_amount=point_material_total,
         calculation_source=calculation_source,

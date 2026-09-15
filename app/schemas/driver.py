@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.schemas.catalog import DeliveryOptionOut, MediaFileOut
+from app.schemas.transport import TransportCategoryOut
 from app.services.storage import normalize_public_url
 
 
@@ -26,6 +27,7 @@ class VehicleCreate(BaseModel):
     vehicle_type: str | None = None
     body_volume_m3: float | None = None
     delivery_option_id: UUID
+    transport_category_id: UUID | None = None
     rate_mode: str | None = None
     rate_per_ton_km: float | None = None
     fixed_rate: float | None = None
@@ -46,6 +48,7 @@ class VehicleOut(BaseModel):
     tonnage_min: float | None = None
     tonnage_max: float | None = None
     delivery_option_id: UUID | None = None
+    transport_category_id: UUID | None = None
     rate_mode: str | None = None
     rate_per_ton_km: float | None = None
     fixed_rate: float | None = None
@@ -57,6 +60,7 @@ class VehicleOut(BaseModel):
     created_at: datetime
     media_files: list[MediaFileOut] = Field(default_factory=list)
     delivery_option: DeliveryOptionOut | None = None
+    transport_category: TransportCategoryOut | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -160,6 +164,7 @@ class DriverVehicleUpdate(BaseModel):
     vehicle_type: str | None = None
     body_volume_m3: float | None = None
     delivery_option_id: UUID | None = None
+    transport_category_id: UUID | None = None
     rate_mode: str | None = None
     rate_per_ton_km: float | None = None
     fixed_rate: float | None = None

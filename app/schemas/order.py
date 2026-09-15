@@ -13,6 +13,7 @@ from pydantic import (
 )
 
 from app.schemas.catalog import DeliveryOptionOut, MaterialOut, MediaFileOut
+from app.schemas.transport import DeliveryTariffOut, TransportCategoryOut
 from app.schemas.driver import DriverResponse
 from app.services.storage import normalize_public_url
 
@@ -159,6 +160,9 @@ class ClientOrderCalculationOptionOut(BaseModel):
     distance: float
     material_cost: float
     delivery_cost: float
+    delivery_cost_per_trip: float | None = None
+    trip_count: int = 1
+    trip_capacity_m3: float | None = None
     total_amount: float
     primary_image_url: str | None = None
     media_files: list[MediaFileOut] = Field(default_factory=list)
@@ -521,6 +525,8 @@ class OrderOut(BaseModel):
     client_phone: str | None = None
     driver_id: UUID | None = None
     delivery_option_id: UUID | None = None
+    transport_category_id: UUID | None = None
+    delivery_tariff_id: UUID | None = None
     quarry_id: UUID | None = None
     pickup_point_type: str | None = None
     current_offer_id: UUID | None = None
@@ -533,6 +539,12 @@ class OrderOut(BaseModel):
     delivery_lon: float | None = None
     mileage_km: float | None = None
     delivery_rate_per_km_snapshot: float | None = None
+    trip_count: int | None = None
+    trip_capacity_m3_snapshot: float | None = None
+    tariff_distance_from_km_snapshot: float | None = None
+    tariff_distance_to_km_snapshot: float | None = None
+    min_delivery_price_snapshot: float | None = None
+    delivery_cost_per_trip: float | None = None
     delivery_cost: float | None = None
     calculation_source: CalculationSource | None = None
     route_calculated_at: datetime | None = None
@@ -552,6 +564,8 @@ class OrderOut(BaseModel):
     assigned_at: datetime | None = None
     created_at: datetime
     delivery_option: DeliveryOptionOut | None = None
+    transport_category: TransportCategoryOut | None = None
+    delivery_tariff: DeliveryTariffOut | None = None
     driver: DriverResponse | None = None
     items: list[OrderItemOut] = Field(default_factory=list)
 

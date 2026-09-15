@@ -289,6 +289,9 @@ class Vehicle(Base):
     tonnage_min: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     tonnage_max: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     delivery_option_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("delivery_options.id"), nullable=True)
+    transport_category_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("transport_categories.id"), nullable=True, index=True
+    )
     rate_mode: Mapped[Optional[str]] = mapped_column(
         SQLEnum("per_ton_km", "fixed", name="vehicle_rate_mode"),
         nullable=True,
@@ -315,6 +318,7 @@ class Vehicle(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     delivery_option: Mapped[Optional["DeliveryOption"]] = relationship("DeliveryOption", back_populates="vehicles")
+    transport_category: Mapped[Optional["TransportCategory"]] = relationship("TransportCategory", lazy="selectin")
     drivers: Mapped[List["Driver"]] = relationship("Driver", back_populates="vehicle")
 
 
@@ -578,6 +582,9 @@ class DeliveryOption(Base):
     __tablename__ = "delivery_options"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    transport_category_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("transport_categories.id"), nullable=True, index=True
+    )
     capacity_m3: Mapped[float] = mapped_column(Float, nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -595,10 +602,89 @@ class DeliveryOption(Base):
 
     orders: Mapped[List["Order"]] = relationship("Order", back_populates="delivery_option")
     vehicles: Mapped[List["Vehicle"]] = relationship("Vehicle", back_populates="delivery_option")
+    transport_category: Mapped[Optional["TransportCategory"]] = relationship(
+        "TransportCategory", back_populates="delivery_options", lazy="selectin"
+    )
     quarries: Mapped[List["Quarry"]] = relationship(
         "Quarry",
         secondary=quarry_delivery_options,
         back_populates="delivery_options",
+    )
+
+
+class TransportCategory(Base):
+    __tablename__ = "transport_categories"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    slug: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    capacity_min_m3: Mapped[float] = mapped_column(Float, nullable=False)
+    capacity_max_m3: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, server_default="true")
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    delivery_options: Mapped[List["DeliveryOption"]] = relationship(
+        "DeliveryOption", back_populates="transport_category"
+    )
+    tariffs: Mapped[List["DeliveryTariff"]] = relationship(
+        "DeliveryTariff", back_populates="transport_category", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        CheckConstraint("capacity_min_m3 > 0", name="ck_transport_category_capacity_min"),
+        CheckConstraint(
+            "capacity_max_m3 IS NULL OR capacity_max_m3 >= capacity_min_m3",
+            name="ck_transport_category_capacity_range",
+        ),
+    )
+
+
+class DeliveryTariff(Base):
+    __tablename__ = "delivery_tariffs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    city_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cities.id"), nullable=False, index=True)
+    transport_category_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("transport_categories.id"), nullable=False, index=True
+    )
+    distance_from_km: Mapped[float] = mapped_column(Float, nullable=False)
+    distance_to_km: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    rate_per_km: Mapped[float] = mapped_column(Float, nullable=False)
+    min_price_quarry: Mapped[float] = mapped_column(Float, nullable=False)
+    min_price_warehouse: Mapped[float] = mapped_column(Float, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, server_default="true")
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    city: Mapped["City"] = relationship("City")
+    transport_category: Mapped["TransportCategory"] = relationship(
+        "TransportCategory", back_populates="tariffs"
+    )
+
+    __table_args__ = (
+        CheckConstraint("distance_from_km >= 0", name="ck_delivery_tariff_distance_from"),
+        CheckConstraint(
+            "distance_to_km IS NULL OR distance_to_km > distance_from_km",
+            name="ck_delivery_tariff_distance_range",
+        ),
+        CheckConstraint("rate_per_km >= 0", name="ck_delivery_tariff_rate"),
+        CheckConstraint("min_price_quarry >= 0", name="ck_delivery_tariff_min_quarry"),
+        CheckConstraint("min_price_warehouse >= 0", name="ck_delivery_tariff_min_warehouse"),
+        UniqueConstraint(
+            "city_id", "transport_category_id", "distance_from_km",
+            name="uq_delivery_tariff_city_category_from",
+        ),
+        Index(
+            "ix_delivery_tariff_lookup",
+            "city_id", "transport_category_id", "is_active", "distance_from_km",
+        ),
     )
 
 
@@ -1100,6 +1186,12 @@ class Order(CityScoped, Base):
     delivery_option_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         ForeignKey("delivery_options.id"), nullable=True
     )
+    transport_category_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("transport_categories.id"), nullable=True
+    )
+    delivery_tariff_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("delivery_tariffs.id"), nullable=True
+    )
     quarry_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("quarries.id"), nullable=True)
     current_offer_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("order_offers.id"), nullable=True)
     address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -1111,6 +1203,12 @@ class Order(CityScoped, Base):
     delivery_lon: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     mileage_km: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     delivery_rate_per_km_snapshot: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    trip_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    trip_capacity_m3_snapshot: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    tariff_distance_from_km_snapshot: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    tariff_distance_to_km_snapshot: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    min_delivery_price_snapshot: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    delivery_cost_per_trip: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     delivery_cost: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     calculation_source: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     route_calculated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -1142,6 +1240,8 @@ class Order(CityScoped, Base):
     delivery_option: Mapped[Optional["DeliveryOption"]] = relationship(
         "DeliveryOption", back_populates="orders"
     )
+    transport_category: Mapped[Optional["TransportCategory"]] = relationship("TransportCategory", lazy="selectin")
+    delivery_tariff: Mapped[Optional["DeliveryTariff"]] = relationship("DeliveryTariff", lazy="selectin")
     quarry: Mapped[Optional["Quarry"]] = relationship("Quarry", back_populates="orders")
     items: Mapped[List["OrderItem"]] = relationship(
         "OrderItem", back_populates="order", cascade="all, delete-orphan"

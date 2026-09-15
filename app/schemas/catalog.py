@@ -5,6 +5,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.services.storage import normalize_public_url
+from app.schemas.transport import TransportCategoryOut
 
 
 class MediaFileOut(BaseModel):
@@ -89,6 +90,7 @@ class MaterialUpdate(BaseModel):
 
 class DeliveryOptionOut(BaseModel):
     id: UUID
+    transport_category_id: UUID | None = None
     capacity_m3: float
     title: str
     description: str | None = None
@@ -101,6 +103,7 @@ class DeliveryOptionOut(BaseModel):
     image_url: str | None = None
     primary_image_url: str | None = None
     media_files: list[MediaFileOut] = Field(default_factory=list)
+    transport_category: TransportCategoryOut | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -161,6 +164,7 @@ class CartItemOut(BaseModel):
 
 
 class DeliveryOptionCreate(BaseModel):
+    transport_category_id: UUID | None = None
     capacity_m3: float
     title: str
     description: str | None = None
@@ -183,6 +187,7 @@ class DeliveryOptionCreate(BaseModel):
 
 
 class DeliveryOptionUpdate(BaseModel):
+    transport_category_id: UUID | None = None
     capacity_m3: float | None = None
     title: str | None = None
     description: str | None = None

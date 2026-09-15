@@ -2,7 +2,7 @@ from app.services.cities import resolve_city
 import asyncio
 import logging
 from dataclasses import dataclass
-from math import isfinite
+from math import ceil, isfinite
 from uuid import UUID
 
 import httpx
@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.models.models import (
     DeliveryOption,
+    DeliveryTariff,
     Material,
     MediaFile,
     ModerationStatus,
@@ -137,17 +138,49 @@ async def cache_2gis_route_distance(
 class ClientOrderPricing:
     material: Material
     delivery_option: DeliveryOption
+    delivery_tariff: DeliveryTariff | None
     quarry: Quarry
     quantity: int
+    trip_count: int
+    trip_capacity_m3: float
     volume: float
     material_unit_price: float
     minimum_delivery_price: float
     material_cost: float
     mileage_km: float
     delivery_cost: float
+    delivery_cost_per_trip: float
     total_amount: float
     primary_image_url: str | None
     media_files: list[MediaFile]
+
+
+async def resolve_delivery_tariff(
+    session: AsyncSession,
+    *,
+    city_id: UUID,
+    delivery_option: DeliveryOption,
+    mileage_km: float,
+) -> DeliveryTariff | None:
+    """Return the active tariff interval for a category and route distance.
+
+    Legacy options without a category keep their previous global calculation until
+    their Sprint 23 migration data is available.
+    """
+    if delivery_option.transport_category_id is None:
+        return None
+    return await session.scalar(
+        select(DeliveryTariff)
+        .where(
+            DeliveryTariff.city_id == city_id,
+            DeliveryTariff.transport_category_id == delivery_option.transport_category_id,
+            DeliveryTariff.is_active.is_(True),
+            DeliveryTariff.distance_from_km <= mileage_km,
+            (DeliveryTariff.distance_to_km.is_(None))
+            | (DeliveryTariff.distance_to_km > mileage_km),
+        )
+        .order_by(DeliveryTariff.distance_from_km.desc(), DeliveryTariff.sort_order.asc())
+    )
 
 
 async def load_pickup_point_media_files(
@@ -356,18 +389,19 @@ async def calculate_client_order_options(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Выбранный тип машины недоступен.",
         )
-    if delivery_option.delivery_rate_per_km is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Для выбранного типа машины не настроен тариф доставки.",
-        )
-    maximum_volume = float(delivery_option.capacity_m3) * quantity
-    requested_volume = maximum_volume if volume is None else float(volume)
-    if requested_volume > maximum_volume:
+    capacity_m3 = float(delivery_option.capacity_m3)
+    if capacity_m3 <= 0 or not isfinite(capacity_m3):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Requested volume exceeds the selected vehicle capacity.",
+            detail="Selected delivery capacity must be greater than zero.",
         )
+    requested_volume = capacity_m3 * quantity if volume is None else float(volume)
+    if requested_volume <= 0 or not isfinite(requested_volume):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Requested volume must be greater than zero.",
+        )
+    trip_count = ceil(requested_volume / capacity_m3)
     if not has_valid_coordinates(delivery_lat, delivery_lon):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -456,34 +490,66 @@ async def calculate_client_order_options(
         )
         if index < len(priced_rows) - 1:
             await asyncio.sleep(ROUTE_REQUEST_INTERVAL_SECONDS)
-    rate = round(float(delivery_option.delivery_rate_per_km), 2)
     options: list[ClientOrderPricing] = []
     for (quarry, material_unit_price, media_files), mileage_km in zip(
         priced_rows,
         distances,
     ):
         primary_image_url = media_files[0].public_url if media_files else None
-        minimum_delivery_price = resolve_min_delivery_price(delivery_option, quarry.point_type)
+        delivery_tariff = await resolve_delivery_tariff(
+            session,
+            city_id=city.id,
+            delivery_option=delivery_option,
+            mileage_km=mileage_km,
+        )
+        if delivery_tariff is None:
+            if delivery_option.transport_category_id is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Для выбранной категории не настроен тариф доставки в этом городе.",
+                )
+            if delivery_option.delivery_rate_per_km is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Для выбранного типа машины не настроен тариф доставки.",
+                )
+            rate = round(float(delivery_option.delivery_rate_per_km), 2)
+            minimum_delivery_price = resolve_min_delivery_price(delivery_option, quarry.point_type)
+        else:
+            rate = round(float(delivery_tariff.rate_per_km), 2)
+            minimum_delivery_price = round(
+                float(
+                    delivery_tariff.min_price_warehouse
+                    if quarry.point_type in {"accumulator", "warehouse", "supplier"}
+                    else delivery_tariff.min_price_quarry
+                ),
+                2,
+            )
         material_cost = round(
             material_unit_price * requested_volume,
             2,
         )
-        delivery_cost = max(
+        delivery_cost_per_trip = max(
             round(mileage_km * rate, 2),
             minimum_delivery_price,
         )
+        delivery_cost = round(delivery_cost_per_trip * trip_count, 2)
         options.append(
             ClientOrderPricing(
                 material=material,
                 delivery_option=delivery_option,
+                delivery_tariff=delivery_tariff,
                 quarry=quarry,
                 quantity=quantity,
+                trip_count=trip_count,
+                trip_capacity_m3=capacity_m3,
                 volume=requested_volume,
                 material_unit_price=material_unit_price,
                 minimum_delivery_price=minimum_delivery_price,
                 material_cost=material_cost,
                 mileage_km=mileage_km,
                 delivery_cost=delivery_cost,
+                delivery_cost_per_trip=round(delivery_cost_per_trip, 2),
                 total_amount=round(material_cost + delivery_cost, 2),
                 primary_image_url=primary_image_url,
                 media_files=media_files,

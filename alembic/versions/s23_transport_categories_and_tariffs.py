@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID
 
 
-revision = "s23_transport_categories_and_tariffs"
+revision = "s23_transport_tariffs"
 down_revision = "s22_publish_parser_cities"
 branch_labels = None
 depends_on = None

@@ -58,6 +58,25 @@ interface ClientAddressBottomSheetProps {
   }) => void;
 }
 
+const CITY_MATCH_RADIUS_KM = 100;
+
+function distanceInKilometers(
+  fromLat: number,
+  fromLon: number,
+  toLat: number,
+  toLon: number,
+): number {
+  const toRadians = (value: number) => (value * Math.PI) / 180;
+  const latitudeDelta = toRadians(toLat - fromLat);
+  const longitudeDelta = toRadians(toLon - fromLon);
+  const haversine =
+    Math.sin(latitudeDelta / 2) ** 2
+    + Math.cos(toRadians(fromLat)) * Math.cos(toRadians(toLat))
+    * Math.sin(longitudeDelta / 2) ** 2;
+
+  return 2 * 6371 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+}
+
 export default function ClientAddressBottomSheet({
   isOpen,
   onClose,
@@ -265,9 +284,32 @@ export default function ClientAddressBottomSheet({
     const normalizeName = (value: string) => value.trim().toLocaleLowerCase().replace(/ё/g, "е");
     const supportedCities = useCityStore.getState().cities.filter((city) => city.is_active);
     const cityName = suggestion.cityName.trim();
-    const matchedCity = cityName
+    const exactCity = cityName
       ? supportedCities.find((city) => normalizeName(city.name) === normalizeName(cityName))
       : undefined;
+    const closestCity = supportedCities.reduce<{ city: typeof supportedCities[number]; distanceKm: number } | undefined>(
+      (closest, city) => {
+        const cityLat = Number(city.center_lat);
+        const cityLon = Number(city.center_lon);
+        if (!Number.isFinite(cityLat) || !Number.isFinite(cityLon)) return closest;
+
+        const distanceKm = distanceInKilometers(suggestion.lat!, suggestion.lon!, cityLat, cityLon);
+        return !closest || distanceKm < closest.distanceKm ? { city, distanceKm } : closest;
+      },
+      undefined,
+    );
+    const matchedCity = exactCity
+      ?? (closestCity && closestCity.distanceKm < CITY_MATCH_RADIUS_KM ? closestCity.city : undefined);
+
+    console.info("[city-matching] address suggestion resolved", {
+      suggestionCity: cityName || null,
+      coordinates: { lat: suggestion.lat, lon: suggestion.lon },
+      matchType: exactCity ? "exact-name" : matchedCity ? "radius" : "none",
+      matchedCity: matchedCity?.name ?? null,
+      closestCity: closestCity?.city.name ?? null,
+      closestDistanceKm: closestCity ? Number(closestCity.distanceKm.toFixed(2)) : null,
+      radiusKm: CITY_MATCH_RADIUS_KM,
+    });
 
     if (cityName && !matchedCity) {
       showWarning(`В г. ${cityName} доставка пока недоступна. Выберите адрес в поддерживаемом регионе.`);

@@ -94,10 +94,6 @@ class DeliveryOptionOut(BaseModel):
     capacity_m3: float
     title: str
     description: str | None = None
-    base_price: float | None = None
-    delivery_rate_per_km: float | None = None
-    min_price_quarry: float = 5000.0
-    min_price_warehouse: float = 3000.0
     is_active: bool
     sort_order: int
     image_url: str | None = None
@@ -168,10 +164,6 @@ class DeliveryOptionCreate(BaseModel):
     capacity_m3: float
     title: str
     description: str | None = None
-    base_price: float | None = None
-    delivery_rate_per_km: float | None = None
-    min_price_quarry: float = Field(default=5000.0, ge=0)
-    min_price_warehouse: float = Field(default=3000.0, ge=0)
     is_active: bool = True
     sort_order: int = 0
 
@@ -191,10 +183,6 @@ class DeliveryOptionUpdate(BaseModel):
     capacity_m3: float | None = None
     title: str | None = None
     description: str | None = None
-    base_price: float | None = None
-    delivery_rate_per_km: float | None = None
-    min_price_quarry: float | None = Field(default=None, ge=0)
-    min_price_warehouse: float | None = Field(default=None, ge=0)
     is_active: bool | None = None
     sort_order: int | None = None
 

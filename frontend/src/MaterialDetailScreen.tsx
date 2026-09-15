@@ -32,10 +32,6 @@ export interface DeliveryOption {
   } | null;
   capacity_m3: number;
   title: string;
-  base_price?: number | null;
-  delivery_rate_per_km?: number;
-  min_price_quarry?: number;
-  min_price_warehouse?: number;
   primary_image_url?: string;
   image_url?: string;
   media_files?: MediaFile[];

@@ -98,10 +98,6 @@ interface AdminDeliveryOption {
   id: string;
   title: string;
   capacity_m3: number;
-  base_price: number;
-  delivery_rate_per_km?: number;
-  min_price_quarry?: number;
-  min_price_warehouse?: number;
   is_active: boolean;
   media_files?: AdminMediaFile[];
   primary_image_url?: string;
@@ -1205,11 +1201,6 @@ export default function AdminDashboardScreen({
       const payload: any = {
         title: editingDelivery.title,
         capacity_m3: Number(editingDelivery.capacity_m3),
-        delivery_rate_per_km: editingDelivery.delivery_rate_per_km
-          ? Number(editingDelivery.delivery_rate_per_km)
-          : null,
-        min_price_quarry: Number(editingDelivery.min_price_quarry ?? 5000),
-        min_price_warehouse: Number(editingDelivery.min_price_warehouse ?? 3000),
         is_active: editingDelivery.is_active ?? true,
         sort_order: 10,
       };
@@ -1623,8 +1614,6 @@ export default function AdminDashboardScreen({
       setEditingDelivery({
         is_active: true,
         capacity_m3: 0,
-        min_price_quarry: 5000,
-        min_price_warehouse: 3000,
       });
       setIsDeliveryModalOpen(true);
     }
@@ -2621,9 +2610,6 @@ export default function AdminDashboardScreen({
                               <th className="px-6 py-4">Фото</th>
                               <th className="px-6 py-4">Название</th>
                               <th className="px-6 py-4">Кубатура (м³)</th>
-                              <th className="px-6 py-4">Минималка с карьера</th>
-                              <th className="px-6 py-4">Минималка с накопителя</th>
-                              <th className="px-6 py-4">Ставка за км</th>
                               <th className="px-6 py-4">Статус</th>
                               <th className="px-6 py-4 text-right">Действия</th>
                             </tr>
@@ -2660,17 +2646,6 @@ export default function AdminDashboardScreen({
                                   </td>
                                   <td className="px-6 py-4 text-sm font-medium">
                                     {opt.capacity_m3} м³
-                                  </td>
-                                  <td className="px-6 py-4 text-sm font-medium">
-                                    {opt.min_price_quarry ?? 5000} ₽
-                                  </td>
-                                  <td className="px-6 py-4 text-sm font-medium">
-                                    {opt.min_price_warehouse ?? 3000} ₽
-                                  </td>
-                                  <td className="px-6 py-4 text-sm font-medium whitespace-nowrap">
-                                    {opt.delivery_rate_per_km
-                                      ? opt.delivery_rate_per_km + " ₽/км"
-                                      : "Не задана"}
                                   </td>
                                   <td className="px-6 py-4">
                                     {opt.is_active === false ? (
@@ -2766,18 +2741,6 @@ export default function AdminDashboardScreen({
                                   <div className="flex flex-col gap-0.5 mt-1">
                                     <span className="text-sm font-medium text-slate-700">
                                       Кубатура: {opt.capacity_m3} м³
-                                    </span>
-                                    <span className="text-sm text-slate-500">
-                                      Минималка с карьера: {opt.min_price_quarry ?? 5000} ₽
-                                    </span>
-                                    <span className="text-sm text-slate-500">
-                                      Минималка с накопителя: {opt.min_price_warehouse ?? 3000} ₽
-                                    </span>
-                                    <span className="text-sm text-slate-500">
-                                      Ставка за км:{" "}
-                                      {opt.delivery_rate_per_km
-                                        ? opt.delivery_rate_per_km + " ₽/км"
-                                        : "Не задана"}
                                     </span>
                                   </div>
                                 </div>
@@ -3859,7 +3822,7 @@ export default function AdminDashboardScreen({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5">
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
                     Объем (м³)
@@ -3874,69 +3837,6 @@ export default function AdminDashboardScreen({
                       setEditingDelivery({
                         ...editingDelivery,
                         capacity_m3: parseFloat(e.target.value),
-                      })
-                    }
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                    Ставка за 1 км (₽)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="Например, 95"
-                    value={editingDelivery.delivery_rate_per_km ?? ""}
-                    onChange={(e) =>
-                      setEditingDelivery({
-                        ...editingDelivery,
-                        delivery_rate_per_km: e.target.value
-                          ? parseFloat(e.target.value)
-                          : undefined,
-                      })
-                    }
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                    Минималка с карьера (₽)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="Например, 5000"
-                    value={editingDelivery.min_price_quarry ?? ""}
-                    onChange={(e) =>
-                      setEditingDelivery({
-                        ...editingDelivery,
-                        min_price_quarry: e.target.value
-                          ? parseFloat(e.target.value)
-                          : undefined,
-                      })
-                    }
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                    Минималка с накопителя (₽)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="Например, 3000"
-                    value={editingDelivery.min_price_warehouse ?? ""}
-                    onChange={(e) =>
-                      setEditingDelivery({
-                        ...editingDelivery,
-                        min_price_warehouse: e.target.value
-                          ? parseFloat(e.target.value)
-                          : undefined,
                       })
                     }
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"

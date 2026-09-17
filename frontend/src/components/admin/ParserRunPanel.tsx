@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { Loader2, MapPin, Play } from "lucide-react";
 import toast from "react-hot-toast";
@@ -23,6 +23,7 @@ type AddressSuggestion = {
 };
 
 type ParserCoordinates = { lat: number; lon: number };
+type CatalogMaterial = { id: string; name: string };
 
 type ParserPreviewItem = { twogis_id: string; name: string; address: string; lat: number; lon: number; phone?: string | null; parsed_data: Record<string, unknown>; is_update: boolean };
 type ParserPreviewResult = {
@@ -111,6 +112,8 @@ export default function ParserRunPanel({
   const [lon, setLon] = useState('');
   const [radius, setRadius] = useState("50000");
   const [keyword, setKeyword] = useState(keywords[target][0]);
+  const [selectedMaterialId, setSelectedMaterialId] = useState("");
+  const [catalogMaterials, setCatalogMaterials] = useState<CatalogMaterial[]>([]);
   const [loading, setLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -120,6 +123,22 @@ export default function ParserRunPanel({
   const [isResultModalOpen, setIsResultModalOpen] = useState(false);
   const suggestionRequestRef = useRef(0);
   const skippedItemsCount = parserResult?.skipped_items.reduce((total, item) => total + (item.count || 1), 0) || 0;
+
+  useEffect(() => {
+    if (target !== "material") return;
+    let cancelled = false;
+    void fetch(`${baseURL}/catalog/materials/`)
+      .then(async (response) => response.ok ? response.json() : [])
+      .then((data) => {
+        if (!cancelled) setCatalogMaterials(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setCatalogMaterials([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [target]);
 
   const notifyCoordinates = (nextLat: string, nextLon: string) => {
     const parsedLat = parseCoordinate(nextLat);
@@ -209,7 +228,15 @@ export default function ParserRunPanel({
       const response = await fetch(`${baseURL}/admin/parser/run`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ city, center_lat: centerLat, center_lon: centerLon, radius_m: Number(radius), target, keyword }),
+        body: JSON.stringify({
+          city,
+          center_lat: centerLat,
+          center_lon: centerLon,
+          radius_m: Number(radius),
+          target,
+          keyword,
+          material_id: target === "material" && selectedMaterialId ? selectedMaterialId : undefined,
+        }),
       });
       if (!response.ok) {
         const errorPayload = await response.json().catch(() => ({ status: response.status }));
@@ -240,7 +267,20 @@ export default function ParserRunPanel({
     if (items.length === 0) return;
     setLoading(true);
     try {
-      const response = await fetch(`${baseURL}/admin/parser/save`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ city, center_lat: parseCoordinate(lat), center_lon: parseCoordinate(lon), radius_m: Number(radius), target, keyword, items }) });
+      const response = await fetch(`${baseURL}/admin/parser/save`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          city,
+          center_lat: parseCoordinate(lat),
+          center_lon: parseCoordinate(lon),
+          radius_m: Number(radius),
+          target,
+          keyword,
+          material_id: target === "material" && selectedMaterialId ? selectedMaterialId : undefined,
+          items,
+        }),
+      });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось сохранить точки"));
       toast.success(`Сохранено: ${data.created + data.updated}`);
@@ -284,10 +324,31 @@ export default function ParserRunPanel({
       <label className="text-xs font-bold text-slate-600">Широта<input required type="text" inputMode="decimal" value={lat} onChange={(event) => { setLat(event.target.value); notifyCoordinates(event.target.value, lon); }} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" /></label>
       <label className="text-xs font-bold text-slate-600">Долгота<input required type="text" inputMode="decimal" value={lon} onChange={(event) => { setLon(event.target.value); notifyCoordinates(lat, event.target.value); }} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" /></label>
       <label className="text-xs font-bold text-slate-600">Радиус, м<input required type="number" min="100" max="50000" value={radius} onChange={(event) => setRadius(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" /></label>
-      <label className="text-xs font-bold text-slate-600">Ключевое слово
-        <input required type="text" maxLength={100} list={`parser-keywords-${target}`} value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder={keywords[target][0]} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" />
-        <datalist id={`parser-keywords-${target}`}>{keywords[target].map((value) => <option key={value} value={value} />)}</datalist>
-        {target === "material" ? <span className="mt-1 block font-normal">Например: песок оптом. Можно ввести свою фразу.</span> : null}
+      <label className="text-xs font-bold text-slate-600">{target === "material" ? "Материал или свой запрос" : "Ключевое слово"}
+        {target === "material" ? (
+          <>
+            <select
+              value={selectedMaterialId}
+              onChange={(event) => {
+                const materialId = event.target.value;
+                setSelectedMaterialId(materialId);
+                const material = catalogMaterials.find((item) => item.id === materialId);
+                if (material) setKeyword(material.name);
+              }}
+              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+            >
+              <option value="">Свой текстовый запрос</option>
+              {catalogMaterials.map((material) => <option key={material.id} value={material.id}>{material.name}</option>)}
+            </select>
+            {!selectedMaterialId ? (
+              <input required type="text" maxLength={100} list={`parser-keywords-${target}`} value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder={keywords[target][0]} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" />
+            ) : <span className="mt-1 block font-normal">Материал будет автоматически добавлен к новым точкам с ценой 0.</span>}
+          </>
+        ) : <>
+          <input required type="text" maxLength={100} list={`parser-keywords-${target}`} value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder={keywords[target][0]} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" />
+          <datalist id={`parser-keywords-${target}`}>{keywords[target].map((value) => <option key={value} value={value} />)}</datalist>
+        </>}
+        {target === "material" && !selectedMaterialId ? <><datalist id={`parser-keywords-${target}`}>{keywords[target].map((value) => <option key={value} value={value} />)}</datalist><span className="mt-1 block font-normal">Можно выбрать материал из каталога или ввести свою фразу.</span></> : null}
       </label>
       <button type="submit" disabled={loading || !token} className="flex items-center justify-center gap-2 self-end rounded-lg bg-sky-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}Запустить</button>
       </form>

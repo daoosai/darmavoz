@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from botocore.exceptions import ClientError
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -94,8 +94,13 @@ async def _hard_delete_septic_profile(
 
 
 @router.get("/septic-providers", response_model=list[SepticProfileOut])
-async def list_septic_providers(city_id: UUID | None = None, db: AsyncSession = Depends(get_db)):
+async def list_septic_providers(
+    response: Response,
+    city_id: UUID | None = None,
+    db: AsyncSession = Depends(get_db),
+):
     selected_city = await resolve_city(db, city_id)
+    response.headers["Cache-Control"] = "no-store, max-age=0"
     stmt = select(SepticProviderProfile).where(SepticProviderProfile.city_id == selected_city.id).where(SepticProviderProfile.moderation_status == "approved", SepticProviderProfile.is_active.is_(True), SepticProviderProfile.is_deleted.is_(False))
     profiles = (await db.execute(stmt.order_by(SepticProviderProfile.created_at.desc()))).scalars().all()
     return await _serialize_septic_profiles(list(profiles), db)

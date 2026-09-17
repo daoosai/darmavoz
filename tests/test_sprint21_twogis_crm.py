@@ -3,7 +3,7 @@ import httpx
 from fastapi import HTTPException
 from sqlalchemy import select
 
-from app.models.models import City, CrmStatus, PointAuditLog, Quarry, Role, User
+from app.models.models import City, CrmStatus, Material, PointAuditLog, Quarry, Role, User, WaterPoint, quarry_materials
 from app.security.jwt import create_access_token
 from app.services.pickup_points import is_pickup_point_publicly_available
 from app.schemas.parser import ParserRunRequest
@@ -624,6 +624,128 @@ async def test_admin_parser_creates_parsed_quarry_and_audit_log(client, session_
     assert audit_log.old_status is None
     assert audit_log.new_status == CrmStatus.auto_added.value
     assert not is_pickup_point_publicly_available(point)
+
+
+@pytest.mark.asyncio
+async def test_parser_selected_material_creates_muted_point_with_material_link(client, session_factory, monkeypatch):
+    async with session_factory() as session:
+        admin_role = await ensure_role(session, "admin")
+        await create_user(session, username="parser_material_link_admin", role=admin_role)
+        material = Material(
+            name="Parser linked sand",
+            price=1000,
+            unit="m3",
+            min_volume=1,
+            is_active=True,
+        )
+        session.add(material)
+        await session.commit()
+        material_id = str(material.id)
+
+    async def fake_search_places(_payload):
+        return [
+            ParsedPlace(
+                twogis_id="2gis-material-link",
+                name="Linked material quarry",
+                address="Tyumen, Material road, 1",
+                lat=57.2,
+                lon=65.6,
+                phone="+79990000003",
+                parsed_data={"raw": {}},
+            )
+        ], False
+
+    monkeypatch.setattr("app.api.admin_parser.search_places", fake_search_places)
+    payload = {
+        "city": "Parser material city",
+        "center_lat": 57.2,
+        "center_lon": 65.6,
+        "radius_m": 1000,
+        "target": "material",
+        "keyword": "Parser linked sand",
+        "material_id": material_id,
+    }
+    preview = await client.post(
+        "/api/v1/admin/parser/run",
+        headers=auth_headers("parser_material_link_admin"),
+        json=payload,
+    )
+    assert preview.status_code == 200
+
+    saved = await client.post(
+        "/api/v1/admin/parser/save",
+        headers=auth_headers("parser_material_link_admin"),
+        json={**payload, "items": preview.json()["items"]},
+    )
+    assert saved.status_code == 200
+    assert saved.json()["created"] == 1
+
+    async with session_factory() as session:
+        point = await session.scalar(select(Quarry).where(Quarry.twogis_id == "2gis-material-link"))
+        material_link = await session.execute(
+            select(quarry_materials.c.price, quarry_materials.c.is_active).where(
+                quarry_materials.c.quarry_id == point.id,
+                quarry_materials.c.material_id == material_id,
+            )
+        )
+
+    assert point is not None
+    assert point.crm_status == CrmStatus.in_progress.value
+    assert point.is_active is False
+    assert material_link.one() == (0, True)
+
+
+@pytest.mark.asyncio
+async def test_water_map_includes_approved_active_point_regardless_of_crm_stage(client, session_factory):
+    async with session_factory() as session:
+        city = City(
+            name="Water map city",
+            region="Test region",
+            code="water-map-city",
+            center_lat=57.15,
+            center_lon=65.53,
+            map_zoom=11,
+            min_lat=57.0,
+            min_lon=65.3,
+            max_lat=57.3,
+            max_lon=65.8,
+            is_active=True,
+        )
+        session.add(city)
+        await session.flush()
+        approved_point = WaterPoint(
+            city_id=city.id,
+            water_type="paid",
+            name="Approved parser water point",
+            source="2GIS",
+            address="Water road, 1",
+            lat=57.15,
+            lon=65.53,
+            price=100,
+            is_active=True,
+            moderation_status="approved",
+            crm_status=CrmStatus.auto_added.value,
+        )
+        pending_point = WaterPoint(
+            city_id=city.id,
+            water_type="paid",
+            name="Pending water point",
+            source="2GIS",
+            address="Water road, 2",
+            lat=57.16,
+            lon=65.54,
+            price=100,
+            is_active=True,
+            moderation_status="pending_moderation",
+            crm_status=CrmStatus.activated.value,
+        )
+        session.add_all([approved_point, pending_point])
+        await session.commit()
+
+    response = await client.get(f"/api/v1/water-points/map?city_id={city.id}")
+
+    assert response.status_code == 200
+    assert {item["id"] for item in response.json()} == {str(approved_point.id)}
 
 
 @pytest.mark.asyncio

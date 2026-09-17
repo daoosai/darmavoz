@@ -2,12 +2,13 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
 
 ParserTarget = Literal["material", "water"]
 CrmStatusValue = Literal[
     "auto_added",
+    "in_progress",
     "invite_sent",
     "response_received",
     "interested",
@@ -46,6 +47,7 @@ class ParserRunRequest(BaseModel):
     radius_m: int = Field(ge=100, le=50000)
     target: ParserTarget
     keyword: Annotated[str, StringConstraints(strip_whitespace=False)] = Field(min_length=1, max_length=100)
+    material_id: UUID | None = None
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
@@ -55,6 +57,12 @@ class ParserRunRequest(BaseModel):
         if not value.strip():
             raise ValueError("Введите ключевое слово")
         return value
+
+    @model_validator(mode="after")
+    def validate_material_selection(self):
+        if self.material_id is not None and self.target != "material":
+            raise ValueError("material_id is only supported for material parsing")
+        return self
 
 
 

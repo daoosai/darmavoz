@@ -8,12 +8,13 @@ from typing import Any, Iterator
 
 import httpx
 from fastapi import HTTPException, status
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.cities import get_or_create_parsed_city, resolve_city
 from app.core.config import settings
-from app.models.models import CrmStatus, ModerationStatus, PointAuditLog, Quarry, WaterPoint
+from app.models.models import CrmStatus, Material, ModerationStatus, PointAuditLog, Quarry, WaterPoint, quarry_materials
 from app.schemas.parser import MATERIAL_KEYWORDS, ParserResultItem, ParserRunRequest, ParserRunResult, ParserSkippedItem, ParserTarget, normalize_parser_keyword
 
 
@@ -508,6 +509,11 @@ async def upsert_places(
     skipped_items: list[ParserSkippedItem] | None = None,
 ) -> ParserRunResult:
     selected_city = await resolve_city(db, payload.city_id, require_active=False) if payload.city_id is not None else None
+    selected_material = None
+    if payload.material_id is not None:
+        selected_material = await db.get(Material, payload.material_id)
+        if selected_material is None or not selected_material.is_active:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Selected material is unavailable")
     result = ParserRunResult(
         found=len(places),
         total_found=len(places) + sum(item.count for item in skipped_items or []),
@@ -560,6 +566,11 @@ async def upsert_places(
             continue
 
         if payload.target == "material":
+            crm_status = (
+                CrmStatus.in_progress.value
+                if selected_material is not None
+                else CrmStatus.auto_added.value
+            )
             point = Quarry(
                 city_id=city.id,
                 name=place.name,
@@ -572,7 +583,7 @@ async def upsert_places(
                 is_active=False,
                 moderation_status=ModerationStatus.pending_moderation.value,
                 twogis_id=place.twogis_id,
-                crm_status=CrmStatus.auto_added.value,
+                crm_status=crm_status,
                 parsed_data=place.parsed_data,
             )
         else:
@@ -593,13 +604,25 @@ async def upsert_places(
             )
         db.add(point)
         await db.flush()
+        if selected_material is not None:
+            material_link = insert(quarry_materials).values(
+                quarry_id=point.id,
+                material_id=selected_material.id,
+                price=0,
+                is_active=True,
+            )
+            await db.execute(
+                material_link.on_conflict_do_nothing(
+                    index_elements=[quarry_materials.c.quarry_id, quarry_materials.c.material_id],
+                )
+            )
         db.add(
             PointAuditLog(
                 point_id=point.id,
                 point_kind=point_kind,
                 admin_id=admin_id,
                 old_status=None,
-                new_status=CrmStatus.auto_added.value,
+                new_status=point.crm_status,
             )
         )
         result.created += 1

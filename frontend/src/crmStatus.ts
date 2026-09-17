@@ -1,5 +1,6 @@
 export type CrmStatus =
   | "auto_added"
+  | "in_progress"
   | "invite_sent"
   | "response_received"
   | "interested"
@@ -11,6 +12,7 @@ export type CrmStatus =
 
 export const CRM_STATUS_LABELS: Record<CrmStatus, string> = {
   auto_added: "Добавлен автоматически",
+  in_progress: "В работе",
   invite_sent: "Приглашение отправлено",
   response_received: "Получен ответ",
   interested: "Заинтересован",
@@ -23,6 +25,7 @@ export const CRM_STATUS_LABELS: Record<CrmStatus, string> = {
 
 export const CRM_STATUS_CLASSES: Record<CrmStatus, string> = {
   auto_added: "bg-slate-100 text-slate-700",
+  in_progress: "bg-sky-100 text-sky-800",
   invite_sent: "bg-amber-100 text-amber-800",
   response_received: "bg-sky-100 text-sky-800",
   interested: "bg-blue-100 text-blue-800",

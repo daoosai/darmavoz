@@ -216,6 +216,7 @@ async def get_pickup_point(
         point.crm_status == CrmStatus.activated.value
         and not is_pickup_point_publicly_available(point)
     ) or point.crm_status not in {
+        CrmStatus.in_progress.value,
         CrmStatus.invite_sent.value,
         CrmStatus.activated.value,
     }:

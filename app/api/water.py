@@ -5,7 +5,7 @@ from uuid import UUID
 
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy import String, cast, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.cities import resolve_city, ensure_owner_city
@@ -21,20 +21,6 @@ from app.services.storage import StorageNotConfiguredError, get_storage_service
 router = APIRouter()
 water_septic_partner_router = APIRouter()
 logger = logging.getLogger(__name__)
-
-# Parsed (`auto_added`) and refused/hidden records stay in the admin CRM only.
-# The remaining stages are shown to clients as muted points until ready.
-CLIENT_MAP_HIDDEN_CRM_STATUSES = (
-    "auto_added",
-    "parsed",
-    "hidden",
-    "refused",
-)
-
-
-def _client_map_crm_filter():
-    return cast(WaterPoint.crm_status, String).notin_(CLIENT_MAP_HIDDEN_CRM_STATUSES)
-
 
 def _is_water_point_ready(point: WaterPoint) -> bool:
     is_free = point.is_free or point.water_type == "free"
@@ -136,8 +122,11 @@ async def list_water_points_for_map(
     selected_city = await resolve_city(db, city_id)
     response.headers["Cache-Control"] = "no-store, max-age=0"
     stmt = select(WaterPoint).where(WaterPoint.city_id == selected_city.id).where(
+        WaterPoint.moderation_status == "approved",
+        WaterPoint.is_active.is_(True),
         WaterPoint.is_deleted.is_(False),
-        _client_map_crm_filter(),
+        WaterPoint.lat.is_not(None),
+        WaterPoint.lon.is_not(None),
     )
     if water_type in {"free", "paid", "unknown"}:
         stmt = stmt.where(WaterPoint.water_type == water_type)

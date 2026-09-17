@@ -696,6 +696,85 @@ async def test_parser_selected_material_creates_muted_point_with_material_link(c
 
 
 @pytest.mark.asyncio
+async def test_parser_save_links_selected_material_to_existing_quarry(client, session_factory, monkeypatch):
+    async with session_factory() as session:
+        admin_role = await ensure_role(session, "admin")
+        await create_user(session, username="parser_existing_material_admin", role=admin_role)
+        material = Material(
+            name="Existing quarry material",
+            price=1000,
+            unit="m3",
+            min_volume=1,
+            is_active=True,
+        )
+        quarry = Quarry(
+            name="Existing parsed quarry",
+            short_name="Existing parsed quarry",
+            point_type="quarry",
+            address="Existing road, 1",
+            lat=57.2,
+            lon=65.6,
+            twogis_id="2gis-existing-material-link",
+            parsed_data={"raw": {}},
+        )
+        session.add_all([material, quarry])
+        await session.commit()
+        material_id = str(material.id)
+
+    async def fake_search_places(_payload):
+        return [
+            ParsedPlace(
+                twogis_id="2gis-existing-material-link",
+                name="Existing parsed quarry",
+                address="Existing road, 1",
+                lat=57.2,
+                lon=65.6,
+                phone=None,
+                parsed_data={"raw": {}},
+            )
+        ], False
+
+    monkeypatch.setattr("app.api.admin_parser.search_places", fake_search_places)
+    payload = {
+        "city": "Existing material city",
+        "center_lat": 57.2,
+        "center_lon": 65.6,
+        "radius_m": 1000,
+        "target": "material",
+        "keyword": "Existing quarry material",
+        "material_id": material_id,
+    }
+    preview = await client.post(
+        "/api/v1/admin/parser/run",
+        headers=auth_headers("parser_existing_material_admin"),
+        json=payload,
+    )
+    assert preview.status_code == 200
+    assert preview.json()["items"][0]["is_update"] is True
+
+    saved = await client.post(
+        "/api/v1/admin/parser/save",
+        headers=auth_headers("parser_existing_material_admin"),
+        json={**payload, "items": preview.json()["items"]},
+    )
+    assert saved.status_code == 200
+    assert saved.json()["updated"] == 1
+
+    async with session_factory() as session:
+        point = await session.scalar(
+            select(Quarry).where(Quarry.twogis_id == "2gis-existing-material-link")
+        )
+        material_link = await session.execute(
+            select(quarry_materials.c.price, quarry_materials.c.is_active).where(
+                quarry_materials.c.quarry_id == point.id,
+                quarry_materials.c.material_id == material_id,
+            )
+        )
+
+    assert material_link.one() == (0, True)
+
+
+@pytest.mark.asyncio
 async def test_water_map_includes_approved_active_point_regardless_of_crm_stage(client, session_factory):
     async with session_factory() as session:
         city = City(

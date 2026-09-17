@@ -353,12 +353,10 @@ class RejectionDecision(BaseModel):
 
 
 class SupplierRegisterRequest(BaseModel):
-    city_ids: list[UUID] | None = Field(default=None, min_length=1)
     phone: str = Field(min_length=10, max_length=20)
 
 
 class SupplierVerifyCodeRequest(BaseModel):
-    city_ids: list[UUID] | None = Field(default=None, min_length=1)
     phone: str = Field(min_length=10, max_length=20)
     code: str = Field(min_length=4, max_length=8)
 

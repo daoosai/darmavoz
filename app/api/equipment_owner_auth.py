@@ -1,5 +1,3 @@
-import json
-from app.services.cities import initialize_service_cities
 import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -64,7 +62,6 @@ async def register_equipment_owner(
         log_prefix="equipment_owner_register_sms_auth",
     )
     await redis.setex(_code_key(phone), TTL_SECONDS, stored_code)
-    await redis.setex(_code_key(phone) + ":cities", TTL_SECONDS, json.dumps([str(value) for value in payload.city_ids] if payload.city_ids is not None else None))
     return PartnerSmsChallengeOut(phone=phone)
 
 
@@ -84,7 +81,6 @@ async def verify_equipment_owner_registration(
         otp_key=_code_key(phone),
         submitted_code=payload.code.strip(),
         stored_code=saved_code,
-        additional_otp_keys=(_code_key(phone) + ":cities",),
     ):
         raise HTTPException(status_code=400, detail="INVALID_OTP")
     user = await _get_equipment_owner_user(db, phone)
@@ -104,9 +100,6 @@ async def verify_equipment_owner_registration(
         )
         db.add(user)
         await db.flush()
-        saved_cities = await redis.get(_code_key(phone) + ":cities")
-        ids = payload.city_ids if payload.city_ids is not None else json.loads(saved_cities) if saved_cities else None
-        await initialize_service_cities(db, user_id=user.id, city_ids=ids)
         try:
             await db.commit()
         except IntegrityError as exc:

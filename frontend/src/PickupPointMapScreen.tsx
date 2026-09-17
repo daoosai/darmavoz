@@ -35,7 +35,7 @@ export interface PickupPointMarker {
   is_free?: boolean;
   unit: string;
   min_delivery_price: number;
-  crm_status: "auto_added" | "invite_sent" | "response_received" | "interested" | "registered" | "registration_completed" | "activated" | "refused" | "call_later";
+  crm_status: "auto_added" | "in_progress" | "invite_sent" | "response_received" | "interested" | "registered" | "registration_completed" | "activated" | "refused" | "call_later";
   primary_image_url?: string | null;
 }
 

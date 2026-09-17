@@ -7,6 +7,7 @@ type PointKind = "quarry" | "water";
 type Owner = { id: string; display_name?: string | null; username?: string | null; phone?: string | null };
 const CRM_STATUS_KEYS: CrmStatus[] = [
   "auto_added",
+  "in_progress",
   "invite_sent",
   "response_received",
   "interested",

@@ -17,8 +17,8 @@ interface WaterPoint {
   name?: string | null;
   source: string;
   address: string | null;
-  lat: number;
-  lon: number;
+  lat: number | string;
+  lon: number | string;
   phone?: string | null;
   price?: number | null;
   is_free?: boolean;
@@ -35,8 +35,8 @@ interface SepticProfile {
   id: string;
   phone: string;
   address: string;
-  lat: number;
-  lon: number;
+  lat: number | string;
+  lon: number | string;
   tank_volume_m3: number | string;
   service_price: number | string;
   primary_image_url?: string | null;
@@ -52,6 +52,12 @@ const isPointReady = (point: WaterPoint) =>
   (point.crm_status === "activated" || point.crm_status === "agreed")
   && point.is_active
   && (isFreePoint(point) || (point.price !== null && point.price !== undefined && point.price > 0));
+
+const hasMapCoordinates = ({ lat, lon }: { lat: number | string; lon: number | string }) =>
+  Number.isFinite(Number(lat)) && Number.isFinite(Number(lon));
+
+const mapCoordinates = ({ lat, lon }: { lat: number | string; lon: number | string }): [number, number] =>
+  [Number(lon), Number(lat)];
 
 export default function WaterMapScreen({ initialTab = "water" }: { initialTab?: ServiceTab }) {
   const cityId = useCityStore((state) => state.cityId);
@@ -184,7 +190,7 @@ export default function WaterMapScreen({ initialTab = "water" }: { initialTab?: 
     markerRefs.current.forEach((marker) => marker.destroy?.());
     if (serviceTab === "septic") {
       markerRefs.current = septicProfiles
-        .filter((profile) => Number.isFinite(profile.lat) && Number.isFinite(profile.lon))
+        .filter(hasMapCoordinates)
         .map((profile) => {
           const element = document.createElement("button");
           element.type = "button";
@@ -207,7 +213,7 @@ export default function WaterMapScreen({ initialTab = "water" }: { initialTab?: 
           element.addEventListener("click", () => setSelectedId(profile.id));
 
           return new mapgl.HtmlMarker(mapRef.current, {
-            coordinates: [profile.lon, profile.lat],
+            coordinates: mapCoordinates(profile),
             html: element,
           });
         });
@@ -216,7 +222,7 @@ export default function WaterMapScreen({ initialTab = "water" }: { initialTab?: 
     }
 
     markerRefs.current = visiblePoints
-      .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon))
+      .filter(hasMapCoordinates)
       .map((point) => {
         const element = document.createElement("button");
         element.type = "button";
@@ -239,7 +245,7 @@ export default function WaterMapScreen({ initialTab = "water" }: { initialTab?: 
         element.addEventListener("click", () => setSelectedId(point.id));
 
         return new mapgl.HtmlMarker(mapRef.current, {
-          coordinates: [point.lon, point.lat],
+          coordinates: mapCoordinates(point),
           html: element,
         });
       });

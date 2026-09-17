@@ -387,6 +387,7 @@ class PickupPointType(str, Enum):
 
 class CrmStatus(str, Enum):
     auto_added = "auto_added"
+    in_progress = "in_progress"
     invite_sent = "invite_sent"
     response_received = "response_received"
     interested = "interested"

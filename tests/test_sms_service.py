@@ -15,6 +15,7 @@ from app.services.sms_service import (
     validate_sms_otp,
     verify_sms_otp_code,
 )
+from app.services.google_play_reviewer import GOOGLE_PLAY_REVIEWER_OTP
 from app.utils.phones import normalize_otp_phone
 
 
@@ -79,6 +80,37 @@ async def test_sms_fails_closed_when_real_sms_is_not_configured(monkeypatch):
         )
 
     assert exc_info.value.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_google_play_reviewer_uses_static_otp_without_sms_or_rate_limit(monkeypatch):
+    redis = RateLimitRedis()
+    monkeypatch.setattr(settings, "USE_REAL_SMS", True)
+    monkeypatch.setattr(settings, "SMSRU_API_KEY", None)
+
+    await enforce_sms_rate_limit(redis, "+7 (000) 000-00-00")
+    stored_code = await send_auth_sms_code(
+        phone_number="70000000000",
+        code="1234",
+        log_prefix="test_sms",
+    )
+
+    assert stored_code == GOOGLE_PLAY_REVIEWER_OTP
+    assert redis.values == {}
+    assert await validate_sms_otp(
+        redis=redis,
+        phone_number="+70000000000",
+        otp_key="otp:driver_login:+70000000000",
+        submitted_code=GOOGLE_PLAY_REVIEWER_OTP,
+        stored_code="any-value",
+    )
+    assert not await validate_sms_otp(
+        redis=redis,
+        phone_number="+70000000000",
+        otp_key="otp:driver_login:+70000000000",
+        submitted_code="1234",
+        stored_code=GOOGLE_PLAY_REVIEWER_OTP,
+    )
 
 
 @pytest.mark.parametrize(

@@ -7,6 +7,10 @@ from fastapi import HTTPException, status
 from redis.asyncio import Redis
 
 from app.core.config import settings
+from app.services.google_play_reviewer import (
+    GOOGLE_PLAY_REVIEWER_OTP,
+    is_google_play_reviewer_phone,
+)
 from app.utils.phones import normalize_otp_phone
 
 logger = logging.getLogger("uvicorn.error")
@@ -41,6 +45,9 @@ def _phone_rate_limit_suffix(phone_number: str) -> str:
 
 async def enforce_sms_rate_limit(redis: Redis, phone_number: str) -> None:
     """Limit SMS sends per phone without persisting unauthenticated users."""
+    if is_google_play_reviewer_phone(phone_number):
+        return
+
     suffix = _phone_rate_limit_suffix(phone_number)
     lock_key = f"otp_lock:{suffix}"
     cooldown_key = f"ratelimit:sms_cooldown:{suffix}"
@@ -130,6 +137,9 @@ async def validate_sms_otp(
     additional_otp_keys: tuple[str, ...] = (),
 ) -> bool:
     """Validate OTP and invalidate it after three bad guesses."""
+    if is_google_play_reviewer_phone(phone_number):
+        return secrets.compare_digest(submitted_code, GOOGLE_PLAY_REVIEWER_OTP)
+
     suffix = _phone_rate_limit_suffix(phone_number)
     lock_key = f"otp_lock:{suffix}"
     attempts_key = f"otp_attempts:{suffix}"
@@ -240,6 +250,10 @@ def sanitize_smsru_response(response_data: object, phone_number: str) -> object:
 
 async def send_auth_sms_code(*, phone_number: str, code: str, log_prefix: str) -> str:
     masked_phone = mask_sms_phone(phone_number)
+    if is_google_play_reviewer_phone(phone_number):
+        logger.info("%s_google_play_reviewer_static_otp normalized_phone=%s", log_prefix, masked_phone)
+        return GOOGLE_PLAY_REVIEWER_OTP
+
     message = (
         f"{code} — код для входа в приложение Дармавоз. "
         "Никому не сообщайте код."

@@ -1,14 +1,14 @@
 """Restore the explicit in-progress CRM stage for parser material links.
 
 Revision ID: s23_parser_material_in_progress
-Revises: s23_transport_tariffs
+Revises: s22_publish_parser_cities
 """
 
 from alembic import op
 
 
 revision = "s23_parser_material_in_progress"
-down_revision = "s23_transport_tariffs"
+down_revision = "s22_publish_parser_cities"
 branch_labels = None
 depends_on = None
 

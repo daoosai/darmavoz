@@ -7,6 +7,7 @@ import { isServerVersionNewer } from "./version";
 const API_SUFFIX_RE = /\/api\/v1\/?$/;
 const PROD_APK_PATH = "/static/darmavoz.apk";
 const TEST_APK_PATH = "/static/darmavoz-test.apk";
+const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=ru.darmavoz.app";
 
 const getPublicBaseUrl = () => {
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || baseURL;
@@ -83,8 +84,16 @@ export default function UpdateBanner() {
     return null;
   }
 
-  const cacheBustedDownloadUrl = new URL(updateInfo.downloadUrl);
-  cacheBustedDownloadUrl.searchParams.set("v", Date.now().toString());
+  const handleUpdateClick = () => {
+    if (isTestContour()) {
+      const cacheBustedDownloadUrl = new URL(updateInfo.downloadUrl);
+      cacheBustedDownloadUrl.searchParams.set("v", Date.now().toString());
+      window.open(cacheBustedDownloadUrl.toString(), "_system");
+      return;
+    }
+
+    window.open(PLAY_STORE_URL, "_blank");
+  };
 
   return (
     <div className="mb-4 flex flex-col items-start gap-4 rounded-2xl border border-blue-100 bg-blue-50 p-4 shadow-sm sm:p-5">
@@ -100,7 +109,7 @@ export default function UpdateBanner() {
         </div>
       </div>
       <button
-        onClick={() => window.open(cacheBustedDownloadUrl.toString(), "_system")}
+        onClick={handleUpdateClick}
         className="flex w-full items-center justify-center rounded-xl bg-[#2DB0E6] py-3 font-bold text-white shadow-sm transition-all hover:bg-[#2DB0E6] active:scale-[0.98]"
         type="button"
       >

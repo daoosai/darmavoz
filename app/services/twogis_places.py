@@ -5,6 +5,7 @@ import logging
 import re
 from dataclasses import dataclass
 from typing import Any, Iterator
+from uuid import UUID
 
 import httpx
 from fastapi import HTTPException, status
@@ -499,6 +500,26 @@ async def search_places(payload: ParserRunRequest) -> PlacesSearchResult:
     )
 
 
+async def _link_material_to_quarry(
+    db: AsyncSession,
+    *,
+    quarry_id: UUID,
+    material_id: UUID,
+) -> None:
+    material_link = insert(quarry_materials).values(
+        quarry_id=quarry_id,
+        material_id=material_id,
+        price=0,
+        is_active=True,
+    )
+    await db.execute(
+        material_link.on_conflict_do_update(
+            index_elements=[quarry_materials.c.quarry_id, quarry_materials.c.material_id],
+            set_={"is_active": True},
+        )
+    )
+
+
 async def upsert_places(
     db: AsyncSession,
     *,
@@ -548,6 +569,12 @@ async def upsert_places(
                     existing.contact_phone = place.phone
                 elif payload.target == "water" and not existing.phone:
                     existing.phone = place.phone
+            if selected_material is not None:
+                await _link_material_to_quarry(
+                    db,
+                    quarry_id=existing.id,
+                    material_id=selected_material.id,
+                )
             result.updated += 1
             result.updated_items.append(
                 ParserResultItem(id=place.twogis_id, name=place.name, phone=place.phone)
@@ -605,16 +632,10 @@ async def upsert_places(
         db.add(point)
         await db.flush()
         if selected_material is not None:
-            material_link = insert(quarry_materials).values(
+            await _link_material_to_quarry(
+                db,
                 quarry_id=point.id,
                 material_id=selected_material.id,
-                price=0,
-                is_active=True,
-            )
-            await db.execute(
-                material_link.on_conflict_do_nothing(
-                    index_elements=[quarry_materials.c.quarry_id, quarry_materials.c.material_id],
-                )
             )
         db.add(
             PointAuditLog(

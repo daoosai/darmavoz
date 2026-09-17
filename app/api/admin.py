@@ -75,6 +75,7 @@ from app.security.auth import (
 )
 from app.utils.phones import normalize_phone
 from app.services.dispatch_service import delete_order_by_id, list_recent_orders, update_order_by_logist
+from app.services.google_play_reviewer import GOOGLE_PLAY_REVIEWER_PHONE_VALUES
 from app.services.vehicle_moderation import (
     REQUIRED_VEHICLE_MEDIA_SLOTS,
     vehicle_has_required_photos,
@@ -87,6 +88,19 @@ MODERATION_PENDING_STATUSES = (
     ModerationStatus.pending_moderation.value,
     ModerationStatus.has_pending_changes.value,
 )
+
+
+def _reviewer_driver_exclusion_clause():
+    return Driver.phone.notin_(GOOGLE_PLAY_REVIEWER_PHONE_VALUES)
+
+
+def _reviewer_vehicle_exclusion_clause():
+    return ~exists(
+        select(Driver.id).where(
+            Driver.vehicle_id == Vehicle.id,
+            Driver.phone.in_(GOOGLE_PLAY_REVIEWER_PHONE_VALUES),
+        )
+    )
 
 
 class CatalogReorderItem(BaseModel):
@@ -335,7 +349,11 @@ async def _list_admin_partner_users(
         select(User)
         .join(Role)
         .options(selectinload(User.pickup_points))
-        .where(Role.name == role, User.is_deleted.is_(False))
+        .where(
+            Role.name == role,
+            User.is_deleted.is_(False),
+            User.username.notin_(GOOGLE_PLAY_REVIEWER_PHONE_VALUES),
+        )
         .order_by(func.coalesce(User.display_name, User.username))
     )
     partners = result.scalars().unique().all()
@@ -657,6 +675,7 @@ async def _load_vehicle_or_404(db: AsyncSession, vehicle_id: UUID) -> Vehicle:
         .execution_options(populate_existing=True)
         .options(selectinload(Vehicle.delivery_option))
         .where(Vehicle.id == vehicle_id)
+        .where(_reviewer_vehicle_exclusion_clause())
     )
     vehicle = result.scalar_one_or_none()
     if vehicle is None:
@@ -691,6 +710,7 @@ async def _load_driver_or_404(db: AsyncSession, driver_id: UUID) -> Driver:
             selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option),
         )
         .where(Driver.id == driver_id)
+        .where(_reviewer_driver_exclusion_clause())
     )
     driver = result.scalar_one_or_none()
     if driver is None:
@@ -707,6 +727,7 @@ async def _list_admin_drivers(db: AsyncSession) -> list[Driver]:
             selectinload(Driver.user),
             selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option),
         )
+        .where(_reviewer_driver_exclusion_clause())
         .order_by(Driver.name.asc())
     )
     drivers = list(result.scalars().all())
@@ -719,6 +740,7 @@ async def _list_admin_vehicles(db: AsyncSession) -> list[Vehicle]:
         select(Vehicle)
         .options(selectinload(Vehicle.delivery_option))
         .where(Vehicle.is_active.is_(True))
+        .where(_reviewer_vehicle_exclusion_clause())
         .order_by(Vehicle.created_at.desc(), Vehicle.title.asc())
     )
     vehicles = list(result.scalars().all())
@@ -901,6 +923,7 @@ async def _list_admin_cars(
             selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option),
         )
         .where(Driver.vehicle_id.is_not(None))
+        .where(_reviewer_driver_exclusion_clause())
     )
 
     if volume is not None:
@@ -956,6 +979,7 @@ async def _get_admin_car_stats(db: AsyncSession) -> AdminCarStatsOut:
         .outerjoin(DeliveryOption, Vehicle.delivery_option_id == DeliveryOption.id)
         .options(selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option))
         .where(Driver.vehicle_id.is_not(None))
+        .where(_reviewer_driver_exclusion_clause())
         .where(Driver.is_active.is_(True))
         .where(Vehicle.is_active.is_(True))
         .where(Driver.moderation_status == ModerationStatus.approved.value)
@@ -988,6 +1012,7 @@ async def _list_pending_moderation_items(db: AsyncSession) -> list[PendingModera
             selectinload(Driver.user),
         )
         .where(Driver.vehicle_id.is_not(None))
+        .where(_reviewer_driver_exclusion_clause())
         .where(
             Vehicle.moderation_status.in_(MODERATION_PENDING_STATUSES)
         )
@@ -1241,6 +1266,7 @@ async def get_pending_driver_moderation_count(
         .join(Vehicle, Driver.vehicle_id == Vehicle.id)
         .where(
             Driver.vehicle_id.is_not(None),
+            _reviewer_driver_exclusion_clause(),
             Vehicle.moderation_status.in_(MODERATION_PENDING_STATUSES),
         )
     )
@@ -1258,6 +1284,7 @@ async def get_moderation_counts(
         .join(Vehicle, Driver.vehicle_id == Vehicle.id)
         .where(
             Driver.vehicle_id.is_not(None),
+            _reviewer_driver_exclusion_clause(),
             Vehicle.moderation_status.in_(MODERATION_PENDING_STATUSES),
         )
     )

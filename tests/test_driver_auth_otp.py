@@ -77,6 +77,45 @@ async def test_driver_register_requires_otp_before_creating_driver(client, sessi
 
 
 @pytest.mark.asyncio
+async def test_google_play_reviewer_registration_creates_driver_account(client, session_factory, monkeypatch):
+    fake_redis = FakeRedis()
+    monkeypatch.setattr("app.api.auth.get_redis", lambda: fake_redis)
+
+    payload = {
+        "phone": "+7 (000) 000-00-00",
+        "password": "reviewer123",
+        "name": "Google Play Reviewer",
+        "vehicle_brand": "Review truck",
+        "vehicle_plate_number": "A000AA00",
+        "cubature_min": 10.0,
+        "cubature_max": 14.0,
+        "tonnage_min": 8.0,
+        "tonnage_max": 12.0,
+        "vehicle_type": "Самосвал",
+    }
+
+    challenge_response = await client.post("/api/v1/auth/driver/register", json=payload)
+
+    assert challenge_response.status_code == 202
+    assert challenge_response.json() == {"status": "sms_sent", "phone": "+70000000000"}
+    assert fake_redis.storage["otp:driver_register:+70000000000"] == "7777"
+
+    verify_response = await client.post(
+        "/api/v1/driver/auth/verify-register",
+        json={"phone": "+70000000000", "code": "7777"},
+    )
+
+    assert verify_response.status_code == 200
+    assert verify_response.json()["role"] == "driver"
+    async with session_factory() as session:
+        user = await session.scalar(select(User).where(User.username == "+70000000000"))
+        driver = await session.scalar(select(Driver).where(Driver.phone == "+70000000000"))
+
+    assert user is not None
+    assert driver is not None
+
+
+@pytest.mark.asyncio
 async def test_driver_login_returns_sms_challenge_and_verify_issues_token(client, session_factory, monkeypatch):
     fake_redis = FakeRedis()
     monkeypatch.setattr("app.api.auth.get_redis", lambda: fake_redis)

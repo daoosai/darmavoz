@@ -15,6 +15,7 @@ from sqlalchemy.orm import selectinload
 
 from app.services.cities import driver_city_clause
 from app.core.config import settings
+from app.services.google_play_reviewer import GOOGLE_PLAY_REVIEWER_PHONE_VALUES
 from app.models.models import Driver, Order, OrderDistributionHistory, OrderOffer, OrderOfferStatus, Vehicle
 from app.services.redis_client import get_redis
 
@@ -197,6 +198,7 @@ class SmartMatchingService:
             select(Driver).where(driver_city_clause(getattr(order, "city_id", None)))
             .options(selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option))
             .where(Driver.vehicle_id.is_not(None))
+            .where(Driver.phone.notin_(GOOGLE_PLAY_REVIEWER_PHONE_VALUES))
             .order_by(Driver.dispatch_priority.desc(), Driver.id.asc())
         )
         all_drivers = list((await session.scalars(query)).all())

@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from app.services.cities import resolve_city, ensure_same_city, driver_city_clause, ensure_driver_city
 from app.core.config import settings
+from app.services.google_play_reviewer import GOOGLE_PLAY_REVIEWER_PHONE_VALUES
 from app.models.models import (
     Client,
     ClientAddress,
@@ -1195,6 +1196,7 @@ def _matching_drivers_base_query(order: Order) -> Select[tuple[Driver]]:
         .join(Driver.vehicle)
         .options(selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option))
         .where(Driver.status == DriverStatus.available.value)
+        .where(Driver.phone.notin_(GOOGLE_PLAY_REVIEWER_PHONE_VALUES))
         .where(Driver.moderation_status.in_(DISPATCH_ALLOWED_MODERATION_STATUSES))
         .where(Driver.is_auto_dispatch_enabled.is_(True))
         .where(Driver.vehicle_id.is_not(None))
@@ -1231,6 +1233,7 @@ async def _log_dispatch_candidates(
         select(Driver)
         .options(selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option))
         .where(Driver.vehicle_id.is_not(None))
+        .where(Driver.phone.notin_(GOOGLE_PLAY_REVIEWER_PHONE_VALUES))
         .order_by(Driver.dispatch_priority.desc(), Driver.id.asc())
     )
     drivers = list(result.scalars().all())

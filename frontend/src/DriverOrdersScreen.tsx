@@ -28,7 +28,11 @@ import toast from "react-hot-toast";
 import { logoutCurrentSession } from "./pushAuth";
 import SupportScreen from "./SupportScreen";
 import { handleOpenNavigator } from "./openNavigator";
-import { useDriverLocationTracking } from "./useDriverLocationTracking";
+import {
+  hasBackgroundLocationPermission,
+  requestBackgroundLocationPermission,
+  useDriverLocationTracking,
+} from "./useDriverLocationTracking";
 
 export interface DriverOrder {
   id: string;
@@ -85,6 +89,10 @@ export default function DriverOrdersScreen({
   const [activeTab, setActiveTab] = useState<"orders" | "profile" | "support">("orders");
   const [isOnShift, setIsOnShift] = useState(false);
   const [isUpdatingShift, setIsUpdatingShift] = useState(false);
+  const [isPreparingShiftStart, setIsPreparingShiftStart] = useState(false);
+  const [isLocationDisclosureOpen, setIsLocationDisclosureOpen] = useState(false);
+  const [shouldStartShiftAfterDisclosure, setShouldStartShiftAfterDisclosure] = useState(false);
+  const [isLocationTrackingPermitted, setIsLocationTrackingPermitted] = useState(false);
 
   const [orders, setOrders] = useState<DriverOrder[]>([]);
 
@@ -95,7 +103,11 @@ export default function DriverOrdersScreen({
   const [moderationStatus, setModerationStatus] = useState<string | null>(null);
   const [isDriverActive, setIsDriverActive] = useState(true);
   const [driverStatus, setDriverStatus] = useState<DriverAvailabilityStatus>("offline");
-  const { trackingState } = useDriverLocationTracking({ isOnShift, token });
+  const isShiftActionPending = isUpdatingShift || isPreparingShiftStart;
+  const { trackingState } = useDriverLocationTracking({
+    isOnShift: isOnShift && isLocationTrackingPermitted,
+    token,
+  });
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playCount = useRef(0);
@@ -154,7 +166,22 @@ export default function DriverOrdersScreen({
         const profile = Array.isArray(data) ? data[0] : data;
         setModerationStatus(profile?.moderation_status || null);
         setIsDriverActive(profile?.is_active !== false);
-        setIsOnShift(Boolean(profile?.is_on_shift));
+        const profileIsOnShift = Boolean(profile?.is_on_shift);
+        let hasLocationPermission = false;
+        if (profileIsOnShift) {
+          try {
+            hasLocationPermission = await hasBackgroundLocationPermission();
+          } catch (error) {
+            console.warn("Не удалось проверить разрешение на фоновую геолокацию", error);
+          }
+        }
+
+        setIsOnShift(profileIsOnShift);
+        setIsLocationTrackingPermitted(profileIsOnShift && hasLocationPermission);
+        if (profileIsOnShift && !hasLocationPermission) {
+          setShouldStartShiftAfterDisclosure(false);
+          setIsLocationDisclosureOpen(true);
+        }
         if (isDriverAvailabilityStatus(profile?.status)) {
           setDriverStatus(profile.status);
         }
@@ -174,7 +201,7 @@ export default function DriverOrdersScreen({
     }
   };
 
-  const handleShiftChange = async (nextValue: boolean) => {
+  const handleShiftChange = async (nextValue: boolean, shouldTrack = false) => {
     const currentToken = useAuthStore.getState().token;
     if (!currentToken) return;
 
@@ -199,6 +226,7 @@ export default function DriverOrdersScreen({
 
       const data = await response.json().catch(() => ({}));
       setIsOnShift(Boolean(data?.is_on_shift ?? nextValue));
+      setIsLocationTrackingPermitted(nextValue && shouldTrack);
       if (isDriverAvailabilityStatus(data?.status)) {
         setDriverStatus(data.status);
       }
@@ -209,6 +237,67 @@ export default function DriverOrdersScreen({
     } finally {
       setIsUpdatingShift(false);
     }
+  };
+
+  const openLocationDisclosure = (startShiftAfterDisclosure: boolean) => {
+    setShouldStartShiftAfterDisclosure(startShiftAfterDisclosure);
+    setIsLocationDisclosureOpen(true);
+  };
+
+  const handleShiftToggle = async (nextValue: boolean) => {
+    if (!nextValue) {
+      setIsLocationTrackingPermitted(false);
+      await handleShiftChange(false);
+      return;
+    }
+
+    setIsPreparingShiftStart(true);
+    try {
+      if (await hasBackgroundLocationPermission()) {
+        await handleShiftChange(true, true);
+      } else {
+        openLocationDisclosure(true);
+      }
+    } catch (error) {
+      console.warn("Не удалось проверить разрешение на фоновую геолокацию", error);
+      openLocationDisclosure(true);
+    } finally {
+      setIsPreparingShiftStart(false);
+    }
+  };
+
+  const handleLocationDisclosureContinue = async () => {
+    const shouldStartShift = shouldStartShiftAfterDisclosure;
+    setIsLocationDisclosureOpen(false);
+    setIsPreparingShiftStart(true);
+
+    try {
+      const hasLocationPermission = await requestBackgroundLocationPermission();
+      if (!hasLocationPermission) {
+        setIsLocationTrackingPermitted(false);
+        toast.error("Разрешение на фоновую геолокацию не выдано");
+        return;
+      }
+
+      if (shouldStartShift) {
+        await handleShiftChange(true, true);
+      } else {
+        setIsLocationTrackingPermitted(true);
+      }
+    } catch (error) {
+      console.warn("Не удалось запросить разрешение на фоновую геолокацию", error);
+      setIsLocationTrackingPermitted(false);
+      toast.error("Не удалось запросить разрешение на геолокацию");
+    } finally {
+      setIsPreparingShiftStart(false);
+      setShouldStartShiftAfterDisclosure(false);
+    }
+  };
+
+  const handleLocationDisclosureCancel = () => {
+    setIsLocationDisclosureOpen(false);
+    setShouldStartShiftAfterDisclosure(false);
+    setIsLocationTrackingPermitted(false);
   };
 
   const checkIncomingOffer = React.useCallback(async () => {
@@ -585,9 +674,9 @@ export default function DriverOrdersScreen({
                   role="switch"
                   aria-checked={false}
                   aria-label="Начать смену"
-                  disabled={isUpdatingShift}
-                  onClick={() => handleShiftChange(true)}
-                  className={`relative h-6 w-11 shrink-0 rounded-full bg-slate-300 transition-colors ${isUpdatingShift ? "cursor-not-allowed opacity-60" : ""}`}
+                  disabled={isShiftActionPending}
+                  onClick={() => handleShiftToggle(true)}
+                  className={`relative h-6 w-11 shrink-0 rounded-full bg-slate-300 transition-colors ${isShiftActionPending ? "cursor-not-allowed opacity-60" : ""}`}
                 >
                   <span className="absolute left-0.5 top-0.5 h-5 w-5 translate-x-0 rounded-full bg-white shadow transition-transform" />
                 </button>
@@ -696,13 +785,47 @@ export default function DriverOrdersScreen({
           hasActiveOrder={orders.length > 0}
           onOpenSupport={() => setActiveTab("support")}
           isOnShift={isOnShift}
-          isUpdatingShift={isUpdatingShift}
+          isUpdatingShift={isShiftActionPending}
           trackingState={trackingState}
           driverStatus={driverStatus}
-          onShiftChange={handleShiftChange}
+          onShiftChange={handleShiftToggle}
         />
       ) : (
         <SupportScreen onBack={() => setActiveTab("profile")} />
+      )}
+
+      {isLocationDisclosureOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/50 p-4 pt-[max(env(safe-area-inset-top),2.5rem)] pb-[max(env(safe-area-inset-bottom),1rem)]"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="background-location-disclosure-title"
+        >
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+            <h2 id="background-location-disclosure-title" className="text-xl font-black text-slate-900">
+              Использование местоположения
+            </h2>
+            <p className="mt-4 text-sm leading-relaxed text-slate-600">
+              Приложение «Дармавоз» собирает данные о вашем местоположении, чтобы логисты могли отслеживать маршрут доставки, а также для автоматического назначения ближайших к вам заказов. Эти данные собираются в фоновом режиме, даже когда приложение закрыто или не используется.
+            </p>
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={handleLocationDisclosureCancel}
+                className="flex-1 rounded-xl border border-slate-200 px-4 py-3 font-bold text-slate-700 transition hover:bg-slate-50"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleLocationDisclosureContinue()}
+                className="flex-1 rounded-xl bg-[#2DB0E6] px-4 py-3 font-bold text-white transition hover:bg-[#209dd0]"
+              >
+                Продолжить
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Bottom Navigation */}

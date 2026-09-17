@@ -18,6 +18,9 @@ const FALLBACK_POSITION_OPTIONS = {
 } as const;
 
 type TrackingState = "idle" | "tracking" | "permission_denied" | "error";
+type BackgroundLocationPermissions = Awaited<
+  ReturnType<typeof BackgroundGeolocation.checkPermissions>
+>;
 
 interface UseDriverLocationTrackingParams {
   isOnShift: boolean;
@@ -26,6 +29,29 @@ interface UseDriverLocationTrackingParams {
 
 const isLocationGranted = (permissions: Awaited<ReturnType<typeof Geolocation.checkPermissions>>) =>
   permissions.location === "granted" || permissions.coarseLocation === "granted";
+
+const isBackgroundLocationGranted = (permissions: BackgroundLocationPermissions) =>
+  permissions.location === "granted" &&
+  (permissions.backgroundLocation === "granted" || permissions.backgroundLocation === "always");
+
+export const hasBackgroundLocationPermission = async () => {
+  if (!Capacitor.isNativePlatform()) {
+    return true;
+  }
+
+  return isBackgroundLocationGranted(await BackgroundGeolocation.checkPermissions());
+};
+
+export const requestBackgroundLocationPermission = async () => {
+  if (!Capacitor.isNativePlatform()) {
+    return true;
+  }
+
+  const permissions = await BackgroundGeolocation.requestPermissions({
+    permissions: ["location", "backgroundLocation"],
+  });
+  return isBackgroundLocationGranted(permissions);
+};
 
 export function useDriverLocationTracking({
   isOnShift,
@@ -95,6 +121,19 @@ export function useDriverLocationTracking({
   }, [isOnShift, token]);
 
   const ensureLocationPermission = useCallback(async () => {
+    if (Capacitor.isNativePlatform()) {
+      try {
+        if (await hasBackgroundLocationPermission()) {
+          return true;
+        }
+      } catch (error) {
+        console.warn("Не удалось проверить разрешение на фоновую геолокацию", error);
+      }
+
+      setTrackingState("permission_denied");
+      return false;
+    }
+
     let permissions = await Geolocation.checkPermissions();
     if (!isLocationGranted(permissions)) {
       permissions = await Geolocation.requestPermissions({ permissions: ["location"] });

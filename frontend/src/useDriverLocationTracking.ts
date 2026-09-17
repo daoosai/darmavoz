@@ -47,15 +47,8 @@ export const hasBackgroundLocationPermission = async () => {
 };
 
 export const requestBackgroundLocationPermission = async () => {
-  if (!Capacitor.isNativePlatform()) {
-    const permissions = await Geolocation.requestPermissions({ permissions: ["location"] });
-    return isLocationGranted(permissions);
-  }
-
-  const permissions = await BackgroundGeolocation.requestPermissions({
-    permissions: ["location", "backgroundLocation"],
-  });
-  return isBackgroundLocationGranted(permissions);
+  const permissions = await Geolocation.requestPermissions();
+  return isLocationGranted(permissions);
 };
 
 export function useDriverLocationTracking({
@@ -128,7 +121,7 @@ export function useDriverLocationTracking({
   const ensureLocationPermission = useCallback(async () => {
     if (Capacitor.isNativePlatform()) {
       try {
-        if (await hasBackgroundLocationPermission()) {
+        if (isLocationGranted(await Geolocation.checkPermissions())) {
           return true;
         }
       } catch (error) {
@@ -200,7 +193,7 @@ export function useDriverLocationTracking({
         {
           backgroundTitle: "Геопозиция Дармавоз",
           backgroundMessage: "Передаём ваше местоположение логисту",
-          requestPermissions: false,
+          requestPermissions: true,
           stale: false,
           distanceFilter: 0,
           minIntervalMs: LOCATION_INTERVAL_MS,

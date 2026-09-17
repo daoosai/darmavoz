@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import PullToRefresh from "react-simple-pull-to-refresh";
+import { Geolocation } from "@capacitor/geolocation";
 import { useAuthStore } from "./store";
 import { getOrderStatusText } from "./utils/statusMapper";
 import {
@@ -30,7 +31,6 @@ import SupportScreen from "./SupportScreen";
 import { handleOpenNavigator } from "./openNavigator";
 import {
   hasBackgroundLocationPermission,
-  requestBackgroundLocationPermission,
   useDriverLocationTracking,
 } from "./useDriverLocationTracking";
 
@@ -268,24 +268,24 @@ export default function DriverOrdersScreen({
 
   const handleLocationDisclosureContinue = async () => {
     const shouldStartShift = shouldStartShiftAfterDisclosure;
-    setIsLocationDisclosureOpen(false);
     setIsPreparingShiftStart(true);
 
     try {
-      const hasLocationPermission = await requestBackgroundLocationPermission();
-      if (!hasLocationPermission) {
+      const perm = await Geolocation.requestPermissions();
+      if (perm.location !== "granted") {
         setIsLocationTrackingPermitted(false);
         toast.error("Разрешение на фоновую геолокацию не выдано");
         return;
       }
 
+      setIsLocationDisclosureOpen(false);
       if (shouldStartShift) {
         await handleShiftChange(true, true);
       } else {
         setIsLocationTrackingPermitted(true);
       }
     } catch (error) {
-      console.warn("Не удалось запросить разрешение на фоновую геолокацию", error);
+      console.error(error);
       setIsLocationTrackingPermitted(false);
       toast.error("Не удалось запросить разрешение на геолокацию");
     } finally {

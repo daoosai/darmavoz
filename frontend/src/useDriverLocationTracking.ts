@@ -39,7 +39,9 @@ export const hasBackgroundLocationPermission = async () => {
     return true;
   }
 
-  return isBackgroundLocationGranted(await BackgroundGeolocation.checkPermissions());
+  const status = await BackgroundGeolocation.checkPermissions();
+  console.log('Permission status:', status);
+  return isBackgroundLocationGranted(status);
 };
 
 export const requestBackgroundLocationPermission = async () => {

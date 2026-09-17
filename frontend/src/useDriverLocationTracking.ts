@@ -36,7 +36,9 @@ const isBackgroundLocationGranted = (permissions: BackgroundLocationPermissions)
 
 export const hasBackgroundLocationPermission = async () => {
   if (!Capacitor.isNativePlatform()) {
-    return true;
+    const status = await Geolocation.checkPermissions();
+    console.log('Permission status:', status);
+    return isLocationGranted(status);
   }
 
   const status = await BackgroundGeolocation.checkPermissions();
@@ -46,7 +48,8 @@ export const hasBackgroundLocationPermission = async () => {
 
 export const requestBackgroundLocationPermission = async () => {
   if (!Capacitor.isNativePlatform()) {
-    return true;
+    const permissions = await Geolocation.requestPermissions({ permissions: ["location"] });
+    return isLocationGranted(permissions);
   }
 
   const permissions = await BackgroundGeolocation.requestPermissions({

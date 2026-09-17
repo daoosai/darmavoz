@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import PullToRefresh from "react-simple-pull-to-refresh";
+import { Capacitor } from "@capacitor/core";
 import { Geolocation } from "@capacitor/geolocation";
 import { useAuthStore } from "./store";
 import { getOrderStatusText } from "./utils/statusMapper";
@@ -271,8 +272,21 @@ export default function DriverOrdersScreen({
     setIsPreparingShiftStart(true);
 
     try {
-      const perm = await Geolocation.requestPermissions();
-      if (perm.location !== "granted") {
+      let hasLocationPermission = false;
+      if (Capacitor.isNativePlatform()) {
+        const perm = await Geolocation.requestPermissions();
+        hasLocationPermission = perm.location === "granted";
+      } else {
+        // Browsers show their permission prompt only when location is actually requested.
+        await Geolocation.getCurrentPosition({
+          enableHighAccuracy: false,
+          timeout: 10_000,
+          maximumAge: 0,
+        });
+        hasLocationPermission = true;
+      }
+
+      if (!hasLocationPermission) {
         setIsLocationTrackingPermitted(false);
         toast.error("Разрешение на фоновую геолокацию не выдано");
         return;

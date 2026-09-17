@@ -129,7 +129,6 @@ class AdminDriverUpdate(BaseModel):
 
 
 class DriverRegisterRequest(BaseModel):
-    city_ids: list[UUID] | None = Field(default=None, min_length=1)
     phone: str
     password: str
     name: str | None = None

@@ -921,9 +921,8 @@ async def _create_owner_equipment(
     *,
     current_owner: User,
 ) -> dict:
-    selected_city = await resolve_city(db, payload.city_id, require_active=False)
-    await ensure_owner_city(db, current_owner.id, selected_city.id)
-    payload.city_id = selected_city.id
+    # City binding is performed by an administrator after moderation.
+    payload.city_id = None
     equipment_type, equipment_type_id = await _resolve_equipment_type(
         db,
         equipment_type=payload.equipment_type,
@@ -987,14 +986,11 @@ async def _update_owner_equipment(
     *,
     current_owner: User,
 ) -> dict:
-    if "city_id" in payload.model_fields_set:
-        selected_city = await resolve_city(db, payload.city_id, require_active=False)
-        await ensure_owner_city(db, current_owner.id, selected_city.id)
-        payload.city_id = selected_city.id
     listing = await _get_listing(db, listing_id)
     if listing.owner_user_id == current_owner.id:
         previous_status = listing.moderation_status
         payload_data = await _normalize_listing_update_data(db, payload)
+        payload_data.pop("city_id", None)
         use_pending_changes = listing.moderation_status in OWNER_PENDING_EDIT_STATUSES
         pending_changes: dict = {}
         if use_pending_changes:

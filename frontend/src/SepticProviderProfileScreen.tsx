@@ -1,5 +1,4 @@
 import { currentCity } from './cityStore';
-import ServiceCityField from './ServiceCityField';
 import {
   useEffect,
   useMemo,
@@ -160,9 +159,8 @@ export default function SepticProviderProfileScreen({
   const currentUser = useAuthStore((state) => state.currentUser);
   const setCurrentUser = useAuthStore((state) => state.setCurrentUser);
   const [profiles, setProfiles] = useState<SepticProfile[]>([]);
-  const [serviceCityId, setServiceCityId] = useState('');
-  const fetch2gisAddressSuggestions = (query: string) => fetchCitySuggestions(query, currentCity(serviceCityId || undefined));
-  const withCityBias = (address: string) => biasCityAddress(address, currentCity(serviceCityId || undefined));
+  const fetch2gisAddressSuggestions = (query: string) => fetchCitySuggestions(query, currentCity());
+  const withCityBias = (address: string) => biasCityAddress(address, currentCity());
   const [form, setForm] = useState<SepticForm>(EMPTY_FORM);
   const [showForm, setShowForm] = useState(false);
   const [editingProfile, setEditingProfile] = useState<SepticProfile | null>(null);
@@ -199,7 +197,6 @@ export default function SepticProviderProfileScreen({
     setProfiles(Array.isArray(data) ? data.map((profile) => normalizeSepticProfile(profile as SepticProfile)) : []);
   };
 
-  useEffect(() => { setServiceCityId((editingProfile as any)?.city_id || ''); }, [editingProfile]);
   useEffect(() => {
     void loadProfiles()
       .catch((error) =>
@@ -286,7 +283,7 @@ export default function SepticProviderProfileScreen({
             new mapgl.Map(mapContainerRef.current, {
               center: initialCoordinates
                 ? [initialCoordinates.lon, initialCoordinates.lat]
-                : [currentCity(serviceCityId || undefined).center_lon, currentCity(serviceCityId || undefined).center_lat],
+                : [currentCity().center_lon, currentCity().center_lat],
               zoom: 12,
               key,
             }),
@@ -323,7 +320,7 @@ export default function SepticProviderProfileScreen({
       mapRef.current?.destroy();
       mapRef.current = null;
     };
-  }, [showForm, serviceCityId]);
+  }, [showForm]);
 
   useEffect(() => {
     const mapgl = (window as any).mapgl;
@@ -384,7 +381,7 @@ export default function SepticProviderProfileScreen({
     setIsGeocoding(true);
     try {
       const response = await fetch(
-        `${baseURL}/geo/geocode?city_id=${encodeURIComponent(serviceCityId)}&address=${encodeURIComponent(withCityBias(address))}`,
+        `${baseURL}/geo/geocode?address=${encodeURIComponent(withCityBias(address))}`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
       const data = await response.json().catch(() => ({}));
@@ -609,7 +606,6 @@ export default function SepticProviderProfileScreen({
             address,
             lat,
             lon,
-            city_id: serviceCityId,
             tank_volume_m3: tankVolume,
             service_price: servicePrice,
           }),
@@ -702,7 +698,6 @@ export default function SepticProviderProfileScreen({
       {showForm ? (
         <div className="fixed inset-0 z-[99999] flex items-end justify-center bg-slate-900/50 sm:items-center sm:p-4" role="dialog" aria-modal="true">
         <form onSubmit={submit} className="max-h-[90dvh] w-full space-y-4 overflow-y-auto rounded-t-3xl bg-white px-4 py-5 pb-[max(env(safe-area-inset-bottom),1.25rem)] pt-[max(env(safe-area-inset-top),1.25rem)] shadow-2xl sm:max-h-[90dvh] sm:max-w-2xl sm:rounded-3xl sm:p-5">
-        <ServiceCityField value={serviceCityId} onChange={setServiceCityId} />
           <div className="flex items-center justify-between gap-3">
             <h2 className="font-black text-slate-900">{editingProfile ? "Редактирование септика" : "Новый септик"}</h2>
             <button type="button" onClick={closeForm} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800" aria-label="Закрыть форму" title="Закрыть">

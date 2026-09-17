@@ -170,9 +170,8 @@ async def create_septic_profile(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_water_septic_partner_user),
 ):
-    selected_city = await resolve_city(db, payload.city_id, require_active=False)
-    await ensure_owner_city(db, current_user.id, selected_city.id)
-    payload.city_id = selected_city.id
+    # City binding is performed by an administrator after moderation.
+    payload.city_id = None
     profile = SepticProviderProfile(
         **payload.model_dump(),
         owner_user_id=current_user.id,
@@ -199,9 +198,6 @@ async def update_septic_profile(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_water_septic_partner_user),
 ):
-    selected_city = await resolve_city(db, payload.city_id, require_active=False)
-    await ensure_owner_city(db, current_user.id, selected_city.id)
-    payload.city_id = selected_city.id
     profile = await db.scalar(
         select(SepticProviderProfile).where(
             SepticProviderProfile.id == profile_id,
@@ -211,6 +207,7 @@ async def update_septic_profile(
     )
     if profile is None:
         raise HTTPException(status_code=404, detail="Профиль септика не найден")
+    payload.city_id = profile.city_id
 
     for field, value in payload.model_dump().items():
         setattr(profile, field, value)
@@ -277,14 +274,13 @@ async def get_septic_profile(db: AsyncSession = Depends(get_db), current_user: U
 
 @water_septic_partner_router.put("/septic-profile", response_model=SepticProfileOut)
 async def upsert_septic_profile(payload: SepticProfileIn, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_water_septic_partner_user)):
-    selected_city = await resolve_city(db, payload.city_id, require_active=False)
-    await ensure_owner_city(db, current_user.id, selected_city.id)
-    payload.city_id = selected_city.id
     profile = await db.scalar(select(SepticProviderProfile).where(SepticProviderProfile.owner_user_id == current_user.id))
     if profile is None:
+        payload.city_id = None
         profile = SepticProviderProfile(**payload.model_dump(), owner_user_id=current_user.id, moderation_status="pending_moderation")
         db.add(profile)
     else:
+        payload.city_id = profile.city_id
         for field, value in payload.model_dump().items(): setattr(profile, field, value)
         profile.is_deleted = False; profile.is_active = True; profile.moderation_status = "pending_moderation"; profile.moderation_comment = None
     await db.commit(); await db.refresh(profile); return await _serialize_septic_profile(profile, db)

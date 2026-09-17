@@ -5,14 +5,12 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 class SupplierProfileOut(BaseModel):
-    city_ids: list[UUID] = Field(default_factory=list)
     phone: Optional[str] = None
     email: Optional[str] = None
     display_name: Optional[str] = None
 
 
 class SupplierProfileUpdate(BaseModel):
-    city_ids: list[UUID] | None = Field(default=None, min_length=1)
     display_name: Optional[str] = Field(default=None, max_length=255)
 
     model_config = ConfigDict(str_strip_whitespace=True)

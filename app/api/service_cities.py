@@ -53,14 +53,14 @@ async def set_service_cities(db: AsyncSession, user: User, payload: ServiceCitie
 
 @router.get('/profile/cities')
 async def my_cities(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
-    return await get_service_cities(db, user)
+    del db, user
+    raise HTTPException(403, 'Города обслуживания настраивает администратор')
 
 
 @router.patch('/profile/cities')
 async def update_my_cities(payload: ServiceCitiesIn, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
-    if user.role.name not in {'driver', 'supplier', 'equipment_owner', 'water_septic_partner'}:
-        raise HTTPException(403, 'Требуется профиль исполнителя')
-    return await set_service_cities(db, user, payload)
+    del payload, db, user
+    raise HTTPException(403, 'Города обслуживания настраивает администратор')
 
 
 @router.get('/admin/users/{user_id}/cities', dependencies=[Depends(get_current_admin_user)])

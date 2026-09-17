@@ -1,4 +1,3 @@
-from app.api.service_cities import set_service_cities, ServiceCitiesIn
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,7 +17,6 @@ def _partner_phone_value(user: User) -> str | None:
 
 def _profile_out(user: User) -> SupplierProfileOut:
     return SupplierProfileOut(
-        city_ids=user.city_ids,
         phone=_partner_phone_value(user),
         email=user.email,
         display_name=user.display_name,
@@ -38,8 +36,6 @@ async def update_water_septic_partner_profile(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_water_septic_partner_user),
 ) -> SupplierProfileOut:
-    if payload.city_ids is not None:
-        await set_service_cities(db, current_user, ServiceCitiesIn(city_ids=payload.city_ids))
     if "display_name" in payload.model_fields_set:
         current_user.display_name = payload.display_name
     await db.commit()

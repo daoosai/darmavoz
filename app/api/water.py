@@ -200,9 +200,8 @@ async def my_water_points(db: AsyncSession = Depends(get_db), current_user: User
 
 @water_septic_partner_router.post("/water-points", response_model=WaterPointOut, status_code=status.HTTP_201_CREATED)
 async def create_water_point(payload: WaterPointIn, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_water_septic_partner_user)):
-    selected_city = await resolve_city(db, payload.city_id, require_active=False)
-    await ensure_owner_city(db, current_user.id, selected_city.id)
-    payload.city_id = selected_city.id
+    # City binding is performed by an administrator after moderation.
+    payload.city_id = None
     point = WaterPoint(**payload.model_dump(), owner_user_id=current_user.id, moderation_status="pending_moderation")
     db.add(point)
     await db.flush()
@@ -220,11 +219,9 @@ async def create_water_point(payload: WaterPointIn, db: AsyncSession = Depends(g
 
 @water_septic_partner_router.patch("/water-points/{point_id}", response_model=WaterPointOut)
 async def update_water_point(point_id: UUID, payload: WaterPointIn, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_water_septic_partner_user)):
-    selected_city = await resolve_city(db, payload.city_id, require_active=False)
-    await ensure_owner_city(db, current_user.id, selected_city.id)
-    payload.city_id = selected_city.id
     point = await db.scalar(select(WaterPoint).where(WaterPoint.id == point_id, WaterPoint.owner_user_id == current_user.id, WaterPoint.is_deleted.is_(False)))
     if point is None: raise HTTPException(status_code=404, detail="Точка воды не найдена")
+    payload.city_id = point.city_id
     for field, value in payload.model_dump().items(): setattr(point, field, value)
     point.moderation_status = "pending_moderation"; point.moderation_comment = None
     await db.flush()

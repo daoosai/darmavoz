@@ -179,10 +179,6 @@ export default function DriverOrdersScreen({
 
         setIsOnShift(profileIsOnShift);
         setIsLocationTrackingPermitted(profileIsOnShift && hasLocationPermission);
-        if (profileIsOnShift && !hasLocationPermission) {
-          setShouldStartShiftAfterDisclosure(false);
-          setIsLocationDisclosureOpen(true);
-        }
         if (isDriverAvailabilityStatus(profile?.status)) {
           setDriverStatus(profile.status);
         }

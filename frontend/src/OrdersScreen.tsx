@@ -97,11 +97,6 @@ const formatTrips = (count: number) => {
   return "рейсов";
 };
 
-const isBulkMaterial = (unit?: string | null) => {
-  const normalizedUnit = unit?.trim().toLowerCase().replace(/\s/g, "") || "";
-  return ["m3", "м3", "м³", "куб.м", "куб.м."].includes(normalizedUnit);
-};
-
 const getOrderTripsCount = (order: ClientOrder) => {
   const rawTripCount = order.trip_count ?? order.trips_count;
   const tripCount = Number(rawTripCount);
@@ -117,13 +112,14 @@ const getOrderVolume = (order: ClientOrder) => {
 };
 
 const getOrderDeliverySummary = (order: ClientOrder) => {
-  const item = order.items?.[0];
   const tripCount = getOrderTripsCount(order);
   const volume = getOrderVolume(order);
   const vehicleTitle = order.delivery_option?.title || "Самосвал";
 
-  if (item && isBulkMaterial(item.material?.unit) && tripCount && volume !== null) {
-    return `${formatVolume(volume)} м³ (${tripCount} ${formatTrips(tripCount)}) · ${vehicleTitle}`;
+  if (volume !== null || tripCount !== null) {
+    const volumeText = volume !== null ? `${formatVolume(volume)} м³` : "Объём не указан";
+    const tripsText = tripCount !== null ? ` (${tripCount} ${formatTrips(tripCount)})` : "";
+    return `${volumeText}${tripsText} · ${vehicleTitle}`;
   }
 
   return `${getOrderQuantity(order)} шт. · ${vehicleTitle}`;

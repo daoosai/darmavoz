@@ -7,6 +7,7 @@ import { getOrderStatusText } from "./utils/statusMapper";
 import {
   baseURL,
   extractApiErrorMessage,
+  formatShortAddress,
   orderStatusColors,
   handleApiError,
 } from "./utils";
@@ -49,6 +50,7 @@ export interface DriverOrder {
   material_name?: string;
   capacity_m3?: number;
   trip_count?: number | null;
+  trips_count?: number | null;
   trip_capacity_m3_snapshot?: number | null;
   client_phone?: string;
   client?: { phone?: string; name?: string; full_name?: string };
@@ -1039,7 +1041,7 @@ export const DriverOrderCard: React.FC<{
   const capacity =
     order.capacity_m3 || order.delivery_option?.capacity_m3 || "?";
   const orderVolume = getOrderVolume(order);
-  const tripCount = Math.max(1, Number(order.trip_count || 1));
+  const tripCount = Math.max(1, Number(order.trip_count ?? order.trips_count ?? 1));
   const tripCapacity = Number(
     order.trip_capacity_m3_snapshot || order.delivery_option?.capacity_m3 || capacity,
   );
@@ -1260,7 +1262,7 @@ export const DriverOrderCard: React.FC<{
                 Куда (Клиент)
               </p>
               <p className="text-sm font-bold text-slate-900 leading-snug">
-                {order.delivery_address || order.address}
+                {formatShortAddress(order.delivery_address || order.address)}
               </p>
             </div>
           </div>

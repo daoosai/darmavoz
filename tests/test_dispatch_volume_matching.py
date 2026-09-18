@@ -20,6 +20,7 @@ from app.models.models import (
 )
 from app.security.auth import get_password_hash
 from app.security.jwt import create_access_token
+from app.services.cities import initialize_service_cities, resolve_city
 from app.services.dispatch_service import get_matching_drivers
 
 
@@ -49,6 +50,13 @@ async def create_user(session, *, username: str, role: Role) -> User:
     return user
 
 
+async def assign_default_city(session, *drivers: Driver) -> None:
+    city = await resolve_city(session, None)
+    await session.flush()
+    for driver in drivers:
+        await initialize_service_cities(session, driver_id=driver.id, city_ids=[city.id])
+
+
 async def create_order_with_volume(
     session,
     *,
@@ -59,12 +67,14 @@ async def create_order_with_volume(
     trip_count: int | None = None,
     trip_capacity_m3: float | None = None,
 ) -> Order:
+    city = await resolve_city(session, None)
     client = Client(name="Тестовый клиент", phone=f"+7999{uuid.uuid4().int % 10_000_000:07d}")
     session.add(client)
     await session.flush()
 
     order = Order(
         client_id=client.id,
+        city_id=city.id,
         delivery_option_id=delivery_option.id,
         address="Томск, тестовый адрес",
         total_amount=1000.0,
@@ -142,6 +152,7 @@ async def test_auto_dispatch_matches_20m3_driver_for_100m3_order_with_five_trips
             moderation_status=ModerationStatus.approved.value,
         )
         session.add(driver)
+        await assign_default_city(session, driver)
 
         order = await create_order_with_volume(
             session,
@@ -264,6 +275,7 @@ async def test_auto_dispatch_matches_driver_by_vehicle_cubature_range(session_fa
             moderation_status=ModerationStatus.approved.value,
         )
         session.add(pending_driver)
+        await assign_default_city(session, matching_driver, rejected_driver, pending_driver)
 
         order = await create_order_with_volume(
             session,
@@ -300,6 +312,7 @@ async def test_logist_drivers_endpoint_filters_by_order_volume_and_approved_stat
         session.add_all([category, material, order_option, vehicle_option])
         await session.flush()
 
+        drivers = []
         for username, phone, min_v, max_v, driver_mod, vehicle_mod in [
             ("range_list_ok", "+79990020001", 30.0, 40.0, ModerationStatus.approved.value, ModerationStatus.approved.value),
             ("range_list_small", "+79990020002", 20.0, 25.0, ModerationStatus.approved.value, ModerationStatus.approved.value),
@@ -328,6 +341,9 @@ async def test_logist_drivers_endpoint_filters_by_order_volume_and_approved_stat
                 moderation_status=driver_mod,
             )
             session.add(driver)
+            drivers.append(driver)
+
+        await assign_default_city(session, *drivers)
 
         order = await create_order_with_volume(
             session,
@@ -403,6 +419,7 @@ async def test_logist_can_assign_driver_manually_by_volume_range_even_with_diffe
             moderation_status=ModerationStatus.approved.value,
         )
         session.add(driver)
+        await assign_default_city(session, driver)
         await session.commit()
         await session.refresh(material)
         await session.refresh(order_option)

@@ -72,13 +72,21 @@ export default function TransportTariffsPanel({ token }: { token: string | null 
   const loadTariffs = async (currentCategoryId = categoryId, currentCityId = cityId) => {
     if (!currentCategoryId || !currentCityId || !token) {
       setTariffs([]);
-      return;
+      return [];
     }
     const response = await fetch(
       `${baseURL}/admin/transport-categories/${currentCategoryId}/tariffs?city_id=${currentCityId}`,
       { headers },
     );
-    if (response.ok) setTariffs(await response.json());
+    if (!response.ok) {
+      throw new Error(await extractApiErrorMessage(
+        { status: response.status, data: await response.json().catch(() => null) },
+        "Не удалось загрузить тарифы.",
+      ));
+    }
+    const nextTariffs: Tariff[] = await response.json();
+    setTariffs(nextTariffs);
+    return nextTariffs;
   };
 
   useEffect(() => {
@@ -102,7 +110,9 @@ export default function TransportTariffsPanel({ token }: { token: string | null 
   }, [token]);
 
   useEffect(() => {
-    void loadTariffs();
+    void loadTariffs().catch((error) => {
+      toast.error(error instanceof Error ? error.message : "Не удалось загрузить тарифы.");
+    });
   }, [categoryId, cityId]);
 
   const saveCategory = async (event: FormEvent) => {
@@ -205,15 +215,17 @@ export default function TransportTariffsPanel({ token }: { token: string | null 
         },
       );
       if (!response.ok) {
-        throw new Error(await extractApiErrorMessage(
+        toast.error(await extractApiErrorMessage(
           { status: response.status, data: await response.json().catch(() => null) },
-          "Не удалось сохранить тариф",
+          "Не удалось сохранить тариф.",
         ));
+        return;
       }
+      await response.json();
+      await loadTariffs(categoryId, cityId);
       setTariffDraft(emptyTariffDraft);
       setEditingTariffId(null);
-      await loadTariffs();
-      toast.success("Тариф сохранён");
+      toast.success(editingTariffId ? "Тариф обновлён" : "Тариф сохранён");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Не удалось сохранить тариф");
     } finally {

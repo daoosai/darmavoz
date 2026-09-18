@@ -177,3 +177,70 @@ async def test_delivery_option_category_capacity_errors_are_human_readable(
         "Вместимость 0 м³ выходит за пределы категории «Малые машины» "
         "(допустимо от 1 до 5 м³)."
     )
+
+
+@pytest.mark.asyncio
+async def test_overlapping_tariff_range_returns_human_readable_error(
+    client,
+    session_factory,
+    admin_token,
+):
+    async with session_factory() as session:
+        city = City(
+            name="Город тарифов",
+            region="Тестовый регион",
+            code=f"s23-tariffs-{uuid4().hex}",
+            center_lat=57.15,
+            center_lon=65.53,
+            map_zoom=11,
+            min_lat=56.95,
+            min_lon=65.10,
+            max_lat=57.45,
+            max_lon=65.95,
+            is_active=True,
+            is_default=False,
+        )
+        category = TransportCategory(
+            slug=f"s23-tariff-category-{uuid4().hex}",
+            title="Тестовая категория",
+            capacity_min_m3=1,
+            capacity_max_m3=5,
+            is_active=True,
+            sort_order=0,
+        )
+        session.add_all([city, category])
+        await session.flush()
+        session.add(
+            DeliveryTariff(
+                city_id=city.id,
+                transport_category_id=category.id,
+                distance_from_km=0,
+                distance_to_km=None,
+                rate_per_km=100,
+                min_price_quarry=1000,
+                min_price_warehouse=1000,
+                is_active=True,
+                sort_order=0,
+            )
+        )
+        await session.commit()
+        city_id = city.id
+        category_id = category.id
+
+    response = await client.post(
+        f"/api/v1/admin/transport-categories/{category_id}/tariffs",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={
+            "city_id": str(city_id),
+            "distance_from_km": 0,
+            "distance_to_km": 10,
+            "rate_per_km": 100,
+            "min_price_quarry": 1000,
+            "min_price_warehouse": 1000,
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "Диапазоны тарифов пересекаются с существующим диапазоном для этого города и категории."
+    )

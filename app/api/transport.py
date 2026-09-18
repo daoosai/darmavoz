@@ -52,7 +52,7 @@ async def _validate_tariff_range(
     if await db.scalar(query.limit(1)) is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Тарифный диапазон пересекается с существующим диапазоном этого города и категории.",
+            detail="Диапазоны тарифов пересекаются с существующим диапазоном для этого города и категории.",
         )
 
 

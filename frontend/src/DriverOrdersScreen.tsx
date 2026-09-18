@@ -1047,11 +1047,8 @@ export const DriverOrderCard: React.FC<{
     order.capacity_m3 || order.delivery_option?.capacity_m3 || "?";
   const orderVolume = getOrderVolume(order);
   const tripCount = Math.max(1, Number(order.trip_count ?? order.trips_count ?? 1));
-  const tripCapacity = Number(
-    order.trip_capacity_m3 ?? order.trip_capacity_m3_snapshot ?? order.delivery_option?.capacity_m3 ?? capacity,
-  );
   const volumeLabel = tripCount > 1
-    ? `${orderVolume} м³ (${tripCount} рейсов по ${tripCapacity} м³)`
+    ? `${orderVolume} м³ (${tripCount} рейсов)`
     : `${orderVolume || capacity} м³`;
   const deliveryCost = getDeliveryCost(order);
   const estimatedTotalAmount = getEstimatedTotalAmount(order);

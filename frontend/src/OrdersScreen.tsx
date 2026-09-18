@@ -5,6 +5,7 @@ import { ArrowLeft, Info, List, MapPin, Package, Truck, X } from "lucide-react";
 
 import { baseURL, clientOrderStatusColors, formatShortAddress, resolveMediaUrl } from "./utils";
 import { getClientOrderStatusText } from "./utils/statusMapper";
+import { formatTripsCount } from "./utils/pluralize";
 import {
   ClientOrderSummary,
   normalizeClientOrderSummary,
@@ -88,15 +89,6 @@ const getOrderQuantity = (order: ClientOrder) => order.items?.[0]?.quantity || 1
 const formatVolume = (volume: number) =>
   Number.isInteger(volume) ? String(volume) : volume.toLocaleString("ru-RU", { maximumFractionDigits: 2 });
 
-const formatTrips = (count: number) => {
-  const lastTwoDigits = count % 100;
-  const lastDigit = count % 10;
-  if (lastTwoDigits >= 11 && lastTwoDigits <= 14) return "рейсов";
-  if (lastDigit === 1) return "рейс";
-  if (lastDigit >= 2 && lastDigit <= 4) return "рейса";
-  return "рейсов";
-};
-
 const getOrderTripsCount = (order: ClientOrder) => {
   const rawTripCount = order.trip_count ?? order.trips_count;
   const tripCount = Number(rawTripCount);
@@ -118,7 +110,7 @@ const getOrderDeliverySummary = (order: ClientOrder) => {
 
   if (volume !== null || tripCount !== null) {
     const volumeText = volume !== null ? `${formatVolume(volume)} м³` : "Объём не указан";
-    const tripsText = tripCount !== null ? ` (${tripCount} ${formatTrips(tripCount)})` : "";
+    const tripsText = tripCount !== null ? ` (${formatTripsCount(tripCount)})` : "";
     return `${volumeText}${tripsText} · ${vehicleTitle}`;
   }
 

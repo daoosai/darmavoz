@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import PullToRefresh from "react-simple-pull-to-refresh";
 import { useAuthStore } from "./store";
 import { getOrderStatusText } from "./utils/statusMapper";
+import { formatTripsCount } from "./utils/pluralize";
 import type { PlacementStatus } from "./placement";
 import {
   baseURL,
@@ -93,15 +94,6 @@ const mergeOrderIntoList = (orders: AdminOrder[], nextOrder: AdminOrder) => [
 const formatVolume = (volume: number) =>
   Number.isInteger(volume) ? String(volume) : volume.toLocaleString("ru-RU", { maximumFractionDigits: 2 });
 
-const formatTrips = (count: number) => {
-  const lastTwoDigits = count % 100;
-  const lastDigit = count % 10;
-  if (lastTwoDigits >= 11 && lastTwoDigits <= 14) return "рейсов";
-  if (lastDigit === 1) return "рейс";
-  if (lastDigit >= 2 && lastDigit <= 4) return "рейса";
-  return "рейсов";
-};
-
 const getOrderTripsCount = (order: AdminOrder) => {
   const tripCount = Number(order.trip_count ?? order.trips_count);
   return Number.isInteger(tripCount) && tripCount > 0 ? tripCount : null;
@@ -129,7 +121,7 @@ const formatOrderVolumeWithTrips = (order: AdminOrder) => {
   );
 
   if (totalVolume !== null && tripCount && tripCapacity > 0) {
-    return `${formatVolume(totalVolume)} м³ (${tripCount} ${formatTrips(tripCount)} по ${formatVolume(tripCapacity)} м³)`;
+    return `${formatVolume(totalVolume)} м³ (${formatTripsCount(tripCount)} по ${formatVolume(tripCapacity)} м³)`;
   }
 
   return totalVolume !== null ? `${formatVolume(totalVolume)} м³` : "-";

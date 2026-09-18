@@ -4,6 +4,7 @@ import { Capacitor } from "@capacitor/core";
 import { Geolocation } from "@capacitor/geolocation";
 import { useAuthStore } from "./store";
 import { getOrderStatusText } from "./utils/statusMapper";
+import { formatTripsCount } from "./utils/pluralize";
 import {
   baseURL,
   extractApiErrorMessage,
@@ -1048,7 +1049,7 @@ export const DriverOrderCard: React.FC<{
   const orderVolume = getOrderVolume(order);
   const tripCount = Math.max(1, Number(order.trip_count ?? order.trips_count ?? 1));
   const volumeLabel = tripCount > 1
-    ? `${orderVolume} м³ (${tripCount} рейсов)`
+    ? `${orderVolume} м³ (${formatTripsCount(tripCount)})`
     : `${orderVolume || capacity} м³`;
   const deliveryCost = getDeliveryCost(order);
   const estimatedTotalAmount = getEstimatedTotalAmount(order);

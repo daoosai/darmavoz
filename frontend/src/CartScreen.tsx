@@ -18,6 +18,7 @@ import {
   useClientOrdersStore,
 } from "./store";
 import { baseURL, extractApiErrorMessage, resolveMediaUrl } from "./utils";
+import { formatTripsCount } from "./utils/pluralize";
 import toast from "react-hot-toast";
 import { MaterialProps } from "./MaterialDetailScreen";
 import PickupPointMapScreen, { PickupPointSelection } from "./PickupPointMapScreen";
@@ -600,7 +601,7 @@ export default function CartScreen({
                     )}
                     {tripCount && (
                       <span className="text-xs font-medium text-slate-500">
-                        {tripCount} {tripCount === 1 ? "рейс" : "рейсов"}
+                        {formatTripsCount(tripCount)}
                       </span>
                     )}
                   </div>

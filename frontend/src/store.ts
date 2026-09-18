@@ -14,13 +14,6 @@ export const getDeliveryOptionsForVolume = (
   .filter((option) => option.is_active !== false && Number(option.capacity_m3) > 0)
   .sort((first, second) => Number(first.capacity_m3) - Number(second.capacity_m3));
 
-export const findDeliveryOptionForVolume = (
-  deliveryOptions: DeliveryOption[],
-  volume: number,
-) => getDeliveryOptionsForVolume(deliveryOptions).find(
-  (option) => Number(option.capacity_m3) >= volume,
-);
-
 export interface CartItem {
   id: string; // unique id for the cart item
   material: MaterialProps;
@@ -343,11 +336,6 @@ export const useCartStore = create<CartState>()(
         0,
       );
       const newVolume = existingVolume + Number(deliveryOption.capacity_m3);
-      // A delivery option determines capacity per trip, not the maximum order
-      // volume. Once the order exceeds all available capacities, keep the
-      // chosen option and let the backend calculate the required trip count.
-      const upgradedOption =
-        findDeliveryOptionForVolume(uniqueOptions, newVolume) || deliveryOption;
 
       const targetItem = existingItems[0];
       set((state) => ({
@@ -365,7 +353,6 @@ export const useCartStore = create<CartState>()(
                     ...material,
                     delivery_options: uniqueOptions,
                   },
-                  deliveryOption: upgradedOption,
                   pickupPoint: pickupPoint || item.pickupPoint,
                   comment: item.comment || comment,
                   quantity: 1,
@@ -396,21 +383,12 @@ export const useCartStore = create<CartState>()(
   updateItemVolume: (id, volume) => {
     const item = get().cartItems.find((cartItem) => cartItem.id === id);
     if (!item) return false;
-    const availableOptions = getDeliveryOptionsForVolume([
-      item.deliveryOption,
-      ...(item.material.delivery_options || []),
-    ]);
-    // Large orders may require several trips in the same vehicle. Preserve the
-    // current option above the largest configured single-trip capacity.
-    const upgradedOption =
-      findDeliveryOptionForVolume(availableOptions, volume) || item.deliveryOption;
 
     set((state) => ({
       cartItems: state.cartItems.map((cartItem) =>
         cartItem.id === id
           ? {
               ...cartItem,
-              deliveryOption: upgradedOption,
               quantity: 1,
               volume,
             }

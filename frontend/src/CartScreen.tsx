@@ -11,8 +11,6 @@ import {
   Truck,
 } from "lucide-react";
 import {
-  findDeliveryOptionForVolume,
-  getDeliveryOptionsForVolume,
   normalizeClientOrderSummary,
   useAuthStore,
   useCartStore,
@@ -550,11 +548,7 @@ export default function CartScreen({
         <div className="flex flex-col gap-4 mb-6">
           {cartItems.map((item) => {
             const draftVolume = draftVolumes[item.id] ?? getCartItemVolume(item);
-            const deliveryOptions = getDeliveryOptionsForVolume([
-              item.deliveryOption,
-              ...(item.material.delivery_options || []),
-            ]);
-            const displayedOption = findDeliveryOptionForVolume(deliveryOptions, draftVolume) || item.deliveryOption;
+            const displayedOption = item.deliveryOption;
             const calculation = calcResults[item.id];
             const tripCount = isMarketplaceCalculation(calculation)
               ? calculation.best_option.trip_count

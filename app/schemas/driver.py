@@ -320,6 +320,8 @@ class DriverOfferOrderOut(BaseModel):
     id: UUID
     material_name: str
     quantity: int
+    trip_count: int | None = None
+    trip_capacity_m3: float | None = None
     address: str | None = None
     pickup_address: str | None = None
     pickup_lat: float | None = None

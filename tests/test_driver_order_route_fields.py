@@ -120,6 +120,8 @@ async def test_driver_current_order_endpoints_include_route_fields(client, sessi
             pickup_lat=None,
             pickup_lon=None,
             total_amount=25000.0,
+            trip_count=5,
+            trip_capacity_m3_snapshot=20.0,
             status="driver_assigned",
             assigned_at=now,
         )
@@ -136,6 +138,8 @@ async def test_driver_current_order_endpoints_include_route_fields(client, sessi
             pickup_lat=None,
             pickup_lon=None,
             total_amount=27000.0,
+            trip_count=5,
+            trip_capacity_m3_snapshot=20.0,
             status="offered_to_driver",
             created_at=now,
         )
@@ -148,7 +152,7 @@ async def test_driver_current_order_endpoints_include_route_fields(client, sessi
                     order_id=assigned_order.id,
                     material_id=material.id,
                     quantity=1,
-                    volume=10.0,
+                    volume=100.0,
                     price=2500.0,
                     amount=25000.0,
                 ),
@@ -156,7 +160,7 @@ async def test_driver_current_order_endpoints_include_route_fields(client, sessi
                     order_id=incoming_order.id,
                     material_id=material.id,
                     quantity=1,
-                    volume=10.0,
+                    volume=100.0,
                     price=2500.0,
                     amount=27000.0,
                 ),
@@ -188,6 +192,8 @@ async def test_driver_current_order_endpoints_include_route_fields(client, sessi
     assert incoming_payload["order"]["delivery_address"] == "Тюмень, Полевая 20"
     assert incoming_payload["order"]["delivery_lat"] == 57.14
     assert incoming_payload["order"]["delivery_lon"] == 65.6
+    assert incoming_payload["order"]["trip_count"] == 5
+    assert incoming_payload["order"]["trip_capacity_m3"] == 20.0
 
     assigned_response = await client.get(
         "/api/v1/driver/orders/assigned/current",
@@ -201,3 +207,5 @@ async def test_driver_current_order_endpoints_include_route_fields(client, sessi
     assert assigned_payload["order"]["delivery_address"] == "Тюмень, Лесная 10"
     assert assigned_payload["order"]["delivery_lat"] == 57.152223
     assert assigned_payload["order"]["delivery_lon"] == 65.527202
+    assert assigned_payload["order"]["trip_count"] == 5
+    assert assigned_payload["order"]["trip_capacity_m3"] == 20.0

@@ -51,6 +51,7 @@ export interface DriverOrder {
   capacity_m3?: number;
   trip_count?: number | null;
   trips_count?: number | null;
+  trip_capacity_m3?: number | null;
   trip_capacity_m3_snapshot?: number | null;
   client_phone?: string;
   client?: { phone?: string; name?: string; full_name?: string };
@@ -87,6 +88,7 @@ const getOrderVolume = (order: DriverOrder) => {
   );
   return itemVolume || Number(
     order.trip_capacity_m3_snapshot
+    ?? order.trip_capacity_m3
     ?? order.capacity_m3
     ?? order.delivery_option?.capacity_m3
     ?? 0,
@@ -423,6 +425,9 @@ export default function DriverOrdersScreen({
                   status: detail.status || "driver_assigned",
                   material_name: detail.material_name,
                   capacity_m3: detail.capacity_m3,
+                  trip_count: detail.trip_count ?? detail.trips_count,
+                  trip_capacity_m3: detail.trip_capacity_m3,
+                  trip_capacity_m3_snapshot: detail.trip_capacity_m3_snapshot,
                   client_phone: detail.client_phone || detail.client?.phone,
                   client: detail.client,
                   pickup_lat: detail.pickup_lat,
@@ -1043,7 +1048,7 @@ export const DriverOrderCard: React.FC<{
   const orderVolume = getOrderVolume(order);
   const tripCount = Math.max(1, Number(order.trip_count ?? order.trips_count ?? 1));
   const tripCapacity = Number(
-    order.trip_capacity_m3_snapshot || order.delivery_option?.capacity_m3 || capacity,
+    order.trip_capacity_m3 ?? order.trip_capacity_m3_snapshot ?? order.delivery_option?.capacity_m3 ?? capacity,
   );
   const volumeLabel = tripCount > 1
     ? `${orderVolume} м³ (${tripCount} рейсов по ${tripCapacity} м³)`

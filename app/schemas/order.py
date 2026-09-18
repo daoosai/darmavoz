@@ -588,6 +588,15 @@ class DriverOrderOut(OrderOut):
     client_name: str | None = None
     quarry_name: str | None = None
 
+    @computed_field(return_type=float | None)
+    @property
+    def trip_capacity_m3(self) -> float | None:
+        if self.trip_capacity_m3_snapshot is not None:
+            return float(self.trip_capacity_m3_snapshot)
+        if self.delivery_option is not None:
+            return float(self.delivery_option.capacity_m3)
+        return None
+
 
 class DriverOrderStatusUpdate(BaseModel):
     status: str

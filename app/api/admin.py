@@ -2058,13 +2058,26 @@ async def _validate_delivery_option_category(
 
     category = await db.get(TransportCategory, category_id)
     if category is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Transport category not found")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Выбранная категория транспорта не найдена.",
+        )
     if capacity_m3 < category.capacity_min_m3 or (
         category.capacity_max_m3 is not None and capacity_m3 > category.capacity_max_m3
     ):
+        capacity_text = f"{capacity_m3:g}"
+        min_capacity_text = f"{category.capacity_min_m3:g}"
+        range_text = (
+            f"от {min_capacity_text} до {category.capacity_max_m3:g} м³"
+            if category.capacity_max_m3 is not None
+            else f"от {min_capacity_text} м³"
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Delivery option capacity must be within the selected transport category range",
+            detail=(
+                f"Вместимость {capacity_text} м³ выходит за пределы категории "
+                f"«{category.title}» (допустимо {range_text})."
+            ),
         )
 
 

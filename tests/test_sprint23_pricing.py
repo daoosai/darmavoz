@@ -122,3 +122,58 @@ async def test_large_volume_uses_multiple_trips_and_multiplies_delivery_price(
     assert pricing.trip_count == 5
     assert pricing.delivery_cost_per_trip == 5000
     assert pricing.delivery_cost == 25_000
+
+
+@pytest.mark.asyncio
+async def test_delivery_option_category_capacity_errors_are_human_readable(
+    client,
+    session_factory,
+    admin_token,
+):
+    async with session_factory() as session:
+        category = TransportCategory(
+            slug=f"s23-small-{uuid4().hex}",
+            title="Малые машины",
+            capacity_min_m3=1,
+            capacity_max_m3=5,
+            is_active=True,
+            sort_order=0,
+        )
+        delivery_option = DeliveryOption(
+            transport_category=category,
+            capacity_m3=3,
+            title="Малая машина 3 м³",
+            is_active=True,
+            sort_order=0,
+        )
+        session.add_all([category, delivery_option])
+        await session.commit()
+        category_id = category.id
+        delivery_option_id = delivery_option.id
+
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    invalid_create = await client.post(
+        "/api/v1/admin/delivery-options",
+        headers=headers,
+        json={
+            "title": "Малая машина 10 м³",
+            "capacity_m3": 10,
+            "transport_category_id": str(category_id),
+        },
+    )
+    assert invalid_create.status_code == 400
+    assert invalid_create.json()["detail"] == (
+        "Вместимость 10 м³ выходит за пределы категории «Малые машины» "
+        "(допустимо от 1 до 5 м³)."
+    )
+
+    invalid_update = await client.patch(
+        f"/api/v1/admin/delivery-options/{delivery_option_id}",
+        headers=headers,
+        json={"capacity_m3": 0},
+    )
+    assert invalid_update.status_code == 400
+    assert invalid_update.json()["detail"] == (
+        "Вместимость 0 м³ выходит за пределы категории «Малые машины» "
+        "(допустимо от 1 до 5 м³)."
+    )

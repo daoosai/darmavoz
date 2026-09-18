@@ -1214,12 +1214,37 @@ export default function AdminDashboardScreen({
 
   const handleSaveDelivery = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingDelivery?.title || editingDelivery.capacity_m3 === undefined) {
-      toast.error("Заполните обязательные поля (Название, Объем)");
+    if (!editingDelivery?.title?.trim()) {
+      toast.error("Укажите название типа машины.");
+      return;
+    }
+    const capacity = Number(editingDelivery.capacity_m3);
+    if (!Number.isFinite(capacity) || capacity <= 0) {
+      toast.error("Укажите вместимость больше 0 м³.");
       return;
     }
     if (!editingDelivery.transport_category_id) {
       toast.error("Выберите категорию транспорта");
+      return;
+    }
+    const selectedCategory = transportCategories.find(
+      (category) => category.id === editingDelivery.transport_category_id,
+    );
+    if (!selectedCategory) {
+      toast.error("Выбранная категория транспорта не найдена. Обновите страницу и повторите попытку.");
+      return;
+    }
+    const minCapacity = Number(selectedCategory.capacity_min_m3);
+    const maxCapacity = selectedCategory.capacity_max_m3 == null
+      ? null
+      : Number(selectedCategory.capacity_max_m3);
+    if (capacity < minCapacity || (maxCapacity !== null && capacity > maxCapacity)) {
+      const range = maxCapacity === null
+        ? `от ${minCapacity} м³`
+        : `от ${minCapacity} до ${maxCapacity} м³`;
+      toast.error(
+        `Вместимость ${capacity} м³ выходит за пределы категории «${selectedCategory.title}» (допустимо ${range}).`,
+      );
       return;
     }
 
@@ -1233,7 +1258,7 @@ export default function AdminDashboardScreen({
 
       const payload: any = {
         title: editingDelivery.title,
-        capacity_m3: Number(editingDelivery.capacity_m3),
+        capacity_m3: capacity,
         transport_category_id: editingDelivery.transport_category_id,
         is_active: editingDelivery.is_active ?? true,
         sort_order: 10,
@@ -1250,7 +1275,13 @@ export default function AdminDashboardScreen({
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        throw new Error(extractApiErrorMessage(errData, "Ошибка сервера"));
+        toast.error(
+          extractApiErrorMessage(
+            { status: res.status, data: errData },
+            "Не удалось сохранить тип машины.",
+          ),
+        );
+        return;
       }
 
       const savedData = await res.json();

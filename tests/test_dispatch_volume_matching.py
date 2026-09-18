@@ -433,6 +433,8 @@ async def test_logist_can_assign_driver_manually_by_volume_range_even_with_diffe
             "material_id": str(material.id),
             "delivery_option_id": str(order_option.id),
             "address": "Томск, ручное назначение",
+            "delivery_lat": 56.84,
+            "delivery_lon": 60.61,
             "notes": "Проверка диапазона",
             "quantity": 1,
             "auto_dispatch": False,

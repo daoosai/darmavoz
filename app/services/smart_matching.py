@@ -65,6 +65,18 @@ def _requested_volume(order: Order) -> float | None:
     return volume if volume > 0 else None
 
 
+def _trip_capacity_m3(order: Order) -> float | None:
+    snapshot_capacity = getattr(order, "trip_capacity_m3_snapshot", None)
+    if snapshot_capacity is not None and float(snapshot_capacity) > 0:
+        return float(snapshot_capacity)
+
+    option_capacity = getattr(getattr(order, "delivery_option", None), "capacity_m3", None)
+    if option_capacity is not None and float(option_capacity) > 0:
+        return float(option_capacity)
+
+    return _requested_volume(order)
+
+
 def _vehicle_matches_volume(vehicle: Vehicle | None, requested_volume: float | None) -> bool:
     if vehicle is None or requested_volume is None:
         return vehicle is not None
@@ -204,6 +216,7 @@ class SmartMatchingService:
         all_drivers = list((await session.scalars(query)).all())
         attempted_ids, rejected_ids = await self._cycle_offer_ids(session, order)
         requested_volume = _requested_volume(order)
+        trip_capacity_m3 = _trip_capacity_m3(order)
         now = utcnow()
         locations = await _load_locations([driver.id for driver in all_drivers])
         candidates: list[dict] = []
@@ -214,7 +227,7 @@ class SmartMatchingService:
         for driver in all_drivers:
             exclusion_reasons = self._hard_exclusion_reasons(
                 driver,
-                requested_volume,
+                trip_capacity_m3,
                 attempted_ids=attempted_ids,
                 rejected_ids=rejected_ids,
                 excluded_driver_ids=excluded_driver_ids,
@@ -309,6 +322,7 @@ class SmartMatchingService:
                         "delivery_lat": order.delivery_lat,
                         "delivery_lon": order.delivery_lon,
                         "requested_volume_m3": requested_volume,
+                        "trip_capacity_m3": trip_capacity_m3,
                     },
                     candidates_snapshot={"candidates": candidates, "not_recommended": not_recommended, "message": snapshot["message"]},
                     recommended_driver_id=UUID(candidates[0]["driver_id"]) if candidates else None,

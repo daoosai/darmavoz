@@ -11,6 +11,7 @@ import {
   attemptStatusMap,
   translateReason,
   handleApiError,
+  formatShortAddress,
 } from "./utils";
 import {
   LogOut,
@@ -51,10 +52,18 @@ import DriverMapComponent from "./components/DriverMapComponent";
 
 interface AdminOrder {
   id: string;
-  address: string;
-  items?: { material: { name: string } }[];
+  address?: string;
+  delivery_address?: string | null;
+  items?: {
+    material?: { name?: string };
+    volume?: number | null;
+    quantity?: number | null;
+  }[];
   delivery_option_id?: string;
-  delivery_option?: { capacity_m3: number };
+  delivery_option?: { capacity_m3?: number | null };
+  trip_count?: number | null;
+  trips_count?: number | null;
+  trip_capacity_m3_snapshot?: number | null;
   total_amount: number;
   delivery_cost?: number;
   estimated_total_amount?: number;
@@ -80,6 +89,51 @@ const mergeOrderIntoList = (orders: AdminOrder[], nextOrder: AdminOrder) => [
   nextOrder,
   ...orders.filter((order) => order.id !== nextOrder.id),
 ];
+
+const formatVolume = (volume: number) =>
+  Number.isInteger(volume) ? String(volume) : volume.toLocaleString("ru-RU", { maximumFractionDigits: 2 });
+
+const formatTrips = (count: number) => {
+  const lastTwoDigits = count % 100;
+  const lastDigit = count % 10;
+  if (lastTwoDigits >= 11 && lastTwoDigits <= 14) return "рейсов";
+  if (lastDigit === 1) return "рейс";
+  if (lastDigit >= 2 && lastDigit <= 4) return "рейса";
+  return "рейсов";
+};
+
+const getOrderTripsCount = (order: AdminOrder) => {
+  const tripCount = Number(order.trip_count ?? order.trips_count);
+  return Number.isInteger(tripCount) && tripCount > 0 ? tripCount : null;
+};
+
+const getOrderTotalVolume = (order: AdminOrder) => {
+  const itemVolume = (order.items || []).reduce(
+    (total, item) => total + (Number(item.volume) || 0),
+    0,
+  );
+  if (itemVolume > 0) return itemVolume;
+
+  const tripCount = getOrderTripsCount(order);
+  const tripCapacity = Number(
+    order.trip_capacity_m3_snapshot ?? order.delivery_option?.capacity_m3,
+  );
+  return tripCount && tripCapacity > 0 ? tripCount * tripCapacity : null;
+};
+
+const formatOrderVolumeWithTrips = (order: AdminOrder) => {
+  const totalVolume = getOrderTotalVolume(order);
+  const tripCount = getOrderTripsCount(order);
+  const tripCapacity = Number(
+    order.trip_capacity_m3_snapshot ?? order.delivery_option?.capacity_m3,
+  );
+
+  if (totalVolume !== null && tripCount && tripCapacity > 0) {
+    return `${formatVolume(totalVolume)} м³ (${tripCount} ${formatTrips(tripCount)} по ${formatVolume(tripCapacity)} м³)`;
+  }
+
+  return totalVolume !== null ? `${formatVolume(totalVolume)} м³` : "-";
+};
 
 interface AdminDriver {
   id: string;
@@ -936,7 +990,7 @@ export default function LogistDashboardScreen({
                         <div className="flex items-start gap-3">
                           <MapPin className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" />
                           <p className="text-sm font-bold text-slate-900 leading-snug">
-                            {order.address}
+                            {formatShortAddress(order.delivery_address || order.address || "Адрес не указан")}
                           </p>
                         </div>
 
@@ -956,7 +1010,7 @@ export default function LogistDashboardScreen({
                               Объем
                             </p>
                             <p className="text-xs font-semibold text-slate-800">
-                              {order.delivery_option?.capacity_m3 || "-"} м³
+                              {formatOrderVolumeWithTrips(order)}
                             </p>
                           </div>
                         </div>
@@ -1541,7 +1595,7 @@ export default function LogistDashboardScreen({
                   Адрес
                 </p>
                 <p className="text-sm font-semibold text-slate-800">
-                  {manualAssignOrder.address}
+                  {formatShortAddress(manualAssignOrder.delivery_address || manualAssignOrder.address || "Адрес не указан")}
                 </p>
               </div>
 

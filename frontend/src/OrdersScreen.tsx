@@ -3,7 +3,7 @@ import PullToRefresh from "react-simple-pull-to-refresh";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, Info, List, MapPin, Package, Truck, X } from "lucide-react";
 
-import { baseURL, clientOrderStatusColors, resolveMediaUrl } from "./utils";
+import { baseURL, clientOrderStatusColors, formatShortAddress, resolveMediaUrl } from "./utils";
 import { getClientOrderStatusText } from "./utils/statusMapper";
 import {
   ClientOrderSummary,
@@ -114,17 +114,6 @@ const getOrderVolume = (order: ClientOrder) => {
     0,
   );
   return volume > 0 ? volume : null;
-};
-
-export const formatShortAddress = (address: string) => {
-  const parts = address
-    .split(",")
-    .map((part) => part.trim())
-    .filter(Boolean);
-  const administrativePart = /^(россия|российская федерация)$|область|край|республика|автоном|городской округ|муниципальн|(?:^|\s)(округ|район|м-н)(?:\s|$)|микрорайон/i;
-  const shortParts = parts.filter((part) => !administrativePart.test(part)).slice(0, 3);
-
-  return shortParts.join(", ") || parts.slice(0, 3).join(", ") || address;
 };
 
 const getOrderDeliverySummary = (order: ClientOrder) => {

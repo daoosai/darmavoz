@@ -52,6 +52,17 @@ export const formatPhoneNumber = (value: string) => {
   return formatted;
 };
 
+export const formatShortAddress = (address: string) => {
+  const parts = address
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const administrativePart = /^(россия|российская федерация)$|область|край|республика|автоном|городской округ|муниципальн|(?:^|\s)(округ|район|м-н)(?:\s|$)|микрорайон/i;
+  const shortParts = parts.filter((part) => !administrativePart.test(part)).slice(0, 3);
+
+  return shortParts.join(", ") || parts.slice(0, 3).join(", ") || address;
+};
+
 export const formatValidationErrors = (detail: any[]): string | null => {
   const messages = detail
     .map((entry: any) => {

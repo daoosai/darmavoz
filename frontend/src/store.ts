@@ -46,14 +46,18 @@ export interface ClientOrderSummary {
   clarification_reasons?: string[];
   clarification_comment?: string | null;
   client_clarification_reply?: string | null;
+  trip_count?: number | null;
+  trips_count?: number | null;
   items?: {
     material?: {
       name?: string | null;
+      unit?: string | null;
       image_url?: string | null;
       primary_image_url?: string | null;
       media_files?: { public_url?: string | null; is_primary?: boolean }[];
     } | null;
     quantity?: number;
+    volume?: number | null;
   }[];
   driver?: {
     name: string;

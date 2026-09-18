@@ -85,6 +85,61 @@ const getOrderMaterialTitle = (order: ClientOrder) =>
 
 const getOrderQuantity = (order: ClientOrder) => order.items?.[0]?.quantity || 1;
 
+const formatVolume = (volume: number) =>
+  Number.isInteger(volume) ? String(volume) : volume.toLocaleString("ru-RU", { maximumFractionDigits: 2 });
+
+const formatTrips = (count: number) => {
+  const lastTwoDigits = count % 100;
+  const lastDigit = count % 10;
+  if (lastTwoDigits >= 11 && lastTwoDigits <= 14) return "рейсов";
+  if (lastDigit === 1) return "рейс";
+  if (lastDigit >= 2 && lastDigit <= 4) return "рейса";
+  return "рейсов";
+};
+
+const isBulkMaterial = (unit?: string | null) => {
+  const normalizedUnit = unit?.trim().toLowerCase().replace(/\s/g, "") || "";
+  return ["m3", "м3", "м³", "куб.м", "куб.м."].includes(normalizedUnit);
+};
+
+const getOrderTripsCount = (order: ClientOrder) => {
+  const rawTripCount = order.trip_count ?? order.trips_count;
+  const tripCount = Number(rawTripCount);
+  return Number.isInteger(tripCount) && tripCount > 0 ? tripCount : null;
+};
+
+const getOrderVolume = (order: ClientOrder) => {
+  const volume = (order.items || []).reduce(
+    (total, item) => total + (Number(item.volume) || 0),
+    0,
+  );
+  return volume > 0 ? volume : null;
+};
+
+export const formatShortAddress = (address: string) => {
+  const parts = address
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const administrativePart = /^(россия|российская федерация)$|область|край|республика|автоном|городской округ|муниципальн|(?:^|\s)(округ|район|м-н)(?:\s|$)|микрорайон/i;
+  const shortParts = parts.filter((part) => !administrativePart.test(part)).slice(0, 3);
+
+  return shortParts.join(", ") || parts.slice(0, 3).join(", ") || address;
+};
+
+const getOrderDeliverySummary = (order: ClientOrder) => {
+  const item = order.items?.[0];
+  const tripCount = getOrderTripsCount(order);
+  const volume = getOrderVolume(order);
+  const vehicleTitle = order.delivery_option?.title || "Самосвал";
+
+  if (item && isBulkMaterial(item.material?.unit) && tripCount && volume !== null) {
+    return `${formatVolume(volume)} м³ (${tripCount} ${formatTrips(tripCount)}) · ${vehicleTitle}`;
+  }
+
+  return `${getOrderQuantity(order)} шт. · ${vehicleTitle}`;
+};
+
 const getOrderMaterialImage = (order: ClientOrder) => {
   const material = order.items?.[0]?.material;
   const imageUrl =
@@ -135,7 +190,7 @@ function OrderCard({
       <h3 className="mt-3 text-xl font-bold leading-snug text-slate-900">{getOrderMaterialTitle(order)}</h3>
       <p className="mt-2 flex items-center gap-1.5 text-sm text-slate-500">
         <Truck className="h-4 w-4 shrink-0 text-sky-500" />
-        {getOrderQuantity(order)} шт. · {order.delivery_option?.title || "Самосвал"}
+        {getOrderDeliverySummary(order)}
       </p>
 
       <div className="mt-4 overflow-hidden rounded-xl bg-sky-50">
@@ -187,7 +242,7 @@ function OrderCard({
       {order.address ? (
         <p className="mt-4 flex items-start gap-2 text-sm text-slate-600">
           <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-          {order.address}
+          {formatShortAddress(order.address)}
         </p>
       ) : null}
       {order.city_name && <p className="mt-2 text-xs text-slate-500">Город: {order.city_name}</p>}

@@ -38,7 +38,7 @@ import {
 export interface DriverOrder {
   id: string;
   address: string;
-  items?: { material: { name: string } }[];
+  items?: { material: { name: string }; volume?: number | null }[];
   delivery_option?: { capacity_m3: number };
   created_at: string;
   total_amount: number;
@@ -48,6 +48,8 @@ export interface DriverOrder {
   status: string;
   material_name?: string;
   capacity_m3?: number;
+  trip_count?: number | null;
+  trip_capacity_m3_snapshot?: number | null;
   client_phone?: string;
   client?: { phone?: string; name?: string; full_name?: string };
   pickup_address?: string;
@@ -75,6 +77,19 @@ const getEstimatedTotalAmount = (
 ) =>
   Number(order.estimated_total_amount ?? 0) ||
   Number(order.total_amount ?? 0) + getDeliveryCost(order);
+
+const getOrderVolume = (order: DriverOrder) => {
+  const itemVolume = (order.items || []).reduce(
+    (total, item) => total + Number(item.volume || 0),
+    0,
+  );
+  return itemVolume || Number(
+    order.trip_capacity_m3_snapshot
+    ?? order.capacity_m3
+    ?? order.delivery_option?.capacity_m3
+    ?? 0,
+  );
+};
 
 const formatCurrency = (value?: number | null) =>
   `${Number(value ?? 0).toLocaleString("ru-RU")} ₽`;
@@ -1023,6 +1038,14 @@ export const DriverOrderCard: React.FC<{
     order.material_name || order.items?.[0]?.material?.name || "Неизвестно";
   const capacity =
     order.capacity_m3 || order.delivery_option?.capacity_m3 || "?";
+  const orderVolume = getOrderVolume(order);
+  const tripCount = Math.max(1, Number(order.trip_count || 1));
+  const tripCapacity = Number(
+    order.trip_capacity_m3_snapshot || order.delivery_option?.capacity_m3 || capacity,
+  );
+  const volumeLabel = tripCount > 1
+    ? `${orderVolume} м³ (${tripCount} рейсов по ${tripCapacity} м³)`
+    : `${orderVolume || capacity} м³`;
   const deliveryCost = getDeliveryCost(order);
   const estimatedTotalAmount = getEstimatedTotalAmount(order);
   const materialCost = estimatedTotalAmount - deliveryCost;
@@ -1251,7 +1274,7 @@ export const DriverOrderCard: React.FC<{
           </div>
           <div className="flex flex-col">
             <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">Объем</span>
-            <span className="text-sm font-bold text-slate-800">{capacity} м³</span>
+            <span className="text-sm font-bold text-slate-800">{volumeLabel}</span>
           </div>
         </div>
 

@@ -56,6 +56,8 @@ async def create_order_with_volume(
     delivery_option: DeliveryOption,
     material: Material,
     status: str = OrderStatus.searching_driver.value,
+    trip_count: int | None = None,
+    trip_capacity_m3: float | None = None,
 ) -> Order:
     client = Client(name="Тестовый клиент", phone=f"+7999{uuid.uuid4().int % 10_000_000:07d}")
     session.add(client)
@@ -69,6 +71,8 @@ async def create_order_with_volume(
         status=status,
         source="dispatcher",
         created_by_source="dispatcher",
+        trip_count=trip_count,
+        trip_capacity_m3_snapshot=trip_capacity_m3,
     )
     session.add(order)
     await session.flush()
@@ -86,6 +90,72 @@ async def create_order_with_volume(
     order.__dict__["delivery_option"] = delivery_option
     await session.flush()
     return order
+
+
+@pytest.mark.asyncio
+async def test_auto_dispatch_matches_20m3_driver_for_100m3_order_with_five_trips(session_factory):
+    async with session_factory() as session:
+        driver_role = await ensure_role(session, "driver")
+        category = Category(name="Многорейсовый материал", slug="multi-trip-stone", sort_order=0, is_active=True)
+        material = Material(
+            category=category,
+            name="Многорейсовый щебень",
+            description="",
+            price=1800.0,
+            unit="m3",
+            min_volume=1.0,
+            is_active=True,
+            sort_order=0,
+        )
+        delivery_option = DeliveryOption(
+            capacity_m3=20.0,
+            title="Самосвал 20 м3",
+            description="",
+            base_price=0.0,
+            is_active=True,
+            sort_order=0,
+        )
+        session.add_all([category, material, delivery_option])
+        await session.flush()
+
+        user = await create_user(session, username="multi_trip_driver", role=driver_role)
+        vehicle = Vehicle(
+            title="Самосвал 20 м3",
+            delivery_option_id=delivery_option.id,
+            body_volume_m3=20.0,
+            cubature_min=20.0,
+            cubature_max=20.0,
+            is_active=True,
+            moderation_status=ModerationStatus.approved.value,
+        )
+        session.add(vehicle)
+        await session.flush()
+        driver = Driver(
+            user_id=user.id,
+            vehicle_id=vehicle.id,
+            name="Водитель многорейсового заказа",
+            phone="+79990040001",
+            status=DriverStatus.available.value,
+            is_active=True,
+            is_auto_dispatch_enabled=True,
+            dispatch_priority=100,
+            moderation_status=ModerationStatus.approved.value,
+        )
+        session.add(driver)
+
+        order = await create_order_with_volume(
+            session,
+            volume=100.0,
+            delivery_option=delivery_option,
+            material=material,
+            trip_count=5,
+            trip_capacity_m3=20.0,
+        )
+        await session.commit()
+
+        drivers = await get_matching_drivers(session, order)
+
+    assert [candidate.id for candidate in drivers] == [driver.id]
 
 
 @pytest.mark.asyncio

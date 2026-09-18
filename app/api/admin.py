@@ -37,6 +37,7 @@ from app.models.models import (
     SepticProviderProfile,
     SupportMessage,
     SupportTicket,
+    TransportCategory,
     User,
     Vehicle,
     WaterPoint,
@@ -2046,6 +2047,27 @@ async def get_delivery_option(
     return (await _attach_delivery_option_media(db, [delivery_option]))[0]
 
 
+async def _validate_delivery_option_category(
+    db: AsyncSession,
+    *,
+    category_id: UUID | None,
+    capacity_m3: float,
+) -> None:
+    if category_id is None:
+        return
+
+    category = await db.get(TransportCategory, category_id)
+    if category is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Transport category not found")
+    if capacity_m3 < category.capacity_min_m3 or (
+        category.capacity_max_m3 is not None and capacity_m3 > category.capacity_max_m3
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Delivery option capacity must be within the selected transport category range",
+        )
+
+
 @router.post("/delivery-options", response_model=DeliveryOptionOut, status_code=status.HTTP_201_CREATED)
 async def create_delivery_option(
     payload: DeliveryOptionCreate,
@@ -2053,6 +2075,11 @@ async def create_delivery_option(
     current_admin: User = Depends(get_current_admin_user),
 ):
     del current_admin
+    await _validate_delivery_option_category(
+        db,
+        category_id=payload.transport_category_id,
+        capacity_m3=payload.capacity_m3,
+    )
     delivery_option = DeliveryOption(**payload.model_dump())
     db.add(delivery_option)
     await db.commit()
@@ -2072,7 +2099,13 @@ async def update_delivery_option(
     if delivery_option is None:
         raise HTTPException(status_code=404, detail="Delivery option not found")
 
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    values = payload.model_dump(exclude_unset=True)
+    await _validate_delivery_option_category(
+        db,
+        category_id=values.get("transport_category_id", delivery_option.transport_category_id),
+        capacity_m3=values.get("capacity_m3", delivery_option.capacity_m3),
+    )
+    for field, value in values.items():
         setattr(delivery_option, field, value)
 
     await db.commit()

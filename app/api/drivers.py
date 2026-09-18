@@ -10,7 +10,7 @@ from app.db.database import get_db
 from app.models.models import DeliveryOption, Driver, DriverStatus, MediaFile, ModerationStatus, Order, OrderOffer, OrderStatus, User, Vehicle
 from app.schemas.driver import DriverCreate, DriverFleetResponse, DriverResponse
 from app.security.auth import get_current_logist_user
-from app.services.dispatch_service import build_vehicle_volume_match_clause, get_order_requested_volume
+from app.services.dispatch_service import build_vehicle_volume_match_clause, get_order_trip_capacity
 from app.services.google_play_reviewer import GOOGLE_PLAY_REVIEWER_PHONE_VALUES
 from app.services.storage import StorageNotConfiguredError, get_storage_service
 from app.services.cities import driver_city_clause, resolve_city, initialize_service_cities
@@ -115,7 +115,7 @@ def build_driver_list_query(
             .where(Driver.status == DriverStatus.available.value)
             .where(Driver.moderation_status == ModerationStatus.approved.value)
             .where(Vehicle.moderation_status == ModerationStatus.approved.value)
-            .where(build_vehicle_volume_match_clause(get_order_requested_volume(order)))
+            .where(build_vehicle_volume_match_clause(get_order_trip_capacity(order)))
         )
 
     return stmt

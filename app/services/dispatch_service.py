@@ -172,6 +172,30 @@ def get_order_requested_volume(order: Order | None) -> float | None:
     return None
 
 
+def get_order_trip_capacity(order: Order | None) -> float | None:
+    """Return the volume a driver must carry in one trip.
+
+    Sprint 23 orders can contain several trips. Driver eligibility must use
+    the immutable capacity snapshot created during checkout, rather than the
+    total volume requested by the client.
+    """
+    if order is None:
+        return None
+
+    trip_capacity = getattr(order, "trip_capacity_m3_snapshot", None)
+    if trip_capacity is not None and float(trip_capacity) > 0:
+        return float(trip_capacity)
+
+    delivery_option = getattr(order, "delivery_option", None)
+    option_capacity = getattr(delivery_option, "capacity_m3", None)
+    if option_capacity is not None and float(option_capacity) > 0:
+        return float(option_capacity)
+
+    # Legacy orders do not have a per-trip snapshot. Retain their existing
+    # total-volume matching behaviour until they are completed.
+    return get_order_requested_volume(order)
+
+
 def get_order_material_name(order: Order | None) -> str:
     if order is None:
         return "Груз"
@@ -226,20 +250,20 @@ def build_manual_assign_push_message(order: Order) -> tuple[str, str]:
     )
 
 
-def build_vehicle_volume_match_clause(requested_volume: float | None):
-    if requested_volume is None or requested_volume <= 0:
+def build_vehicle_volume_match_clause(trip_capacity_m3: float | None):
+    if trip_capacity_m3 is None or trip_capacity_m3 <= 0:
         return True
 
     return and_(
-        or_(Vehicle.cubature_min.is_(None), Vehicle.cubature_min <= requested_volume),
-        or_(Vehicle.cubature_max.is_(None), Vehicle.cubature_max >= requested_volume),
-        or_(Vehicle.body_volume_m3.is_(None), Vehicle.body_volume_m3 >= requested_volume),
+        or_(Vehicle.cubature_min.is_(None), Vehicle.cubature_min <= trip_capacity_m3),
+        or_(Vehicle.cubature_max.is_(None), Vehicle.cubature_max >= trip_capacity_m3),
+        or_(Vehicle.body_volume_m3.is_(None), Vehicle.body_volume_m3 >= trip_capacity_m3),
     )
 
 
 def ensure_driver_vehicle_matches_order_volume(order: Order, driver: Driver) -> None:
-    requested_volume = get_order_requested_volume(order)
-    if requested_volume is None or requested_volume <= 0:
+    trip_capacity_m3 = get_order_trip_capacity(order)
+    if trip_capacity_m3 is None or trip_capacity_m3 <= 0:
         return
 
     vehicle = driver.vehicle
@@ -248,8 +272,8 @@ def ensure_driver_vehicle_matches_order_volume(order: Order, driver: Driver) -> 
 
     cubature_min = vehicle.cubature_min
     cubature_max = vehicle.cubature_max
-    if (cubature_min is not None and requested_volume < cubature_min) or (
-        cubature_max is not None and requested_volume > cubature_max
+    if (cubature_min is not None and trip_capacity_m3 < cubature_min) or (
+        cubature_max is not None and trip_capacity_m3 > cubature_max
     ):
         raise HTTPException(status_code=409, detail="Машина водителя не подходит под объем заказа")
 
@@ -1233,7 +1257,7 @@ async def delete_order_by_id(session: AsyncSession, order_id: UUID) -> None:
 
 
 def _matching_drivers_base_query(order: Order) -> Select[tuple[Driver]]:
-    requested_volume = get_order_requested_volume(order)
+    trip_capacity_m3 = get_order_trip_capacity(order)
     return (
         select(Driver).where(driver_city_clause(getattr(order, "city_id", None)))
         .join(Driver.vehicle)
@@ -1245,7 +1269,7 @@ def _matching_drivers_base_query(order: Order) -> Select[tuple[Driver]]:
         .where(Driver.vehicle_id.is_not(None))
         .where(Vehicle.is_active.is_(True))
         .where(Vehicle.moderation_status.in_(DISPATCH_ALLOWED_MODERATION_STATUSES))
-        .where(build_vehicle_volume_match_clause(requested_volume))
+        .where(build_vehicle_volume_match_clause(trip_capacity_m3))
     )
 
 
@@ -1271,7 +1295,7 @@ async def _log_dispatch_candidates(
     excluded_driver_ids: set[UUID],
     exclude_attempted_drivers: bool,
 ) -> None:
-    requested_volume = get_order_requested_volume(order)
+    trip_capacity_m3 = get_order_trip_capacity(order)
     result = await session.execute(
         select(Driver)
         .options(selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option))
@@ -1309,16 +1333,16 @@ async def _log_dispatch_candidates(
                 reasons.append('vehicle_inactive')
             if vehicle.moderation_status not in DISPATCH_ALLOWED_MODERATION_STATUSES:
                 reasons.append(f'vehicle_moderation={vehicle.moderation_status}')
-            if requested_volume is not None and requested_volume > 0:
+            if trip_capacity_m3 is not None and trip_capacity_m3 > 0:
                 cubature_min = vehicle.cubature_min
                 cubature_max = vehicle.cubature_max
                 body_volume = vehicle.body_volume_m3
-                if cubature_min is not None and requested_volume < cubature_min:
-                    reasons.append(f'volume_lt_min:{requested_volume}<{cubature_min}')
-                if cubature_max is not None and requested_volume > cubature_max:
-                    reasons.append(f'volume_gt_max:{requested_volume}>{cubature_max}')
-                if body_volume is not None and requested_volume > body_volume:
-                    reasons.append(f'volume_gt_body:{requested_volume}>{body_volume}')
+                if cubature_min is not None and trip_capacity_m3 < cubature_min:
+                    reasons.append(f'trip_capacity_lt_min:{trip_capacity_m3}<{cubature_min}')
+                if cubature_max is not None and trip_capacity_m3 > cubature_max:
+                    reasons.append(f'trip_capacity_gt_max:{trip_capacity_m3}>{cubature_max}')
+                if body_volume is not None and trip_capacity_m3 > body_volume:
+                    reasons.append(f'trip_capacity_gt_body:{trip_capacity_m3}>{body_volume}')
         if driver.id in rejected_ids:
             reasons.append('already_rejected_or_expired')
         if exclude_attempted_drivers and driver.id in attempted_ids:
@@ -1344,7 +1368,8 @@ async def _log_dispatch_candidates(
         'dispatch_candidate_scan',
         extra={
             'order_id': str(order.id),
-            'requested_volume': requested_volume,
+            'requested_volume': get_order_requested_volume(order),
+            'trip_capacity_m3': trip_capacity_m3,
             'drivers_total': len(candidate_logs),
             'drivers_snapshot': candidate_logs,
         },

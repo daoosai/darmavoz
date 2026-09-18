@@ -197,22 +197,12 @@ export default function CartScreen({
     item: ReturnType<typeof useCartStore.getState>["cartItems"][number],
     direction: number,
   ) => {
-    const deliveryOptions = getDeliveryOptionsForVolume([
-      item.deliveryOption,
-      ...(item.material.delivery_options || []),
-    ]);
-    const maxVolume = Number(deliveryOptions.at(-1)?.capacity_m3 || MIN_VOLUME_M3);
     const currentVolume = draftVolumes[item.id] ?? getCartItemVolume(item);
-    const nextVolume = Math.min(
-      maxVolume,
-      Math.max(MIN_VOLUME_M3, currentVolume + direction * VOLUME_STEP_M3),
+    const nextVolume = Math.max(
+      MIN_VOLUME_M3,
+      currentVolume + direction * VOLUME_STEP_M3,
     );
-    if (
-      nextVolume === currentVolume ||
-      !findDeliveryOptionForVolume(deliveryOptions, nextVolume)
-    ) {
-      return;
-    }
+    if (nextVolume === currentVolume) return;
     setDraftVolumes((current) => ({ ...current, [item.id]: nextVolume }));
   };
 
@@ -565,7 +555,6 @@ export default function CartScreen({
               ...(item.material.delivery_options || []),
             ]);
             const displayedOption = findDeliveryOptionForVolume(deliveryOptions, draftVolume) || item.deliveryOption;
-            const maxVolume = Number(deliveryOptions.at(-1)?.capacity_m3 || displayedOption.capacity_m3);
             const calculation = calcResults[item.id];
             const tripCount = isMarketplaceCalculation(calculation)
               ? calculation.best_option.trip_count
@@ -639,15 +628,28 @@ export default function CartScreen({
                       >
                         <Minus className="h-4 w-4" />
                       </button>
-                      <span className="min-w-[68px] px-2 text-center text-sm font-bold text-sky-700">
-                        {draftVolume} м³
-                      </span>
+                      <input
+                        type="number"
+                        min={MIN_VOLUME_M3}
+                        step={VOLUME_STEP_M3}
+                        value={draftVolume}
+                        onChange={(event) => {
+                          const nextVolume = Number(event.target.value);
+                          if (Number.isFinite(nextVolume) && nextVolume >= MIN_VOLUME_M3) {
+                            setDraftVolumes((current) => ({
+                              ...current,
+                              [item.id]: nextVolume,
+                            }));
+                          }
+                        }}
+                        aria-label={`Объём ${item.material.name}`}
+                        className="w-[76px] bg-transparent px-1 text-center text-sm font-bold text-sky-700 outline-none"
+                      />
                       <button
                         type="button"
                         onClick={() => changeDraftVolume(item, VOLUME_STEP_M3)}
-                        disabled={draftVolume >= maxVolume}
                         aria-label={`Увеличить объём ${item.material.name}`}
-                        className="grid h-7 w-7 place-items-center rounded-full bg-white text-sky-700 shadow-sm transition-colors disabled:cursor-not-allowed disabled:text-slate-300"
+                        className="grid h-7 w-7 place-items-center rounded-full bg-white text-sky-700 shadow-sm transition-colors"
                       >
                         <Plus className="h-4 w-4" />
                       </button>

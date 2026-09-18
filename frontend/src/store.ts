@@ -339,14 +339,11 @@ export const useCartStore = create<CartState>()(
         0,
       );
       const newVolume = existingVolume + Number(deliveryOption.capacity_m3);
-      const upgradedOption = findDeliveryOptionForVolume(uniqueOptions, newVolume);
-
-      if (!upgradedOption) {
-        toast.error(
-          "Максимальный объем одной машины превышен. Пожалуйста, оформите второй заказ.",
-        );
-        return false;
-      }
+      // A delivery option determines capacity per trip, not the maximum order
+      // volume. Once the order exceeds all available capacities, keep the
+      // chosen option and let the backend calculate the required trip count.
+      const upgradedOption =
+        findDeliveryOptionForVolume(uniqueOptions, newVolume) || deliveryOption;
 
       const targetItem = existingItems[0];
       set((state) => ({
@@ -399,8 +396,10 @@ export const useCartStore = create<CartState>()(
       item.deliveryOption,
       ...(item.material.delivery_options || []),
     ]);
-    const upgradedOption = findDeliveryOptionForVolume(availableOptions, volume);
-    if (!upgradedOption) return false;
+    // Large orders may require several trips in the same vehicle. Preserve the
+    // current option above the largest configured single-trip capacity.
+    const upgradedOption =
+      findDeliveryOptionForVolume(availableOptions, volume) || item.deliveryOption;
 
     set((state) => ({
       cartItems: state.cartItems.map((cartItem) =>

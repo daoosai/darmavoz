@@ -140,6 +140,34 @@ async def update_transport_category(
     return category
 
 
+@admin_router.delete("/transport-categories/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_transport_category(
+    category_id: UUID,
+    db: AsyncSession = Depends(get_db), current_admin: User = Depends(get_current_admin_user)
+):
+    del current_admin
+    category = await db.get(TransportCategory, category_id)
+    if category is None:
+        raise HTTPException(status_code=404, detail="Категория транспорта не найдена.")
+    has_delivery_options = await db.scalar(
+        select(DeliveryOption.id)
+        .where(DeliveryOption.transport_category_id == category_id)
+        .limit(1)
+    )
+    has_tariffs = await db.scalar(
+        select(DeliveryTariff.id)
+        .where(DeliveryTariff.transport_category_id == category_id)
+        .limit(1)
+    )
+    if has_delivery_options is not None or has_tariffs is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Нельзя удалить категорию с привязанными типами машин или тарифами.",
+        )
+    await db.delete(category)
+    await db.commit()
+
+
 @admin_router.get("/transport-categories/{category_id}/tariffs", response_model=list[DeliveryTariffOut])
 async def list_category_tariffs(
     category_id: UUID,

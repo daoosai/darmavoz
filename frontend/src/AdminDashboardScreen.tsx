@@ -96,12 +96,20 @@ interface AdminMaterial {
 
 interface AdminDeliveryOption {
   id: string;
+  transport_category_id?: string | null;
   title: string;
   capacity_m3: number;
   is_active: boolean;
   media_files?: AdminMediaFile[];
   primary_image_url?: string;
   image_url?: string;
+}
+
+interface AdminTransportCategory {
+  id: string;
+  title: string;
+  capacity_min_m3: number;
+  capacity_max_m3?: number | null;
 }
 
 interface AdminDriver {
@@ -245,6 +253,9 @@ export default function AdminDashboardScreen({
   const [deliveryOptions, setDeliveryOptions] = useState<AdminDeliveryOption[]>(
     [],
   );
+  const [transportCategories, setTransportCategories] = useState<
+    AdminTransportCategory[]
+  >([]);
 
   // --- Live Fleet State ---
   interface LiveFleetCar {
@@ -835,6 +846,23 @@ export default function AdminDashboardScreen({
     }
   };
 
+  const fetchTransportCategories = async () => {
+    if (!token) return [];
+    try {
+      const res = await fetch(`${baseURL}/admin/transport-categories`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Ошибка загрузки категорий транспорта");
+      const data = await res.json();
+      const items = Array.isArray(data) ? data : data.results || [];
+      setTransportCategories(items);
+      return items as AdminTransportCategory[];
+    } catch {
+      toast.error("Не удалось загрузить категории транспорта");
+      return [];
+    }
+  };
+
   const fetchDrivers = async (silent = false) => {
     if (!token) return;
     if (!silent) setIsLoading(true);
@@ -989,8 +1017,9 @@ export default function AdminDashboardScreen({
     fetchCategories();
     if ((activeTab === "materials" || activeTab === "quarries") && materials.length === 0) {
       fetchMaterials();
-    } else if (activeTab === "delivery" && deliveryOptions.length === 0) {
-      fetchDeliveryOptions();
+    } else if (activeTab === "delivery") {
+      if (deliveryOptions.length === 0) fetchDeliveryOptions();
+      if (transportCategories.length === 0) fetchTransportCategories();
     } else if (activeTab === "drivers" && drivers.length === 0) {
       fetchDrivers();
       if (deliveryOptions.length === 0) fetchDeliveryOptions(true);
@@ -1189,6 +1218,10 @@ export default function AdminDashboardScreen({
       toast.error("Заполните обязательные поля (Название, Объем)");
       return;
     }
+    if (!editingDelivery.transport_category_id) {
+      toast.error("Выберите категорию транспорта");
+      return;
+    }
 
     setIsSavingDelivery(true);
     try {
@@ -1201,6 +1234,7 @@ export default function AdminDashboardScreen({
       const payload: any = {
         title: editingDelivery.title,
         capacity_m3: Number(editingDelivery.capacity_m3),
+        transport_category_id: editingDelivery.transport_category_id,
         is_active: editingDelivery.is_active ?? true,
         sort_order: 10,
       };
@@ -1593,6 +1627,9 @@ export default function AdminDashboardScreen({
   };
 
   const openDeliveryModal = async (delivery?: AdminDeliveryOption) => {
+    const categories = transportCategories.length
+      ? transportCategories
+      : await fetchTransportCategories();
     if (delivery) {
       setEditingDelivery({ ...delivery });
       setIsDeliveryModalOpen(true);
@@ -1614,6 +1651,7 @@ export default function AdminDashboardScreen({
       setEditingDelivery({
         is_active: true,
         capacity_m3: 0,
+        transport_category_id: categories[0]?.id,
       });
       setIsDeliveryModalOpen(true);
     }
@@ -3842,6 +3880,30 @@ export default function AdminDashboardScreen({
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
                   />
                 </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Категория транспорта
+                </label>
+                <select
+                  required
+                  value={editingDelivery.transport_category_id || ""}
+                  onChange={(e) =>
+                    setEditingDelivery({
+                      ...editingDelivery,
+                      transport_category_id: e.target.value || null,
+                    })
+                  }
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
+                >
+                  <option value="">Выберите категорию</option>
+                  {transportCategories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.title} · {category.capacity_min_m3}–{category.capacity_max_m3 ?? "∞"} м³
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="flex flex-col gap-2 pt-2">

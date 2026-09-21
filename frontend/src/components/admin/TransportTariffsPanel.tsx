@@ -48,6 +48,7 @@ export default function TransportTariffsPanel({ token }: { token: string | null 
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingTariff, setSavingTariff] = useState(false);
+  const [deletingTariffId, setDeletingTariffId] = useState<string | null>(null);
   const [savingCategory, setSavingCategory] = useState(false);
 
   const headers = {
@@ -233,6 +234,35 @@ export default function TransportTariffsPanel({ token }: { token: string | null 
     }
   };
 
+  const deleteTariff = async (tariff: Tariff) => {
+    const range = `${tariff.distance_from_km}–${tariff.distance_to_km ?? "∞"} км`;
+    if (!window.confirm(`Удалить тарифный диапазон ${range}?`)) return;
+
+    setDeletingTariffId(tariff.id);
+    try {
+      const response = await fetch(`${baseURL}/admin/transport-tariffs/${tariff.id}`, {
+        method: "DELETE",
+        headers,
+      });
+      if (!response.ok) {
+        throw new Error(await extractApiErrorMessage(
+          { status: response.status, data: await response.json().catch(() => null) },
+          "Не удалось удалить тариф.",
+        ));
+      }
+      if (editingTariffId === tariff.id) {
+        setEditingTariffId(null);
+        setTariffDraft(emptyTariffDraft);
+      }
+      await loadTariffs(categoryId, cityId);
+      toast.success("Тариф удалён");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось удалить тариф.");
+    } finally {
+      setDeletingTariffId(null);
+    }
+  };
+
   if (loading) {
     return <div className="flex justify-center rounded-2xl bg-white p-12 shadow-sm"><Loader2 className="h-7 w-7 animate-spin text-[#2DB0E6]" /></div>;
   }
@@ -263,6 +293,6 @@ export default function TransportTariffsPanel({ token }: { token: string | null 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">{([['distance_from_km','От, км'],['distance_to_km','До, км'],['rate_per_km','₽ / км'],['min_price_quarry','Мин. карьер'],['min_price_warehouse','Мин. склад']] as const).map(([key,label]) => <label key={key} className="text-xs font-semibold text-slate-500">{label}<input required={key !== 'distance_to_km'} min="0" step="0.01" type="number" value={tariffDraft[key]} onChange={(event) => setTariffDraft({ ...tariffDraft, [key]: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-800" /></label>)}</div>
       <button disabled={savingTariff || !categoryId || !cityId} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[#2DB0E6] px-4 py-2.5 font-bold text-white shadow-sm disabled:opacity-50"><Save className="h-4 w-4" />{savingTariff ? "Сохраняем" : editingTariffId ? "Сохранить" : "Добавить тариф"}</button>
     </form>
-    <div className="grid gap-3">{tariffs.map((tariff) => <button key={tariff.id} onClick={() => { setEditingTariffId(tariff.id); setTariffDraft({ distance_from_km: String(tariff.distance_from_km), distance_to_km: tariff.distance_to_km == null ? "" : String(tariff.distance_to_km), rate_per_km: String(tariff.rate_per_km), min_price_quarry: String(tariff.min_price_quarry), min_price_warehouse: String(tariff.min_price_warehouse) }); }} className="rounded-2xl border border-slate-100 bg-white p-4 text-left shadow-sm transition-colors hover:border-sky-200 hover:bg-sky-50/30"><div className="flex items-center justify-between"><span className="font-bold text-slate-800">{tariff.distance_from_km}–{tariff.distance_to_km ?? "∞"} км</span><span className="rounded-full bg-sky-50 px-2 py-1 text-xs font-bold text-sky-700">{tariff.rate_per_km} ₽/км</span></div><p className="mt-1 text-sm text-slate-500">Минимум: карьер {tariff.min_price_quarry} ₽ · склад {tariff.min_price_warehouse} ₽</p></button>)}{tariffs.length === 0 && <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center text-sm text-slate-500">В этом городе ещё нет тарифных диапазонов.</div>}</div>
+    <div className="grid gap-3">{tariffs.map((tariff) => <div key={tariff.id} className="flex items-start gap-2 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm transition-colors hover:border-sky-200 hover:bg-sky-50/30"><button type="button" onClick={() => { setEditingTariffId(tariff.id); setTariffDraft({ distance_from_km: String(tariff.distance_from_km), distance_to_km: tariff.distance_to_km == null ? "" : String(tariff.distance_to_km), rate_per_km: String(tariff.rate_per_km), min_price_quarry: String(tariff.min_price_quarry), min_price_warehouse: String(tariff.min_price_warehouse) }); }} className="min-w-0 flex-1 text-left"><div className="flex items-center justify-between gap-3"><span className="font-bold text-slate-800">{tariff.distance_from_km}–{tariff.distance_to_km ?? "∞"} км</span><span className="shrink-0 rounded-full bg-sky-50 px-2 py-1 text-xs font-bold text-sky-700">{tariff.rate_per_km} ₽/км</span></div><p className="mt-1 text-sm text-slate-500">Минимум: карьер {tariff.min_price_quarry} ₽ · склад {tariff.min_price_warehouse} ₽</p></button><button type="button" onClick={() => void deleteTariff(tariff)} disabled={deletingTariffId === tariff.id} className="rounded-xl p-2 text-red-500 transition hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50" aria-label={`Удалить тариф ${tariff.distance_from_km}–${tariff.distance_to_km ?? "∞"} км`}>{deletingTariffId === tariff.id ? <Loader2 className="h-5 w-5 animate-spin" /> : <Trash2 className="h-5 w-5" />}</button></div>)}{tariffs.length === 0 && <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center text-sm text-slate-500">В этом городе ещё нет тарифных диапазонов.</div>}</div>
   </section>;
 }

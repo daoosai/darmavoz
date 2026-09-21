@@ -201,6 +201,19 @@ async def create_category_tariff(
     return tariff
 
 
+@admin_router.delete("/transport-tariffs/{tariff_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_category_tariff(
+    tariff_id: UUID,
+    db: AsyncSession = Depends(get_db), current_admin: User = Depends(get_current_admin_user),
+):
+    del current_admin
+    tariff = await db.get(DeliveryTariff, tariff_id)
+    if tariff is None:
+        raise HTTPException(status_code=404, detail="Тариф не найден.")
+    await db.delete(tariff)
+    await db.commit()
+
+
 @admin_router.patch("/transport-tariffs/{tariff_id}", response_model=DeliveryTariffOut)
 async def update_category_tariff(
     tariff_id: UUID,

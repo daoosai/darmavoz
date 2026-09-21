@@ -244,3 +244,55 @@ async def test_overlapping_tariff_range_returns_human_readable_error(
     assert response.json()["detail"] == (
         "Диапазоны тарифов пересекаются с существующим диапазоном для этого города и категории."
     )
+
+
+@pytest.mark.asyncio
+async def test_admin_can_delete_delivery_tariff(client, session_factory, admin_token):
+    async with session_factory() as session:
+        city = City(
+            name="Test tariff deletion city",
+            region="Test region",
+            code=f"s23-tariff-delete-{uuid4().hex}",
+            center_lat=57.15,
+            center_lon=65.53,
+            map_zoom=11,
+            min_lat=56.95,
+            min_lon=65.10,
+            max_lat=57.45,
+            max_lon=65.95,
+            is_active=True,
+            is_default=False,
+        )
+        category = TransportCategory(
+            slug=f"s23-tariff-delete-category-{uuid4().hex}",
+            title="Test tariff deletion category",
+            capacity_min_m3=1,
+            capacity_max_m3=5,
+            is_active=True,
+            sort_order=0,
+        )
+        session.add_all([city, category])
+        await session.flush()
+        tariff = DeliveryTariff(
+            city_id=city.id,
+            transport_category_id=category.id,
+            distance_from_km=0,
+            distance_to_km=10,
+            rate_per_km=100,
+            min_price_quarry=1000,
+            min_price_warehouse=1000,
+            is_active=True,
+            sort_order=0,
+        )
+        session.add(tariff)
+        await session.commit()
+        tariff_id = tariff.id
+
+    response = await client.delete(
+        f"/api/v1/admin/transport-tariffs/{tariff_id}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+
+    assert response.status_code == 204
+    async with session_factory() as session:
+        assert await session.get(DeliveryTariff, tariff_id) is None

@@ -68,6 +68,7 @@ const DEFAULT_CALCULATION_ERROR_TEXT =
 
 const MIN_VOLUME_M3 = 5;
 const VOLUME_STEP_M3 = 1;
+type DraftVolume = number | "";
 
 const getCartItemVolume = (item: ReturnType<typeof useCartStore.getState>["cartItems"][number]) =>
   Number(item.volume ?? item.deliveryOption.capacity_m3 * item.quantity);
@@ -150,7 +151,7 @@ export default function CartScreen({
   const [preferredPointIds, setPreferredPointIds] = useState<Record<string, string>>({});
   const [manualCalculationRevision, setManualCalculationRevision] = useState(0);
   const [mapContext, setMapContext] = useState<MapContext | null>(null);
-  const [draftVolumes, setDraftVolumes] = useState<Record<string, number>>({});
+  const [draftVolumes, setDraftVolumes] = useState<Record<string, DraftVolume>>({});
   const calculationVersionRef = useRef(0);
   const processedManualCalculationRevisionRef = useRef(0);
 
@@ -185,7 +186,13 @@ export default function CartScreen({
     const timer = window.setTimeout(() => {
       cartItems.forEach((item) => {
         const draftVolume = draftVolumes[item.id];
-        if (draftVolume == null || draftVolume === getCartItemVolume(item)) return;
+        if (
+          typeof draftVolume !== "number" ||
+          draftVolume < MIN_VOLUME_M3 ||
+          draftVolume === getCartItemVolume(item)
+        ) {
+          return;
+        }
         updateItemVolume(item.id, draftVolume);
       });
     }, 500);
@@ -196,13 +203,30 @@ export default function CartScreen({
     item: ReturnType<typeof useCartStore.getState>["cartItems"][number],
     direction: number,
   ) => {
-    const currentVolume = draftVolumes[item.id] ?? getCartItemVolume(item);
+    const draftVolume = draftVolumes[item.id];
+    const currentVolume =
+      typeof draftVolume === "number" ? draftVolume : getCartItemVolume(item);
     const nextVolume = Math.max(
       MIN_VOLUME_M3,
       currentVolume + direction * VOLUME_STEP_M3,
     );
     if (nextVolume === currentVolume) return;
     setDraftVolumes((current) => ({ ...current, [item.id]: nextVolume }));
+  };
+
+  const commitDraftVolume = (
+    item: ReturnType<typeof useCartStore.getState>["cartItems"][number],
+  ) => {
+    const draftVolume = draftVolumes[item.id];
+    const nextVolume =
+      typeof draftVolume === "number" && Number.isFinite(draftVolume)
+        ? Math.max(MIN_VOLUME_M3, draftVolume)
+        : MIN_VOLUME_M3;
+
+    setDraftVolumes((current) => ({ ...current, [item.id]: nextVolume }));
+    if (nextVolume !== getCartItemVolume(item)) {
+      updateItemVolume(item.id, nextVolume);
+    }
   };
 
   useEffect(() => {
@@ -617,7 +641,10 @@ export default function CartScreen({
                       <button
                         type="button"
                         onClick={() => changeDraftVolume(item, -VOLUME_STEP_M3)}
-                        disabled={draftVolume <= MIN_VOLUME_M3}
+                        disabled={
+                          typeof draftVolume === "number" &&
+                          draftVolume <= MIN_VOLUME_M3
+                        }
                         aria-label={`Уменьшить объём ${item.material.name}`}
                         className="grid h-7 w-7 place-items-center rounded-full bg-white text-sky-700 shadow-sm transition-colors disabled:cursor-not-allowed disabled:text-slate-300"
                       >
@@ -629,12 +656,28 @@ export default function CartScreen({
                         step={VOLUME_STEP_M3}
                         value={draftVolume}
                         onChange={(event) => {
-                          const nextVolume = Number(event.target.value);
-                          if (Number.isFinite(nextVolume) && nextVolume >= MIN_VOLUME_M3) {
+                          const rawValue = event.target.value;
+                          if (rawValue === "") {
+                            setDraftVolumes((current) => ({
+                              ...current,
+                              [item.id]: "",
+                            }));
+                            return;
+                          }
+
+                          const nextVolume = Number(rawValue);
+                          if (Number.isFinite(nextVolume)) {
                             setDraftVolumes((current) => ({
                               ...current,
                               [item.id]: nextVolume,
                             }));
+                          }
+                        }}
+                        onBlur={() => commitDraftVolume(item)}
+                        onFocus={(event) => event.target.select()}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.currentTarget.blur();
                           }
                         }}
                         aria-label={`Объём ${item.material.name}`}

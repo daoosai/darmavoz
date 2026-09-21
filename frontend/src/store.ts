@@ -196,6 +196,23 @@ interface AddressState {
   clearSelectedAddress: () => void;
 }
 
+export type PendingAction = {
+  type: "OPEN_DELIVERY_SELECTION";
+  materialId: string;
+};
+
+interface PurchaseFlowState {
+  pendingAction: PendingAction | null;
+  setPendingAction: (action: PendingAction) => void;
+  clearPendingAction: () => void;
+}
+
+export const usePurchaseFlowStore = create<PurchaseFlowState>((set) => ({
+  pendingAction: null,
+  setPendingAction: (action) => set({ pendingAction: action }),
+  clearPendingAction: () => set({ pendingAction: null }),
+}));
+
 export const useAddressStore = create<AddressState>()(
   persist(
     (set) => ({

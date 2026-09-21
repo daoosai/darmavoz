@@ -44,7 +44,12 @@ import AdminDashboardScreen from "./AdminDashboardScreen";
 import AdminOrdersListScreen from "./AdminOrdersListScreen";
 import AdminStatisticsScreen from "./AdminStatisticsScreen";
 import DriverRegistrationScreen from "./DriverRegistrationScreen";
-import { useAuthStore, useCartStore, useAddressStore } from "./store";
+import {
+  useAuthStore,
+  useCartStore,
+  useAddressStore,
+  usePurchaseFlowStore,
+} from "./store";
 import ClientAuthBottomSheet from "./ClientAuthBottomSheet";
 import ClientAddressBottomSheet from "./ClientAddressBottomSheet";
 import ClientProfileScreen from "./ClientProfileScreen";
@@ -489,7 +494,9 @@ function MainContent({
   const [serviceDirection, setServiceDirection] = useState<"delivery" | "equipment">("delivery");
   const [mapMaterial, setMapMaterial] = useState<MaterialProps | null>(null);
   const [materialActionChoice, setMaterialActionChoice] = useState<MaterialProps | null>(null);
-  const [quickBuyMaterial, setQuickBuyMaterial] = useState<MaterialProps | null>(null);
+  const pendingAction = usePurchaseFlowStore((state) => state.pendingAction);
+  const setPendingAction = usePurchaseFlowStore((state) => state.setPendingAction);
+  const clearPendingAction = usePurchaseFlowStore((state) => state.clearPendingAction);
   const [selectedPickupPoint, setSelectedPickupPoint] =
     useState<PickupPointSelection | null>(null);
   useEffect(() => {
@@ -497,7 +504,6 @@ function MainContent({
     setSelectedPickupPoint(null);
     setMapMaterial(null);
     setMaterialActionChoice(null);
-    setQuickBuyMaterial(null);
   }, [cityId, setSelectedMaterial]);
 
   const handleCartClick = () => {
@@ -511,7 +517,7 @@ function MainContent({
   const handleClientAuthenticated = () => {
     onClearFocusedOrder();
     setActiveTab("home");
-    if (quickBuyMaterial) {
+    if (pendingAction && !selectedAddress) {
       setShowAddressSheet(true);
     }
   };
@@ -535,12 +541,12 @@ function MainContent({
     closeMaterialActionChoice();
     setSelectedPickupPoint(null);
     if (role !== "client" || !token) {
-      setQuickBuyMaterial(material);
+      setPendingAction({ type: "OPEN_DELIVERY_SELECTION", materialId: material.id });
       setShowAuthSheet(true);
       return;
     }
     if (!selectedAddress) {
-      setQuickBuyMaterial(material);
+      setPendingAction({ type: "OPEN_DELIVERY_SELECTION", materialId: material.id });
       setShowAddressSheet(true);
       return;
     }
@@ -601,15 +607,29 @@ function MainContent({
   };
 
   useEffect(() => {
-    if (!quickBuyMaterial) return;
+    if (pendingAction?.type !== "OPEN_DELIVERY_SELECTION") return;
     if (role !== "client" || !token) return;
     if (!selectedAddress) return;
+
+    const material = materials.find(
+      (candidate) => candidate.id === pendingAction.materialId,
+    );
+    if (!material) return;
+
     setSelectedPickupPoint(null);
-    setSelectedMaterial(quickBuyMaterial);
-    setQuickBuyMaterial(null);
+    setSelectedMaterial(material);
+    clearPendingAction();
     setShowAddressSheet(false);
     setShowAuthSheet(false);
-  }, [quickBuyMaterial, role, selectedAddress, setSelectedMaterial, token]);
+  }, [
+    clearPendingAction,
+    materials,
+    pendingAction,
+    role,
+    selectedAddress,
+    setSelectedMaterial,
+    token,
+  ]);
 
   useEffect(() => {
     if (currentPath === "/map" && activeTab !== "map") {
@@ -964,7 +984,7 @@ function MainContent({
         <ClientAddressBottomSheet
           isOpen={showAddressSheet}
           onClose={() => setShowAddressSheet(false)}
-          closeOnSelect={Boolean(quickBuyMaterial)}
+          closeOnSelect={Boolean(pendingAction)}
         />
       </div>
     </div>

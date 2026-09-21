@@ -4,7 +4,6 @@ const DGIS_KEY = import.meta.env.VITE_2GIS_KEY;
 const TWOGIS_SUGGEST_URL = "https://catalog.api.2gis.com/3.0/suggests";
 const TWOGIS_GEOCODER_URL = "https://catalog.api.2gis.com/3.0/items/geocode";
 const TWOGIS_ADDRESS_SUGGEST_TYPES = [
-  "adm_div",
   "adm_div.city",
   "adm_div.settlement",
   "adm_div.district",

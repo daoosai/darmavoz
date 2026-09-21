@@ -237,9 +237,7 @@ export default function ClientAddressBottomSheet({
   }, []);
 
   const fetch2GISSuggests = async (query: string) => {
-    const items = await fetch2gisAddressSuggestions(query, currentCity(), {
-      searchAllCities: true,
-    });
+    const items = await fetch2gisAddressSuggestions(query, currentCity());
     return items
       .map((item: any): AddressSuggestion => {
         const address = get2gisSuggestionAddress(item);

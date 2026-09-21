@@ -51,8 +51,9 @@ const getCitySuggestViewport = (city: City) => {
   if (!hasValidBounds) return null;
 
   return {
-    viewpoint1: `${minLon},${minLat}`,
-    viewpoint2: `${maxLon},${maxLat}`,
+    // 2GIS expects the top-left and bottom-right vertices respectively.
+    viewpoint1: `${minLon},${maxLat}`,
+    viewpoint2: `${maxLon},${minLat}`,
   };
 };
 
@@ -290,6 +291,11 @@ export const fetch2gisAddressSuggestions = async (
 
     return items;
   } catch (error) {
+    console.error(
+      "2GIS Suggest API request failed:",
+      getRequestUrlForLog(requestUrl),
+      error,
+    );
     logSuggestError(error);
     return [];
   }

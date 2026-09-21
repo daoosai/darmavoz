@@ -9,6 +9,7 @@ import {
   Minus,
   Plus,
   Truck,
+  Edit2,
 } from "lucide-react";
 import {
   normalizeClientOrderSummary,
@@ -426,6 +427,15 @@ export default function CartScreen({
     setManualCalculationRevision((current) => current + 1);
   };
 
+  const openDeliveryOptionPicker = (
+    item: ReturnType<typeof useCartStore.getState>["cartItems"][number],
+  ) => {
+    setDeliveryOptionContext({
+      itemId: item.id,
+      material: item.material,
+    });
+  };
+
   const handleCheckout = async () => {
     if (cartItems.length === 0 || !globalAddress.trim()) return;
 
@@ -642,9 +652,17 @@ export default function CartScreen({
                     </button>
                   </div>
 
-                  <div className="line-clamp-1 text-[14px] text-slate-500">
-                    {displayedOption.title} (машина до {displayedOption.capacity_m3} м³)
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => openDeliveryOptionPicker(item)}
+                    aria-label={`Изменить вариант доставки для ${item.material.name}`}
+                    className="group -ml-1 mt-1 inline-flex max-w-full items-center gap-1.5 rounded-lg px-1 py-0.5 text-left text-[14px] text-slate-500 transition-colors hover:bg-sky-50 hover:text-sky-700"
+                  >
+                    <span className="line-clamp-1">
+                      {displayedOption.title} (машина до {displayedOption.capacity_m3} м³)
+                    </span>
+                    <Edit2 className="h-3.5 w-3.5 shrink-0 opacity-60 transition-opacity group-hover:opacity-100" />
+                  </button>
 
                   <div className="mt-1 flex flex-wrap items-center gap-2">
                     {displayedOption.transport_category?.title && (
@@ -781,12 +799,7 @@ export default function CartScreen({
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() =>
-                    setDeliveryOptionContext({
-                      itemId: item.id,
-                      material: item.material,
-                    })
-                  }
+                  onClick={() => openDeliveryOptionPicker(item)}
                   className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-orange-300 bg-white px-4 py-2.5 font-bold text-orange-700 transition-colors hover:bg-orange-100"
                 >
                   <Truck className="h-4 w-4" />

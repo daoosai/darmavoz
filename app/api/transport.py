@@ -1,11 +1,11 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import exists, select
+from sqlalchemy import exists, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
-from app.models.models import DeliveryOption, DeliveryTariff, TransportCategory, User
+from app.models.models import DeliveryOption, DeliveryTariff, Order, TransportCategory, User
 from app.schemas.catalog import DeliveryOptionOut
 from app.schemas.transport import (
     DeliveryTariffCreate,
@@ -210,6 +210,12 @@ async def delete_category_tariff(
     tariff = await db.get(DeliveryTariff, tariff_id)
     if tariff is None:
         raise HTTPException(status_code=404, detail="Тариф не найден.")
+
+    await db.execute(
+        update(Order)
+        .where(Order.delivery_tariff_id == tariff_id)
+        .values(delivery_tariff_id=None)
+    )
     await db.delete(tariff)
     await db.commit()
 

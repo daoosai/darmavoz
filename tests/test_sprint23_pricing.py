@@ -6,11 +6,13 @@ from sqlalchemy.dialects.postgresql import insert
 import app.services.order_pricing as order_pricing
 from app.models.models import (
     Category,
+    Client,
     City,
     DeliveryOption,
     DeliveryTariff,
     Material,
     ModerationStatus,
+    Order,
     Quarry,
     TransportCategory,
     quarry_materials,
@@ -284,9 +286,22 @@ async def test_admin_can_delete_delivery_tariff(client, session_factory, admin_t
             is_active=True,
             sort_order=0,
         )
-        session.add(tariff)
+        client_record = Client(name="Test tariff deletion client")
+        session.add_all([tariff, client_record])
+        await session.flush()
+        order = Order(
+            client_id=client_record.id,
+            city_id=city.id,
+            delivery_tariff_id=tariff.id,
+            delivery_rate_per_km_snapshot=100,
+            tariff_distance_from_km_snapshot=0,
+            tariff_distance_to_km_snapshot=10,
+            total_amount=1000,
+        )
+        session.add(order)
         await session.commit()
         tariff_id = tariff.id
+        order_id = order.id
 
     response = await client.delete(
         f"/api/v1/admin/transport-tariffs/{tariff_id}",
@@ -296,3 +311,9 @@ async def test_admin_can_delete_delivery_tariff(client, session_factory, admin_t
     assert response.status_code == 204
     async with session_factory() as session:
         assert await session.get(DeliveryTariff, tariff_id) is None
+        order_after_delete = await session.get(Order, order_id)
+        assert order_after_delete is not None
+        assert order_after_delete.delivery_tariff_id is None
+        assert order_after_delete.delivery_rate_per_km_snapshot == 100
+        assert order_after_delete.tariff_distance_from_km_snapshot == 0
+        assert order_after_delete.tariff_distance_to_km_snapshot == 10

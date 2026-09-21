@@ -202,7 +202,7 @@ interface AddressState {
 }
 
 export type PendingAction = {
-  type: "OPEN_DELIVERY_SELECTION";
+  type: "OPEN_DELIVERY_SELECTION" | "OPEN_PICKUP_MAP";
   materialId: string;
 };
 

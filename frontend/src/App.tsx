@@ -531,9 +531,21 @@ function MainContent({
     setMaterialActionChoice(null);
   };
 
-  const openDeliveryMap = (material: MaterialProps) => {
-    setMaterialActionChoice(null);
+  const startPickupSelection = (material: MaterialProps) => {
+    closeMaterialActionChoice();
     setSelectedPickupPoint(null);
+
+    if (role !== "client" || !token) {
+      setPendingAction({ type: "OPEN_PICKUP_MAP", materialId: material.id });
+      setShowAuthSheet(true);
+      return;
+    }
+    if (!selectedAddress) {
+      setPendingAction({ type: "OPEN_PICKUP_MAP", materialId: material.id });
+      setShowAddressSheet(true);
+      return;
+    }
+
     setMapMaterial(material);
   };
 
@@ -607,7 +619,12 @@ function MainContent({
   };
 
   useEffect(() => {
-    if (pendingAction?.type !== "OPEN_DELIVERY_SELECTION") return;
+    if (
+      pendingAction?.type !== "OPEN_DELIVERY_SELECTION" &&
+      pendingAction?.type !== "OPEN_PICKUP_MAP"
+    ) {
+      return;
+    }
     if (role !== "client" || !token) return;
     if (!selectedAddress) return;
 
@@ -617,7 +634,11 @@ function MainContent({
     if (!material) return;
 
     setSelectedPickupPoint(null);
-    setSelectedMaterial(material);
+    if (pendingAction.type === "OPEN_DELIVERY_SELECTION") {
+      setSelectedMaterial(material);
+    } else {
+      setMapMaterial(material);
+    }
     clearPendingAction();
     setShowAddressSheet(false);
     setShowAuthSheet(false);
@@ -934,7 +955,7 @@ function MainContent({
           material={materialActionChoice}
           onClose={closeMaterialActionChoice}
           onQuickBuy={startQuickBuy}
-          onChooseOnMap={openDeliveryMap}
+          onChooseOnMap={startPickupSelection}
         />
 
         {/* Bottom Sheet */}

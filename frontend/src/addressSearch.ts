@@ -3,8 +3,12 @@ import type { City } from './AdminCitiesScreen';
 const DGIS_KEY = import.meta.env.VITE_2GIS_KEY;
 const TWOGIS_SUGGEST_URL = "https://catalog.api.2gis.com/3.0/suggests";
 const TWOGIS_ADDRESS_SUGGEST_TYPES = [
+  "adm_div",
   "adm_div.city",
   "adm_div.settlement",
+  "adm_div.district",
+  "adm_div.district_area",
+  "adm_div.division",
   "building",
   "street",
   "adm_div.place",
@@ -33,6 +37,23 @@ const getRequestUrlForLog = (requestUrl: URL) => {
 
 const getText = (value: unknown): string =>
   typeof value === "string" ? value.trim() : "";
+
+const getCitySuggestViewport = (city: City) => {
+  const minLat = Number(city.min_lat);
+  const minLon = Number(city.min_lon);
+  const maxLat = Number(city.max_lat);
+  const maxLon = Number(city.max_lon);
+  const hasValidBounds = [minLat, minLon, maxLat, maxLon].every(Number.isFinite)
+    && minLat < maxLat
+    && minLon < maxLon;
+
+  if (!hasValidBounds) return null;
+
+  return {
+    viewpoint1: `${minLon},${minLat}`,
+    viewpoint2: `${maxLon},${maxLat}`,
+  };
+};
 
 const normalizeLocalityName = (value: string): string =>
   value.trim().toLocaleLowerCase().replace(/ё/g, "е");
@@ -189,13 +210,19 @@ export const fetch2gisAddressSuggestions = async (
   const params = new URLSearchParams({
     q: options.searchAllCities ? normalized : withCityBias(normalized, city),
     key: DGIS_KEY,
+    suggest_type: "address",
     type: TWOGIS_ADDRESS_SUGGEST_TYPES,
     fields: "items.point,items.address,items.adm_div,items.full_address_name",
-    page_size: "20",
+    page_size: "50",
     locale: "ru_RU",
   });
   if (!options.searchAllCities) {
     params.set("location", `${city.center_lon},${city.center_lat}`);
+    const viewport = getCitySuggestViewport(city);
+    if (viewport) {
+      params.set("viewpoint1", viewport.viewpoint1);
+      params.set("viewpoint2", viewport.viewpoint2);
+    }
   }
   requestUrl.search = params.toString();
 

@@ -12,6 +12,7 @@ interface MaterialBottomSheetProps {
   material: MaterialProps | null;
   onClose: () => void;
   pickupPoint?: PickupPointSelection | null;
+  cartItemId?: string | null;
   onSubmitted?: () => void;
 }
 
@@ -62,6 +63,7 @@ export default function MaterialBottomSheet({
   material,
   onClose,
   pickupPoint,
+  cartItemId,
   onSubmitted,
 }: MaterialBottomSheetProps) {
   const [deliveryOptions, setDeliveryOptions] = useState<DeliveryOption[]>([]);
@@ -73,6 +75,9 @@ export default function MaterialBottomSheet({
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
   const addToCart = useCartStore((state) => state.addToCart);
+  const replaceItemDeliveryOption = useCartStore(
+    (state) => state.replaceItemDeliveryOption,
+  );
 
   useEffect(() => {
     if (!material) return;
@@ -135,15 +140,19 @@ export default function MaterialBottomSheet({
 
   const handleSubmit = () => {
     if (!selectedOption) return;
-    const wasAdded = addToCart(
-      { ...material, price: materialPrice, delivery_options: deliveryOptions },
-      selectedOption,
-      comment,
-      pickupPoint || undefined,
-      deliveryOptions,
+    const wasUpdated = cartItemId
+      ? replaceItemDeliveryOption(cartItemId, selectedOption, deliveryOptions)
+      : addToCart(
+          { ...material, price: materialPrice, delivery_options: deliveryOptions },
+          selectedOption,
+          comment,
+          pickupPoint || undefined,
+          deliveryOptions,
+        );
+    if (!wasUpdated) return;
+    toast.success(
+      cartItemId ? "Вариант доставки обновлён" : "Товар добавлен в корзину",
     );
-    if (!wasAdded) return;
-    toast.success("Товар добавлен в корзину");
     onSubmitted?.();
     onClose();
   };

@@ -22,6 +22,7 @@ import { formatTripsCount } from "./utils/pluralize";
 import toast from "react-hot-toast";
 import { MaterialProps } from "./MaterialDetailScreen";
 import PickupPointMapScreen, { PickupPointSelection } from "./PickupPointMapScreen";
+import MaterialBottomSheet from "./MaterialBottomSheet";
 
 interface MarketplaceOption {
   quarry_id: string;
@@ -57,6 +58,11 @@ interface MapContext {
   itemId: string;
   material: MaterialProps;
   deliveryOptionId: string;
+}
+
+interface DeliveryOptionContext {
+  itemId: string;
+  material: MaterialProps;
 }
 
 const isMarketplaceCalculation = (
@@ -151,6 +157,8 @@ export default function CartScreen({
   const [preferredPointIds, setPreferredPointIds] = useState<Record<string, string>>({});
   const [manualCalculationRevision, setManualCalculationRevision] = useState(0);
   const [mapContext, setMapContext] = useState<MapContext | null>(null);
+  const [deliveryOptionContext, setDeliveryOptionContext] =
+    useState<DeliveryOptionContext | null>(null);
   const [draftVolumes, setDraftVolumes] = useState<Record<string, DraftVolume>>({});
   const calculationVersionRef = useRef(0);
   const processedManualCalculationRevisionRef = useRef(0);
@@ -400,6 +408,24 @@ export default function CartScreen({
     toast.success("Точка выбрана, пересчитываем стоимость");
   };
 
+  const handleDeliveryOptionChanged = () => {
+    if (!deliveryOptionContext) return;
+    const { itemId } = deliveryOptionContext;
+    setPreferredPointIds((current) => {
+      if (!current[itemId]) return current;
+      const next = { ...current };
+      delete next[itemId];
+      return next;
+    });
+    setCalcResults((current) => {
+      if (!current[itemId]) return current;
+      const next = { ...current };
+      delete next[itemId];
+      return next;
+    });
+    setManualCalculationRevision((current) => current + 1);
+  };
+
   const handleCheckout = async () => {
     if (cartItems.length === 0 || !globalAddress.trim()) return;
 
@@ -497,6 +523,9 @@ export default function CartScreen({
     .map((item) => getCalculationErrorText(calcResults[item.id]))
     .find((message): message is string => Boolean(message))
     || DEFAULT_CALCULATION_ERROR_TEXT;
+  const unavailableCartItems = cartItems.filter(
+    (item) => !isMarketplaceCalculation(calcResults[item.id]),
+  );
 
   const totalDeliveryCost = cartItems.reduce((acc, item) => {
     const res = calcResults[item.id];
@@ -745,8 +774,26 @@ export default function CartScreen({
             </span>
           </div>
         ) : hasCalculationError ? (
-          <div className="p-4 bg-orange-50 text-orange-700 rounded-xl text-sm mt-4">
-            {calculationErrorText}
+          <div className="mt-4 rounded-xl bg-orange-50 p-4 text-sm text-orange-700">
+            <p>{calculationErrorText}</p>
+            <div className="mt-3 flex flex-col gap-2">
+              {unavailableCartItems.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() =>
+                    setDeliveryOptionContext({
+                      itemId: item.id,
+                      material: item.material,
+                    })
+                  }
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-orange-300 bg-white px-4 py-2.5 font-bold text-orange-700 transition-colors hover:bg-orange-100"
+                >
+                  <Truck className="h-4 w-4" />
+                  Выбрать другой вариант для «{item.material.name}»
+                </button>
+              ))}
+            </div>
           </div>
         ) : hasCalculations ? (
           <div className="flex flex-col gap-5">
@@ -971,6 +1018,12 @@ export default function CartScreen({
           onSelect={selectPointFromMap}
         />
       )}
+      <MaterialBottomSheet
+        material={deliveryOptionContext?.material ?? null}
+        cartItemId={deliveryOptionContext?.itemId}
+        onClose={() => setDeliveryOptionContext(null)}
+        onSubmitted={handleDeliveryOptionChanged}
+      />
     </div>
   );
 }

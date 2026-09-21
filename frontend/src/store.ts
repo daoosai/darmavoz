@@ -107,6 +107,11 @@ interface CartState {
     pickupPoint?: PickupPointSelection,
     availableDeliveryOptions?: DeliveryOption[],
   ) => boolean;
+  replaceItemDeliveryOption: (
+    id: string,
+    deliveryOption: DeliveryOption,
+    availableDeliveryOptions?: DeliveryOption[],
+  ) => boolean;
   updateItemVolume: (id: string, volume: number) => boolean;
   setItemIdempotencyKey: (id: string, idempotencyKey: string) => void;
   removeFromCart: (id: string) => void;
@@ -394,6 +399,35 @@ export const useCartStore = create<CartState>()(
           volume: Number(deliveryOption.capacity_m3),
         },
       ],
+    }));
+    return true;
+  },
+  replaceItemDeliveryOption: (
+    id,
+    deliveryOption,
+    availableDeliveryOptions = [],
+  ) => {
+    const item = get().cartItems.find((cartItem) => cartItem.id === id);
+    if (!item) return false;
+
+    const deliveryOptions = getDeliveryOptionsForVolume([
+      deliveryOption,
+      ...availableDeliveryOptions,
+    ]);
+    set((state) => ({
+      cartItems: state.cartItems.map((cartItem) =>
+        cartItem.id === id
+          ? {
+              ...cartItem,
+              material: {
+                ...cartItem.material,
+                delivery_options: deliveryOptions,
+              },
+              deliveryOption,
+              pickupPoint: undefined,
+            }
+          : cartItem,
+      ),
     }));
     return true;
   },

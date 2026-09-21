@@ -18,6 +18,7 @@ import {
   get2gisSuggestionCityName,
   get2gisSuggestionCoordinates,
   get2gisSuggestionLabel,
+  reverseGeocode2gisAddress,
 } from "./addressSearch";
 import { baseURL, handleApiError } from "./utils";
 import { useAuthStore, useAddressStore } from "./store";
@@ -110,6 +111,7 @@ export default function ClientAddressBottomSheet({
   const wrapperRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
+  const reverseGeocodeRequestRef = useRef(0);
 
   const showWarning = (message: string) => {
     toast(message, {
@@ -134,6 +136,37 @@ export default function ClientAddressBottomSheet({
       setLon(nextLon);
     });
     return marker;
+  };
+
+  const handleMapClick = async (event: { lngLat?: number[] }) => {
+    const [clickedLon, clickedLat] = event.lngLat || [];
+    if (!Number.isFinite(clickedLat) || !Number.isFinite(clickedLon)) return;
+
+    const requestId = ++reverseGeocodeRequestRef.current;
+    setLat(clickedLat);
+    setLon(clickedLon);
+    setNewAddress("");
+    setPendingCityId(null);
+    setPreviewZoom(null);
+    setSelectedSuggestion(null);
+    setSuggestions([]);
+
+    const address = await reverseGeocode2gisAddress(clickedLon, clickedLat);
+    if (requestId !== reverseGeocodeRequestRef.current) return;
+
+    if (!address) {
+      showWarning("Не удалось определить адрес. Пожалуйста, укажите точку ближе к дороге/поселку");
+      return;
+    }
+
+    setNewAddress(address);
+    setSelectedSuggestion({
+      label: address,
+      address,
+      lat: clickedLat,
+      lon: clickedLon,
+      cityName: "",
+    });
   };
 
   useEffect(() => {
@@ -183,6 +216,7 @@ export default function ClientAddressBottomSheet({
         if (!mapInstance) return;
 
         mapRef.current = mapInstance;
+        mapInstance.on("click", handleMapClick);
 
         if (lat && lon) {
           markerRef.current = createDraggableMarker(mapInstance, [lon, lat]);
@@ -191,6 +225,8 @@ export default function ClientAddressBottomSheet({
     }
 
     return () => {
+      reverseGeocodeRequestRef.current += 1;
+      mapInstance?.off?.("click", handleMapClick);
       if (mapRef.current) {
         mapRef.current.destroy();
         mapRef.current = null;

@@ -2,6 +2,7 @@ import { currentCity, useCityStore } from './cityStore';
 import type { City } from './AdminCitiesScreen';
 const DGIS_KEY = import.meta.env.VITE_2GIS_KEY;
 const TWOGIS_SUGGEST_URL = "https://catalog.api.2gis.com/3.0/suggests";
+const TWOGIS_GEOCODER_URL = "https://catalog.api.2gis.com/3.0/items/geocode";
 const TWOGIS_ADDRESS_SUGGEST_TYPES = [
   "adm_div",
   "adm_div.city",
@@ -140,6 +141,44 @@ export const get2gisSuggestionAddress = (item: any): string => {
 
 export const get2gisSuggestionLabel = (item: any): string =>
   get2gisSuggestionAddress(item);
+
+export const reverseGeocode2gisAddress = async (
+  lon: number,
+  lat: number,
+): Promise<string | null> => {
+  if (!DGIS_KEY || !Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return null;
+  }
+
+  const requestUrl = new URL(TWOGIS_GEOCODER_URL);
+  requestUrl.search = new URLSearchParams({
+    lon: String(lon),
+    lat: String(lat),
+    key: DGIS_KEY,
+    fields: "items.point,items.address,items.adm_div,items.full_address_name",
+    locale: "ru_RU",
+  }).toString();
+
+  try {
+    const response = await fetch(requestUrl);
+    const data = await response.json();
+    if (!response.ok) {
+      const error = Object.assign(
+        new Error(`2GIS Geocoder API responded with ${response.status}`),
+        { response: { status: response.status, data } },
+      );
+      logSuggestError(error);
+      return null;
+    }
+
+    const item = Array.isArray(data?.result?.items) ? data.result.items[0] : null;
+    const address = get2gisSuggestionAddress(item);
+    return address || null;
+  } catch (error) {
+    logSuggestError(error);
+    return null;
+  }
+};
 
 export const get2gisCitySuggestionName = (item: any): string =>
   getText(item?.name) || getText(item?.address?.name) || get2gisSuggestionAddress(item).split(",")[0];

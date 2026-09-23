@@ -107,10 +107,13 @@ export const get2gisSuggestionCityName = (item: any): string => {
       type === "adm_div.settlement"
     );
   });
-  const fallbackName = getText(item?.name);
+  const cityName = getText(city?.name || city?.caption);
+  if (cityName) return cityName;
 
-  return getText(city?.name || city?.caption) ||
-    (/^(россия|российская федерация)$/i.test(fallbackName) ? "" : fallbackName);
+  if (/^(adm_div\.city|adm_div\.settlement)$/.test(getText(item?.type))) {
+    return getText(item?.name);
+  }
+  return getText(item?.full_address_name).split(",")[0].trim();
 };
 
 const appendUniqueParts = (address: string, parts: string[]): string => {
@@ -128,8 +131,10 @@ const appendUniqueParts = (address: string, parts: string[]): string => {
 };
 
 export const get2gisSuggestionAddress = (item: any): string => {
+  const fullAddress = getText(item?.full_address_name);
+  if (fullAddress) return fullAddress;
+
   const baseAddress =
-    getText(item?.full_address_name) ||
     getText(item?.full_name) ||
     getText(item?.address_name) ||
     getText(item?.address?.name) ||
@@ -199,14 +204,14 @@ export const get2gisSuggestionCoordinates = (
     }
   }
 
-  const pointLat = Number(item?.point?.lat);
-  const pointLon = Number(item?.point?.lon);
+  const pointLat = Number(item?.point?.lat ?? NaN);
+  const pointLon = Number(item?.point?.lon ?? NaN);
   if (Number.isFinite(pointLat) && Number.isFinite(pointLon)) {
     return { lat: pointLat, lon: pointLon };
   }
 
-  const directLat = Number(item?.lat);
-  const directLon = Number(item?.lon);
+  const directLat = Number(item?.lat ?? NaN);
+  const directLon = Number(item?.lon ?? NaN);
   if (Number.isFinite(directLat) && Number.isFinite(directLon)) {
     return { lat: directLat, lon: directLon };
   }
@@ -247,12 +252,12 @@ export const fetch2gisAddressSuggestions = async (
 
   const requestUrl = new URL(TWOGIS_SUGGEST_URL);
   const params = new URLSearchParams({
-    q: options.searchAllCities ? normalized : withCityBias(normalized, city),
+    q: normalized,
     key: DGIS_KEY,
     suggest_type: "address",
     type: TWOGIS_ADDRESS_SUGGEST_TYPES,
     fields: "items.point,items.address,items.adm_div,items.full_address_name",
-    page_size: "50",
+    page_size: "20",
     locale: "ru_RU",
   });
   if (!options.searchAllCities) {

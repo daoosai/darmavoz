@@ -101,6 +101,7 @@ export default function LogistEditOrderModal({
   });
 
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const suggestionRequestRef = useRef(0);
   const deliveryInputRef = useRef<HTMLInputElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const isOrderEditLocked =
@@ -328,6 +329,7 @@ export default function LogistEditOrderModal({
     e: React.ChangeEvent<HTMLInputElement>,
   ) => {
     const value = e.target.value;
+    const requestId = ++suggestionRequestRef.current;
     setNewOrder((prev) => ({
       ...prev,
       delivery_address: value,
@@ -337,10 +339,12 @@ export default function LogistEditOrderModal({
     setCalculationResult(null);
 
     const suggests = await fetch2GISSuggests(value);
+    if (requestId !== suggestionRequestRef.current) return;
     setSuggestions(suggests.filter(Boolean));
   };
 
   const selectDeliverySuggestion = async (address: string) => {
+    suggestionRequestRef.current += 1;
     setNewOrder((prev) => ({
       ...prev,
       delivery_address: address,

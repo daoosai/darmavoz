@@ -182,6 +182,7 @@ export default function SupplierWaterPointsScreen({
   const [deleteTarget, setDeleteTarget] = useState<WaterPoint | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
+  const suggestionRequestRef = useRef(0);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [isMapUnavailable, setIsMapUnavailable] = useState(false);
@@ -459,6 +460,7 @@ export default function SupplierWaterPointsScreen({
 
   const handleAddressChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const address = event.target.value;
+    const requestId = ++suggestionRequestRef.current;
     lastGeocodedAddressRef.current = "";
     setForm((current) => ({ ...current, address, lat: "", lon: "" }));
     setShowSuggestions(true);
@@ -469,6 +471,7 @@ export default function SupplierWaterPointsScreen({
     }
 
     const nextSuggestions = await fetch2gisAddressSuggestions(address);
+    if (requestId !== suggestionRequestRef.current) return;
     setSuggestions(
       nextSuggestions
         .map((item: any) => {
@@ -482,6 +485,7 @@ export default function SupplierWaterPointsScreen({
   };
 
   const selectSuggestion = async (suggestion: AddressSuggestion) => {
+    suggestionRequestRef.current += 1;
     const address = suggestion.address.trim() || suggestion.label.trim();
     setShowSuggestions(false);
     setSuggestions([]);

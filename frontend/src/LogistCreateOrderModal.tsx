@@ -144,6 +144,7 @@ export default function LogistCreateOrderModal({
   });
 
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const suggestionRequestRef = useRef(0);
   const [availableDrivers, setAvailableDrivers] = useState<AvailableDriver[]>([]);
   const [isLoadingDrivers, setIsLoadingDrivers] = useState(false);
   const deliveryInputRef = useRef<HTMLInputElement>(null);
@@ -457,6 +458,7 @@ export default function LogistCreateOrderModal({
     e: React.ChangeEvent<HTMLInputElement>,
   ) => {
     const value = e.target.value;
+    const requestId = ++suggestionRequestRef.current;
     setNewOrder((prev) => ({
       ...prev,
       delivery_address: value,
@@ -466,10 +468,12 @@ export default function LogistCreateOrderModal({
     setCalculationResult(null);
 
     const suggests = await fetch2GISSuggests(value);
+    if (requestId !== suggestionRequestRef.current) return;
     setSuggestions(suggests.filter(Boolean));
   };
 
   const selectDeliverySuggestion = async (address: string) => {
+    suggestionRequestRef.current += 1;
     setNewOrder((prev) => ({
       ...prev,
       delivery_address: address,

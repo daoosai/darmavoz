@@ -181,6 +181,7 @@ export default function SupplierCreatePointModal({
   const withCityBias = (address: string) => biasCityAddress(address, currentCity());
   const [form, setForm] = useState<SupplierPointFormState>(() => buildInitialForm(point));
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
+  const suggestionRequestRef = useRef(0);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
@@ -270,6 +271,15 @@ export default function SupplierCreatePointModal({
           mapInstance.destroy();
           return;
         }
+        mapInstance.on("click", (event: any) => {
+          const [nextLon, nextLat] = event?.lngLat || [];
+          if (!Number.isFinite(nextLat) || !Number.isFinite(nextLon)) return;
+          setForm((current) => ({
+            ...current,
+            lat: stringifyCoordinate(nextLat),
+            lon: stringifyCoordinate(nextLon),
+          }));
+        });
         mapRef.current = mapInstance;
         if (initialCoordinates) {
           markerRef.current = createDraggableMarker(mapInstance, [
@@ -453,6 +463,7 @@ export default function SupplierCreatePointModal({
 
   const handleAddressChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
+    const requestId = ++suggestionRequestRef.current;
     lastGeocodedAddressRef.current = "";
     setForm((current) => ({ ...current, address: value }));
     setShowSuggestions(true);
@@ -463,6 +474,7 @@ export default function SupplierCreatePointModal({
     }
 
     const nextSuggestions = await fetch2gisAddressSuggestions(value);
+    if (requestId !== suggestionRequestRef.current) return;
     setSuggestions(
       nextSuggestions
         .map((item: any) => {
@@ -481,6 +493,7 @@ export default function SupplierCreatePointModal({
   };
 
   const selectSuggestion = async (suggestion: AddressSuggestion) => {
+    suggestionRequestRef.current += 1;
     const address = suggestion.address.trim() || suggestion.label.trim();
     setShowSuggestions(false);
     setSuggestions([]);

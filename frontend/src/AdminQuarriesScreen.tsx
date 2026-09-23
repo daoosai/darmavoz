@@ -9,13 +9,14 @@ import {
   get2gisSuggestionAddress,
   get2gisSuggestionCoordinates,
   get2gisSuggestionLabel,
+  reverseGeocode2gisAddress,
   withCityBias,
 } from "./addressSearch";
 import { useAuthStore, usePlacementStore } from "./store";
 import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
 import { CRM_STATUS_LABELS, getCrmStatusClass, getCrmStatusLabel, type CrmStatus } from "./crmStatus";
 import { PlacementBadge, PlacementDates, type PlacementFields, type PlacementStatus } from "./placement";
-import MapWebGLFallback, { tryCreate2GisMap } from "./components/MapWebGLFallback";
+import MapWebGLFallback, { load2GisMapSdk, tryCreate2GisMap } from "./components/MapWebGLFallback";
 import AddressSuggestDropdown from "./components/AddressSuggestDropdown";
 import AdminQuarriesMap from "./components/admin/AdminQuarriesMap";
 import CrmPanel from "./components/admin/CrmPanel";
@@ -1884,6 +1885,8 @@ function EnhancedEditQuarryModal({
   const mapRef = React.useRef<any>(null);
   const markerRef = React.useRef<any>(null);
   const blurTimeoutRef = React.useRef<number | null>(null);
+  const suggestionRequestRef = React.useRef(0);
+  const mapPickRequestRef = React.useRef(0);
   const lastGeocodedAddressRef = React.useRef(
     normalizeOptionalText(quarry.address)?.toLowerCase() || "",
   );
@@ -1918,33 +1921,64 @@ function EnhancedEditQuarryModal({
   };
 
   React.useEffect(() => {
-    const mapgl = (window as any).mapgl;
+    let disposed = false;
     const key = import.meta.env.VITE_2GIS_KEY;
-    if (!mapCity || !mapgl || !key || !mapContainerRef.current || mapRef.current) return;
-
-    const initialCoordinates = getParsedCoordinates();
-    const mapInstance = tryCreate2GisMap(
-      () =>
-        new mapgl.Map(mapContainerRef.current, {
-          center: initialCoordinates
-            ? [initialCoordinates.lon, initialCoordinates.lat]
-            : [mapCity.center_lon, mapCity.center_lat],
-          zoom: mapCity.map_zoom,
-          key,
-        }),
-      () => setIsMapUnavailable(true),
-    );
-    if (!mapInstance) return;
-
-    mapRef.current = mapInstance;
-    if (initialCoordinates) {
-      markerRef.current = createDraggableMarker(mapInstance, [
-        initialCoordinates.lon,
-        initialCoordinates.lat,
-      ]);
+    if (!mapContainerRef.current || mapRef.current) return;
+    if (!key) {
+      setIsMapUnavailable(true);
+      return;
     }
+    const centerCity = mapCity || currentCity();
+
+    void load2GisMapSdk()
+      .then((mapgl) => {
+        if (disposed || !mapContainerRef.current || mapRef.current) return;
+        const initialCoordinates = getParsedCoordinates();
+        const mapInstance = tryCreate2GisMap(
+          () => new mapgl.Map(mapContainerRef.current, {
+            center: initialCoordinates
+              ? [initialCoordinates.lon, initialCoordinates.lat]
+              : [centerCity.center_lon, centerCity.center_lat],
+            zoom: centerCity.map_zoom,
+            key,
+          }),
+          () => setIsMapUnavailable(true),
+        );
+        if (!mapInstance) return;
+        mapInstance.on("click", (event: any) => {
+          const [nextLon, nextLat] = event?.lngLat || [];
+          if (!Number.isFinite(nextLat) || !Number.isFinite(nextLon)) return;
+          const requestId = ++mapPickRequestRef.current;
+          suggestionRequestRef.current += 1;
+          setSuggestions([]);
+          setShowSuggestions(false);
+          if (blurTimeoutRef.current) {
+            window.clearTimeout(blurTimeoutRef.current);
+            blurTimeoutRef.current = null;
+          }
+          setFormData((current) => ({
+            ...current,
+            lat: stringifyCoordinate(nextLat),
+            lon: stringifyCoordinate(nextLon),
+          }));
+          void reverseGeocode2gisAddress(nextLon, nextLat).then((address) => {
+            if (disposed || requestId !== mapPickRequestRef.current || !address) return;
+            lastGeocodedAddressRef.current = address.toLowerCase();
+            setFormData((current) => ({ ...current, address }));
+          });
+        });
+        mapRef.current = mapInstance;
+        if (initialCoordinates) {
+          markerRef.current = createDraggableMarker(mapInstance, [
+            initialCoordinates.lon,
+            initialCoordinates.lat,
+          ]);
+        }
+      })
+      .catch(() => !disposed && setIsMapUnavailable(true));
 
     return () => {
+      disposed = true;
       if (blurTimeoutRef.current) {
         window.clearTimeout(blurTimeoutRef.current);
       }
@@ -2038,6 +2072,8 @@ function EnhancedEditQuarryModal({
 
   const handleAddressChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
+    mapPickRequestRef.current += 1;
+    const requestId = ++suggestionRequestRef.current;
     lastGeocodedAddressRef.current = "";
     setFormData((current) => ({ ...current, address: value }));
     if (!value.trim()) {
@@ -2046,7 +2082,8 @@ function EnhancedEditQuarryModal({
       return;
     }
     setShowSuggestions(true);
-    const results = await fetch2gisAddressSuggestions(value);
+    const results = await fetch2gisAddressSuggestions(value, mapCity || currentCity());
+    if (requestId !== suggestionRequestRef.current) return;
     setSuggestions(
       results
         .map((item: any) => {
@@ -2065,6 +2102,8 @@ function EnhancedEditQuarryModal({
   };
 
   const handleSuggestionSelect = async (suggestion: AddressSuggestion) => {
+    mapPickRequestRef.current += 1;
+    suggestionRequestRef.current += 1;
     const address = suggestion.address.trim() || suggestion.label.trim();
     setSuggestions([]);
     setShowSuggestions(false);

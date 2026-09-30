@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import OrderPaymentsPanel from './OrderPaymentsPanel';
 import PullToRefresh from "react-simple-pull-to-refresh";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, Info, List, MapPin, Package, Truck, X } from "lucide-react";
@@ -185,6 +186,7 @@ function OrderCard({
         <p className="mt-1 text-xl font-bold text-slate-900">{formatAmount(order)}</p>
       </div>
 
+      <OrderPaymentsPanel orderId={order.id} />
       {status === "requires_clarification" ? (
         <section className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
           <p className="text-sm font-bold text-amber-900">Вопрос от логиста</p>

@@ -91,6 +91,18 @@ class Settings(BaseSettings):
     TWOGIS_PLACES_MAX_RESULTS: int = Field(default=1000, ge=50, le=5000)
     YANDEX_GEOCODER_API_KEY: str | None = None
     YANDEX_ROUTER_API_KEY: str | None = None
+    PAYMENTS_ENABLED: bool = False
+    YOOKASSA_SHOP_ID: str | None = None
+    YOOKASSA_SECRET_KEY: str | None = None
+    YOOKASSA_API_BASE_URL: str | None = None
+    PAYMENT_RETURN_URL: str | None = None
+    PAYMENT_TEST_MODE: bool = True
+    PAYMENT_REPORT_TIMEZONE: str = "Asia/Irkutsk"
+    PAYMENT_POLL_INTERVAL_SECONDS: int = Field(default=60, ge=10)
+    PAYMENT_RECEIPTS_ENABLED: bool = False
+    PAYMENT_RECEIPT_VAT_CODE: int | None = Field(default=None, ge=1, le=12)
+    PAYMENT_RECEIPT_TAX_SYSTEM_CODE: int | None = Field(default=None, ge=1, le=6)
+    PAYMENT_RECEIPT_MODE: str = "full_prepayment"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

@@ -12,6 +12,7 @@ import toast from "react-hot-toast";
 import { useAuthStore } from "./store";
 import { baseURL, handleApiError, orderStatusColors } from "./utils";
 import { getOrderStatusText } from "./utils/statusMapper";
+import OrderPaymentsPanel from './OrderPaymentsPanel';
 
 interface AdminOrdersListScreenProps {
   role: "admin" | "logist";
@@ -232,6 +233,7 @@ export default function AdminOrdersListScreen({
                       </p>
                     </div>
 
+                    <OrderPaymentsPanel orderId={order.id} materialAmount={order.total_amount} deliveryAmount={order.delivery_cost || 0} />
                     <div className="flex items-center justify-between rounded-2xl bg-sky-50 border border-sky-100 p-4 mt-auto">
                       <div>
                         <p className="text-xs font-bold uppercase tracking-[0.16em] text-sky-500">

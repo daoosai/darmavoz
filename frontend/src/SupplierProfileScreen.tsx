@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 
 import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
 import DeleteAccountButton from "./components/shared/DeleteAccountButton";
+import CommerceMenu from './CommerceMenu';
 
 interface Props {
   token: string;
@@ -77,6 +78,7 @@ export default function SupplierProfileScreen({
     <div className="px-5 pb-8 pt-[max(env(safe-area-inset-top),1rem)] text-gray-900">
       <p className="text-xs font-bold uppercase tracking-[0.2em] text-sky-500">Кабинет поставщика</p>
       <h1 className="mt-1 text-3xl font-black">Профиль</h1>
+      <div className="mt-5"><CommerceMenu /></div>
 
       <form onSubmit={saveProfile} className="mt-8 space-y-5 rounded-2xl bg-white p-5 shadow-sm">
         <label className="block text-sm font-bold text-gray-900">

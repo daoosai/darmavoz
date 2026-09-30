@@ -50,6 +50,7 @@ import SupportScreen from "./SupportScreen";
 import WaterSepticModerationPanel from "./components/admin/WaterSepticModerationPanel";
 import NotificationCenter from "./components/shared/NotificationCenter";
 import DriverMapComponent from "./components/DriverMapComponent";
+import OrderPaymentsPanel from './OrderPaymentsPanel';
 
 interface AdminOrder {
   id: string;
@@ -906,6 +907,7 @@ export default function LogistDashboardScreen({
                         key={order.id}
                         className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex flex-col gap-4 text-left hover:shadow-md transition-shadow"
                       >
+                        <OrderPaymentsPanel orderId={order.id} materialAmount={order.total_amount} deliveryAmount={order.delivery_cost || 0} />
                         {/* Card Header */}
                         <div className="flex justify-between items-start gap-2">
                           <div className="flex flex-col">

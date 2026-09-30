@@ -5,6 +5,7 @@ import toast from "react-hot-toast";
 import { useAuthStore } from "./store";
 import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
 import DeleteAccountButton from "./components/shared/DeleteAccountButton";
+import CommerceMenu from './CommerceMenu';
 
 interface Props {
   token: string;
@@ -96,6 +97,7 @@ export default function EquipmentOwnerProfileScreen({
         {cabinetLabel}
       </p>
       <h1 className="mt-1 text-3xl font-black">Профиль</h1>
+      <div className="mt-5"><CommerceMenu /></div>
 
       <form onSubmit={saveProfile} className="mt-8 space-y-5 rounded-2xl bg-white p-5 shadow-sm">
         <label className="block text-sm font-bold text-gray-900">

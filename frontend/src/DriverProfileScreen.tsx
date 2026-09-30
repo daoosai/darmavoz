@@ -29,6 +29,7 @@ import UpdateBanner from "./UpdateBanner";
 import toast from "react-hot-toast";
 import { DriverOrder, DriverOrderCard } from "./DriverOrdersScreen";
 import DeleteAccountButton from "./components/shared/DeleteAccountButton";
+import CommerceMenu from './CommerceMenu';
 
 interface DriverProfile {
   id: string;
@@ -536,6 +537,7 @@ export default function DriverProfileScreen({
   return (
     <div className="flex flex-col flex-1 bg-slate-50 w-full relative">
       <div className="flex-1 flex flex-col gap-4 p-5 pb-6">
+        <CommerceMenu />
         <UpdateBanner />
 
         {moderationStatus === "approved" && !isDriverInactive && (

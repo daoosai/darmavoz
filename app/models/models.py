@@ -144,6 +144,7 @@ class User(Base):
     deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     deletion_source: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     auth_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    wholesale_access_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
 
     role: Mapped["Role"] = relationship("Role", back_populates="users")
     driver_profile: Mapped[Optional["Driver"]] = relationship(

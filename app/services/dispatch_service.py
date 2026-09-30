@@ -1086,8 +1086,19 @@ async def update_order_by_logist(
     order_id: UUID,
     payload,
 ) -> Order:
+    # Serialize price edits with payment/quote creation on the same order row.
+    await session.execute(select(Order.id).where(Order.id == order_id).with_for_update())
     order = await get_order_by_id(session, order_id)
     provided_fields = set(payload.model_fields_set)
+    financial_fields = {"material_id", "delivery_option_id", "quarry_id", "total_amount", "delivery_cost", "volume", "quantity", "client_id"}
+    if provided_fields & financial_fields:
+        from app.models.commerce import Payment
+        locked_payment = await session.scalar(select(Payment.id).where(Payment.order_id == order_id, Payment.status.in_(["creating", "unknown", "pending", "succeeded"])))
+        if locked_payment:
+            raise HTTPException(409, "Стоимость и состав заказа зафиксированы платёжной попыткой")
+        from app.models.commerce import PaymentQuote
+        from sqlalchemy import update
+        await session.execute(update(PaymentQuote).where(PaymentQuote.order_id == order_id).values(is_valid=False))
     restricted_fields = {
         "material_id",
         "delivery_option_id",

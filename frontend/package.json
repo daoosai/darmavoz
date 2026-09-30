@@ -1,8 +1,8 @@
 {
   "name": "react-example",
   "private": true,
-  "version": "3.1.5",
-  "versionCode": 316,
+  "version": "3.2.0",
+  "versionCode": 317,
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
@@ -20,6 +20,7 @@
   "dependencies": {
     "@capacitor/android": "^8.4.2",
     "@capacitor/app": "^8.1.1",
+    "@capacitor/browser": "^8.0.4",
     "@capacitor/cli": "^8.4.2",
     "@capacitor/core": "^8.4.2",
     "@capacitor/geolocation": "^8.2.0",

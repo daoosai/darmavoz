@@ -67,6 +67,7 @@ import PickupPointMapScreen, { PickupPointSelection } from "./PickupPointMapScre
 import EquipmentOwnerPortalScreen from "./EquipmentOwnerPortalScreen";
 import WaterSepticPartnerPortalScreen from "./WaterSepticPartnerPortalScreen";
 import AdminNotificationToastListener from "./components/shared/AdminNotificationToastListener";
+import PaymentReturn from './PaymentReturn';
 
 const WATER_PARTNER_BOARD_PATH = "/water-partner-board";
 const ADMIN_DASHBOARD_PATHS = {
@@ -120,6 +121,8 @@ export default function App() {
     | "driver_register"
   >(
     role === "client" && (
+      new URLSearchParams(window.location.search).has('payment_order')
+      ||
       currentPath === "/"
       || currentPath === "/calculator"
       || currentPath === "/map"
@@ -144,7 +147,7 @@ export default function App() {
           : "welcome",
   );
 
-  const [activeTab, setActiveTab] = useState("home");
+  const [activeTab, setActiveTab] = useState(new URLSearchParams(window.location.search).has('payment_order') ? 'orders' : 'home');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
     null,
   );
@@ -462,6 +465,7 @@ export default function App() {
       <InstallPWA />
       <AdminNotificationToastListener />
       {renderContent()}
+      <PaymentReturn />
     </>
   );
 }

@@ -37,7 +37,7 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       - name: Verify migration and city isolation in disposable CI database
-        run: python -m pytest -q tests/test_sprint22_unit.py tests/test_sprint22_api.py
+        run: python -m pytest -q tests/test_sprint22_unit.py tests/test_sprint22_api.py tests/test_sprint24.py tests/test_sprint24_api.py
 
   deploy-test:
     needs: sprint22-checks
@@ -75,7 +75,7 @@ jobs:
           node --import tsx --test src/bulkCalculator.test.ts
           npm run build
           npx playwright install --with-deps chromium
-          npx playwright test tests/e2e/sprint22.spec.ts
+          npx playwright test tests/e2e/sprint22.spec.ts tests/e2e/sprint24.spec.ts
           tar -C dist -cf ../frontend-dist.tar .
 
       - name: Setup SSH agent
@@ -236,6 +236,9 @@ jobs:
               openapi = json.load(response)
 
           required_sprint18_paths = {
+              "/api/v1/wholesale-requests",
+              "/api/v1/finance/payments",
+              "/api/v1/webhooks/yookassa",
               "/api/v1/cities/",
               "/api/v1/catalog/calculator/",
               "/api/v1/admin/placements/summary",

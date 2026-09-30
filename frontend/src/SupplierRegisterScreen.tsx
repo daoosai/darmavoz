@@ -3,6 +3,7 @@ import { ArrowLeft, Loader2, Phone } from "lucide-react";
 import toast from "react-hot-toast";
 
 import OtpVerificationStep from "./OtpVerificationStep";
+import LegalConsentText from "./LegalConsentText";
 import { switchAuthenticatedSession } from "./pushAuth";
 import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
 
@@ -158,6 +159,7 @@ export default function SupplierRegisterScreen({ onBack }: Props) {
               >
                 {isBusy ? <Loader2 className="h-5 w-5 animate-spin" /> : "Получить код"}
               </button>
+              <LegalConsentText />
             </form>
           )}
         </section>

@@ -21,6 +21,7 @@ import { cityFetch, useCityStore } from './cityStore';
 import OrdersScreen from "./OrdersScreen";
 import WelcomeScreen from "./WelcomeScreen";
 import PrivacyPolicyScreen from "./PrivacyPolicyScreen";
+import TermsPage from "./TermsPage";
 import { getImageUrl, baseURL, APP_VERSION } from "./utils";
 
 import CartScreen from "./CartScreen";
@@ -187,7 +188,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!token || role !== "water_septic_partner" || currentPath === WATER_PARTNER_BOARD_PATH) return;
+    if (
+      !token ||
+      role !== "water_septic_partner" ||
+      currentPath === WATER_PARTNER_BOARD_PATH ||
+      currentPath === "/privacy" ||
+      currentPath === "/privacy/" ||
+      currentPath === "/terms" ||
+      currentPath === "/terms/"
+    ) return;
     window.history.replaceState({}, "", WATER_PARTNER_BOARD_PATH);
     setCurrentPath(WATER_PARTNER_BOARD_PATH);
     setCurrentRoute("water_septic_partner");
@@ -259,6 +268,18 @@ export default function App() {
   };
 
   const renderContent = () => {
+    if (currentPath === "/terms" || currentPath === "/terms/") {
+      return (
+        <TermsPage
+          onBack={() => {
+            window.history.pushState({}, "", "/");
+            setCurrentPath("/");
+            setCurrentRoute("welcome");
+          }}
+        />
+      );
+    }
+
     if (currentPath === "/privacy" || currentPath === "/privacy/") {
       return (
         <PrivacyPolicyScreen

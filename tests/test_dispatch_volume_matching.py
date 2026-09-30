@@ -20,6 +20,7 @@ from app.models.models import (
 )
 from app.security.auth import get_password_hash
 from app.security.jwt import create_access_token
+from app.services.cities import initialize_service_cities, resolve_city
 from app.services.dispatch_service import get_matching_drivers
 
 
@@ -49,6 +50,13 @@ async def create_user(session, *, username: str, role: Role) -> User:
     return user
 
 
+async def assign_default_city(session, *drivers: Driver) -> None:
+    city = await resolve_city(session, None)
+    await session.flush()
+    for driver in drivers:
+        await initialize_service_cities(session, driver_id=driver.id, city_ids=[city.id])
+
+
 async def create_order_with_volume(
     session,
     *,
@@ -56,19 +64,25 @@ async def create_order_with_volume(
     delivery_option: DeliveryOption,
     material: Material,
     status: str = OrderStatus.searching_driver.value,
+    trip_count: int | None = None,
+    trip_capacity_m3: float | None = None,
 ) -> Order:
+    city = await resolve_city(session, None)
     client = Client(name="Тестовый клиент", phone=f"+7999{uuid.uuid4().int % 10_000_000:07d}")
     session.add(client)
     await session.flush()
 
     order = Order(
         client_id=client.id,
+        city_id=city.id,
         delivery_option_id=delivery_option.id,
         address="Томск, тестовый адрес",
         total_amount=1000.0,
         status=status,
         source="dispatcher",
         created_by_source="dispatcher",
+        trip_count=trip_count,
+        trip_capacity_m3_snapshot=trip_capacity_m3,
     )
     session.add(order)
     await session.flush()
@@ -86,6 +100,73 @@ async def create_order_with_volume(
     order.__dict__["delivery_option"] = delivery_option
     await session.flush()
     return order
+
+
+@pytest.mark.asyncio
+async def test_auto_dispatch_matches_20m3_driver_for_100m3_order_with_five_trips(session_factory):
+    async with session_factory() as session:
+        driver_role = await ensure_role(session, "driver")
+        category = Category(name="Многорейсовый материал", slug="multi-trip-stone", sort_order=0, is_active=True)
+        material = Material(
+            category=category,
+            name="Многорейсовый щебень",
+            description="",
+            price=1800.0,
+            unit="m3",
+            min_volume=1.0,
+            is_active=True,
+            sort_order=0,
+        )
+        delivery_option = DeliveryOption(
+            capacity_m3=20.0,
+            title="Самосвал 20 м3",
+            description="",
+            base_price=0.0,
+            is_active=True,
+            sort_order=0,
+        )
+        session.add_all([category, material, delivery_option])
+        await session.flush()
+
+        user = await create_user(session, username="multi_trip_driver", role=driver_role)
+        vehicle = Vehicle(
+            title="Самосвал 20 м3",
+            delivery_option_id=delivery_option.id,
+            body_volume_m3=20.0,
+            cubature_min=20.0,
+            cubature_max=20.0,
+            is_active=True,
+            moderation_status=ModerationStatus.approved.value,
+        )
+        session.add(vehicle)
+        await session.flush()
+        driver = Driver(
+            user_id=user.id,
+            vehicle_id=vehicle.id,
+            name="Водитель многорейсового заказа",
+            phone="+79990040001",
+            status=DriverStatus.available.value,
+            is_active=True,
+            is_auto_dispatch_enabled=True,
+            dispatch_priority=100,
+            moderation_status=ModerationStatus.approved.value,
+        )
+        session.add(driver)
+        await assign_default_city(session, driver)
+
+        order = await create_order_with_volume(
+            session,
+            volume=100.0,
+            delivery_option=delivery_option,
+            material=material,
+            trip_count=5,
+            trip_capacity_m3=20.0,
+        )
+        await session.commit()
+
+        drivers = await get_matching_drivers(session, order)
+
+    assert [candidate.id for candidate in drivers] == [driver.id]
 
 
 @pytest.mark.asyncio
@@ -194,6 +275,7 @@ async def test_auto_dispatch_matches_driver_by_vehicle_cubature_range(session_fa
             moderation_status=ModerationStatus.approved.value,
         )
         session.add(pending_driver)
+        await assign_default_city(session, matching_driver, rejected_driver, pending_driver)
 
         order = await create_order_with_volume(
             session,
@@ -230,6 +312,7 @@ async def test_logist_drivers_endpoint_filters_by_order_volume_and_approved_stat
         session.add_all([category, material, order_option, vehicle_option])
         await session.flush()
 
+        drivers = []
         for username, phone, min_v, max_v, driver_mod, vehicle_mod in [
             ("range_list_ok", "+79990020001", 30.0, 40.0, ModerationStatus.approved.value, ModerationStatus.approved.value),
             ("range_list_small", "+79990020002", 20.0, 25.0, ModerationStatus.approved.value, ModerationStatus.approved.value),
@@ -258,6 +341,9 @@ async def test_logist_drivers_endpoint_filters_by_order_volume_and_approved_stat
                 moderation_status=driver_mod,
             )
             session.add(driver)
+            drivers.append(driver)
+
+        await assign_default_city(session, *drivers)
 
         order = await create_order_with_volume(
             session,
@@ -333,6 +419,7 @@ async def test_logist_can_assign_driver_manually_by_volume_range_even_with_diffe
             moderation_status=ModerationStatus.approved.value,
         )
         session.add(driver)
+        await assign_default_city(session, driver)
         await session.commit()
         await session.refresh(material)
         await session.refresh(order_option)
@@ -346,6 +433,13 @@ async def test_logist_can_assign_driver_manually_by_volume_range_even_with_diffe
             "material_id": str(material.id),
             "delivery_option_id": str(order_option.id),
             "address": "Томск, ручное назначение",
+            "pickup_address": "Томск, точка погрузки",
+            "pickup_lat": 56.5,
+            "pickup_lon": 60.5,
+            "delivery_lat": 56.84,
+            "delivery_lon": 60.61,
+            "mileage_km": 10,
+            "calculation_source": "manual",
             "notes": "Проверка диапазона",
             "quantity": 1,
             "auto_dispatch": False,

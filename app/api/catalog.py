@@ -1,11 +1,11 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
-from app.models.models import Category, DeliveryOption, Material, MediaFile
+from app.models.models import Category, DeliveryOption, DeliveryTariff, Material, MediaFile, TransportCategory
 from app.schemas.catalog import CategoryOut, DeliveryOptionOut, MaterialOut
 
 router = APIRouter()
@@ -26,12 +26,30 @@ async def calculator_references(db: AsyncSession = Depends(get_db)):
     return {"materials": materials, "delivery_options": options}
 
 
-async def _get_active_delivery_options(db: AsyncSession) -> list[DeliveryOption]:
+async def _get_active_delivery_options(
+    db: AsyncSession, city_id: UUID | None = None
+) -> list[DeliveryOption]:
     result = await db.execute(
         select(DeliveryOption)
         .where(DeliveryOption.is_active.is_(True))
         .order_by(DeliveryOption.sort_order.asc(), DeliveryOption.capacity_m3.asc())
     )
+    if city_id is not None:
+        result = await db.execute(
+            select(DeliveryOption)
+            .where(
+                DeliveryOption.is_active.is_(True),
+                DeliveryOption.transport_category_id.is_not(None),
+                exists(
+                    select(DeliveryTariff.id).where(
+                        DeliveryTariff.city_id == city_id,
+                        DeliveryTariff.transport_category_id == DeliveryOption.transport_category_id,
+                        DeliveryTariff.is_active.is_(True),
+                    )
+                ),
+            )
+            .order_by(DeliveryOption.sort_order.asc(), DeliveryOption.capacity_m3.asc())
+        )
     return list(result.scalars().all())
 
 
@@ -94,6 +112,7 @@ async def get_categories(db: AsyncSession = Depends(get_db)) -> list[Category]:
 @router.get("/materials/", response_model=list[MaterialOut])
 async def get_materials(
     category_id: UUID | None = None,
+    city_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> list[Material]:
     stmt = select(Material).where(Material.is_active.is_(True))
@@ -102,29 +121,28 @@ async def get_materials(
 
     result = await db.execute(stmt.order_by(Material.sort_order.asc(), Material.id.asc()))
     materials = list(result.scalars().all())
-    delivery_options = await _get_active_delivery_options(db)
+    delivery_options = await _get_active_delivery_options(db, city_id)
     await _attach_media(db, materials, delivery_options)
     return _attach_delivery_options(materials, delivery_options)
 
 
 @router.get("/materials/{material_id}", response_model=MaterialOut)
-async def get_material(material_id: UUID, db: AsyncSession = Depends(get_db)) -> Material:
+async def get_material(
+    material_id: UUID, city_id: UUID | None = None, db: AsyncSession = Depends(get_db)
+) -> Material:
     material = await db.get(Material, material_id)
     if material is None or not material.is_active:
         raise HTTPException(status_code=404, detail="Material not found")
-    delivery_options = await _get_active_delivery_options(db)
+    delivery_options = await _get_active_delivery_options(db, city_id)
     await _attach_media(db, [material], delivery_options)
     return _attach_delivery_options([material], delivery_options)[0]
 
 
 @router.get("/delivery-options/", response_model=list[DeliveryOptionOut])
-async def get_delivery_options(db: AsyncSession = Depends(get_db)) -> list[DeliveryOption]:
-    result = await db.execute(
-        select(DeliveryOption)
-        .where(DeliveryOption.is_active.is_(True))
-        .order_by(DeliveryOption.sort_order.asc(), DeliveryOption.capacity_m3.asc())
-    )
-    delivery_options = list(result.scalars().all())
+async def get_delivery_options(
+    city_id: UUID | None = None, db: AsyncSession = Depends(get_db)
+) -> list[DeliveryOption]:
+    delivery_options = await _get_active_delivery_options(db, city_id)
     await _attach_media(db, [], delivery_options)
     return delivery_options
 

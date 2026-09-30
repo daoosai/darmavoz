@@ -55,6 +55,7 @@ import SupportScreen from "./SupportScreen";
 import { type PlacementStatus } from "./placement";
 import NotificationCenter from "./components/shared/NotificationCenter";
 import DriverMapComponent from "./components/DriverMapComponent";
+import TransportTariffsPanel from "./components/admin/TransportTariffsPanel";
 
 interface AdminCategory {
   id: string;
@@ -95,16 +96,20 @@ interface AdminMaterial {
 
 interface AdminDeliveryOption {
   id: string;
+  transport_category_id?: string | null;
   title: string;
   capacity_m3: number;
-  base_price: number;
-  delivery_rate_per_km?: number;
-  min_price_quarry?: number;
-  min_price_warehouse?: number;
   is_active: boolean;
   media_files?: AdminMediaFile[];
   primary_image_url?: string;
   image_url?: string;
+}
+
+interface AdminTransportCategory {
+  id: string;
+  title: string;
+  capacity_min_m3: number;
+  capacity_max_m3?: number | null;
 }
 
 interface AdminDriver {
@@ -248,6 +253,9 @@ export default function AdminDashboardScreen({
   const [deliveryOptions, setDeliveryOptions] = useState<AdminDeliveryOption[]>(
     [],
   );
+  const [transportCategories, setTransportCategories] = useState<
+    AdminTransportCategory[]
+  >([]);
 
   // --- Live Fleet State ---
   interface LiveFleetCar {
@@ -838,6 +846,23 @@ export default function AdminDashboardScreen({
     }
   };
 
+  const fetchTransportCategories = async () => {
+    if (!token) return [];
+    try {
+      const res = await fetch(`${baseURL}/admin/transport-categories`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Ошибка загрузки категорий транспорта");
+      const data = await res.json();
+      const items = Array.isArray(data) ? data : data.results || [];
+      setTransportCategories(items);
+      return items as AdminTransportCategory[];
+    } catch {
+      toast.error("Не удалось загрузить категории транспорта");
+      return [];
+    }
+  };
+
   const fetchDrivers = async (silent = false) => {
     if (!token) return;
     if (!silent) setIsLoading(true);
@@ -992,8 +1017,9 @@ export default function AdminDashboardScreen({
     fetchCategories();
     if ((activeTab === "materials" || activeTab === "quarries") && materials.length === 0) {
       fetchMaterials();
-    } else if (activeTab === "delivery" && deliveryOptions.length === 0) {
-      fetchDeliveryOptions();
+    } else if (activeTab === "delivery") {
+      if (deliveryOptions.length === 0) fetchDeliveryOptions();
+      if (transportCategories.length === 0) fetchTransportCategories();
     } else if (activeTab === "drivers" && drivers.length === 0) {
       fetchDrivers();
       if (deliveryOptions.length === 0) fetchDeliveryOptions(true);
@@ -1188,8 +1214,37 @@ export default function AdminDashboardScreen({
 
   const handleSaveDelivery = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingDelivery?.title || editingDelivery.capacity_m3 === undefined) {
-      toast.error("Заполните обязательные поля (Название, Объем)");
+    if (!editingDelivery?.title?.trim()) {
+      toast.error("Укажите название типа машины.");
+      return;
+    }
+    const capacity = Number(editingDelivery.capacity_m3);
+    if (!Number.isFinite(capacity) || capacity <= 0) {
+      toast.error("Укажите вместимость больше 0 м³.");
+      return;
+    }
+    if (!editingDelivery.transport_category_id) {
+      toast.error("Выберите категорию транспорта");
+      return;
+    }
+    const selectedCategory = transportCategories.find(
+      (category) => category.id === editingDelivery.transport_category_id,
+    );
+    if (!selectedCategory) {
+      toast.error("Выбранная категория транспорта не найдена. Обновите страницу и повторите попытку.");
+      return;
+    }
+    const minCapacity = Number(selectedCategory.capacity_min_m3);
+    const maxCapacity = selectedCategory.capacity_max_m3 == null
+      ? null
+      : Number(selectedCategory.capacity_max_m3);
+    if (capacity < minCapacity || (maxCapacity !== null && capacity > maxCapacity)) {
+      const range = maxCapacity === null
+        ? `от ${minCapacity} м³`
+        : `от ${minCapacity} до ${maxCapacity} м³`;
+      toast.error(
+        `Вместимость ${capacity} м³ выходит за пределы категории «${selectedCategory.title}» (допустимо ${range}).`,
+      );
       return;
     }
 
@@ -1203,12 +1258,8 @@ export default function AdminDashboardScreen({
 
       const payload: any = {
         title: editingDelivery.title,
-        capacity_m3: Number(editingDelivery.capacity_m3),
-        delivery_rate_per_km: editingDelivery.delivery_rate_per_km
-          ? Number(editingDelivery.delivery_rate_per_km)
-          : null,
-        min_price_quarry: Number(editingDelivery.min_price_quarry ?? 5000),
-        min_price_warehouse: Number(editingDelivery.min_price_warehouse ?? 3000),
+        capacity_m3: capacity,
+        transport_category_id: editingDelivery.transport_category_id,
         is_active: editingDelivery.is_active ?? true,
         sort_order: 10,
       };
@@ -1224,7 +1275,13 @@ export default function AdminDashboardScreen({
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        throw new Error(extractApiErrorMessage(errData, "Ошибка сервера"));
+        toast.error(
+          extractApiErrorMessage(
+            { status: res.status, data: errData },
+            "Не удалось сохранить тип машины.",
+          ),
+        );
+        return;
       }
 
       const savedData = await res.json();
@@ -1601,6 +1658,9 @@ export default function AdminDashboardScreen({
   };
 
   const openDeliveryModal = async (delivery?: AdminDeliveryOption) => {
+    const categories = transportCategories.length
+      ? transportCategories
+      : await fetchTransportCategories();
     if (delivery) {
       setEditingDelivery({ ...delivery });
       setIsDeliveryModalOpen(true);
@@ -1622,8 +1682,7 @@ export default function AdminDashboardScreen({
       setEditingDelivery({
         is_active: true,
         capacity_m3: 0,
-        min_price_quarry: 5000,
-        min_price_warehouse: 3000,
+        transport_category_id: categories[0]?.id,
       });
       setIsDeliveryModalOpen(true);
     }
@@ -2582,6 +2641,8 @@ export default function AdminDashboardScreen({
                 </>
               ) : (
                 <>
+                  <TransportTariffsPanel token={token} />
+                  <div className="pt-2">
                   {/* Delivery Options Tab */}
                   <div className="flex justify-between items-center bg-white p-5 rounded-2xl shadow-sm border border-slate-100 mb-2">
                     <h2 className="text-xl font-bold text-slate-800">
@@ -2618,9 +2679,6 @@ export default function AdminDashboardScreen({
                               <th className="px-6 py-4">Фото</th>
                               <th className="px-6 py-4">Название</th>
                               <th className="px-6 py-4">Кубатура (м³)</th>
-                              <th className="px-6 py-4">Минималка с карьера</th>
-                              <th className="px-6 py-4">Минималка с накопителя</th>
-                              <th className="px-6 py-4">Ставка за км</th>
                               <th className="px-6 py-4">Статус</th>
                               <th className="px-6 py-4 text-right">Действия</th>
                             </tr>
@@ -2657,17 +2715,6 @@ export default function AdminDashboardScreen({
                                   </td>
                                   <td className="px-6 py-4 text-sm font-medium">
                                     {opt.capacity_m3} м³
-                                  </td>
-                                  <td className="px-6 py-4 text-sm font-medium">
-                                    {opt.min_price_quarry ?? 5000} ₽
-                                  </td>
-                                  <td className="px-6 py-4 text-sm font-medium">
-                                    {opt.min_price_warehouse ?? 3000} ₽
-                                  </td>
-                                  <td className="px-6 py-4 text-sm font-medium whitespace-nowrap">
-                                    {opt.delivery_rate_per_km
-                                      ? opt.delivery_rate_per_km + " ₽/км"
-                                      : "Не задана"}
                                   </td>
                                   <td className="px-6 py-4">
                                     {opt.is_active === false ? (
@@ -2764,18 +2811,6 @@ export default function AdminDashboardScreen({
                                     <span className="text-sm font-medium text-slate-700">
                                       Кубатура: {opt.capacity_m3} м³
                                     </span>
-                                    <span className="text-sm text-slate-500">
-                                      Минималка с карьера: {opt.min_price_quarry ?? 5000} ₽
-                                    </span>
-                                    <span className="text-sm text-slate-500">
-                                      Минималка с накопителя: {opt.min_price_warehouse ?? 3000} ₽
-                                    </span>
-                                    <span className="text-sm text-slate-500">
-                                      Ставка за км:{" "}
-                                      {opt.delivery_rate_per_km
-                                        ? opt.delivery_rate_per_km + " ₽/км"
-                                        : "Не задана"}
-                                    </span>
                                   </div>
                                 </div>
                               </div>
@@ -2803,6 +2838,7 @@ export default function AdminDashboardScreen({
                       )}
                     </div>
                   )}
+                  </div>
                 </>
               )}
             </div>
@@ -3855,7 +3891,7 @@ export default function AdminDashboardScreen({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5">
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
                     Объем (м³)
@@ -3875,69 +3911,30 @@ export default function AdminDashboardScreen({
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
                   />
                 </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                    Ставка за 1 км (₽)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="Например, 95"
-                    value={editingDelivery.delivery_rate_per_km ?? ""}
-                    onChange={(e) =>
-                      setEditingDelivery({
-                        ...editingDelivery,
-                        delivery_rate_per_km: e.target.value
-                          ? parseFloat(e.target.value)
-                          : undefined,
-                      })
-                    }
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                    Минималка с карьера (₽)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="Например, 5000"
-                    value={editingDelivery.min_price_quarry ?? ""}
-                    onChange={(e) =>
-                      setEditingDelivery({
-                        ...editingDelivery,
-                        min_price_quarry: e.target.value
-                          ? parseFloat(e.target.value)
-                          : undefined,
-                      })
-                    }
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                    Минималка с накопителя (₽)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="Например, 3000"
-                    value={editingDelivery.min_price_warehouse ?? ""}
-                    onChange={(e) =>
-                      setEditingDelivery({
-                        ...editingDelivery,
-                        min_price_warehouse: e.target.value
-                          ? parseFloat(e.target.value)
-                          : undefined,
-                      })
-                    }
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
-                  />
-                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Категория транспорта
+                </label>
+                <select
+                  required
+                  value={editingDelivery.transport_category_id || ""}
+                  onChange={(e) =>
+                    setEditingDelivery({
+                      ...editingDelivery,
+                      transport_category_id: e.target.value || null,
+                    })
+                  }
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#2DB0E6]/20 focus:border-[#2DB0E6] transition-all font-medium"
+                >
+                  <option value="">Выберите категорию</option>
+                  {transportCategories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.title} · {category.capacity_min_m3}–{category.capacity_max_m3 ?? "∞"} м³
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="flex flex-col gap-2 pt-2">

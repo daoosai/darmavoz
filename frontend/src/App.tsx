@@ -21,6 +21,7 @@ import { cityFetch, useCityStore } from './cityStore';
 import OrdersScreen from "./OrdersScreen";
 import WelcomeScreen from "./WelcomeScreen";
 import PrivacyPolicyScreen from "./PrivacyPolicyScreen";
+import TermsPage from "./TermsPage";
 import { getImageUrl, baseURL, APP_VERSION } from "./utils";
 
 import CartScreen from "./CartScreen";
@@ -44,7 +45,12 @@ import AdminDashboardScreen from "./AdminDashboardScreen";
 import AdminOrdersListScreen from "./AdminOrdersListScreen";
 import AdminStatisticsScreen from "./AdminStatisticsScreen";
 import DriverRegistrationScreen from "./DriverRegistrationScreen";
-import { useAuthStore, useCartStore, useAddressStore } from "./store";
+import {
+  useAuthStore,
+  useCartStore,
+  useAddressStore,
+  usePurchaseFlowStore,
+} from "./store";
 import ClientAuthBottomSheet from "./ClientAuthBottomSheet";
 import ClientAddressBottomSheet from "./ClientAddressBottomSheet";
 import ClientProfileScreen from "./ClientProfileScreen";
@@ -182,7 +188,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!token || role !== "water_septic_partner" || currentPath === WATER_PARTNER_BOARD_PATH) return;
+    if (
+      !token ||
+      role !== "water_septic_partner" ||
+      currentPath === WATER_PARTNER_BOARD_PATH ||
+      currentPath === "/privacy" ||
+      currentPath === "/privacy/" ||
+      currentPath === "/terms" ||
+      currentPath === "/terms/"
+    ) return;
     window.history.replaceState({}, "", WATER_PARTNER_BOARD_PATH);
     setCurrentPath(WATER_PARTNER_BOARD_PATH);
     setCurrentRoute("water_septic_partner");
@@ -254,6 +268,18 @@ export default function App() {
   };
 
   const renderContent = () => {
+    if (currentPath === "/terms" || currentPath === "/terms/") {
+      return (
+        <TermsPage
+          onBack={() => {
+            window.history.pushState({}, "", "/");
+            setCurrentPath("/");
+            setCurrentRoute("welcome");
+          }}
+        />
+      );
+    }
+
     if (currentPath === "/privacy" || currentPath === "/privacy/") {
       return (
         <PrivacyPolicyScreen
@@ -489,7 +515,9 @@ function MainContent({
   const [serviceDirection, setServiceDirection] = useState<"delivery" | "equipment">("delivery");
   const [mapMaterial, setMapMaterial] = useState<MaterialProps | null>(null);
   const [materialActionChoice, setMaterialActionChoice] = useState<MaterialProps | null>(null);
-  const [quickBuyMaterial, setQuickBuyMaterial] = useState<MaterialProps | null>(null);
+  const pendingAction = usePurchaseFlowStore((state) => state.pendingAction);
+  const setPendingAction = usePurchaseFlowStore((state) => state.setPendingAction);
+  const clearPendingAction = usePurchaseFlowStore((state) => state.clearPendingAction);
   const [selectedPickupPoint, setSelectedPickupPoint] =
     useState<PickupPointSelection | null>(null);
   useEffect(() => {
@@ -497,7 +525,6 @@ function MainContent({
     setSelectedPickupPoint(null);
     setMapMaterial(null);
     setMaterialActionChoice(null);
-    setQuickBuyMaterial(null);
   }, [cityId, setSelectedMaterial]);
 
   const handleCartClick = () => {
@@ -511,7 +538,7 @@ function MainContent({
   const handleClientAuthenticated = () => {
     onClearFocusedOrder();
     setActiveTab("home");
-    if (quickBuyMaterial) {
+    if (pendingAction && !selectedAddress) {
       setShowAddressSheet(true);
     }
   };
@@ -525,9 +552,21 @@ function MainContent({
     setMaterialActionChoice(null);
   };
 
-  const openDeliveryMap = (material: MaterialProps) => {
-    setMaterialActionChoice(null);
+  const startPickupSelection = (material: MaterialProps) => {
+    closeMaterialActionChoice();
     setSelectedPickupPoint(null);
+
+    if (role !== "client" || !token) {
+      setPendingAction({ type: "OPEN_PICKUP_MAP", materialId: material.id });
+      setShowAuthSheet(true);
+      return;
+    }
+    if (!selectedAddress) {
+      setPendingAction({ type: "OPEN_PICKUP_MAP", materialId: material.id });
+      setShowAddressSheet(true);
+      return;
+    }
+
     setMapMaterial(material);
   };
 
@@ -535,12 +574,12 @@ function MainContent({
     closeMaterialActionChoice();
     setSelectedPickupPoint(null);
     if (role !== "client" || !token) {
-      setQuickBuyMaterial(material);
+      setPendingAction({ type: "OPEN_DELIVERY_SELECTION", materialId: material.id });
       setShowAuthSheet(true);
       return;
     }
     if (!selectedAddress) {
-      setQuickBuyMaterial(material);
+      setPendingAction({ type: "OPEN_DELIVERY_SELECTION", materialId: material.id });
       setShowAddressSheet(true);
       return;
     }
@@ -601,15 +640,38 @@ function MainContent({
   };
 
   useEffect(() => {
-    if (!quickBuyMaterial) return;
+    if (
+      pendingAction?.type !== "OPEN_DELIVERY_SELECTION" &&
+      pendingAction?.type !== "OPEN_PICKUP_MAP"
+    ) {
+      return;
+    }
     if (role !== "client" || !token) return;
     if (!selectedAddress) return;
+
+    const material = materials.find(
+      (candidate) => candidate.id === pendingAction.materialId,
+    );
+    if (!material) return;
+
     setSelectedPickupPoint(null);
-    setSelectedMaterial(quickBuyMaterial);
-    setQuickBuyMaterial(null);
+    if (pendingAction.type === "OPEN_DELIVERY_SELECTION") {
+      setSelectedMaterial(material);
+    } else {
+      setMapMaterial(material);
+    }
+    clearPendingAction();
     setShowAddressSheet(false);
     setShowAuthSheet(false);
-  }, [quickBuyMaterial, role, selectedAddress, setSelectedMaterial, token]);
+  }, [
+    clearPendingAction,
+    materials,
+    pendingAction,
+    role,
+    selectedAddress,
+    setSelectedMaterial,
+    token,
+  ]);
 
   useEffect(() => {
     if (currentPath === "/map" && activeTab !== "map") {
@@ -914,7 +976,7 @@ function MainContent({
           material={materialActionChoice}
           onClose={closeMaterialActionChoice}
           onQuickBuy={startQuickBuy}
-          onChooseOnMap={openDeliveryMap}
+          onChooseOnMap={startPickupSelection}
         />
 
         {/* Bottom Sheet */}
@@ -964,7 +1026,7 @@ function MainContent({
         <ClientAddressBottomSheet
           isOpen={showAddressSheet}
           onClose={() => setShowAddressSheet(false)}
-          closeOnSelect={Boolean(quickBuyMaterial)}
+          closeOnSelect={Boolean(pendingAction)}
         />
       </div>
     </div>

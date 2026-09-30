@@ -12,6 +12,7 @@ interface MaterialBottomSheetProps {
   material: MaterialProps | null;
   onClose: () => void;
   pickupPoint?: PickupPointSelection | null;
+  cartItemId?: string | null;
   onSubmitted?: () => void;
 }
 
@@ -62,6 +63,7 @@ export default function MaterialBottomSheet({
   material,
   onClose,
   pickupPoint,
+  cartItemId,
   onSubmitted,
 }: MaterialBottomSheetProps) {
   const [deliveryOptions, setDeliveryOptions] = useState<DeliveryOption[]>([]);
@@ -73,6 +75,9 @@ export default function MaterialBottomSheet({
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
   const addToCart = useCartStore((state) => state.addToCart);
+  const replaceItemDeliveryOption = useCartStore(
+    (state) => state.replaceItemDeliveryOption,
+  );
 
   useEffect(() => {
     if (!material) return;
@@ -123,18 +128,31 @@ export default function MaterialBottomSheet({
 
   const materialPrice = pickupPoint?.price ?? material.price;
   const isSubmitDisabled = !selectedOption;
+  const optionGroupsMap = new Map<string, { title: string; options: DeliveryOption[] }>();
+  deliveryOptions.forEach((option) => {
+      const categoryId = option.transport_category?.id || option.transport_category_id || "legacy";
+      const title = option.transport_category?.title || "Варианты доставки";
+      const group = optionGroupsMap.get(categoryId) || { title, options: [] };
+      group.options.push(option);
+      optionGroupsMap.set(categoryId, group);
+  });
+  const optionGroups = Array.from(optionGroupsMap.values());
 
   const handleSubmit = () => {
     if (!selectedOption) return;
-    const wasAdded = addToCart(
-      { ...material, price: materialPrice, delivery_options: deliveryOptions },
-      selectedOption,
-      comment,
-      pickupPoint || undefined,
-      deliveryOptions,
+    const wasUpdated = cartItemId
+      ? replaceItemDeliveryOption(cartItemId, selectedOption, deliveryOptions)
+      : addToCart(
+          { ...material, price: materialPrice, delivery_options: deliveryOptions },
+          selectedOption,
+          comment,
+          pickupPoint || undefined,
+          deliveryOptions,
+        );
+    if (!wasUpdated) return;
+    toast.success(
+      cartItemId ? "Вариант доставки обновлён" : "Товар добавлен в корзину",
     );
-    if (!wasAdded) return;
-    toast.success("Товар добавлен в корзину");
     onSubmitted?.();
     onClose();
   };
@@ -206,24 +224,32 @@ export default function MaterialBottomSheet({
                 </div>
               )}
               <div>
-                <h3 className="mb-3 font-semibold text-gray-900">
-                  Выберите кубатуру
+                <h3 className="mb-1 font-semibold text-gray-900">
+                  Выберите категорию и объём
                 </h3>
+                <p className="mb-3 text-sm text-slate-500">
+                  Точный объём нужен, чтобы рассчитать количество рейсов.
+                </p>
                 {isLoadingOptions ? (
                   <div className="flex justify-center py-4">
                     <Loader2 className="h-6 w-6 animate-spin text-gray-300" />
                   </div>
                 ) : (
-                  <div className="flex gap-3 overflow-x-auto pb-2 hide-scrollbar -mx-4 px-4">
-                    {[...deliveryOptions]
-                      .sort(
-                        (a, b) => (a.capacity_m3 || 0) - (b.capacity_m3 || 0),
-                      )
-                      .map((option) => {
+                  <div className="flex flex-col gap-4">
+                    {optionGroups.map((group) => (
+                      <section key={group.title} className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
+                        <p className="mb-2 px-1 text-xs font-bold uppercase tracking-wide text-slate-500">
+                          {group.title}
+                        </p>
+                        <div className="flex gap-3 overflow-x-auto pb-1 hide-scrollbar">
+                          {[...group.options]
+                            .sort((a, b) => (a.capacity_m3 || 0) - (b.capacity_m3 || 0))
+                            .map((option) => {
                         const isSelected = selectedOption?.id === option.id;
                         const fallbackImage = getTruckFallback(option.capacity_m3 || 0);
                         const imgSrc = getDeliveryOptionImage(option) || fallbackImage;
 
+                        /*
                         return (
                           <button
                             key={option.id}
@@ -253,7 +279,32 @@ export default function MaterialBottomSheet({
                             </span>
                           </button>
                         );
-                      })}
+                        */
+                              return (
+                                <button
+                                  key={option.id}
+                                  onClick={() => setSelectedOption(option)}
+                                  className={`shrink-0 min-w-[130px] p-3 rounded-2xl border text-left transition-all ${
+                                    isSelected
+                                      ? "border-sky-500 bg-sky-50 shadow-sm ring-1 ring-sky-200"
+                                      : "border-gray-200 bg-white hover:border-gray-300"
+                                  }`}
+                                >
+                                  <div className="w-full h-16 bg-white rounded-lg mb-2 overflow-hidden flex items-center justify-center">
+                                    <img src={imgSrc} alt={option.title} className="max-w-full max-h-full object-contain" />
+                                  </div>
+                                  <span className={`mb-1 block whitespace-nowrap text-base font-semibold ${isSelected ? "text-sky-600" : "text-gray-900"}`}>
+                                    {option.capacity_m3} м³
+                                  </span>
+                                  <span className={`block whitespace-nowrap text-xs font-medium ${isSelected ? "text-sky-600" : "text-gray-500"}`}>
+                                    {option.title}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                        </div>
+                      </section>
+                    ))}
                   </div>
                 )}
               </div>

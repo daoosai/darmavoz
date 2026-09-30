@@ -31,7 +31,15 @@ async def seed_data() -> None:
 
         await session.commit()
 
-        await ensure_user(session, settings.ADMIN_USERNAME, settings.ADMIN_PASSWORD, "admin")
+        # The administrator credentials are managed through the environment.
+        # Keep an existing bootstrap account in sync when those credentials change.
+        await ensure_user(
+            session,
+            settings.ADMIN_USERNAME,
+            settings.ADMIN_PASSWORD,
+            "admin",
+            reset_password=True,
+        )
         await ensure_optional_user(session, settings.LOGIST_USERNAME, settings.LOGIST_PASSWORD, "logist")
         await ensure_optional_user(session, settings.MANAGER_USERNAME, settings.MANAGER_PASSWORD, "manager")
 

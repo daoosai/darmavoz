@@ -14,13 +14,6 @@ export const getDeliveryOptionsForVolume = (
   .filter((option) => option.is_active !== false && Number(option.capacity_m3) > 0)
   .sort((first, second) => Number(first.capacity_m3) - Number(second.capacity_m3));
 
-export const findDeliveryOptionForVolume = (
-  deliveryOptions: DeliveryOption[],
-  volume: number,
-) => getDeliveryOptionsForVolume(deliveryOptions).find(
-  (option) => Number(option.capacity_m3) >= volume,
-);
-
 export interface CartItem {
   id: string; // unique id for the cart item
   material: MaterialProps;
@@ -46,14 +39,18 @@ export interface ClientOrderSummary {
   clarification_reasons?: string[];
   clarification_comment?: string | null;
   client_clarification_reply?: string | null;
+  trip_count?: number | null;
+  trips_count?: number | null;
   items?: {
     material?: {
       name?: string | null;
+      unit?: string | null;
       image_url?: string | null;
       primary_image_url?: string | null;
       media_files?: { public_url?: string | null; is_primary?: boolean }[];
     } | null;
     quantity?: number;
+    volume?: number | null;
   }[];
   driver?: {
     name: string;
@@ -108,6 +105,11 @@ interface CartState {
     deliveryOption: DeliveryOption,
     comment?: string,
     pickupPoint?: PickupPointSelection,
+    availableDeliveryOptions?: DeliveryOption[],
+  ) => boolean;
+  replaceItemDeliveryOption: (
+    id: string,
+    deliveryOption: DeliveryOption,
     availableDeliveryOptions?: DeliveryOption[],
   ) => boolean;
   updateItemVolume: (id: string, volume: number) => boolean;
@@ -198,6 +200,23 @@ interface AddressState {
   ) => void;
   clearSelectedAddress: () => void;
 }
+
+export type PendingAction = {
+  type: "OPEN_DELIVERY_SELECTION" | "OPEN_PICKUP_MAP";
+  materialId: string;
+};
+
+interface PurchaseFlowState {
+  pendingAction: PendingAction | null;
+  setPendingAction: (action: PendingAction) => void;
+  clearPendingAction: () => void;
+}
+
+export const usePurchaseFlowStore = create<PurchaseFlowState>((set) => ({
+  pendingAction: null,
+  setPendingAction: (action) => set({ pendingAction: action }),
+  clearPendingAction: () => set({ pendingAction: null }),
+}));
 
 export const useAddressStore = create<AddressState>()(
   persist(
@@ -339,14 +358,6 @@ export const useCartStore = create<CartState>()(
         0,
       );
       const newVolume = existingVolume + Number(deliveryOption.capacity_m3);
-      const upgradedOption = findDeliveryOptionForVolume(uniqueOptions, newVolume);
-
-      if (!upgradedOption) {
-        toast.error(
-          "Максимальный объем одной машины превышен. Пожалуйста, оформите второй заказ.",
-        );
-        return false;
-      }
 
       const targetItem = existingItems[0];
       set((state) => ({
@@ -364,7 +375,6 @@ export const useCartStore = create<CartState>()(
                     ...material,
                     delivery_options: uniqueOptions,
                   },
-                  deliveryOption: upgradedOption,
                   pickupPoint: pickupPoint || item.pickupPoint,
                   comment: item.comment || comment,
                   quantity: 1,
@@ -392,22 +402,44 @@ export const useCartStore = create<CartState>()(
     }));
     return true;
   },
+  replaceItemDeliveryOption: (
+    id,
+    deliveryOption,
+    availableDeliveryOptions = [],
+  ) => {
+    const item = get().cartItems.find((cartItem) => cartItem.id === id);
+    if (!item) return false;
+
+    const deliveryOptions = getDeliveryOptionsForVolume([
+      deliveryOption,
+      ...availableDeliveryOptions,
+    ]);
+    set((state) => ({
+      cartItems: state.cartItems.map((cartItem) =>
+        cartItem.id === id
+          ? {
+              ...cartItem,
+              material: {
+                ...cartItem.material,
+                delivery_options: deliveryOptions,
+              },
+              deliveryOption,
+              pickupPoint: undefined,
+            }
+          : cartItem,
+      ),
+    }));
+    return true;
+  },
   updateItemVolume: (id, volume) => {
     const item = get().cartItems.find((cartItem) => cartItem.id === id);
     if (!item) return false;
-    const availableOptions = getDeliveryOptionsForVolume([
-      item.deliveryOption,
-      ...(item.material.delivery_options || []),
-    ]);
-    const upgradedOption = findDeliveryOptionForVolume(availableOptions, volume);
-    if (!upgradedOption) return false;
 
     set((state) => ({
       cartItems: state.cartItems.map((cartItem) =>
         cartItem.id === id
           ? {
               ...cartItem,
-              deliveryOption: upgradedOption,
               quantity: 1,
               volume,
             }

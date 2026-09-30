@@ -5,6 +5,7 @@ import toast from "react-hot-toast";
 import { switchAuthenticatedSession } from "./pushAuth";
 import { baseURL, extractApiErrorMessage } from "./utils";
 import SwipeableBottomSheet from "./SwipeableBottomSheet";
+import LegalConsentText from "./LegalConsentText";
 
 interface Props {
   isOpen: boolean;
@@ -349,6 +350,7 @@ export default function ClientAuthBottomSheet({ isOpen, onClose, onAuthenticated
                     {isSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : null}
                     Получить код
                   </button>
+                  <LegalConsentText />
                 </div>
               ) : (
                 <div className="flex h-full flex-col animate-in fade-in slide-in-from-right-4 duration-300">

@@ -190,6 +190,12 @@ def _build_driver_order_payload(order: Order) -> DriverOfferOrderOut:
         id=order.id,
         material_name=item.material.name if item and item.material else "",
         quantity=order.quantity,
+        trip_count=order.trip_count,
+        trip_capacity_m3=(
+            order.trip_capacity_m3_snapshot
+            if order.trip_capacity_m3_snapshot is not None
+            else (order.delivery_option.capacity_m3 if order.delivery_option else None)
+        ),
         address=order.address,
         pickup_address=order.pickup_address,
         pickup_lat=order.pickup_lat,

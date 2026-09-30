@@ -167,11 +167,11 @@ async def test_driver_login_returns_sms_challenge_and_verify_issues_token(client
 
 
 @pytest.mark.asyncio
-async def test_non_driver_login_still_returns_token_without_otp(client, session_factory):
+async def test_admin_login_still_returns_token_without_otp(client, session_factory):
     async with session_factory() as session:
         admin_role = await ensure_role(session, "admin")
         admin = User(
-            username="admin_otp_test",
+            username="admin",
             hashed_password=get_password_hash("admin123"),
             role_id=admin_role.id,
             is_active=True,
@@ -181,7 +181,7 @@ async def test_non_driver_login_still_returns_token_without_otp(client, session_
 
     response = await client.post(
         "/api/v1/auth/login",
-        data={"username": "admin_otp_test", "password": "admin123"},
+        data={"username": "admin", "password": "admin123"},
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
 

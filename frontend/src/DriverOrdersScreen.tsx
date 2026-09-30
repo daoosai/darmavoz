@@ -4,9 +4,11 @@ import { Capacitor } from "@capacitor/core";
 import { Geolocation } from "@capacitor/geolocation";
 import { useAuthStore } from "./store";
 import { getOrderStatusText } from "./utils/statusMapper";
+import { formatTripsCount } from "./utils/pluralize";
 import {
   baseURL,
   extractApiErrorMessage,
+  formatShortAddress,
   orderStatusColors,
   handleApiError,
 } from "./utils";
@@ -38,7 +40,7 @@ import {
 export interface DriverOrder {
   id: string;
   address: string;
-  items?: { material: { name: string } }[];
+  items?: { material: { name: string }; volume?: number | null }[];
   delivery_option?: { capacity_m3: number };
   created_at: string;
   total_amount: number;
@@ -48,6 +50,10 @@ export interface DriverOrder {
   status: string;
   material_name?: string;
   capacity_m3?: number;
+  trip_count?: number | null;
+  trips_count?: number | null;
+  trip_capacity_m3?: number | null;
+  trip_capacity_m3_snapshot?: number | null;
   client_phone?: string;
   client?: { phone?: string; name?: string; full_name?: string };
   pickup_address?: string;
@@ -75,6 +81,20 @@ const getEstimatedTotalAmount = (
 ) =>
   Number(order.estimated_total_amount ?? 0) ||
   Number(order.total_amount ?? 0) + getDeliveryCost(order);
+
+const getOrderVolume = (order: DriverOrder) => {
+  const itemVolume = (order.items || []).reduce(
+    (total, item) => total + Number(item.volume || 0),
+    0,
+  );
+  return itemVolume || Number(
+    order.trip_capacity_m3_snapshot
+    ?? order.trip_capacity_m3
+    ?? order.capacity_m3
+    ?? order.delivery_option?.capacity_m3
+    ?? 0,
+  );
+};
 
 const formatCurrency = (value?: number | null) =>
   `${Number(value ?? 0).toLocaleString("ru-RU")} ₽`;
@@ -406,6 +426,9 @@ export default function DriverOrdersScreen({
                   status: detail.status || "driver_assigned",
                   material_name: detail.material_name,
                   capacity_m3: detail.capacity_m3,
+                  trip_count: detail.trip_count ?? detail.trips_count,
+                  trip_capacity_m3: detail.trip_capacity_m3,
+                  trip_capacity_m3_snapshot: detail.trip_capacity_m3_snapshot,
                   client_phone: detail.client_phone || detail.client?.phone,
                   client: detail.client,
                   pickup_lat: detail.pickup_lat,
@@ -1023,6 +1046,11 @@ export const DriverOrderCard: React.FC<{
     order.material_name || order.items?.[0]?.material?.name || "Неизвестно";
   const capacity =
     order.capacity_m3 || order.delivery_option?.capacity_m3 || "?";
+  const orderVolume = getOrderVolume(order);
+  const tripCount = Math.max(1, Number(order.trip_count ?? order.trips_count ?? 1));
+  const volumeLabel = tripCount > 1
+    ? `${orderVolume} м³ (${formatTripsCount(tripCount)})`
+    : `${orderVolume || capacity} м³`;
   const deliveryCost = getDeliveryCost(order);
   const estimatedTotalAmount = getEstimatedTotalAmount(order);
   const materialCost = estimatedTotalAmount - deliveryCost;
@@ -1237,7 +1265,7 @@ export const DriverOrderCard: React.FC<{
                 Куда (Клиент)
               </p>
               <p className="text-sm font-bold text-slate-900 leading-snug">
-                {order.delivery_address || order.address}
+                {formatShortAddress(order.delivery_address || order.address)}
               </p>
             </div>
           </div>
@@ -1251,7 +1279,7 @@ export const DriverOrderCard: React.FC<{
           </div>
           <div className="flex flex-col">
             <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">Объем</span>
-            <span className="text-sm font-bold text-slate-800">{capacity} м³</span>
+            <span className="text-sm font-bold text-slate-800">{volumeLabel}</span>
           </div>
         </div>
 

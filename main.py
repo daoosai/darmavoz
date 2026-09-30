@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api import admin, admin_moderation, admin_parser, admin_quarries, auth, catalog, client_addresses, client_auth, client_orders, clients, driver_dispatch, drivers, equipment, equipment_owner_auth, equipment_owner_profile, geo, logist_orders, media, orders, pickup_points, placements, sprint19, supplier_auth, supplier_points, support, system, telemetry, water, water_septic_partner_auth, water_septic_partner_profile, webhooks
+from app.api import admin, admin_moderation, admin_parser, admin_quarries, auth, catalog, client_addresses, client_auth, client_orders, clients, driver_dispatch, drivers, equipment, equipment_owner_auth, equipment_owner_profile, geo, logist_orders, media, orders, pickup_points, placements, sprint19, supplier_auth, supplier_points, support, system, telemetry, transport, water, water_septic_partner_auth, water_septic_partner_profile, webhooks
 from app.core.config import settings
 from app.core.error_handling import register_exception_handlers
 from app.db.seed import seed_data
@@ -149,6 +149,8 @@ app.include_router(admin_moderation.router, prefix="/api/v1/admin", tags=["admin
 app.include_router(admin_parser.router, prefix="/api/v1/admin", tags=["admin-parser"])
 app.include_router(admin_quarries.router, prefix="/api/v1/admin", tags=["admin-quarries"])
 app.include_router(catalog.router, prefix="/api/v1/catalog", tags=["catalog"])
+app.include_router(transport.router, prefix="/api/v1/catalog", tags=["transport"])
+app.include_router(transport.admin_router, prefix="/api/v1/admin", tags=["admin-transport"])
 app.include_router(pickup_points.router, prefix="/api/v1/catalog/pickup-points", tags=["pickup-points"])
 app.include_router(pickup_points.router, prefix="/api/v1/pickup-points", tags=["pickup-points-compat"])
 app.include_router(equipment.router, prefix="/api/v1", tags=["special-equipment"])

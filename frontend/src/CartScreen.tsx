@@ -9,10 +9,9 @@ import {
   Minus,
   Plus,
   Truck,
+  Edit2,
 } from "lucide-react";
 import {
-  findDeliveryOptionForVolume,
-  getDeliveryOptionsForVolume,
   normalizeClientOrderSummary,
   useAuthStore,
   useCartStore,
@@ -20,9 +19,11 @@ import {
   useClientOrdersStore,
 } from "./store";
 import { baseURL, extractApiErrorMessage, resolveMediaUrl } from "./utils";
+import { formatTripsCount } from "./utils/pluralize";
 import toast from "react-hot-toast";
 import { MaterialProps } from "./MaterialDetailScreen";
 import PickupPointMapScreen, { PickupPointSelection } from "./PickupPointMapScreen";
+import MaterialBottomSheet from "./MaterialBottomSheet";
 
 interface MarketplaceOption {
   quarry_id: string;
@@ -30,6 +31,9 @@ interface MarketplaceOption {
   point_type: string;
   distance: number;
   delivery_cost: number | null | undefined;
+  delivery_cost_per_trip?: number | null;
+  trip_count?: number | null;
+  trip_capacity_m3?: number | null;
   material_cost: number;
   total_amount: number;
   primary_image_url?: string | null;
@@ -57,6 +61,11 @@ interface MapContext {
   deliveryOptionId: string;
 }
 
+interface DeliveryOptionContext {
+  itemId: string;
+  material: MaterialProps;
+}
+
 const isMarketplaceCalculation = (
   result: CalculationResult | undefined,
 ): result is MarketplaceCalculation => Boolean(result && "best_option" in result);
@@ -66,6 +75,7 @@ const DEFAULT_CALCULATION_ERROR_TEXT =
 
 const MIN_VOLUME_M3 = 5;
 const VOLUME_STEP_M3 = 1;
+type DraftVolume = number | "";
 
 const getCartItemVolume = (item: ReturnType<typeof useCartStore.getState>["cartItems"][number]) =>
   Number(item.volume ?? item.deliveryOption.capacity_m3 * item.quantity);
@@ -148,7 +158,9 @@ export default function CartScreen({
   const [preferredPointIds, setPreferredPointIds] = useState<Record<string, string>>({});
   const [manualCalculationRevision, setManualCalculationRevision] = useState(0);
   const [mapContext, setMapContext] = useState<MapContext | null>(null);
-  const [draftVolumes, setDraftVolumes] = useState<Record<string, number>>({});
+  const [deliveryOptionContext, setDeliveryOptionContext] =
+    useState<DeliveryOptionContext | null>(null);
+  const [draftVolumes, setDraftVolumes] = useState<Record<string, DraftVolume>>({});
   const calculationVersionRef = useRef(0);
   const processedManualCalculationRevisionRef = useRef(0);
 
@@ -183,7 +195,13 @@ export default function CartScreen({
     const timer = window.setTimeout(() => {
       cartItems.forEach((item) => {
         const draftVolume = draftVolumes[item.id];
-        if (draftVolume == null || draftVolume === getCartItemVolume(item)) return;
+        if (
+          typeof draftVolume !== "number" ||
+          draftVolume < MIN_VOLUME_M3 ||
+          draftVolume === getCartItemVolume(item)
+        ) {
+          return;
+        }
         updateItemVolume(item.id, draftVolume);
       });
     }, 500);
@@ -194,23 +212,30 @@ export default function CartScreen({
     item: ReturnType<typeof useCartStore.getState>["cartItems"][number],
     direction: number,
   ) => {
-    const deliveryOptions = getDeliveryOptionsForVolume([
-      item.deliveryOption,
-      ...(item.material.delivery_options || []),
-    ]);
-    const maxVolume = Number(deliveryOptions.at(-1)?.capacity_m3 || MIN_VOLUME_M3);
-    const currentVolume = draftVolumes[item.id] ?? getCartItemVolume(item);
-    const nextVolume = Math.min(
-      maxVolume,
-      Math.max(MIN_VOLUME_M3, currentVolume + direction * VOLUME_STEP_M3),
+    const draftVolume = draftVolumes[item.id];
+    const currentVolume =
+      typeof draftVolume === "number" ? draftVolume : getCartItemVolume(item);
+    const nextVolume = Math.max(
+      MIN_VOLUME_M3,
+      currentVolume + direction * VOLUME_STEP_M3,
     );
-    if (
-      nextVolume === currentVolume ||
-      !findDeliveryOptionForVolume(deliveryOptions, nextVolume)
-    ) {
-      return;
-    }
+    if (nextVolume === currentVolume) return;
     setDraftVolumes((current) => ({ ...current, [item.id]: nextVolume }));
+  };
+
+  const commitDraftVolume = (
+    item: ReturnType<typeof useCartStore.getState>["cartItems"][number],
+  ) => {
+    const draftVolume = draftVolumes[item.id];
+    const nextVolume =
+      typeof draftVolume === "number" && Number.isFinite(draftVolume)
+        ? Math.max(MIN_VOLUME_M3, draftVolume)
+        : MIN_VOLUME_M3;
+
+    setDraftVolumes((current) => ({ ...current, [item.id]: nextVolume }));
+    if (nextVolume !== getCartItemVolume(item)) {
+      updateItemVolume(item.id, nextVolume);
+    }
   };
 
   useEffect(() => {
@@ -384,6 +409,33 @@ export default function CartScreen({
     toast.success("Точка выбрана, пересчитываем стоимость");
   };
 
+  const handleDeliveryOptionChanged = () => {
+    if (!deliveryOptionContext) return;
+    const { itemId } = deliveryOptionContext;
+    setPreferredPointIds((current) => {
+      if (!current[itemId]) return current;
+      const next = { ...current };
+      delete next[itemId];
+      return next;
+    });
+    setCalcResults((current) => {
+      if (!current[itemId]) return current;
+      const next = { ...current };
+      delete next[itemId];
+      return next;
+    });
+    setManualCalculationRevision((current) => current + 1);
+  };
+
+  const openDeliveryOptionPicker = (
+    item: ReturnType<typeof useCartStore.getState>["cartItems"][number],
+  ) => {
+    setDeliveryOptionContext({
+      itemId: item.id,
+      material: item.material,
+    });
+  };
+
   const handleCheckout = async () => {
     if (cartItems.length === 0 || !globalAddress.trim()) return;
 
@@ -481,6 +533,9 @@ export default function CartScreen({
     .map((item) => getCalculationErrorText(calcResults[item.id]))
     .find((message): message is string => Boolean(message))
     || DEFAULT_CALCULATION_ERROR_TEXT;
+  const unavailableCartItems = cartItems.filter(
+    (item) => !isMarketplaceCalculation(calcResults[item.id]),
+  );
 
   const totalDeliveryCost = cartItems.reduce((acc, item) => {
     const res = calcResults[item.id];
@@ -557,12 +612,11 @@ export default function CartScreen({
         <div className="flex flex-col gap-4 mb-6">
           {cartItems.map((item) => {
             const draftVolume = draftVolumes[item.id] ?? getCartItemVolume(item);
-            const deliveryOptions = getDeliveryOptionsForVolume([
-              item.deliveryOption,
-              ...(item.material.delivery_options || []),
-            ]);
-            const displayedOption = findDeliveryOptionForVolume(deliveryOptions, draftVolume) || item.deliveryOption;
-            const maxVolume = Number(deliveryOptions.at(-1)?.capacity_m3 || displayedOption.capacity_m3);
+            const displayedOption = item.deliveryOption;
+            const calculation = calcResults[item.id];
+            const tripCount = isMarketplaceCalculation(calculation)
+              ? calculation.best_option.trip_count
+              : null;
             const vehicleImageUrl = resolveMediaUrl(
               displayedOption.primary_image_url
                 || displayedOption.media_files?.[0]?.public_url
@@ -598,8 +652,29 @@ export default function CartScreen({
                     </button>
                   </div>
 
-                  <div className="line-clamp-1 text-[14px] text-slate-500">
-                    {displayedOption.title} (машина до {displayedOption.capacity_m3} м³)
+                  <button
+                    type="button"
+                    onClick={() => openDeliveryOptionPicker(item)}
+                    aria-label={`Изменить вариант доставки для ${item.material.name}`}
+                    className="group -ml-1 mt-1 inline-flex max-w-full items-center gap-1.5 rounded-lg px-1 py-0.5 text-left text-[14px] text-slate-500 transition-colors hover:bg-sky-50 hover:text-sky-700"
+                  >
+                    <span className="line-clamp-1">
+                      {displayedOption.title} (машина до {displayedOption.capacity_m3} м³)
+                    </span>
+                    <Edit2 className="h-3.5 w-3.5 shrink-0 opacity-60 transition-opacity group-hover:opacity-100" />
+                  </button>
+
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    {displayedOption.transport_category?.title && (
+                      <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700">
+                        {displayedOption.transport_category.title}
+                      </span>
+                    )}
+                    {tripCount && (
+                      <span className="text-xs font-medium text-slate-500">
+                        {formatTripsCount(tripCount)}
+                      </span>
+                    )}
                   </div>
 
                   {item.comment && (
@@ -613,21 +688,53 @@ export default function CartScreen({
                       <button
                         type="button"
                         onClick={() => changeDraftVolume(item, -VOLUME_STEP_M3)}
-                        disabled={draftVolume <= MIN_VOLUME_M3}
+                        disabled={
+                          typeof draftVolume === "number" &&
+                          draftVolume <= MIN_VOLUME_M3
+                        }
                         aria-label={`Уменьшить объём ${item.material.name}`}
                         className="grid h-7 w-7 place-items-center rounded-full bg-white text-sky-700 shadow-sm transition-colors disabled:cursor-not-allowed disabled:text-slate-300"
                       >
                         <Minus className="h-4 w-4" />
                       </button>
-                      <span className="min-w-[68px] px-2 text-center text-sm font-bold text-sky-700">
-                        {draftVolume} м³
-                      </span>
+                      <input
+                        type="number"
+                        min={MIN_VOLUME_M3}
+                        step={VOLUME_STEP_M3}
+                        value={draftVolume}
+                        onChange={(event) => {
+                          const rawValue = event.target.value;
+                          if (rawValue === "") {
+                            setDraftVolumes((current) => ({
+                              ...current,
+                              [item.id]: "",
+                            }));
+                            return;
+                          }
+
+                          const nextVolume = Number(rawValue);
+                          if (Number.isFinite(nextVolume)) {
+                            setDraftVolumes((current) => ({
+                              ...current,
+                              [item.id]: nextVolume,
+                            }));
+                          }
+                        }}
+                        onBlur={() => commitDraftVolume(item)}
+                        onFocus={(event) => event.target.select()}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.currentTarget.blur();
+                          }
+                        }}
+                        aria-label={`Объём ${item.material.name}`}
+                        className="w-[76px] bg-transparent px-1 text-center text-sm font-bold text-sky-700 outline-none"
+                      />
                       <button
                         type="button"
                         onClick={() => changeDraftVolume(item, VOLUME_STEP_M3)}
-                        disabled={draftVolume >= maxVolume}
                         aria-label={`Увеличить объём ${item.material.name}`}
-                        className="grid h-7 w-7 place-items-center rounded-full bg-white text-sky-700 shadow-sm transition-colors disabled:cursor-not-allowed disabled:text-slate-300"
+                        className="grid h-7 w-7 place-items-center rounded-full bg-white text-sky-700 shadow-sm transition-colors"
                       >
                         <Plus className="h-4 w-4" />
                       </button>
@@ -685,8 +792,21 @@ export default function CartScreen({
             </span>
           </div>
         ) : hasCalculationError ? (
-          <div className="p-4 bg-orange-50 text-orange-700 rounded-xl text-sm mt-4">
-            {calculationErrorText}
+          <div className="mt-4 rounded-xl bg-orange-50 p-4 text-sm text-orange-700">
+            <p>{calculationErrorText}</p>
+            <div className="mt-3 flex flex-col gap-2">
+              {unavailableCartItems.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => openDeliveryOptionPicker(item)}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-orange-300 bg-white px-4 py-2.5 font-bold text-orange-700 transition-colors hover:bg-orange-100"
+                >
+                  <Truck className="h-4 w-4" />
+                  Выбрать другой вариант для «{item.material.name}»
+                </button>
+              ))}
+            </div>
           </div>
         ) : hasCalculations ? (
           <div className="flex flex-col gap-5">
@@ -911,6 +1031,12 @@ export default function CartScreen({
           onSelect={selectPointFromMap}
         />
       )}
+      <MaterialBottomSheet
+        material={deliveryOptionContext?.material ?? null}
+        cartItemId={deliveryOptionContext?.itemId}
+        onClose={() => setDeliveryOptionContext(null)}
+        onSubmitted={handleDeliveryOptionChanged}
+      />
     </div>
   );
 }

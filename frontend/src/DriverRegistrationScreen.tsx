@@ -3,6 +3,7 @@ import { ArrowLeft, Eye, EyeOff, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
 
 import OtpVerificationStep from "./OtpVerificationStep";
+import LegalConsentText from "./LegalConsentText";
 import { switchAuthenticatedSession } from "./pushAuth";
 import { UserRole } from "./store";
 import {
@@ -359,6 +360,7 @@ export default function DriverRegistrationScreen({
               {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : null}
               {isLoading ? "Регистрация..." : "Зарегистрироваться"}
             </button>
+            <LegalConsentText />
           </form>
         )}
       </div>

@@ -172,6 +172,7 @@ export default function SepticProviderProfileScreen({
     formatPhoneNumber(extractProfilePhone(currentUser)),
   );
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
+  const suggestionRequestRef = useRef(0);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [isMapUnavailable, setIsMapUnavailable] = useState(false);
@@ -401,6 +402,7 @@ export default function SepticProviderProfileScreen({
 
   const handleAddressChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const address = event.target.value;
+    const requestId = ++suggestionRequestRef.current;
     lastGeocodedAddressRef.current = "";
     update("address", address);
     setShowSuggestions(true);
@@ -409,6 +411,7 @@ export default function SepticProviderProfileScreen({
       return;
     }
     const nextSuggestions = await fetch2gisAddressSuggestions(address);
+    if (requestId !== suggestionRequestRef.current) return;
     setSuggestions(
       nextSuggestions
         .map((item: any) => {
@@ -422,6 +425,7 @@ export default function SepticProviderProfileScreen({
   };
 
   const selectSuggestion = async (suggestion: AddressSuggestion) => {
+    suggestionRequestRef.current += 1;
     const address = suggestion.address.trim() || suggestion.label.trim();
     setShowSuggestions(false);
     setSuggestions([]);

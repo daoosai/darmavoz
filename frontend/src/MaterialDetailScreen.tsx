@@ -22,12 +22,16 @@ export interface MaterialProps {
 
 export interface DeliveryOption {
   id: string;
+  transport_category_id?: string | null;
+  transport_category?: {
+    id: string;
+    slug: string;
+    title: string;
+    capacity_min_m3: number;
+    capacity_max_m3?: number | null;
+  } | null;
   capacity_m3: number;
   title: string;
-  base_price: number;
-  delivery_rate_per_km?: number;
-  min_price_quarry?: number;
-  min_price_warehouse?: number;
   primary_image_url?: string;
   image_url?: string;
   media_files?: MediaFile[];

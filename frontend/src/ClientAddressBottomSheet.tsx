@@ -112,6 +112,7 @@ export default function ClientAddressBottomSheet({
   const mapRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
   const reverseGeocodeRequestRef = useRef(0);
+  const suggestionRequestRef = useRef(0);
 
   const showWarning = (message: string) => {
     toast(message, {
@@ -143,6 +144,7 @@ export default function ClientAddressBottomSheet({
     if (!Number.isFinite(clickedLat) || !Number.isFinite(clickedLon)) return;
 
     const requestId = ++reverseGeocodeRequestRef.current;
+    suggestionRequestRef.current += 1;
     setLat(clickedLat);
     setLon(clickedLon);
     setNewAddress("");
@@ -294,6 +296,7 @@ export default function ClientAddressBottomSheet({
     e: React.ChangeEvent<HTMLInputElement>,
   ) => {
     const val = e.target.value;
+    const requestId = ++suggestionRequestRef.current;
     setNewAddress(val);
     setLat(null);
     setLon(null);
@@ -301,10 +304,12 @@ export default function ClientAddressBottomSheet({
     setPreviewZoom(null);
     setSelectedSuggestion(null);
     const suggests = await fetch2GISSuggests(val);
+    if (requestId !== suggestionRequestRef.current) return;
     setSuggestions(suggests.filter(Boolean));
   };
 
   const selectSuggestion = async (suggestion: AddressSuggestion) => {
+    suggestionRequestRef.current += 1;
     const address = suggestion.address.trim() || suggestion.label.trim();
     if (
       !address ||

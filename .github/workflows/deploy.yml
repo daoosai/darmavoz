@@ -138,7 +138,18 @@ jobs:
           docker compose -f "${COMPOSE_FILE}" build backend
 
           # Сначала прогоняем Alembic отдельным контейнером, затем пересоздаём runtime backend
-          docker compose -f "${COMPOSE_FILE}" run --rm --no-deps --entrypoint alembic backend upgrade head
-          docker rm -f darmavoz_backend || true
+          docker compose -f "${COMPOSE_FILE}" run --rm -T --no-deps --entrypoint alembic backend upgrade head </dev/null
           docker compose -f "${COMPOSE_FILE}" up -d --no-deps --force-recreate backend
+
+          for attempt in $(seq 1 30); do
+            if docker compose -f "${COMPOSE_FILE}" exec -T backend python -c 'import json, urllib.request; spec = json.load(urllib.request.urlopen("http://127.0.0.1:8000/openapi.json", timeout=3)); assert "/api/v1/admin/transport-categories" in spec["paths"]' >/dev/null 2>&1; then
+              break
+            fi
+            if [ "${attempt}" -eq 30 ]; then
+              docker compose -f "${COMPOSE_FILE}" logs --tail=100 backend >&2 || true
+              echo "Production backend did not expose Sprint 23 routes" >&2
+              exit 1
+            fi
+            sleep 2
+          done
           EOF

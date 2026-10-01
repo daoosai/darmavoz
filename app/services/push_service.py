@@ -150,7 +150,7 @@ async def _send_push_with_token_cleanup(
                 "push_data": data or {},
             },
         )
-        return True
+        return message_id is not None
     except Exception as exc:
         if _looks_like_invalid_token_error(exc):
             await clear_token()

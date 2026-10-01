@@ -25,79 +25,52 @@ EXPIRATION_NOTICE_BODY = (
 )
 
 
-async def run_expiration_notification_tick(
-    session_factory=AsyncSessionLocal,
-    *,
-    now: datetime | None = None,
-) -> int:
-    """Create one in-app notice per listing and send the matching email."""
+def expiration_stage(ends_at, now):
+    remaining = ends_at - now
+    if remaining.total_seconds() <= 0: return 'expired'
+    if remaining <= timedelta(days=1): return '1day'
+    if remaining <= timedelta(days=3): return '3days'
+    return None
+
+
+async def run_expiration_notification_tick(session_factory=AsyncSessionLocal, *, now=None) -> int:
+    from app.models.models import Quarry, User
+    from app.services.notification_outbox import enqueue
     current_time = now or utcnow()
-    window_start = current_time + timedelta(days=2)
-    window_end = current_time + timedelta(days=3)
-    emails: list[tuple[str, str]] = []
     notified_count = 0
-
+    emails = []
     async with session_factory() as session:
-        result = await session.execute(
-            select(SpecialEquipmentListing)
-            .options(
-                selectinload(SpecialEquipmentListing.owner),
-                selectinload(SpecialEquipmentListing.created_by),
-            )
-            .where(
-                *public_placement_filters(SpecialEquipmentListing),
-                SpecialEquipmentListing.placement_ends_at >= window_start,
-                SpecialEquipmentListing.placement_ends_at < window_end,
-                SpecialEquipmentListing.expiration_notice_sent.is_(False),
-            )
-            .order_by(SpecialEquipmentListing.placement_ends_at.asc())
-            .limit(settings.EXPIRATION_NOTIFICATION_BATCH_SIZE)
-            .with_for_update(skip_locked=True)
-        )
-        listings = list(result.scalars().unique().all())
-
-        for listing in listings:
-            recipient = listing.owner or listing.created_by
-            if recipient is None:
-                logger.warning(
-                    "equipment_expiration_notice_recipient_missing",
-                    extra={"listing_id": str(listing.id)},
-                )
-                continue
-
-            session.add(
-                UserNotification(
-                    user_id=recipient.id,
-                    event_type=EXPIRATION_NOTICE_EVENT_TYPE,
-                    title=EXPIRATION_NOTICE_TITLE,
-                    body=EXPIRATION_NOTICE_BODY,
-                    payload={
-                        "listing_id": str(listing.id),
-                        "event": EXPIRATION_NOTICE_EVENT_TYPE,
-                    },
-                )
-            )
-            listing.expiration_notice_sent = True
-            notified_count += 1
-            if recipient.email:
-                emails.append((recipient.email, listing.title))
-
+        for model, kind in ((Quarry, 'pickup_point'), (SpecialEquipmentListing, 'equipment')):
+            filters = [model.placement_ends_at.is_not(None), model.placement_ends_at <= current_time + timedelta(days=3),
+                model.placement_status.not_in(('archived', 'pending_moderation')),
+                model.moderation_status.in_(('approved', 'has_pending_changes'))]
+            if model is SpecialEquipmentListing: filters.append(model.is_deleted.is_(False))
+            entities = list((await session.scalars(select(model).where(*filters).order_by(model.placement_ends_at).with_for_update(skip_locked=True))).all())
+            for entity in entities:
+                owner_id = entity.owner_user_id or getattr(entity, 'created_by_user_id', None)
+                if owner_id is None: continue
+                stage = expiration_stage(entity.placement_ends_at, current_time)
+                title = 'Продлите размещение' if stage == 'expired' else EXPIRATION_NOTICE_TITLE
+                body = 'Срок размещения истёк. Откройте профиль и продлите размещение.' if stage == 'expired' else ('Размещение закончится в течение суток. Продлите его в профиле.' if stage == '1day' else ('Размещение закончится в течение трёх дней. Продлите его в профиле.' if kind == 'pickup_point' else EXPIRATION_NOTICE_BODY))
+                end = entity.placement_ends_at.isoformat()
+                event_type = f'{kind}_placement_expired' if stage == 'expired' else f'{kind}_placement_expiring'
+                created = await enqueue(session, key=f'placement:{kind}:{entity.id}:{end}:{stage}', recipient_type='user', recipient_id=owner_id,
+                    event_type=event_type, title=title, body=body, inbox=True,
+                    payload={'entity_type': kind, 'entity_id': str(entity.id), 'placement_end': end, 'stage': stage,
+                        'city_id': str(entity.city_id or ''), 'listing_id' if kind == 'equipment' else 'pickup_point_id': str(entity.id)})
+                if created:
+                    notified_count += 1
+                    if kind == 'equipment':
+                        entity.expiration_notice_sent = True
+                        if stage == '3days':
+                            owner = await session.get(User, owner_id)
+                            if owner and owner.email: emails.append(owner.email)
         await session.commit()
-
-    for email, listing_title in emails:
+    for email in emails:
         try:
-            await asyncio.to_thread(
-                send_email,
-                to_email=email,
-                subject="Дармавоз: срок размещения скоро истечёт",
-                body=EXPIRATION_NOTICE_BODY,
-            )
+            await asyncio.to_thread(send_email, to_email=email, subject="Дармавоз: срок размещения скоро истечёт", body=EXPIRATION_NOTICE_BODY)
         except Exception:
-            logger.exception(
-                "equipment_expiration_email_failed",
-                extra={"email": email, "listing_title": listing_title},
-            )
-
+            logger.exception("equipment_expiration_email_failed")
     return notified_count
 
 

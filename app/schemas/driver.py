@@ -75,7 +75,8 @@ class DriverCreate(BaseModel):
 
 
 class AdminDriverCreate(BaseModel):
-    city_ids: list[UUID] | None = Field(default=None, min_length=1)
+    transport_category_id: UUID | None = None
+    city_ids: list[UUID] | None = None
     name: str
     phone: str
     password: str
@@ -105,6 +106,7 @@ class AdminDriverCreate(BaseModel):
 
 
 class AdminDriverUpdate(BaseModel):
+    transport_category_id: UUID | None = None
     name: str | None = None
     phone: str | None = None
     password: str | None = None
@@ -157,6 +159,10 @@ class DriverProfileUpdate(BaseModel):
 
 
 class DriverVehicleUpdate(BaseModel):
+    cubature_min: float | None = None
+    cubature_max: float | None = None
+    tonnage_min: float | None = None
+    tonnage_max: float | None = None
     brand: str | None = None
     model: str | None = None
     plate_number: str | None = None
@@ -213,6 +219,12 @@ class DriverFcmTokenOut(BaseModel):
 
 
 class DriverResponse(BaseModel):
+    city_names: list[str] = Field(default_factory=list)
+    current_order_id: UUID | None = None
+    is_active: bool = True
+    dispatch_exclusion_reasons: list[str] = Field(default_factory=list)
+    has_push_token: bool = False
+    effective_transport_category_id: UUID | None = None
     city_ids: list[UUID] = Field(default_factory=list)
     id: UUID
     name: str

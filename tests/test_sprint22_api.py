@@ -95,7 +95,7 @@ async def test_driver_membership_and_unknown_historical_city(session_factory):
 @pytest.mark.asyncio
 async def test_dispatch_queries_offers_and_manual_assignment_respect_city(session_factory):
     from app.api.drivers import build_driver_list_query
-    from app.models.models import Client, DeliveryOption, Order, Role, User, Vehicle
+    from app.models.models import Client, DeliveryOption, Order, Role, User, Vehicle, TransportCategory
     from app.services.dispatch_service import (
         _matching_drivers_base_query, assign_order_to_driver_manually, create_offer_for_driver,
     )
@@ -105,7 +105,10 @@ async def test_dispatch_queries_offers_and_manual_assignment_respect_city(sessio
         if role is None:
             role = Role(name='driver')
             db.add(role)
-        option = DeliveryOption(title='CI 20', capacity_m3=20, is_active=True)
+        category = TransportCategory(slug='ci-' + uuid4().hex, title='CI truck', capacity_min_m3=1, capacity_max_m3=30)
+        db.add(category)
+        await db.flush()
+        option = DeliveryOption(title='CI 20', capacity_m3=20, is_active=True, transport_category_id=category.id)
         customer = Client(name='CI customer', phone=f'+7{uuid4().int % 10**10:010d}')
         db.add_all([option, customer])
         await db.flush()
@@ -115,7 +118,7 @@ async def test_dispatch_queries_offers_and_manual_assignment_respect_city(sessio
             vehicle = Vehicle(title='CI vehicle', delivery_option_id=option.id, cubature_min=10, cubature_max=30, is_active=True, moderation_status='approved')
             db.add_all([user, vehicle])
             await db.flush()
-            driver = Driver(name=f'CI {index}', phone=f'+7{uuid4().int % 10**10:010d}', user_id=user.id, vehicle_id=vehicle.id, status='available', is_active=True, is_auto_dispatch_enabled=True, moderation_status='approved')
+            driver = Driver(name=f'CI {index}', phone=f'+7{uuid4().int % 10**10:010d}', user_id=user.id, vehicle_id=vehicle.id, status='available', is_active=True, is_on_shift=True, is_dispatch_eligible=True, is_auto_dispatch_enabled=True, moderation_status='approved')
             db.add(driver)
             await db.flush()
             drivers.append(driver)

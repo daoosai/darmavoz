@@ -67,6 +67,7 @@ import PickupPointMapScreen, { PickupPointSelection } from "./PickupPointMapScre
 import EquipmentOwnerPortalScreen from "./EquipmentOwnerPortalScreen";
 import WaterSepticPartnerPortalScreen from "./WaterSepticPartnerPortalScreen";
 import AdminNotificationToastListener from "./components/shared/AdminNotificationToastListener";
+import { openNotificationTarget } from "./notificationNavigation";
 import PaymentReturn from './PaymentReturn';
 
 const WATER_PARTNER_BOARD_PATH = "/water-partner-board";
@@ -96,6 +97,11 @@ export default function App() {
     typeof window !== "undefined" ? window.location.pathname : "/",
   );
   const { role, token } = useAuthStore();
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const orderId = params.get("notification_order");
+    if (orderId && window.location.pathname === "/" && ["admin", "logist", "client"].includes(role || "")) openNotificationTarget({ order_id: orderId, city_id: params.get("notification_city") });
+  }, [role]);
   const resolveRouteForRole = (nextRole: string | null | undefined) => {
     if (nextRole === "driver") return "driver" as const;
     if (nextRole === "logist") return "logist" as const;

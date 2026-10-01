@@ -28,5 +28,10 @@ messaging.onBackgroundMessage(function(payload) {
 
 self.addEventListener('notificationclick', function(event) {
   event.notification.close();
-  event.waitUntil(clients.openWindow('/'));
+  const data = event.notification.data?.FCM_MSG?.data || event.notification.data || {};
+  const params = new URLSearchParams();
+  if (data.city_id) params.set("notification_city", data.city_id);
+  if (/^[0-9a-f-]{36}$/i.test(data.order_id || '')) params.set('notification_order', data.order_id);
+  if (/^[0-9a-f-]{36}$/i.test(data.entity_id || '')) { params.set('notification_entity', data.entity_id); params.set('entity_type', data.entity_type || ''); }
+  event.waitUntil(clients.openWindow('/?' + params.toString()));
 });

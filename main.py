@@ -23,7 +23,7 @@ from app.services.expiration_notification_worker import (
 )
 from app.services.redis_client import close_redis
 from app.api import wholesale, payments
-from app.services import commerce_worker
+from app.services import commerce_worker, notification_outbox
 
 logger = logging.getLogger(__name__)
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -54,9 +54,11 @@ async def lifespan(app: FastAPI):
     relevance_stop_event, relevance_task = await start_relevance_worker()
     expiration_stop_event, expiration_task = await start_expiration_notification_worker()
     commerce_stop, commerce_task = await commerce_worker.start()
+    push_stop, push_task = await notification_outbox.start()
     try:
         yield
     finally:
+        await notification_outbox.shutdown(push_stop, push_task)
         await commerce_worker.shutdown(commerce_stop, commerce_task)
         await stop_expiration_notification_worker(expiration_stop_event, expiration_task)
         await stop_relevance_worker(relevance_stop_event, relevance_task)

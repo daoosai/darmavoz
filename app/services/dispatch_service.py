@@ -252,9 +252,11 @@ def build_manual_assign_push_message(order: Order) -> tuple[str, str]:
 
 def build_vehicle_volume_match_clause(trip_capacity_m3: float | None):
     if trip_capacity_m3 is None or trip_capacity_m3 <= 0:
-        return True
+        return False
 
+    capacity = func.coalesce(Vehicle.body_volume_m3, Vehicle.cubature_max, select(DeliveryOption.capacity_m3).where(DeliveryOption.id == Vehicle.delivery_option_id).scalar_subquery())
     return and_(
+        capacity >= trip_capacity_m3,
         or_(Vehicle.cubature_min.is_(None), Vehicle.cubature_min <= trip_capacity_m3),
         or_(Vehicle.cubature_max.is_(None), Vehicle.cubature_max >= trip_capacity_m3),
         or_(Vehicle.body_volume_m3.is_(None), Vehicle.body_volume_m3 >= trip_capacity_m3),
@@ -264,7 +266,7 @@ def build_vehicle_volume_match_clause(trip_capacity_m3: float | None):
 def ensure_driver_vehicle_matches_order_volume(order: Order, driver: Driver) -> None:
     trip_capacity_m3 = get_order_trip_capacity(order)
     if trip_capacity_m3 is None or trip_capacity_m3 <= 0:
-        return
+        raise HTTPException(status_code=409, detail="Для назначения требуется кубатура рейса")
 
     vehicle = driver.vehicle
     if vehicle is None:
@@ -272,6 +274,9 @@ def ensure_driver_vehicle_matches_order_volume(order: Order, driver: Driver) -> 
 
     cubature_min = vehicle.cubature_min
     cubature_max = vehicle.cubature_max
+    upper = vehicle.body_volume_m3 or cubature_max or getattr(vehicle.delivery_option, "capacity_m3", None)
+    if upper is None or trip_capacity_m3 > upper:
+        raise HTTPException(status_code=409, detail="Машина водителя не подходит под объем заказа")
     if (cubature_min is not None and trip_capacity_m3 < cubature_min) or (
         cubature_max is not None and trip_capacity_m3 > cubature_max
     ):
@@ -330,8 +335,12 @@ async def add_event(
     description: str | None = None,
     *,
     order_status: str | None = None,
+    notify: bool = True,
 ) -> None:
-    session.add(EventLog(order_id=order_id, event_type=event_type, description=description))
+    from uuid import uuid4
+    from app.services.notification_outbox import enqueue_order_event
+    event_id = uuid4()
+    session.add(EventLog(id=event_id,order_id=order_id, event_type=event_type, description=description))
     if order_status is None:
         order_status = await session.scalar(select(Order.status).where(Order.id == order_id))
     if order_status is not None:
@@ -344,6 +353,9 @@ async def add_event(
             )
         )
     await session.flush()
+    order = await session.get(Order, order_id)
+    if order is not None and notify:
+        await enqueue_order_event(session, order, event_id, event_type)
 
 
 async def get_or_create_guest_client(session: AsyncSession) -> Client:
@@ -903,6 +915,7 @@ async def create_logist_order(session: AsyncSession, payload: LogistOrderCreate)
 
 
 async def assign_order_to_driver_manually(session: AsyncSession, *, order_id: UUID, driver_id: UUID) -> Order:
+    await session.execute(select(Order.id).where(Order.id == order_id).with_for_update())
     order = await get_order_by_id(session, order_id)
     allowed_statuses = {
         OrderStatus.created.value,
@@ -915,12 +928,8 @@ async def assign_order_to_driver_manually(session: AsyncSession, *, order_id: UU
             return order
         raise HTTPException(status_code=409, detail="Order cannot be manually assigned in its current status")
 
-    result = await session.execute(
-        select(Driver)
-        .options(selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option))
-        .where(Driver.id == driver_id)
-    )
-    driver = result.scalar_one_or_none()
+    from app.services.dispatch_admission import admit_driver
+    driver = await admit_driver(session, order, driver_id, automatic=False)
     if driver is None:
         raise HTTPException(status_code=404, detail="Driver not found")
     if driver.moderation_status not in DISPATCH_ALLOWED_MODERATION_STATUSES:
@@ -1043,7 +1052,7 @@ async def get_order_by_id(
     *,
     include_deleted: bool = False,
 ) -> Order:
-    stmt = select(Order).options(*order_load_options()).where(Order.id == order_id)
+    stmt = select(Order).options(*order_load_options()).where(Order.id == order_id).execution_options(populate_existing=True)
     if not include_deleted:
         stmt = stmt.where(active_order_clause())
     result = await session.execute(stmt)
@@ -1226,7 +1235,7 @@ async def update_order_by_logist(
         driver_notification_candidate and driver_notification_snapshot_before != driver_notification_snapshot_after
     )
 
-    await add_event(session, order.id, "order_updated_by_logist", "Order updated by logist", order_status=order.status)
+    await add_event(session, order.id, "order_updated_by_logist", "Order updated by logist", order_status=order.status, notify=driver_visible_details_changed)
     await session.commit()
     refreshed_order = await get_order_by_id(session, order.id)
     if (
@@ -1262,12 +1271,14 @@ async def delete_order_by_id(session: AsyncSession, order_id: UUID) -> None:
         .where(OrderOffer.order_id == order_id)
         .values(status=OrderOfferStatus.cancelled.value)
     )
+    await add_event(session, order.id, "order_cancelled", "Order cancelled")
     await session.commit()
     if cancelled_driver_id is not None:
         schedule_driver_order_cancelled_notification(order, cancelled_driver_id)
 
 
 def _matching_drivers_base_query(order: Order) -> Select[tuple[Driver]]:
+    from app.services.driver_eligibility import driver_constraints
     trip_capacity_m3 = get_order_trip_capacity(order)
     return (
         select(Driver).where(driver_city_clause(getattr(order, "city_id", None)))
@@ -1281,6 +1292,7 @@ def _matching_drivers_base_query(order: Order) -> Select[tuple[Driver]]:
         .where(Vehicle.is_active.is_(True))
         .where(Vehicle.moderation_status.in_(DISPATCH_ALLOWED_MODERATION_STATUSES))
         .where(build_vehicle_volume_match_clause(trip_capacity_m3))
+        .where(driver_constraints(order))
     )
 
 
@@ -1518,7 +1530,14 @@ async def get_matching_drivers(
 
 
 async def create_offer_for_driver(session: AsyncSession, order: Order, driver: Driver) -> OrderOffer:
-    await ensure_driver_city(session, order, driver.id)
+    await session.execute(select(Order.id).where(Order.id == order.id).with_for_update())
+    order = await get_order_by_id(session, order.id)
+    if order.driver_id is not None or order.status in ACTIVE_ASSIGNED_ORDER_STATUSES | {OrderStatus.completed.value, OrderStatus.cancelled.value}:
+        raise HTTPException(409, "Заказ уже назначен или завершён")
+    if order.current_offer is not None and order.current_offer.status == OrderOfferStatus.pending.value and order.current_offer.expires_at > utcnow():
+        raise HTTPException(409, "Для заказа уже действует предложение")
+    from app.services.dispatch_admission import admit_driver
+    driver = await admit_driver(session, order, driver.id)
     now = utcnow()
     next_sequence_no = (
         await session.scalar(select(func.coalesce(func.max(OrderOffer.sequence_no), 0)).where(OrderOffer.order_id == order.id))
@@ -1571,6 +1590,7 @@ async def advance_dispatch_for_order(
     allow_attempted_fallback: bool = False,
     excluded_driver_ids: set[UUID] | None = None,
 ) -> Order:
+    await session.execute(select(Order.id).where(Order.id == order_id).with_for_update())
     order = await get_order_by_id(session, order_id)
     terminal_or_active_statuses = ACTIVE_ASSIGNED_ORDER_STATUSES | {
         OrderStatus.completed.value,
@@ -1594,8 +1614,14 @@ async def advance_dispatch_for_order(
     if not candidates:
         return await mark_no_driver_found(session, order)
 
-    await create_offer_for_driver(session, order, candidates[0])
-    return order
+    for candidate in candidates:
+        try:
+            await create_offer_for_driver(session, order, candidate)
+            return order
+        except HTTPException as exc:
+            if exc.status_code != 409:
+                raise
+    return await mark_no_driver_found(session, order)
 
 
 async def expire_offer(session: AsyncSession, offer: OrderOffer) -> Order:
@@ -1629,6 +1655,11 @@ async def expire_offer(session: AsyncSession, offer: OrderOffer) -> Order:
 
 
 async def accept_offer(session: AsyncSession, *, offer_id: UUID, driver_id: UUID) -> Order:
+    order_id = await session.scalar(select(OrderOffer.order_id).where(OrderOffer.id == offer_id))
+    if order_id is None:
+        raise HTTPException(404, "Offer not found")
+    await session.execute(select(Order.id).where(Order.id == order_id).with_for_update())
+    await session.execute(select(Driver.id).where(Driver.id == driver_id).with_for_update())
     result = await session.execute(
         select(OrderOffer)
         .options(
@@ -1639,6 +1670,8 @@ async def accept_offer(session: AsyncSession, *, offer_id: UUID, driver_id: UUID
             selectinload(OrderOffer.driver).selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option),
         )
         .where(OrderOffer.id == offer_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     offer = result.scalar_one_or_none()
     if offer is None:
@@ -1649,6 +1682,10 @@ async def accept_offer(session: AsyncSession, *, offer_id: UUID, driver_id: UUID
         raise HTTPException(status_code=409, detail="Offer is no longer pending")
 
     order = offer.order
+    if offer.expires_at <= utcnow() or order.current_offer_id != offer.id or order.status != OrderStatus.offered_to_driver.value:
+        raise HTTPException(409, "Предложение истекло или больше не действует")
+    from app.services.dispatch_admission import admit_driver
+    await admit_driver(session, order, driver_id)
     await ensure_driver_city(session, order, driver_id)
     if order.driver_id is not None and order.driver_id != driver_id:
         raise HTTPException(status_code=409, detail="Order is already assigned")

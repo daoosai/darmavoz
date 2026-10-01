@@ -21,7 +21,7 @@ from app.services.redis_client import get_redis
 
 logger = logging.getLogger(__name__)
 
-ALGORITHM_VERSION = "sprint-21-v1"
+ALGORITHM_VERSION = "sprint-25-v1"
 LOCATION_KEY_PREFIX = "driver:location:"
 ROUTE_CACHE_PREFIX = "smart-matching:truck-route:"
 
@@ -78,8 +78,11 @@ def _trip_capacity_m3(order: Order) -> float | None:
 
 
 def _vehicle_matches_volume(vehicle: Vehicle | None, requested_volume: float | None) -> bool:
-    if vehicle is None or requested_volume is None:
-        return vehicle is not None
+    if vehicle is None or requested_volume is None or requested_volume <= 0:
+        return False
+    upper = vehicle.body_volume_m3 or vehicle.cubature_max or getattr(getattr(vehicle, "delivery_option", None), "capacity_m3", None)
+    if upper is None or requested_volume > upper:
+        return False
     if vehicle.cubature_min is not None and requested_volume < vehicle.cubature_min:
         return False
     if vehicle.cubature_max is not None and requested_volume > vehicle.cubature_max:
@@ -224,6 +227,8 @@ class SmartMatchingService:
         coords = (order.pickup_lat, order.pickup_lon, order.delivery_lat, order.delivery_lon)
         has_order_coordinates = all(value is not None for value in coords)
 
+        from app.services.driver_eligibility import driver_constraints, effective_category, order_category
+        allowed_ids = set((await session.scalars(select(Driver.id).join(Driver.vehicle).where(driver_constraints(order)))).all())
         for driver in all_drivers:
             exclusion_reasons = self._hard_exclusion_reasons(
                 driver,
@@ -235,6 +240,10 @@ class SmartMatchingService:
                 allow_penalty_fallback=allow_penalty_fallback,
                 now=now,
             )
+            if effective_category(driver.vehicle) != order_category(order) or order_category(order) is None:
+                exclusion_reasons.append("category_mismatch")
+            if driver.id not in allowed_ids:
+                exclusion_reasons.append("dispatch_constraint")
             location = locations.get(driver.id)
             if location is None and driver.last_lat is not None and driver.last_lon is not None:
                 updated_at = _normalise_datetime(driver.last_location_updated_at)

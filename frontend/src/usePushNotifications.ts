@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { isDuplicatePush, openNotificationTarget } from './notificationNavigation';
 import { PushNotifications } from '@capacitor/push-notifications';
 import {
   isAdminModerationEvent,
@@ -245,7 +246,7 @@ export const usePushNotifications = () => {
 
         PushNotifications.addListener('pushNotificationReceived', (notification) => {
           if (!isMounted) return;
-          console.log('Foreground push received:', notification);
+          if (isDuplicatePush(notification.data)) return;
           handleForegroundPush(
             notification.title,
             notification.body,
@@ -254,7 +255,7 @@ export const usePushNotifications = () => {
         });
 
         PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
-          console.log('Push action performed: ' + JSON.stringify(notification));
+          if (isMounted) openNotificationTarget(notification.notification.data);
         });
       } catch (error) {
         console.error('Push notification setup failed', error);
@@ -283,7 +284,7 @@ export const usePushNotifications = () => {
 
         webUnsubscribe = onMessage(messaging, (payload) => {
           if (!isMounted) return;
-          console.log('Foreground push received:', payload);
+          if (isDuplicatePush(payload.data)) return;
           const notificationTitle = payload.notification?.title?.trim() || '';
           const notificationBody = payload.notification?.body?.trim() || '';
           if (Notification.permission === 'granted') {
@@ -293,9 +294,8 @@ export const usePushNotifications = () => {
                 notificationTitle && notificationBody ? notificationBody : '';
 
               if (systemNotificationTitle) {
-                new Notification(systemNotificationTitle, {
-                  body: systemNotificationBody,
-                });
+                const notice = new Notification(systemNotificationTitle, { body: systemNotificationBody, tag: payload.data?.event_id });
+                notice.onclick = () => { notice.close(); openNotificationTarget(payload.data); };
               }
             } catch {
               // ignore system notification errors in foreground

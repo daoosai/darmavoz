@@ -1,3 +1,4 @@
+import { operatorFetch } from "./operatorCityStore";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { MaterialProps, DeliveryOption } from "./MaterialDetailScreen";
@@ -262,9 +263,9 @@ export const usePlacementStore = create<PlacementState>((set) => ({
     set({ policy: await response.json() });
   },
   loadSummary: async (token) => {
-    set({ isLoading: true });
+    set({ isLoading: true, summary: null });
     try {
-      const response = await fetch(`${baseURL}/admin/placements/summary`, {
+      const response = await operatorFetch(`${baseURL}/admin/placements/summary`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!response.ok) throw new Error("Не удалось загрузить сводку размещений");

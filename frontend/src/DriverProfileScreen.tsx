@@ -29,9 +29,12 @@ import UpdateBanner from "./UpdateBanner";
 import toast from "react-hot-toast";
 import { DriverOrder, DriverOrderCard } from "./DriverOrdersScreen";
 import DeleteAccountButton from "./components/shared/DeleteAccountButton";
+import NotificationCenter from "./components/shared/NotificationCenter";
 import CommerceMenu from './CommerceMenu';
 
 interface DriverProfile {
+  city_ids?: string[];
+  city_names?: string[];
   id: string;
   name: string;
   phone: string;
@@ -810,6 +813,11 @@ export default function DriverProfileScreen({
             <span className="text-sky-600 text-sm">Открыть</span>
           </button>
         ) : null}
+        <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+          <h2 className="font-bold text-slate-800">Города обслуживания</h2>
+          <p className="mt-2 text-sm text-slate-600">{profile?.city_names?.join(", ") || "Город не назначен. Обратитесь к логисту"}</p>
+        </section>
+        <NotificationCenter token={useAuthStore.getState().token} />
         <NotificationToggle role="driver" />
         <button
           onClick={async () => {

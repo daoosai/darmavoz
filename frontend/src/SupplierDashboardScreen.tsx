@@ -1,3 +1,4 @@
+import { useNotificationFocus } from "./notificationNavigation";
 import { useEffect, useState } from "react";
 import { Building2, Loader2, MapPin, Pencil, Plus, Star, Upload } from "lucide-react";
 import toast from "react-hot-toast";
@@ -87,6 +88,7 @@ interface Props {
 
 export default function SupplierDashboardScreen({ token, onRequireProfile }: Props) {
   const [points, setPoints] = useState<SupplierPoint[]>([]);
+  useNotificationFocus(points);
   const [materials, setMaterials] = useState<MaterialProps[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isBusy, setIsBusy] = useState(false);
@@ -353,7 +355,7 @@ export default function SupplierDashboardScreen({ token, onRequireProfile }: Pro
         ) : (
           <div className="mt-8 space-y-4">
             {points.map((point) => (
-              <article key={point.id} className="overflow-hidden rounded-3xl bg-white shadow-sm">
+              <article data-entity-id={point.id} key={point.id} className="overflow-hidden rounded-3xl bg-white shadow-sm">
                 {point.primary_image_url ? (
                   <img src={point.primary_image_url} alt="" className="h-36 w-full object-cover" />
                 ) : null}

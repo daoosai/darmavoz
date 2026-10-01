@@ -1,3 +1,5 @@
+import OperatorCityBar from './OperatorCityBar';
+import { operatorFetch, useOperatorCityStore } from './operatorCityStore';
 import React, { useEffect, useState } from "react";
 import {
   ArrowLeft,
@@ -38,8 +40,9 @@ export default function AdminStatisticsScreen({
   const routeBase = role === "logist" ? "/logist" : "/admin";
   const title =
     role === "logist"
-      ? "\u0421\u0442\u0430\u0442\u0438\u0441\u0442\u0438\u043a\u0430 \u043b\u043e\u0433\u0438\u0441\u0442\u0430"
-      : "\u0421\u0442\u0430\u0442\u0438\u0441\u0442\u0438\u043a\u0430 \u0430\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440\u0430";
+      ? "Статистика логиста"
+      : "Статистика администратора";
+  const cityId = useOperatorCityStore((state) => state.cityId);
   const token = useAuthStore((state) => state.token);
   const [stats, setStats] = useState<AdminStatistics>(initialStats);
   const [isLoading, setIsLoading] = useState(true);
@@ -48,7 +51,7 @@ export default function AdminStatisticsScreen({
     const fetchStatistics = async () => {
       try {
         setIsLoading(true);
-        const res = await fetch(`${baseURL}/admin/statistics`, {
+        const res = await operatorFetch(`${baseURL}/admin/statistics`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -67,10 +70,11 @@ export default function AdminStatisticsScreen({
           active_drivers: Number(data.active_drivers || 0),
         });
       } catch (error: any) {
+      if (error?.name === "AbortError") return;
         toast.error(
           handleApiError(
             error,
-            "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u0441\u0442\u0430\u0442\u0438\u0441\u0442\u0438\u043a\u0443",
+            "Не удалось загрузить статистику",
           ),
         );
       } finally {
@@ -79,18 +83,18 @@ export default function AdminStatisticsScreen({
     };
 
     fetchStatistics();
-  }, [token]);
+  }, [token, cityId]);
 
   return (
     <div className="min-h-screen bg-slate-50 w-full">
       <div className="w-full max-w-7xl mx-auto flex flex-col min-h-screen">
-        <div className="px-4 sm:px-6 lg:px-8 py-4 pt-[max(env(safe-area-inset-top,0px),1rem)] border-b border-slate-100 bg-white sticky top-0 z-10">
+        <div className="px-4 sm:px-6 lg:px-8 py-4 pt-[max(env(safe-area-inset-top),2.5rem)] border-b border-slate-100 bg-white sticky top-0 z-10">
           <a
             href={routeBase}
             className="inline-flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-700 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            {"\u041d\u0430\u0437\u0430\u0434"}
+            {"Назад"}
           </a>
           <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-start gap-3 sm:gap-4">
@@ -103,7 +107,7 @@ export default function AdminStatisticsScreen({
                 </h1>
                 <p className="text-sm text-slate-500 max-w-2xl">
                   {
-                    "\u041e\u043f\u0435\u0440\u0430\u0446\u0438\u043e\u043d\u043d\u0430\u044f \u0441\u0432\u043e\u0434\u043a\u0430 \u043f\u043e \u0437\u0430\u043a\u0430\u0437\u0430\u043c, \u0432\u044b\u0440\u0443\u0447\u043a\u0435 \u0438 \u0442\u0435\u043a\u0443\u0449\u0435\u043c\u0443 \u0441\u043e\u0441\u0442\u0430\u0432\u0443 \u0432\u043e\u0434\u0438\u0442\u0435\u043b\u0435\u0439."
+                    "Операционная сводка по заказам, выручке и текущему составу водителей."
                   }
                 </p>
               </div>
@@ -111,12 +115,13 @@ export default function AdminStatisticsScreen({
           </div>
         </div>
 
+        <OperatorCityBar />
         <div className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-6">
           {isLoading ? (
             <div className="min-h-[320px] flex items-center justify-center text-slate-500 gap-3">
               <Loader2 className="w-5 h-5 animate-spin text-sky-500" />
               <span className="font-semibold">
-                {"\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430 \u0441\u0442\u0430\u0442\u0438\u0441\u0442\u0438\u043a\u0438..."}
+                {"Загрузка статистики..."}
               </span>
             </div>
           ) : (
@@ -125,14 +130,14 @@ export default function AdminStatisticsScreen({
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <p className="text-sm font-bold uppercase tracking-[0.2em] text-white/80">
-                      {"\u0412\u044b\u0440\u0443\u0447\u043a\u0430 (\u041f\u043b\u0430\u043d)"}
+                      {"Выручка (План)"}
                     </p>
                     <p className="mt-4 text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight">
-                      {stats.total_revenue.toLocaleString("ru-RU")} {"\u20bd"}
+                      {stats.total_revenue.toLocaleString("ru-RU")} {"₽"}
                     </p>
                     <p className="mt-3 text-sm text-white/85 max-w-xl">
                       {
-                        "\u0421\u0443\u043c\u043c\u0430\u0440\u043d\u0430\u044f \u0441\u0442\u043e\u0438\u043c\u043e\u0441\u0442\u044c \u0437\u0430\u043a\u0430\u0437\u043e\u0432 \u043f\u043e \u0442\u0435\u043a\u0443\u0449\u0435\u0439 \u0431\u0430\u0437\u0435 \u0431\u0435\u0437 \u0443\u0434\u0430\u043b\u0435\u043d\u043d\u044b\u0445 \u0437\u0430\u043f\u0438\u0441\u0435\u0439."
+                        "Суммарная стоимость заказов по текущей базе без удаленных записей."
                       }
                     </p>
                   </div>
@@ -147,7 +152,7 @@ export default function AdminStatisticsScreen({
                   <ClipboardList className="w-6 h-6" />
                 </div>
                 <p className="mt-4 text-sm font-bold uppercase tracking-[0.16em] text-slate-500">
-                  {"\u0412\u0441\u0435\u0433\u043e \u0437\u0430\u043a\u0430\u0437\u043e\u0432"}
+                  {"Всего заказов"}
                 </p>
                 <p className="mt-2 text-4xl lg:text-5xl font-black text-slate-900">
                   {stats.total_orders}
@@ -159,7 +164,7 @@ export default function AdminStatisticsScreen({
                   <PackageCheck className="w-6 h-6" />
                 </div>
                 <p className="mt-4 text-sm font-bold uppercase tracking-[0.16em] text-emerald-700">
-                  {"\u0423\u0441\u043f\u0435\u0448\u043d\u044b\u0445 \u0434\u043e\u0441\u0442\u0430\u0432\u043e\u043a"}
+                  {"Успешных доставок"}
                 </p>
                 <p className="mt-2 text-4xl lg:text-5xl font-black text-emerald-700">
                   {stats.completed_orders}
@@ -170,13 +175,13 @@ export default function AdminStatisticsScreen({
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="text-sm font-bold uppercase tracking-[0.16em] text-slate-500">
-                      {"\u0411\u0430\u0437\u0430 \u0432\u043e\u0434\u0438\u0442\u0435\u043b\u0435\u0439"}
+                      {"База водителей"}
                     </p>
                     <p className="mt-2 text-4xl lg:text-5xl font-black text-slate-900">
                       {stats.total_drivers}
                     </p>
                     <p className="mt-3 text-sm lg:text-base text-slate-500">
-                      {"\u041d\u0430 \u043b\u0438\u043d\u0438\u0438:"}{" "}
+                      {"На линии:"}{" "}
                       <span className="font-bold text-sky-600">
                         {stats.active_drivers}
                       </span>

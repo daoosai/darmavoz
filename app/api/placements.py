@@ -91,6 +91,7 @@ async def _commit_action(db: AsyncSession, entity) -> PlacementActionResult:
 
 @router.get("/admin/placements/summary", response_model=PlacementSummaryOut)
 async def placement_summary(
+    city_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_logist_user),
 ) -> PlacementSummaryOut:
@@ -103,7 +104,7 @@ async def placement_summary(
     }
     point_rows = (
         await db.execute(
-            select(Quarry.point_type, Quarry.placement_status, func.count(Quarry.id)).group_by(
+            select(Quarry.point_type, Quarry.placement_status, func.count(Quarry.id)).where(Quarry.city_id == city_id if city_id else True).group_by(
                 Quarry.point_type, Quarry.placement_status
             )
         )
@@ -114,7 +115,7 @@ async def placement_summary(
     equipment_rows = (
         await db.execute(
             select(SpecialEquipmentListing.placement_status, func.count(SpecialEquipmentListing.id))
-            .where(SpecialEquipmentListing.is_deleted.is_(False))
+            .where(SpecialEquipmentListing.is_deleted.is_(False), SpecialEquipmentListing.city_id == city_id if city_id else True)
             .group_by(SpecialEquipmentListing.placement_status)
         )
     ).all()

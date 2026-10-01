@@ -32,7 +32,7 @@ class AdminSupplierPointOut(BaseModel):
 class AdminSupplierOut(BaseModel):
     city_ids: list[UUID] = Field(default_factory=list)
     id: UUID
-    role: Literal["supplier", "equipment_owner"] = "supplier"
+    role: Literal["supplier", "equipment_owner", "water_septic_partner"] = "supplier"
     full_name: Optional[str] = None
     phone: str
     is_active: bool

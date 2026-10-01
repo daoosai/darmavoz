@@ -1,5 +1,9 @@
+import DriverPagination from './DriverPagination';
+import { DriverFilters, DriverSummary } from './DriverManagement';
+import OperatorCityBar from './OperatorCityBar';
+import { operatorFetch, useOperatorCityStore } from './operatorCityStore';
 import ServiceCitiesPanel from './ServiceCitiesPanel';
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useAdminModerationStore, useAuthStore } from "./store";
 import { baseURL, extractApiErrorMessage, handleApiError } from "./utils";
 import {
@@ -113,6 +117,8 @@ interface AdminTransportCategory {
 }
 
 interface AdminDriver {
+  transport_category_id?: string | null;
+  city_ids?: string[];
   id: string;
   name: string;
   phone: string;
@@ -228,6 +234,13 @@ export default function AdminDashboardScreen({
   const moderationRefreshNonce = useAdminModerationStore(
     (state) => state.refreshNonce,
   );
+  const driverRequestRef = useRef(0);
+  const [driverPage, setDriverPage] = useState(0);
+  const [driverHasMore, setDriverHasMore] = useState(false);
+  const [driverFilters, setDriverFilters] = useState<Record<string, string>>({});
+  const driverQueryRef = useRef({ filters: driverFilters, page: driverPage });
+  driverQueryRef.current = { filters: driverFilters, page: driverPage };
+  const cityId = useOperatorCityStore((state) => state.cityId);
   const [activeTab, setActiveTab] = useState<AdminTab>(initialTab);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
@@ -567,7 +580,7 @@ export default function AdminDashboardScreen({
 
   const handleApproveDriver = async (id: string) => {
     try {
-      const res = await fetch(`${baseURL}/admin/drivers/${id}/approve`, {
+      const res = await operatorFetch(`${baseURL}/admin/drivers/${id}/approve`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -595,7 +608,7 @@ export default function AdminDashboardScreen({
 
   const handleRejectDriver = async (id: string) => {
     try {
-      const res = await fetch(`${baseURL}/admin/drivers/${id}/reject`, {
+      const res = await operatorFetch(`${baseURL}/admin/drivers/${id}/reject`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -623,7 +636,7 @@ export default function AdminDashboardScreen({
 
   const handleSuspendDriver = async (id: string) => {
     try {
-      const res = await fetch(`${baseURL}/admin/drivers/${id}/suspend`, {
+      const res = await operatorFetch(`${baseURL}/admin/drivers/${id}/suspend`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -641,7 +654,7 @@ export default function AdminDashboardScreen({
   const fetchCategories = async () => {
     if (!token) return;
     try {
-      const res = await fetch(`${baseURL}/admin/categories/`, {
+      const res = await operatorFetch(`${baseURL}/admin/categories/`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -649,6 +662,7 @@ export default function AdminDashboardScreen({
         setCategories(Array.isArray(data) ? data : data.results || []);
       }
     } catch (e) {
+      if ((e as Error)?.name === "AbortError") return;
       console.warn("Failed to fetch categories");
     }
   };
@@ -686,7 +700,7 @@ export default function AdminDashboardScreen({
         file.type || `image/${fileExt === "jpg" ? "jpeg" : fileExt}`;
 
       // ШАГ 1: Presign
-      const presignRes = await fetch(`${baseURL}/media/presign-upload`, {
+      const presignRes = await operatorFetch(`${baseURL}/media/presign-upload`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -713,7 +727,7 @@ export default function AdminDashboardScreen({
         throw new Error("Бэкенд не вернул upload_url!");
 
       // ШАГ 2: Upload to S3
-      const uploadRes = await fetch(presignData.upload_url, {
+      const uploadRes = await operatorFetch(presignData.upload_url, {
         method: "PUT",
         headers: {
           "Content-Type": safeContentType,
@@ -726,7 +740,7 @@ export default function AdminDashboardScreen({
       }
 
       // ШАГ 3: Confirm
-      const confirmRes = await fetch(`${baseURL}/media/confirm`, {
+      const confirmRes = await operatorFetch(`${baseURL}/media/confirm`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -754,7 +768,7 @@ export default function AdminDashboardScreen({
       // refetch after upload
       if (entityType === "material") {
         await fetchMaterials(true);
-        const refetchRes = await fetch(
+        const refetchRes = await operatorFetch(
           `${baseURL}/admin/materials/${entityId}`,
           {
             headers: { Authorization: `Bearer ${token}` },
@@ -763,12 +777,13 @@ export default function AdminDashboardScreen({
         if (refetchRes.ok) setEditingMaterial(await refetchRes.json());
       } else if (entityType === "delivery_option") {
         await fetchDeliveryOptions(true);
-        const refetchRes = await fetch(
+        const refetchRes = await operatorFetch(
           `${baseURL}/catalog/delivery-options/${entityId}`,
         );
         if (refetchRes.ok) setEditingDelivery(await refetchRes.json());
       }
     } catch (err: any) {
+      if ((err as Error)?.name === "AbortError") return;
       console.error("Full Upload Error:", err);
       toast.error(handleApiError(err, "Сбой загрузки фото"));
     } finally {
@@ -780,13 +795,14 @@ export default function AdminDashboardScreen({
     if (!token) return;
     if (!silent) setIsLoading(true);
     try {
-      const res = await fetch(`${baseURL}/admin/materials/`, {
+      const res = await operatorFetch(`${baseURL}/admin/materials/`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Ошибка загрузки материалов");
       const data = await res.json();
       setMaterials(Array.isArray(data) ? data : data.results || []);
     } catch (err) {
+      if ((err as Error)?.name === "AbortError") return;
       if (!silent) toast.error("Не удалось загрузить каталог");
     } finally {
       if (!silent) setIsLoading(false);
@@ -807,7 +823,7 @@ export default function AdminDashboardScreen({
     setIsReorderingMaterials(true);
 
     try {
-      const response = await fetch(`${baseURL}/admin/catalog/reorder`, {
+      const response = await operatorFetch(`${baseURL}/admin/catalog/reorder`, {
         method: "PATCH",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -833,13 +849,14 @@ export default function AdminDashboardScreen({
     if (!token) return;
     if (!silent) setIsLoading(true);
     try {
-      const res = await fetch(`${baseURL}/catalog/delivery-options/`, {
+      const res = await operatorFetch(`${baseURL}/catalog/delivery-options/`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Ошибка загрузки автопарка");
       const data = await res.json();
       setDeliveryOptions(Array.isArray(data) ? data : data.results || []);
     } catch (err) {
+      if ((err as Error)?.name === "AbortError") return;
       if (!silent) toast.error("Не удалось загрузить типы машин");
     } finally {
       if (!silent) setIsLoading(false);
@@ -849,7 +866,7 @@ export default function AdminDashboardScreen({
   const fetchTransportCategories = async () => {
     if (!token) return [];
     try {
-      const res = await fetch(`${baseURL}/admin/transport-categories`, {
+      const res = await operatorFetch(`${baseURL}/admin/transport-categories`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Ошибка загрузки категорий транспорта");
@@ -863,26 +880,34 @@ export default function AdminDashboardScreen({
     }
   };
 
+  useEffect(() => { setDrivers([]); setCars([]); setPendingRequests([]); setDriverPage(0); void fetchDrivers(); void fetchSidebarCounts(); void fetchModerationCounts(true); void fetchPendingRequests(true); setIsDriverModalOpen(false); }, [cityId]);
+
+  useEffect(() => { const timer = window.setTimeout(() => { void fetchDrivers(); }, 250); return () => window.clearTimeout(timer); }, [driverFilters, driverPage]);
   const fetchDrivers = async (silent = false) => {
+    const request = ++driverRequestRef.current;
     if (!token) return;
     if (!silent) setIsLoading(true);
     try {
-      let res = await fetch(`${baseURL}/admin/drivers`, {
+      let res = await operatorFetch(`${baseURL}/admin/drivers?${new URLSearchParams([...Object.entries(driverQueryRef.current.filters as Record<string, string>).filter(([, value]) => value), ["offset", String(driverQueryRef.current.page * 50)], ["limit", "51"]])}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.status === 404 || res.status === 405) {
-        res = await fetch(`${baseURL}/drivers/`, {
+        res = await operatorFetch(`${baseURL}/admin/drivers?${new URLSearchParams([...Object.entries(driverQueryRef.current.filters as Record<string, string>).filter(([, value]) => value), ["offset", String(driverQueryRef.current.page * 50)], ["limit", "51"]])}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
       }
       if (!res.ok) throw new Error("Ошибка загрузки водителей");
       const data = await res.json();
+      if (request !== driverRequestRef.current) return;
       const items = Array.isArray(data) ? data : data.results || [];
-      setDrivers(applyDriverActiveOverrides(items));
+      setDriverHasMore(items.length > 50);
+      setDrivers(applyDriverActiveOverrides(items.slice(0, 50)));
     } catch (err) {
+      if (request !== driverRequestRef.current) return;
+      if ((err as Error)?.name === "AbortError") return;
       if (!silent) toast.error("Не удалось загрузить водителей");
     } finally {
-      if (!silent) setIsLoading(false);
+      if (!silent && request === driverRequestRef.current) setIsLoading(false);
     }
   };
 
@@ -890,7 +915,7 @@ export default function AdminDashboardScreen({
     if (!token) return;
     if (!silent) setIsLoadingModeration(true);
     try {
-      const res = await fetch(`${baseURL}/admin/moderation/pending`, {
+      const res = await operatorFetch(`${baseURL}/admin/moderation/pending`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Не удалось загрузить ожидающие запросы");
@@ -898,6 +923,7 @@ export default function AdminDashboardScreen({
       const items = Array.isArray(data) ? data : data.results || [];
       setPendingRequests(items);
     } catch (err) {
+      if ((err as Error)?.name === "AbortError") return;
       if (!silent) toast.error("Не удалось загрузить заявки");
     } finally {
       if (!silent) setIsLoadingModeration(false);
@@ -907,7 +933,7 @@ export default function AdminDashboardScreen({
   const fetchModerationCounts = async (silent = true) => {
     if (!token) return;
     try {
-      const res = await fetch(`${baseURL}/admin/moderation/count`, {
+      const res = await operatorFetch(`${baseURL}/admin/moderation/count`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) {
@@ -918,6 +944,7 @@ export default function AdminDashboardScreen({
       setPendingPointModerationCount(Number(data.points) || 0);
       setPendingEquipmentModerationCount(Number(data.equipment) || 0);
     } catch (error) {
+      if ((error as Error)?.name === "AbortError") return;
       if (!silent) {
         toast.error("Не удалось загрузить счетчики модерации");
       }
@@ -927,7 +954,7 @@ export default function AdminDashboardScreen({
   const fetchSidebarCounts = async () => {
     if (!token) return;
     try {
-      const res = await fetch(`${baseURL}/admin/sidebar/counts`, {
+      const res = await operatorFetch(`${baseURL}/admin/sidebar/counts`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) return;
@@ -956,7 +983,7 @@ export default function AdminDashboardScreen({
         params.append("status", carsFilter.status);
 
       const url = `${baseURL}/admin/cars?${params.toString()}`;
-      const res = await fetch(url, {
+      const res = await operatorFetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Failed to fetch live cars");
@@ -964,6 +991,7 @@ export default function AdminDashboardScreen({
       console.log("CARS DATA:", data);
       setCars(Array.isArray(data) ? data : data.items || data.results || []);
     } catch (err) {
+      if ((err as Error)?.name === "AbortError") return;
       console.error(err);
     } finally {
       setIsLoadingCars(false);
@@ -988,6 +1016,7 @@ export default function AdminDashboardScreen({
     carsFilter.status,
     activeTab,
     fleetSubTab,
+    cityId,
   ]);
 
   useEffect(() => {
@@ -1023,6 +1052,7 @@ export default function AdminDashboardScreen({
     } else if (activeTab === "drivers" && drivers.length === 0) {
       fetchDrivers();
       if (deliveryOptions.length === 0) fetchDeliveryOptions(true);
+      if (transportCategories.length === 0) fetchTransportCategories();
     } else if (activeTab === "moderation" && pendingRequests.length === 0) {
       fetchPendingRequests();
     }
@@ -1042,7 +1072,7 @@ export default function AdminDashboardScreen({
 
     if (type === "material") {
       try {
-        const res = await fetch(`${baseURL}/admin/materials/${id}`, {
+        const res = await operatorFetch(`${baseURL}/admin/materials/${id}`, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -1051,11 +1081,12 @@ export default function AdminDashboardScreen({
         toast.success("Товар удален из базы");
         fetchMaterials(true);
       } catch (err: any) {
+      if ((err as Error)?.name === "AbortError") return;
         toast.error(err.message || "Ошибка удаления");
       }
     } else if (type === "delivery") {
       try {
-        const res = await fetch(`${baseURL}/admin/delivery-options/${id}`, {
+        const res = await operatorFetch(`${baseURL}/admin/delivery-options/${id}`, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -1068,11 +1099,12 @@ export default function AdminDashboardScreen({
         }
         fetchDeliveryOptions(true);
       } catch (err) {
+      if ((err as Error)?.name === "AbortError") return;
         toast.error("Ошибка удаления");
       }
     } else if (type === "driver") {
       try {
-        const res = await fetch(`${baseURL}/admin/drivers/${id}`, {
+        const res = await operatorFetch(`${baseURL}/admin/drivers/${id}`, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -1080,6 +1112,7 @@ export default function AdminDashboardScreen({
         toast.success("Водитель успешно удален");
         fetchDrivers(true);
       } catch (err) {
+      if ((err as Error)?.name === "AbortError") return;
         toast.error("Ошибка удаления");
       }
     }
@@ -1087,7 +1120,7 @@ export default function AdminDashboardScreen({
 
   const handleDeleteMedia = async (mediaId: string, entityType: string) => {
     try {
-      const res = await fetch(`${baseURL}/media/${mediaId}`, {
+      const res = await operatorFetch(`${baseURL}/media/${mediaId}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -1097,7 +1130,7 @@ export default function AdminDashboardScreen({
       if (entityType === "material") {
         await fetchMaterials(true);
         if (editingMaterial && editingMaterial.id) {
-          const refetchRes = await fetch(
+          const refetchRes = await operatorFetch(
             `${baseURL}/admin/materials/${editingMaterial.id}`,
             {
               headers: { Authorization: `Bearer ${token}` },
@@ -1108,20 +1141,21 @@ export default function AdminDashboardScreen({
       } else if (entityType === "delivery_option") {
         await fetchDeliveryOptions(true);
         if (editingDelivery && editingDelivery.id) {
-          const refetchRes = await fetch(
+          const refetchRes = await operatorFetch(
             `${baseURL}/catalog/delivery-options/${editingDelivery.id}`,
           );
           if (refetchRes.ok) setEditingDelivery(await refetchRes.json());
         }
       }
     } catch (err) {
+      if ((err as Error)?.name === "AbortError") return;
       toast.error("Ошибка удаления фото");
     }
   };
 
   const handleMakePrimary = async (mediaId: string, entityType: string) => {
     try {
-      const res = await fetch(`${baseURL}/media/${mediaId}/make-primary`, {
+      const res = await operatorFetch(`${baseURL}/media/${mediaId}/make-primary`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -1131,7 +1165,7 @@ export default function AdminDashboardScreen({
       if (entityType === "material") {
         await fetchMaterials(true);
         if (editingMaterial && editingMaterial.id) {
-          const refetchRes = await fetch(
+          const refetchRes = await operatorFetch(
             `${baseURL}/admin/materials/${editingMaterial.id}`,
             {
               headers: { Authorization: `Bearer ${token}` },
@@ -1142,13 +1176,14 @@ export default function AdminDashboardScreen({
       } else if (entityType === "delivery_option") {
         await fetchDeliveryOptions(true);
         if (editingDelivery && editingDelivery.id) {
-          const refetchRes = await fetch(
+          const refetchRes = await operatorFetch(
             `${baseURL}/catalog/delivery-options/${editingDelivery.id}`,
           );
           if (refetchRes.ok) setEditingDelivery(await refetchRes.json());
         }
       }
     } catch (err) {
+      if ((err as Error)?.name === "AbortError") return;
       toast.error("Ошибка обновления фото");
     }
   };
@@ -1189,7 +1224,7 @@ export default function AdminDashboardScreen({
         throw new Error("Сначала создайте категорию материалов");
       }
 
-      const res = await fetch(url, {
+      const res = await operatorFetch(url, {
         method,
         headers: {
           "Content-Type": "application/json",
@@ -1206,6 +1241,7 @@ export default function AdminDashboardScreen({
       setIsMaterialModalOpen(false);
       fetchMaterials(true);
     } catch (err) {
+      if ((err as Error)?.name === "AbortError") return;
       toast.error("Ошибка сохранения материала");
     } finally {
       setIsSavingMaterial(false);
@@ -1264,7 +1300,7 @@ export default function AdminDashboardScreen({
         sort_order: 10,
       };
 
-      const res = await fetch(url, {
+      const res = await operatorFetch(url, {
         method,
         headers: {
           "Content-Type": "application/json",
@@ -1293,6 +1329,7 @@ export default function AdminDashboardScreen({
       setIsDeliveryModalOpen(false);
       fetchDeliveryOptions(true);
     } catch (err: any) {
+      if ((err as Error)?.name === "AbortError") return;
       toast.error(handleApiError(err, "Ошибка сохранения опции доставки"));
     } finally {
       setIsSavingDelivery(false);
@@ -1355,6 +1392,8 @@ export default function AdminDashboardScreen({
         vehicle_plate_number:
           driver.vehicle?.plate_number || driver.vehicle_plate_number,
         vehicle_type: driver.vehicle?.vehicle_type || driver.vehicle_type,
+        delivery_option_id: driver.vehicle?.delivery_option_id || driver.delivery_option_id,
+        transport_category_id: (driver.vehicle as any)?.transport_category_id || driver.transport_category_id,
         cubature_min: driver.vehicle?.cubature_min || driver.cubature_min,
         cubature_max: driver.vehicle?.cubature_max || driver.cubature_max,
         tonnage_min: driver.vehicle?.tonnage_min || driver.tonnage_min,
@@ -1365,7 +1404,7 @@ export default function AdminDashboardScreen({
       setPreviewMain(null);
       setPreviewLeft(null);
       setPreviewPlate(null);
-      setEditingDriver({ is_active: true, phone: "+7" });
+      setEditingDriver({ is_active: true, phone: "+7", delivery_option_id: deliveryOptions[0]?.id });
     }
     setIsDriverModalOpen(true);
   };
@@ -1414,6 +1453,8 @@ export default function AdminDashboardScreen({
         phone: fullPhone,
         is_active: editingDriver.is_active ?? true,
         vehicle_type: editingDriver.vehicle_type,
+        delivery_option_id: editingDriver.delivery_option_id || undefined,
+        transport_category_id: editingDriver.transport_category_id || undefined,
         cubature_min: parseNumber(editingDriver.cubature_min),
         cubature_max: parseNumber(editingDriver.cubature_max),
         tonnage_min: parseNumber(editingDriver.tonnage_min),
@@ -1427,14 +1468,14 @@ export default function AdminDashboardScreen({
       };
 
       if (!isEdit && payload.is_active) {
-        payload.status = "free";
+        payload.status = "offline";
       }
 
       if (editingDriver.password) {
         payload.password = editingDriver.password;
       }
 
-      const res = await fetch(url, {
+      const res = await operatorFetch(url, {
         method,
         headers: {
           "Content-Type": "application/json",
@@ -1474,6 +1515,7 @@ export default function AdminDashboardScreen({
         if (resData?.vehicle?.id) vehicleId = resData.vehicle.id;
         else if (resData?.id) vehicleId = resData.id;
       } catch (e) {
+      if ((e as Error)?.name === "AbortError") return;
         // ignore if empty response
       }
 
@@ -1506,7 +1548,7 @@ export default function AdminDashboardScreen({
               file.type || `image/${fileExt === "jpg" ? "jpeg" : fileExt}`;
 
             // 1: Presign
-            const presignRes = await fetch(`${baseURL}/media/presign-upload`, {
+            const presignRes = await operatorFetch(`${baseURL}/media/presign-upload`, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
@@ -1530,7 +1572,7 @@ export default function AdminDashboardScreen({
             if (!presignData.upload_url) throw new Error("Нет upload_url");
 
             // 2: Upload
-            const uploadRes = await fetch(presignData.upload_url, {
+            const uploadRes = await operatorFetch(presignData.upload_url, {
               method: "PUT",
               headers: { "Content-Type": safeContentType },
               body: file,
@@ -1538,7 +1580,7 @@ export default function AdminDashboardScreen({
             if (!uploadRes.ok) throw new Error(`Ошибка S3 для ${item.slotKey}`);
 
             // 3: Confirm
-            const confirmRes = await fetch(`${baseURL}/media/confirm`, {
+            const confirmRes = await operatorFetch(`${baseURL}/media/confirm`, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
@@ -1558,6 +1600,7 @@ export default function AdminDashboardScreen({
             if (!confirmRes.ok)
               throw new Error(`Ошибка Confirm для ${item.slotKey}`);
           } catch (err: any) {
+      if ((err as Error)?.name === "AbortError") return;
             console.error(err);
             if (err instanceof TypeError && err.message.includes("fetch")) {
               toast.error(
@@ -1600,6 +1643,7 @@ export default function AdminDashboardScreen({
       setIsDriverModalOpen(false);
       fetchDrivers(true);
     } catch (err: any) {
+      if ((err as Error)?.name === "AbortError") return;
       if (err.response?.status === 409) {
         toast.error(
           extractApiErrorMessage(
@@ -1630,7 +1674,7 @@ export default function AdminDashboardScreen({
       setEditingMaterial({ ...material });
       setIsMaterialModalOpen(true);
       try {
-        const res = await fetch(`${baseURL}/admin/materials/${material.id}`, {
+        const res = await operatorFetch(`${baseURL}/admin/materials/${material.id}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) {
@@ -1641,6 +1685,7 @@ export default function AdminDashboardScreen({
           });
         }
       } catch (err) {
+      if ((err as Error)?.name === "AbortError") return;
         console.error("Failed to fetch material details", err);
       }
     } else {
@@ -1665,7 +1710,7 @@ export default function AdminDashboardScreen({
       setEditingDelivery({ ...delivery });
       setIsDeliveryModalOpen(true);
       try {
-        const res = await fetch(
+        const res = await operatorFetch(
           `${baseURL}/catalog/delivery-options/${delivery.id}`,
         );
         if (res.ok) {
@@ -1676,6 +1721,7 @@ export default function AdminDashboardScreen({
           });
         }
       } catch (err) {
+      if ((err as Error)?.name === "AbortError") return;
         console.error("Failed to fetch delivery details", err);
       }
     } else {
@@ -1929,6 +1975,7 @@ export default function AdminDashboardScreen({
           <span>Выйти</span>
         </button>
         </div>
+        <OperatorCityBar />
       </header>
 
       {pendingWaterCount > 0 && !hideWaterBanner ? (
@@ -2025,7 +2072,7 @@ export default function AdminDashboardScreen({
       <div className="flex-1 overflow-y-auto p-6 pb-28 lg:p-8 sm:pb-8 relative">
         <div className="max-w-6xl mx-auto flex flex-col gap-6">
           {shouldShowPlacementSummary ? (
-            <PlacementSummaryPanel
+            <div key={cityId}><PlacementSummaryPanel
               token={token || ""}
               activeSection={summaryManagedSection}
               pointFilters={{
@@ -2039,10 +2086,10 @@ export default function AdminDashboardScreen({
               }}
               onOpenPoints={openSummaryPoints}
               onOpenEquipment={openSummaryEquipment}
-            />
+             /></div>
           ) : null}
           {activeTab === "driver_map" ? (
-            <DriverMapComponent />
+            <div key={cityId}><DriverMapComponent  /></div>
           ) : activeTab === "materials" ? (
             <>
               <AdminCategoriesPanel
@@ -2845,6 +2892,8 @@ export default function AdminDashboardScreen({
           ) : activeTab === "drivers" ? (
             <>
               {/* Drivers Tab */}
+              <DriverFilters value={driverFilters} onChange={(filters) => { setDriverPage(0); setDriverFilters(filters); }} />
+              <DriverPagination page={driverPage} hasMore={driverHasMore} onChange={setDriverPage} />
               <div className="flex justify-between items-center bg-white p-5 rounded-2xl shadow-sm border border-slate-100 mb-2">
                 <h2 className="text-xl font-bold text-slate-800">Водители</h2>
                 <div className="flex items-center gap-3">
@@ -2893,7 +2942,7 @@ export default function AdminDashboardScreen({
                               {d.id.substring(0, 8)}
                             </td>
                             <td className="px-6 py-4 font-semibold text-slate-800">
-                              {d.name}
+                              {d.name}<DriverSummary driver={d} />
                             </td>
                             <td className="px-6 py-4 text-sm whitespace-nowrap">
                               {d.phone}
@@ -3146,7 +3195,7 @@ export default function AdminDashboardScreen({
               )}
             </>
           ) : activeTab === "water_septic" ? (
-            <WaterSepticModerationPanel token={token} />
+            <div key={cityId}><WaterSepticModerationPanel token={token}  /></div>
           ) : activeTab === "moderation" ? (
             <>
               <div className="flex justify-between items-center bg-white p-5 rounded-2xl shadow-sm border border-slate-100 mb-2">
@@ -3438,7 +3487,7 @@ export default function AdminDashboardScreen({
               )}
             </>
           ) : activeTab === "quarries" ? (
-            <AdminQuarriesScreen
+            <div key={cityId}><AdminQuarriesScreen
               materials={materials}
               onPointsChanged={() => fetchModerationCounts(true)}
               statusFilter={effectiveQuarryStatusFilter}
@@ -3447,11 +3496,11 @@ export default function AdminDashboardScreen({
               onPlacementFilterChange={handleQuarryPlacementFilterChange}
               typeFilter={effectiveQuarryTypeFilter}
               onTypeFilterChange={handleQuarryTypeFilterChange}
-            />
+             /></div>
           ) : activeTab === "suppliers" ? (
-            <AdminSuppliersScreen />
+            <div key={cityId}><AdminSuppliersScreen  /></div>
           ) : activeTab === "equipment" ? (
-            <AdminEquipmentScreen
+            <div key={cityId}><AdminEquipmentScreen
               onPendingModerationChanged={(count) => {
                 setPendingEquipmentModerationCount(count);
               }}
@@ -3459,7 +3508,7 @@ export default function AdminDashboardScreen({
               onTabChange={setEquipmentTab}
               placementFilter={equipmentPlacementFilter}
               onPlacementFilterChange={setEquipmentPlacementFilter}
-            />
+             /></div>
           ) : activeTab === "support" ? (
             <SupportScreen operatorMode />
           ) : activeTab === "cities" ? (
@@ -4027,7 +4076,17 @@ export default function AdminDashboardScreen({
               onSubmit={handleSaveDriver}
               className="p-6 overflow-y-auto flex flex-col gap-5"
             >
-              {editingDriver.id && <ServiceCitiesPanel driverId={editingDriver.id} />}
+              {editingDriver.id && <ServiceCitiesPanel driverId={editingDriver.id} onSaved={() => void fetchDrivers()} />}
+              <label className="flex flex-col gap-2 text-sm font-bold text-slate-600">Категория транспорта
+                <select value={editingDriver.transport_category_id || ""} onChange={(event) => setEditingDriver({ ...editingDriver, transport_category_id: event.target.value || undefined })} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <option value="">По варианту доставки</option>{transportCategories.map((category) => <option key={category.id} value={category.id}>{category.title}</option>)}
+                </select>
+              </label>
+              <label className="flex flex-col gap-2 text-sm font-bold text-slate-600">Вариант доставки
+                <select required={!editingDriver.id} value={editingDriver.delivery_option_id || ""} onChange={(event) => setEditingDriver({ ...editingDriver, delivery_option_id: event.target.value })} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <option value="">Выберите вместимость</option>{deliveryOptions.map((option) => <option key={option.id} value={option.id}>{option.title} · {option.capacity_m3} м³</option>)}
+                </select>
+              </label>
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
                   ФИО

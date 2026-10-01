@@ -1,3 +1,4 @@
+from app.services.cities import driver_city_clause
 from datetime import date as date_type
 from datetime import datetime, UTC
 import re
@@ -42,6 +43,7 @@ from app.models.models import (
     Vehicle,
     WaterPoint,
     quarry_materials,
+    user_cities,
 )
 from app.schemas.client import ClientFcmTokenIn, ClientFcmTokenOut
 from app.schemas.catalog import (
@@ -121,6 +123,7 @@ def _error_detail(code: str, message: str) -> dict[str, str]:
 async def _load_partner_equipment_titles(
     db: AsyncSession,
     owner_ids: list[UUID],
+    city_id: UUID | None = None,
 ) -> dict[UUID, list[str]]:
     if not owner_ids:
         return {}
@@ -129,6 +132,7 @@ async def _load_partner_equipment_titles(
         select(SpecialEquipmentListing)
         .where(
             SpecialEquipmentListing.owner_user_id.in_(owner_ids),
+            SpecialEquipmentListing.city_id == city_id if city_id else True,
             SpecialEquipmentListing.is_deleted.is_(False),
         )
         .order_by(SpecialEquipmentListing.title.asc())
@@ -146,19 +150,21 @@ def _build_admin_partner_out(
     *,
     role_name: str,
     equipment_titles: list[str] | None = None,
+    city_id: UUID | None = None,
 ) -> AdminSupplierOut:
     active_points = [
         point.name
         for point in (user.pickup_points or [])
-        if point.is_active
+        if point.is_active and (city_id is None or point.city_id == city_id)
     ]
     return AdminSupplierOut(
         id=user.id,
+        city_ids=user.city_ids,
         role=role_name,
         full_name=user.display_name or None,
         phone=user.username,
         is_active=user.is_active,
-        pickup_points=list(user.pickup_points or []),
+        pickup_points=[point for point in user.pickup_points or [] if city_id is None or point.city_id == city_id],
         active_point_names=active_points,
         active_equipment_names=list(equipment_titles or []),
     )
@@ -219,17 +225,22 @@ class SidebarCountsOut(BaseModel):
 
 @router.get("/statistics", response_model=AdminStatisticsOut)
 async def get_admin_statistics(
+    city_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_logist_user),
 ) -> AdminStatisticsOut:
     del current_user
 
+    from app.services.cities import driver_city_clause, resolve_city
+    if city_id: await resolve_city(db, city_id, require_active=False)
+    order_city = Order.city_id == city_id if city_id else True
+    driver_city = driver_city_clause(city_id) if city_id else True
     total_orders = await db.scalar(
-        select(func.count(Order.id)).where(Order.is_deleted.is_(False))
+        select(func.count(Order.id)).where(Order.is_deleted.is_(False), order_city)
     )
     completed_orders = await db.scalar(
         select(func.count(Order.id)).where(
-            Order.is_deleted.is_(False),
+            Order.is_deleted.is_(False), order_city,
             Order.status == OrderStatus.completed.value,
         )
     )
@@ -239,12 +250,12 @@ async def get_admin_statistics(
                 func.sum(Order.total_amount + func.coalesce(Order.delivery_cost, 0.0)),
                 0.0,
             )
-        ).where(Order.is_deleted.is_(False))
+        ).where(Order.is_deleted.is_(False), order_city)
     )
-    total_drivers = await db.scalar(select(func.count(Driver.id)))
+    total_drivers = await db.scalar(select(func.count(Driver.id)).where(driver_city))
     active_drivers = await db.scalar(
         select(func.count(Driver.id)).where(
-            Driver.is_active.is_(True),
+            Driver.is_active.is_(True), driver_city,
             Driver.status.in_([DriverStatus.available.value, DriverStatus.busy.value]),
         )
     )
@@ -336,6 +347,7 @@ async def update_admin_me(
 
 async def _list_admin_partner_users(
     role: str = Query(default="supplier"),
+    city_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin_user),
 ) -> list[AdminSupplierOut]:
@@ -352,6 +364,7 @@ async def _list_admin_partner_users(
         .options(selectinload(User.pickup_points))
         .where(
             Role.name == role,
+            User.id.in_(select(user_cities.c.user_id).where(user_cities.c.city_id == city_id)) if city_id else True,
             User.is_deleted.is_(False),
             User.username.notin_(GOOGLE_PLAY_REVIEWER_PHONE_VALUES),
         )
@@ -361,12 +374,14 @@ async def _list_admin_partner_users(
     equipment_titles_by_owner = await _load_partner_equipment_titles(
         db,
         [partner.id for partner in partners],
+        city_id=city_id,
     )
     return [
         _build_admin_partner_out(
             partner,
             role_name=role,
             equipment_titles=equipment_titles_by_owner.get(partner.id, []),
+            city_id=city_id,
         )
         for partner in partners
     ]
@@ -375,19 +390,21 @@ async def _list_admin_partner_users(
 @router.get("/users", response_model=list[AdminSupplierOut])
 async def list_admin_partner_users(
     role: str = Query(default="supplier"),
+    city_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin_user),
 ) -> list[AdminSupplierOut]:
-    return await _list_admin_partner_users(role, db, current_admin)
+    return await _list_admin_partner_users(role=role, city_id=city_id, db=db, current_admin=current_admin)
 
 
 @router.get("/suppliers", response_model=list[AdminSupplierOut])
 async def list_admin_suppliers(
     role: str = Query(default="supplier"),
+    city_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin_user),
 ) -> list[AdminSupplierOut]:
-    return await _list_admin_partner_users(role, db, current_admin)
+    return await _list_admin_partner_users(role=role, city_id=city_id, db=db, current_admin=current_admin)
 
 
 @router.patch("/suppliers/{supplier_id}", response_model=AdminSupplierOut)
@@ -721,17 +738,39 @@ async def _load_driver_or_404(db: AsyncSession, driver_id: UUID) -> Driver:
     return driver
 
 
-async def _list_admin_drivers(db: AsyncSession) -> list[Driver]:
+async def _list_admin_drivers(db: AsyncSession, *, city_id=None, without_city=False, q=None, transport_category_id=None, status=None, is_on_shift=None, moderation_status=None, is_dispatch_eligible=None, volume=None, offset=0, limit=None) -> list[Driver]:
+    from app.services.cities import driver_city_clause, resolve_city
+    from app.models.models import driver_cities
+    filters = []
+    if city_id:
+        await resolve_city(db, city_id, require_active=False)
+        filters.append(driver_city_clause(city_id))
+    if without_city: filters.append(~exists(select(driver_cities.c.driver_id).where(driver_cities.c.driver_id == Driver.id)))
+    if q:
+        term = "%" + q.strip() + "%"
+        filters.append(or_(Driver.name.ilike(term), Driver.phone.ilike(term), Driver.vehicle.has(Vehicle.plate_number.ilike(term))))
+    for field, value in ((Driver.status, status), (Driver.is_on_shift, is_on_shift), (Driver.moderation_status, moderation_status), (Driver.is_dispatch_eligible, is_dispatch_eligible)):
+        if value is not None: filters.append(field == value)
+    if transport_category_id:
+        inherited = select(DeliveryOption.transport_category_id).where(DeliveryOption.id == Vehicle.delivery_option_id).scalar_subquery()
+        filters.append(Driver.vehicle.has(func.coalesce(Vehicle.transport_category_id, inherited) == transport_category_id))
+    if volume is not None:
+        from app.services.dispatch_service import build_vehicle_volume_match_clause
+        filters.append(Driver.vehicle.has(build_vehicle_volume_match_clause(volume)))
     result = await db.execute(
         select(Driver)
         .options(
             selectinload(Driver.user),
             selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option),
         )
-        .where(_reviewer_driver_exclusion_clause())
-        .order_by(Driver.name.asc())
+        .where(_reviewer_driver_exclusion_clause(), *filters)
+        .order_by(Driver.name.asc(), Driver.id.asc())
+        .offset(offset).limit(limit)
     )
     drivers = list(result.scalars().all())
+    from app.services.driver_eligibility import ACTIVE_STATUSES
+    current = dict((await db.execute(select(Order.driver_id, Order.id).where(Order.driver_id.in_([driver.id for driver in drivers]), Order.status.in_(ACTIVE_STATUSES)))).all())
+    for driver in drivers: driver.current_order_id = current.get(driver.id)
     await _attach_vehicle_media(db, [driver.vehicle for driver in drivers if driver.vehicle is not None])
     return drivers
 
@@ -914,6 +953,7 @@ async def _list_admin_cars(
     plate_number: str | None = None,
     driver_id: UUID | None = None,
     driver_name: str | None = None,
+    city_id: UUID | None = None,
 ) -> list[AdminCarOut]:
     stmt = (
         select(Driver)
@@ -924,6 +964,7 @@ async def _list_admin_cars(
             selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option),
         )
         .where(Driver.vehicle_id.is_not(None))
+        .where(driver_city_clause(city_id) if city_id else True)
         .where(_reviewer_driver_exclusion_clause())
     )
 
@@ -973,7 +1014,7 @@ async def _list_admin_cars(
     return items
 
 
-async def _get_admin_car_stats(db: AsyncSession) -> AdminCarStatsOut:
+async def _get_admin_car_stats(db: AsyncSession, *, city_id=None) -> AdminCarStatsOut:
     stmt = (
         select(Driver)
         .join(Vehicle, Driver.vehicle_id == Vehicle.id)
@@ -982,6 +1023,7 @@ async def _get_admin_car_stats(db: AsyncSession) -> AdminCarStatsOut:
         .where(Driver.vehicle_id.is_not(None))
         .where(_reviewer_driver_exclusion_clause())
         .where(Driver.is_active.is_(True))
+        .where(driver_city_clause(city_id) if city_id else True)
         .where(Vehicle.is_active.is_(True))
         .where(Driver.moderation_status == ModerationStatus.approved.value)
         .where(Vehicle.moderation_status == ModerationStatus.approved.value)
@@ -1005,7 +1047,7 @@ async def _get_admin_car_stats(db: AsyncSession) -> AdminCarStatsOut:
     )
 
 
-async def _list_pending_moderation_items(db: AsyncSession) -> list[PendingModerationItemOut]:
+async def _list_pending_moderation_items(db: AsyncSession, *, city_id=None) -> list[PendingModerationItemOut]:
     result = await db.execute(
         select(Driver)
         .options(
@@ -1013,6 +1055,7 @@ async def _list_pending_moderation_items(db: AsyncSession) -> list[PendingModera
             selectinload(Driver.user),
         )
         .where(Driver.vehicle_id.is_not(None))
+        .where(driver_city_clause(city_id) if city_id else True)
         .where(_reviewer_driver_exclusion_clause())
         .where(
             Vehicle.moderation_status.in_(MODERATION_PENDING_STATUSES)
@@ -1217,11 +1260,12 @@ async def _ensure_driver_user(
 
 @router.get("/cars/stats", response_model=AdminCarStatsOut)
 async def get_admin_cars_stats(
+    city_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin_user),
 ):
     del current_admin
-    return await _get_admin_car_stats(db)
+    return await _get_admin_car_stats(db, city_id=city_id)
 
 
 @router.get("/cars", response_model=list[AdminCarOut])
@@ -1232,12 +1276,14 @@ async def list_admin_cars(
     plate_number: str | None = None,
     driver_id: UUID | None = None,
     driver_name: str | None = None,
+    city_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin_user),
 ):
     del current_admin
     return await _list_admin_cars(
         db,
+        city_id=city_id,
         volume=volume,
         car_type=car_type,
         status_value=status,
@@ -1249,15 +1295,21 @@ async def list_admin_cars(
 
 @router.get("/drivers", response_model=list[DriverResponse])
 async def list_admin_drivers(
-    db: AsyncSession = Depends(get_db),
-    current_admin: User = Depends(get_current_admin_user),
+    city_id: UUID | None = None, without_city: bool = False,
+    q: str | None = Query(default=None, max_length=200), transport_category_id: UUID | None = None,
+    status: Literal['available', 'busy', 'offline'] | None = None, is_on_shift: bool | None = None,
+    moderation_status: str | None = None, is_dispatch_eligible: bool | None = None,
+    volume: float | None = Query(default=None, gt=0), offset: int = Query(default=0, ge=0), limit: int | None = Query(default=None, ge=1, le=200),
+    db: AsyncSession = Depends(get_db), current_admin: User = Depends(get_current_logist_user),
 ):
-    del current_admin
-    return await _list_admin_drivers(db)
+    return await _list_admin_drivers(db, city_id=city_id, without_city=without_city, q=q,
+        transport_category_id=transport_category_id, status=status, is_on_shift=is_on_shift,
+        moderation_status=moderation_status, is_dispatch_eligible=is_dispatch_eligible, volume=volume, offset=offset, limit=limit)
 
 
 @router.get("/drivers/pending-moderation/count", response_model=PendingCountOut)
 async def get_pending_driver_moderation_count(
+    city_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin_user),
 ) -> PendingCountOut:
@@ -1267,6 +1319,7 @@ async def get_pending_driver_moderation_count(
         .join(Vehicle, Driver.vehicle_id == Vehicle.id)
         .where(
             Driver.vehicle_id.is_not(None),
+            driver_city_clause(city_id) if city_id else True,
             _reviewer_driver_exclusion_clause(),
             Vehicle.moderation_status.in_(MODERATION_PENDING_STATUSES),
         )
@@ -1276,6 +1329,7 @@ async def get_pending_driver_moderation_count(
 
 @router.get("/moderation/count", response_model=ModerationCountsOut)
 async def get_moderation_counts(
+    city_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin_user),
 ) -> ModerationCountsOut:
@@ -1285,17 +1339,18 @@ async def get_moderation_counts(
         .join(Vehicle, Driver.vehicle_id == Vehicle.id)
         .where(
             Driver.vehicle_id.is_not(None),
+            driver_city_clause(city_id) if city_id else True,
             _reviewer_driver_exclusion_clause(),
             Vehicle.moderation_status.in_(MODERATION_PENDING_STATUSES),
         )
     )
     point_count = await db.scalar(
-        select(func.count(Quarry.id)).where(
+        select(func.count(Quarry.id)).where(Quarry.city_id == city_id if city_id else True,
             Quarry.moderation_status.in_(MODERATION_PENDING_STATUSES)
         )
     )
     equipment_count = await db.scalar(
-        select(func.count(SpecialEquipmentListing.id)).where(
+        select(func.count(SpecialEquipmentListing.id)).where(SpecialEquipmentListing.city_id == city_id if city_id else True,
             SpecialEquipmentListing.is_deleted.is_(False),
             SpecialEquipmentListing.moderation_status.in_(MODERATION_PENDING_STATUSES),
         )
@@ -1313,24 +1368,25 @@ async def get_moderation_counts(
 
 @router.get("/sidebar/counts", response_model=SidebarCountsOut)
 async def get_admin_sidebar_counts(
+    city_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin_user),
 ) -> SidebarCountsOut:
     del current_admin
     water_points = await db.scalar(
-        select(func.count(WaterPoint.id)).where(
+        select(func.count(WaterPoint.id)).where(WaterPoint.city_id == city_id if city_id else True,
             WaterPoint.is_deleted.is_(False),
             WaterPoint.moderation_status.in_(MODERATION_PENDING_STATUSES),
         )
     )
     septic_profiles = await db.scalar(
-        select(func.count(SepticProviderProfile.id)).where(
+        select(func.count(SepticProviderProfile.id)).where(SepticProviderProfile.city_id == city_id if city_id else True,
             SepticProviderProfile.is_deleted.is_(False),
             SepticProviderProfile.moderation_status.in_(MODERATION_PENDING_STATUSES),
         )
     )
     orders_requires_clarification = await db.scalar(
-        select(func.count(Order.id)).where(
+        select(func.count(Order.id)).where(Order.city_id == city_id if city_id else True,
             Order.is_deleted.is_(False),
             Order.status == OrderStatus.requires_clarification.value,
         )
@@ -1382,7 +1438,9 @@ async def create_admin_driver(
     db.add(user)
     await db.flush()
 
+    await _get_delivery_option_or_404(db, payload.delivery_option_id)
     vehicle = Vehicle(
+        transport_category_id=payload.transport_category_id,
         title=_build_admin_vehicle_title(
             brand=payload.vehicle_brand,
             plate_number=payload.vehicle_plate_number,
@@ -1400,6 +1458,8 @@ async def create_admin_driver(
         notes="Created by admin onboarding",
         moderation_status=ModerationStatus.approved.value,
     )
+    from app.services.vehicle_validation import validate_vehicle_capacity
+    await validate_vehicle_capacity(db, vehicle)
     db.add(vehicle)
     await db.flush()
 
@@ -1408,7 +1468,7 @@ async def create_admin_driver(
         phone=normalized_phone,
         user_id=user.id,
         vehicle_id=vehicle.id,
-        status=DriverStatus.available.value if payload.is_active else DriverStatus.offline.value,
+        status=payload.status if payload.is_active and payload.status in {"available", "busy", "offline"} else DriverStatus.offline.value,
         is_active=payload.is_active,
         is_auto_dispatch_enabled=payload.is_auto_dispatch_enabled,
         dispatch_priority=payload.dispatch_priority,
@@ -1423,7 +1483,8 @@ async def create_admin_driver(
     db.add(driver)
     await db.flush()
     from app.services.cities import initialize_service_cities
-    await initialize_service_cities(db, user_id=user.id, driver_id=driver.id, city_ids=payload.city_ids)
+    if payload.city_ids:
+        await initialize_service_cities(db, user_id=user.id, driver_id=driver.id, city_ids=payload.city_ids)
     _set_vehicle_moderation(vehicle, ModerationStatus.approved.value, comment="Approved by admin onboarding", admin_user_id=current_admin.id)
     await db.commit()
     return await _load_driver_or_404(db, driver.id)
@@ -1436,9 +1497,10 @@ async def update_admin_driver(
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin_user),
 ):
-    del current_admin
     driver = await _load_driver_or_404(db, driver_id)
+    admission_before = {field: getattr(driver, field) for field in ("is_dispatch_eligible", "is_auto_dispatch_enabled", "dispatch_admission_score", "dispatch_admission_comment")}
     vehicle_profile_fields = {
+        "transport_category_id": payload.transport_category_id,
         "brand": payload.vehicle_brand,
         "plate_number": payload.vehicle_plate_number,
         "vehicle_type": payload.vehicle_type,
@@ -1542,6 +1604,12 @@ async def update_admin_driver(
     if "dispatch_admission_comment" in payload.model_fields_set:
         driver.dispatch_admission_comment = payload.dispatch_admission_comment
 
+    admission_after = {field: getattr(driver, field) for field in admission_before}
+    if admission_before != admission_after:
+        db.add(EventLog(event_type="driver_dispatch_admission_updated", description=f"actor={current_admin.id} driver={driver.id} before={admission_before} after={admission_after}"))
+    if driver.vehicle is not None:
+        from app.services.vehicle_validation import validate_vehicle_capacity
+        await validate_vehicle_capacity(db, driver.vehicle)
     await _ensure_driver_user(
         db,
         driver=driver,
@@ -1639,11 +1707,12 @@ async def suspend_driver(
 @router.get("/moderation/pending", response_model=list[PendingModerationItemOut])
 @router.get("/moderation/pending/", response_model=list[PendingModerationItemOut], include_in_schema=False)
 async def list_pending_moderation(
+    city_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin_user),
 ):
     del current_admin
-    return await _list_pending_moderation_items(db)
+    return await _list_pending_moderation_items(db, city_id=city_id)
 
 
 @router.patch("/vehicles/{vehicle_id}/approve", response_model=VehicleModerationDecisionOut)

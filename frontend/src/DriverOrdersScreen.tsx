@@ -1,3 +1,4 @@
+import { useNotificationFocus } from "./notificationNavigation";
 import React, { useState, useEffect, useRef } from "react";
 import PullToRefresh from "react-simple-pull-to-refresh";
 import { Capacitor } from "@capacitor/core";
@@ -116,6 +117,7 @@ export default function DriverOrdersScreen({
   const [isLocationTrackingPermitted, setIsLocationTrackingPermitted] = useState(false);
 
   const [orders, setOrders] = useState<DriverOrder[]>([]);
+  useNotificationFocus(orders);
 
   const [currentOffer, setCurrentOffer] = useState<any>(null);
   const [timeLeft, setTimeLeft] = useState(0);
@@ -1220,7 +1222,7 @@ export const DriverOrderCard: React.FC<{
 
   return (
     <>
-      <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex flex-col h-auto overflow-visible mb-6">
+      <div data-order-id={order.id} className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex flex-col h-auto overflow-visible mb-6">
         {/* Header: Status and Date */}
         <div className="flex justify-between items-start mb-4">
           <span

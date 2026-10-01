@@ -126,6 +126,10 @@ class User(Base):
     def city_ids(self) -> list[uuid.UUID]:
         return [city.id for city in self.service_cities]
 
+    @property
+    def city_names(self) -> list[str]:
+        return [city.name for city in self.service_cities]
+
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     username: Mapped[str] = mapped_column(String(50), unique=True, index=True)
     display_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
@@ -212,6 +216,10 @@ class Driver(Base):
     def city_ids(self) -> list[uuid.UUID]:
         return [city.id for city in self.service_cities]
 
+    @property
+    def city_names(self) -> list[str]:
+        return [city.name for city in self.service_cities]
+
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255))
     phone: Mapped[str] = mapped_column(String(20), unique=True, index=True)
@@ -264,6 +272,20 @@ class Driver(Base):
     moderated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     moderated_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"), nullable=True)
     fcm_token: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+
+    @property
+    def dispatch_exclusion_reasons(self) -> list[str]:
+        from app.services.driver_eligibility import profile_exclusion_reasons
+        return profile_exclusion_reasons(self)
+
+    @property
+    def has_push_token(self) -> bool:
+        return bool(self.fcm_token)
+
+    @property
+    def effective_transport_category_id(self):
+        from app.services.driver_eligibility import effective_category
+        return effective_category(self.vehicle)
 
     user: Mapped[Optional["User"]] = relationship(
         "User",
@@ -787,6 +809,23 @@ class SepticProviderProfile(CityScoped, Base):
         CheckConstraint("service_price > 0", name="ck_septic_service_price"),
         Index("ix_septic_profiles_public", "moderation_status", "is_active", "is_deleted"),
     )
+
+
+class PushDelivery(Base):
+    __tablename__ = 'push_deliveries'
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    dedupe_key: Mapped[str] = mapped_column(String(255), unique=True)
+    recipient_type: Mapped[str] = mapped_column(String(16))
+    recipient_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    event_type: Mapped[str] = mapped_column(String(100))
+    title: Mapped[str] = mapped_column(String(255))
+    body: Mapped[str] = mapped_column(Text)
+    payload: Mapped[dict] = mapped_column(JSONB, default=dict)
+    status: Mapped[str] = mapped_column(String(16), default='pending', server_default='pending')
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default='0')
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (Index('ix_push_deliveries_due', 'status', 'next_attempt_at'),)
 
 
 class UserNotification(Base):

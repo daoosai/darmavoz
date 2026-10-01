@@ -109,9 +109,11 @@ def build_driver_list_query(
             .where(build_vehicle_volume_match_clause(requested_volume))
         )
     if order is not None:
+        from app.services.driver_eligibility import driver_constraints
         stmt = (
             stmt.join(Driver.vehicle)
             .where(driver_city_clause(order.city_id))
+            .where(driver_constraints(order, automatic=False))
             .where(Driver.status == DriverStatus.available.value)
             .where(Driver.moderation_status == ModerationStatus.approved.value)
             .where(Vehicle.moderation_status == ModerationStatus.approved.value)
@@ -199,7 +201,6 @@ async def create_driver(
     )
     db.add(driver)
     await db.flush()
-    await initialize_service_cities(db, driver_id=driver.id)
     await db.commit()
     result = await db.execute(
         select(Driver)

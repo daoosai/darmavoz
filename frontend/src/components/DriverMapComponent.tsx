@@ -1,3 +1,4 @@
+import { operatorFetch, useOperatorCityStore } from '../operatorCityStore';
 import { useCityStore } from '../cityStore';
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Clock, MapPin, Phone, Truck, X } from "lucide-react";
@@ -110,8 +111,9 @@ const formatLocationUpdatedAt = (value: string | null) => {
 };
 
 export default function DriverMapComponent() {
-  const cities = useCityStore((state) => state.cities);
-  const mapCity = cities.find((city) => city.is_default) || cities[0];
+  const cities = useOperatorCityStore((state) => state.cities);
+  const cityId = useOperatorCityStore((state) => state.cityId);
+  const mapCity = cities.find((city) => city.id === cityId) || cities.find((city) => city.is_default) || cities[0];
   const token = useAuthStore((state) => state.token);
   const [drivers, setDrivers] = useState<DriverMapItem[]>([]);
   const [filters, setFilters] = useState<Record<ActiveDriverMapStatus, boolean>>({
@@ -161,7 +163,7 @@ export default function DriverMapComponent() {
           throw new Error("Требуется авторизация");
         }
 
-        const response = await fetch(`${baseURL}/logist/driver-map`, {
+        const response = await operatorFetch(`${baseURL}/logist/driver-map`, {
           headers: { Authorization: `Bearer ${token}` },
           signal: controller.signal,
         });

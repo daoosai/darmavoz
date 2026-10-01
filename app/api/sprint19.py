@@ -381,20 +381,20 @@ async def restore_septic_provider(
 
 
 @router.get("/notifications", response_model=list[NotificationOut])
-async def list_notifications(unread_only: bool = False, limit: int = 50, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_logist_user)):
+async def list_notifications(unread_only: bool = False, limit: int = 50, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     stmt = select(UserNotification).where(UserNotification.user_id == current_user.id)
     if unread_only: stmt = stmt.where(UserNotification.is_read.is_(False))
     return (await db.execute(stmt.order_by(UserNotification.created_at.desc()).limit(min(max(limit, 1), 100)))).scalars().all()
 
 
 @router.get("/notifications/unread-count")
-async def unread_count(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_logist_user)):
+async def unread_count(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     value = await db.scalar(select(func.count(UserNotification.id)).where(UserNotification.user_id == current_user.id, UserNotification.is_read.is_(False)))
     return {"count": value or 0}
 
 
 @router.patch("/notifications/{notification_id}/read", response_model=NotificationOut)
-async def read_notification(notification_id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_logist_user)):
+async def read_notification(notification_id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     item = await db.scalar(select(UserNotification).where(UserNotification.id == notification_id, UserNotification.user_id == current_user.id))
     if item is None: raise HTTPException(status_code=404, detail="Уведомление не найдено")
     if not item.is_read: item.is_read = True; item.read_at = datetime.now(UTC); await db.commit()
@@ -402,7 +402,7 @@ async def read_notification(notification_id: UUID, db: AsyncSession = Depends(ge
 
 
 @router.post("/notifications/read-all")
-async def read_all_notifications(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_logist_user)):
+async def read_all_notifications(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     rows = (await db.execute(select(UserNotification).where(UserNotification.user_id == current_user.id, UserNotification.is_read.is_(False)))).scalars().all()
     for row in rows: row.is_read = True; row.read_at = datetime.now(UTC)
     await db.commit(); return {"ok": True, "count": len(rows)}

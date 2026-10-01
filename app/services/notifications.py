@@ -29,6 +29,8 @@ logger = logging.getLogger(__name__)
 
 async def create_operator_notifications(session, *, event_type: str, title: str, body: str, payload: dict[str, str]) -> None:
     """Persist operator inbox records in the same transaction as the business event."""
+    if payload.get("order_id"):
+        return  # Created together with durable order deliveries.
     result = await session.execute(
         select(User.id).join(Role, User.role_id == Role.id).where(
             Role.name.in_(("admin", "logist")), User.is_active.is_(True), User.is_deleted.is_(False)
@@ -39,6 +41,9 @@ async def create_operator_notifications(session, *, event_type: str, title: str,
 
 
 def _safe_schedule(schedule_func, *args, **kwargs) -> None:
+    # Order PUSH is persisted transactionally by dispatch_service.add_event.
+    if args and isinstance(args[-1], dict) and args[-1].get("order_id"):
+        return
     try:
         schedule_func(*args, **kwargs)
     except Exception:

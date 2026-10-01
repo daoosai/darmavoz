@@ -1,3 +1,5 @@
+import NotificationCenter from "./components/shared/NotificationCenter";
+import { NotificationToggle } from "./components/shared/NotificationToggle";
 import { useEffect, useState, type FormEvent } from "react";
 import { Building2, Headphones, Loader2, LogOut, Mail, Phone } from "lucide-react";
 import toast from "react-hot-toast";
@@ -79,6 +81,7 @@ export default function SupplierProfileScreen({
       <p className="text-xs font-bold uppercase tracking-[0.2em] text-sky-500">Кабинет поставщика</p>
       <h1 className="mt-1 text-3xl font-black">Профиль</h1>
       <div className="mt-5"><CommerceMenu /></div>
+      <div className="mt-5 flex items-center justify-between rounded-2xl bg-white p-4"><NotificationToggle role="supplier" /><NotificationCenter token={token} /></div>
 
       <form onSubmit={saveProfile} className="mt-8 space-y-5 rounded-2xl bg-white p-5 shadow-sm">
         <label className="block text-sm font-bold text-gray-900">

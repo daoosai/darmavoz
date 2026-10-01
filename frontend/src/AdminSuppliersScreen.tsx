@@ -1,3 +1,5 @@
+import { CityLabel } from './OperatorCityBar';
+import { operatorFetch, useOperatorCityStore } from './operatorCityStore';
 import ServiceCitiesPanel from './ServiceCitiesPanel';
 import { type FormEvent, useEffect, useState } from "react";
 import { Building2, Loader2, MapPin, Pencil, Phone, Trash2, X } from "lucide-react";
@@ -7,6 +9,7 @@ import { useAuthStore } from "./store";
 import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
 
 interface AdminSupplier {
+  city_ids: string[];
   id: string;
   full_name?: string | null;
   phone: string;
@@ -15,6 +18,7 @@ interface AdminSupplier {
 }
 
 interface AdminSupplierResponse {
+  city_ids?: string[];
   id?: string;
   full_name?: string | null;
   phone?: string | null;
@@ -32,6 +36,7 @@ const normalizeSupplier = (item: AdminSupplierResponse): AdminSupplier | null =>
 
   return {
     id: item.id,
+    city_ids: item.city_ids || [],
     full_name: item.full_name || null,
     phone: item.phone,
     is_active: Boolean(item.is_active),
@@ -64,7 +69,7 @@ export default function AdminSuppliersScreen() {
         let resolved = false;
 
         for (const url of urls) {
-          const response = await fetch(url, {
+          const response = await operatorFetch(url, {
             headers: {
               Authorization: `Bearer ${token}`,
             },
@@ -127,7 +132,7 @@ export default function AdminSuppliersScreen() {
     let lastPayload: unknown = {};
 
     for (const url of urls) {
-      const response = await fetch(url, {
+      const response = await operatorFetch(url, {
         method: "PATCH",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -196,7 +201,7 @@ export default function AdminSuppliersScreen() {
       let lastPayload: unknown = {};
 
       for (const url of urls) {
-        const response = await fetch(url, {
+        const response = await operatorFetch(url, {
           method: "DELETE",
           headers: {
             Authorization: `Bearer ${token}`,
@@ -275,7 +280,7 @@ export default function AdminSuppliersScreen() {
                   return (
                     <tr key={supplier.id} className="border-t border-slate-100 align-top">
                       <td className="px-5 py-4 font-bold text-slate-900">
-                        {supplier.full_name?.trim() || "Не указано"}
+                        {supplier.full_name?.trim() || "Не указано"}<span className="mt-1 block text-xs font-normal text-sky-700">{supplier.city_ids.map((id) => <span key={id} className="mr-2"><CityLabel cityId={id} /></span>)}{supplier.city_ids.length === 0 ? "Город не назначен" : null}</span>
                       </td>
                       <td className="px-5 py-4 text-slate-600">
                         {formatPhoneNumber(supplier.phone)}
@@ -342,7 +347,7 @@ export default function AdminSuppliersScreen() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="font-bold text-slate-900">
-                        {supplier.full_name?.trim() || "Не указано"}
+                        {supplier.full_name?.trim() || "Не указано"}<span className="mt-1 block text-xs font-normal text-sky-700">{supplier.city_ids.map((id) => <span key={id} className="mr-2"><CityLabel cityId={id} /></span>)}{supplier.city_ids.length === 0 ? "Город не назначен" : null}</span>
                       </p>
                       <p className="mt-2 flex items-center gap-2 text-sm text-slate-500">
                         <Phone className="h-4 w-4" />

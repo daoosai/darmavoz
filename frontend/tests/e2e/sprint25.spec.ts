@@ -26,7 +26,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 for (const width of [390, 1440]) {
-  test('городской фильтр и привязка логистом на ' + width, async ({ page }) => {
+  test('городской фильтр и привязка логистом на ' + width, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/logist/orders');
     await page.getByRole('button', { name: 'Водители', exact: true }).filter({ visible: true }).click();
@@ -42,6 +42,6 @@ for (const width of [390, 1440]) {
     expect((await saved).postDataJSON().city_ids).toEqual([cities[1].id]);
     expect(await page.locator('header').first().evaluate(element => parseFloat(getComputedStyle(element).paddingTop))).toBeGreaterThanOrEqual(40);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
-    await page.screenshot({ path: 'test-results/sprint25-drivers-' + width + '.png', fullPage: true });
+    await page.screenshot({ path: testInfo.outputPath('sprint25-drivers-' + width + '.png'), fullPage: true });
   });
 }

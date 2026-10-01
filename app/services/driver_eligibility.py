@@ -26,7 +26,7 @@ def category_match_clause(order):
 def driver_constraints(order, *, automatic=True):
     physical_capacity = func.coalesce(Vehicle.body_volume_m3, Vehicle.cubature_max, select(DeliveryOption.capacity_m3).where(DeliveryOption.id == Vehicle.delivery_option_id).scalar_subquery())
     constraints = [physical_capacity > 0, Driver.is_active.is_(True), Driver.status == 'available',
-        (Driver.user_id.is_(None) | exists(select(User.id).where(User.id == Driver.user_id, User.is_active.is_(True), User.is_deleted.is_(False)))),
+        (Driver.user_id.is_(None) | exists(select(User.id).where(User.id == Driver.user_id, User.is_active.is_(True), User.is_deleted.is_(False)).correlate(Driver))),
         Driver.moderation_status.in_(('approved', 'incomplete')), Vehicle.is_active.is_(True),
         Vehicle.moderation_status.in_(('approved', 'incomplete')), category_match_clause(order),
         exists(select(City.id).where(City.id == getattr(order, 'city_id', None), City.is_active.is_(True))),

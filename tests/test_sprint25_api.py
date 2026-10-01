@@ -39,6 +39,49 @@ async def make_order(db, city, category, option, client):
     await db.refresh(order, ['items', 'delivery_option'])
     return order
 
+
+@pytest.mark.asyncio
+async def test_logist_vehicle_management_preserves_permissions_and_busy_assignments(client, session_factory):
+    async with session_factory() as db:
+        city, category, option, customer, driver = await fleet(db)
+        tokens = {}
+        for name in ('logist', 'driver'):
+            role = await db.scalar(select(Role).where(Role.name == name))
+            if role is None:
+                role = Role(name=name); db.add(role); await db.flush()
+            actor = User(username='qa-vehicle-' + uuid4().hex, hashed_password='unused', role_id=role.id, is_active=True)
+            db.add(actor); await db.flush()
+            tokens[name] = create_access_token(data={'sub': actor.username})
+        await db.commit()
+        driver_id, vehicle_id = str(driver.id), str(driver.vehicle_id)
+        payload = {'vehicle_id': vehicle_id, 'transport_category_id': str(category.id),
+                   'delivery_option_id': str(option.id), 'cubature_min': 10, 'cubature_max': 10}
+    path = f'/api/v1/admin/drivers/{driver_id}/vehicle'
+    headers = {'Authorization': 'Bearer ' + tokens['logist']}
+    assert (await client.patch(path, json=payload, headers={'Authorization': 'Bearer ' + tokens['driver']})).status_code == 403
+    assert (await client.patch(path, json={**payload, 'is_dispatch_eligible': True}, headers=headers)).status_code == 422
+    assert (await client.patch(path, json={**payload, 'cubature_min': 11}, headers=headers)).status_code == 422
+    response = await client.patch(path, json=payload, headers=headers)
+    assert response.status_code == 200, response.text
+    assert response.json()['vehicle']['cubature_max'] == 10
+    assert response.json()['vehicle']['transport_category_id'] == str(category.id)
+    async with session_factory() as db:
+        other = Driver(name='QA occupied', phone='+7' + str(uuid4().int % 10**10).zfill(10), vehicle_id=driver.vehicle_id)
+        # A separate occupied vehicle exercises the real assignment guard.
+        occupied = Vehicle(title='QA occupied vehicle', is_active=True, delivery_option_id=option.id)
+        db.add(occupied); await db.flush(); other.vehicle_id = occupied.id
+        db.add(other); await db.commit()
+        occupied_id = str(occupied.id)
+    available = await client.get(f'/api/v1/admin/drivers/{driver_id}/vehicles', headers=headers)
+    assert available.status_code == 200, available.text
+    assert occupied_id not in [vehicle['id'] for vehicle in available.json()]
+    assert (await client.patch(path, json={**payload, 'vehicle_id': occupied_id}, headers=headers)).status_code == 409
+    async with session_factory() as db:
+        order = await make_order(db, city, category, option, customer)
+        order.driver_id, order.status = driver.id, 'driver_assigned'
+        await db.commit()
+    assert (await client.patch(path, json=payload, headers=headers)).status_code == 409
+
 @pytest.mark.asyncio
 async def test_logist_can_assign_city_but_driver_cannot_and_active_order_protects_membership(client, session_factory):
     async with session_factory() as db:

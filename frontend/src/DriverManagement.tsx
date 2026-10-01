@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { baseURL } from './utils';
 import { MapPin } from 'lucide-react';
 import ServiceCitiesPanel from './ServiceCitiesPanel';
+import DriverVehiclePanel from './DriverVehiclePanel';
 import { useOperatorCityStore } from './operatorCityStore';
 export const driverReasonLabels: Record<string, string> = {
   city_missing: 'Город не назначен', driver_inactive: 'Аккаунт отключён', shift_off: 'Не на смене',
@@ -12,6 +13,7 @@ export const driverReasonLabels: Record<string, string> = {
 export function DriverSummary({ driver, editable = false, onSaved }: { driver: any; editable?: boolean; onSaved?: () => void }) {
   const cities = useOperatorCityStore((state) => state.cities);
   const [open, setOpen] = useState(false);
+  const [vehicleOpen, setVehicleOpen] = useState(false);
   const names = (driver.city_ids || []).map((id: string) => cities.find((city) => city.id === id)?.name || id.slice(0, 8));
   return <div className="mt-2 space-y-2 text-xs">
     <p className="flex items-center gap-1 font-semibold text-sky-700"><MapPin className="h-3.5 w-3.5" />{names.join(', ') || 'Город не назначен'}</p>
@@ -20,7 +22,7 @@ export function DriverSummary({ driver, editable = false, onSaved }: { driver: a
     {driver.current_order_id && <p className="font-semibold text-amber-700">Текущий заказ №{driver.current_order_id.slice(0, 8)}</p>}
     {driver.last_location_updated_at && <p className="text-slate-500">Геопозиция: {new Date(driver.last_location_updated_at).toLocaleString('ru-RU')}</p>}
     {(driver.dispatch_exclusion_reasons || []).length > 0 ? <p className="text-amber-700">{driver.dispatch_exclusion_reasons.map((reason: string) => driverReasonLabels[reason] || 'Требуется проверка модерации').join(' · ')}</p> : <p className="text-emerald-700">Доступен для подбора; геопозиция проверяется при распределении</p>}
-    {editable && <><button type="button" onClick={() => setOpen(!open)} className="rounded-xl bg-sky-50 px-3 py-2 font-bold text-sky-700">Города обслуживания</button>{open && <ServiceCitiesPanel driverId={driver.id} onSaved={onSaved} />}</>}
+    {editable && <><button type="button" onClick={() => setOpen(!open)} className="rounded-xl bg-sky-50 px-3 py-2 font-bold text-sky-700">Города обслуживания</button>{open && <ServiceCitiesPanel driverId={driver.id} onSaved={onSaved} />}<button type="button" onClick={() => setVehicleOpen(true)} className="ml-2 rounded-xl bg-sky-50 px-3 py-2 font-bold text-sky-700">Назначить машину</button>{vehicleOpen && <DriverVehiclePanel driver={driver} onClose={() => setVehicleOpen(false)} onSaved={onSaved} />}</>}
   </div>;
 }
 export function DriverFilters({ value, onChange }: { value: Record<string, string>; onChange: (value: Record<string, string>) => void }) {

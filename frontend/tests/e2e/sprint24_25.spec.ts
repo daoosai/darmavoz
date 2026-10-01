@@ -12,9 +12,10 @@ const cities = [
   { id: tyumen, name: 'Тюмень', region: 'Тюменская область', code: 'tyumen', is_default: true },
   { id: ekb, name: 'Екатеринбург', region: 'Свердловская область', code: 'ekaterinburg', is_default: false },
 ].map(city => ({ ...city, is_active: true, center_lat: 57.15, center_lon: 65.53, map_zoom: 11 }));
-const options = [10, 30].map(capacity => ({ id: `option-${capacity}`, title: capacity === 10 ? 'Средние машины (10 м³)' : 'Большие самосвалы (30 м³)', capacity_m3: capacity, is_active: true }));
+const options = [10, 30].map(capacity => ({ id: `50000000-0000-4000-8000-${String(capacity).padStart(12, '0')}`, title: capacity === 10 ? 'Средние машины (10 м³)' : 'Большие самосвалы (30 м³)', capacity_m3: capacity, is_active: true }));
 const material = { id: 'material-sand', name: 'Песок', unit: 'м³', price: 450, description: 'Песок для E2E', delivery_options: options };
-const vehicle = { id: 'vehicle-10', brand: 'КАМАЗ', plate_number: 'А001АА72', vehicle_type: 'Самосвал', cubature_min: 10, cubature_max: 10, body_volume_m3: 10, delivery_option: options[0], is_active: true, media_files: [] };
+const vehicle = { id: '30000000-0000-4000-8000-000000000001', brand: 'КАМАЗ', plate_number: 'А001АА72', vehicle_type: 'Самосвал', cubature_min: 10, cubature_max: 10, body_volume_m3: 10, delivery_option: options[0], is_active: true, media_files: [] };
+const categoryId = '40000000-0000-4000-8000-000000000001';
 const initialDriver = () => ({ id: driverId, name: driverName, phone: '+79990000001', city_ids: [tyumen], city_names: ['Тюмень'], status: 'available', is_active: true, is_on_shift: false, moderation_status: 'approved', vehicle_moderation_status: 'approved', dispatch_exclusion_reasons: [], vehicle });
 type State = { driver: ReturnType<typeof initialDriver>; announcement: any; orders: any[]; registration: any; checkouts: any[]; cityQueries: string[] };
 const state = (): State => ({ driver: initialDriver(), announcement: null, orders: [], registration: null, checkouts: [], cityQueries: [] });
@@ -75,7 +76,7 @@ async function session(browser: Browser, db: State, role: string | null, path = 
       db.cityQueries.push(city);
       return json(!city || db.driver.city_ids.includes(city) ? [db.driver] : []);
     }
-    if (path === '/client/orders/calculate') return json({ best_option: { quarry_id: 'quarry-sand', quarry_name: 'Тестовый карьер', point_type: 'quarry', distance: 5, material_cost: body.volume * 450, delivery_cost: 1000, total_amount: body.volume * 450 + 1000, trip_count: Math.ceil(body.volume / (body.delivery_option_id === 'option-10' ? 10 : 30)) }, alternatives: [] });
+    if (path === '/client/orders/calculate') return json({ best_option: { quarry_id: 'quarry-sand', quarry_name: 'Тестовый карьер', point_type: 'quarry', distance: 5, material_cost: body.volume * 450, delivery_cost: 1000, total_amount: body.volume * 450 + 1000, trip_count: Math.ceil(body.volume / (body.delivery_option_id === options[0].id ? 10 : 30)) }, alternatives: [] });
     if (path === '/orders/checkout') {
       expect(role).toBe('client');
       db.checkouts.push(body);
@@ -89,8 +90,12 @@ async function session(browser: Browser, db: State, role: string | null, path = 
     if (path === '/payments/config') return json({ enabled: false, receipts_enabled: false });
     if (path === '/catalog/materials') return json([material]);
     if (path === '/catalog/delivery-options') return json(options);
-    if (path === `/admin/drivers/${driverId}` && method === 'PATCH') {
-      db.driver.vehicle = { ...db.driver.vehicle, cubature_min: body.cubature_min, cubature_max: body.cubature_max };
+    if (path === '/transport-categories') return json([{ id: categoryId, title: 'Средние самосвалы', is_active: true }]);
+    if (path === `/admin/drivers/${driverId}/vehicles`) return json([db.driver.vehicle]);
+    if (path === `/admin/drivers/${driverId}/vehicle` && method === 'PATCH') {
+      expect(role).toBe('logist');
+      expect(body).toMatchObject({ vehicle_id: vehicle.id, transport_category_id: categoryId, delivery_option_id: options[0].id, cubature_min: 10, cubature_max: 10 });
+      db.driver.vehicle = { ...db.driver.vehicle, cubature_min: body.cubature_min, cubature_max: body.cubature_max, transport_category_id: body.transport_category_id, delivery_option_id: body.delivery_option_id } as any;
       return json(db.driver);
     }
     if (path === '/clients/me' || path === '/supplier/me' || path === '/admin/me' || path === '/logist/me') return json({ id: 'user-e2e', name: 'Пользователь E2E', full_name: 'Пользователь E2E', phone: '+79990000002', email: 'e2e@example.invalid', is_active: true });
@@ -157,17 +162,17 @@ test('Спринт 25: регистрация без города, логист 
   await expect.poll(() => db.driver.city_ids).toEqual([tyumen]);
   await driver.reload(); await profile(driver);
   await expect(driver.getByText('Тюмень', { exact: true })).toBeVisible();
-  // Soft assertions let the shift check run even when the missing logist vehicle UI is detected.
-  const editVehicle = logist.getByRole('button', { name: /Редактировать|Назначить машину/ });
-  await expect.soft(editVehicle, 'Логист должен иметь управление машиной водителя (10 м³)').toBeVisible();
-  if (await editVehicle.count()) {
-    await editVehicle.click();
-    await logist.getByPlaceholder('От', { exact: true }).first().fill('10');
-    await logist.getByPlaceholder('До', { exact: true }).first().fill('10');
-    await logist.getByRole('button', { name: 'Сохранить', exact: true }).click();
-    await expect.soft.poll(() => db.driver.vehicle.cubature_max).toBe(10);
-  }
-  expect.soft(db.driver.vehicle.cubature_max, 'Логист назначил машину с кубатурой 10 м³').toBe(10);
+  await logist.getByRole('button', { name: 'Назначить машину', exact: true }).click();
+  const editor = logist.getByRole('dialog', { name: 'Транспорт водителя', exact: true });
+  await editor.getByLabel('Машина', { exact: true }).selectOption(vehicle.id);
+  await editor.getByLabel('Категория транспорта', { exact: true }).selectOption(categoryId);
+  await editor.getByLabel('Вариант доставки', { exact: true }).selectOption(options[0].id);
+  await editor.getByLabel('Кубатура от, м³', { exact: true }).fill('10');
+  await editor.getByLabel('Кубатура до, м³', { exact: true }).fill('10');
+  await editor.getByRole('button', { name: 'Сохранить', exact: true }).click();
+  await expect(editor).toHaveCount(0);
+  await expect.poll(() => db.driver.vehicle.cubature_max).toBe(10);
+  await driver.reload(); await profile(driver);
   await driver.getByRole('button', { name: 'Заказы', exact: true }).last().click();
   await driver.getByRole('switch', { name: 'Начать смену', exact: true }).click();
   await expect.poll(() => db.driver.is_on_shift).toBe(true);
@@ -199,7 +204,7 @@ test('Спринт 25: 100 м³ — ручной подбор по кубату�
     await expect(client.getByRole('button', { name: 'Изменить вариант доставки для Песок', exact: true })).toBeVisible();
     await client.getByRole('button', { name: 'Оформить заказ', exact: true }).click();
     await expect.poll(() => db.checkouts.length).toBe(capacity === 10 ? 1 : 2);
-    expect(db.checkouts.at(-1)).toMatchObject({ volume: 100, delivery_option_id: `option-${capacity}` });
+    expect(db.checkouts.at(-1)).toMatchObject({ volume: 100, delivery_option_id: options.find(option => option.capacity_m3 === capacity)!.id });
     await client.context().close();
     const logist = await session(browser, db, 'logist', '/logist/orders');
     const card = logist.locator(`[data-order-id="order-${capacity}"]`);

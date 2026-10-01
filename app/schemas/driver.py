@@ -134,6 +134,21 @@ class AdminDriverUpdate(BaseModel):
         return _validate_password(value)
 
 
+class OperatorDriverVehicleUpdate(BaseModel):
+    """Transport-only permissions; account and admission fields are forbidden."""
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    vehicle_id: UUID | None = None
+    delivery_option_id: UUID | None = None
+    transport_category_id: UUID | None = None
+    vehicle_brand: str | None = Field(default=None, max_length=255)
+    vehicle_plate_number: str | None = Field(default=None, max_length=64)
+    vehicle_type: str | None = Field(default=None, max_length=255)
+    cubature_min: float | None = Field(default=None, gt=0)
+    cubature_max: float | None = Field(default=None, gt=0)
+    tonnage_min: float | None = Field(default=None, gt=0)
+    tonnage_max: float | None = Field(default=None, gt=0)
+
+
 class DriverRegisterRequest(BaseModel):
     phone: str
     password: str

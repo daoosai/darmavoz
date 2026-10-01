@@ -63,6 +63,7 @@ from app.schemas.driver import (
     AdminCarStatsOut,
     AdminDriverCreate,
     AdminDriverUpdate,
+    OperatorDriverVehicleUpdate,
     DriverResponse,
     PendingModerationItemOut,
     VehicleModerationDecisionOut,
@@ -1154,6 +1155,7 @@ async def _ensure_vehicle_is_free(
     *,
     exclude_driver_id: UUID | None = None,
 ) -> None:
+    await db.execute(select(Vehicle.id).where(Vehicle.id == vehicle_id).with_for_update())
     stmt = select(Driver).where(Driver.vehicle_id == vehicle_id)
     if exclude_driver_id is not None:
         stmt = stmt.where(Driver.id != exclude_driver_id)
@@ -1618,6 +1620,66 @@ async def update_admin_driver(
     )
     await db.commit()
     return await _load_driver_or_404(db, driver.id)
+
+
+@router.get("/drivers/{driver_id}/vehicles", response_model=list[VehicleOut])
+async def list_driver_available_vehicles(
+    driver_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(get_current_logist_user),
+):
+    await _load_driver_or_404(db, driver_id)
+    vehicles = await _list_admin_vehicles(db)
+    occupied = set((await db.scalars(select(Driver.vehicle_id).where(Driver.id != driver_id, Driver.vehicle_id.is_not(None)))).all())
+    return [vehicle for vehicle in vehicles if vehicle.is_active and vehicle.id not in occupied]
+
+
+@router.patch("/drivers/{driver_id}/vehicle", response_model=DriverResponse)
+async def update_operator_driver_vehicle(
+    driver_id: UUID,
+    payload: OperatorDriverVehicleUpdate,
+    db: AsyncSession = Depends(get_db),
+    actor: User = Depends(get_current_logist_user),
+):
+    from app.services.driver_eligibility import ACTIVE_STATUSES
+    from app.services.vehicle_validation import validate_vehicle_capacity
+
+    await db.execute(select(Driver.id).where(Driver.id == driver_id).with_for_update())
+    driver = await _load_driver_or_404(db, driver_id)
+    active_order = await db.scalar(select(Order.id).where(Order.driver_id == driver_id, Order.status.in_(ACTIVE_STATUSES)).limit(1))
+    active_offer = await db.scalar(select(OrderOffer.id).where(OrderOffer.driver_id == driver_id, OrderOffer.status == "pending", OrderOffer.expires_at > func.now()).limit(1))
+    if active_order or active_offer:
+        raise HTTPException(409, "Нельзя менять транспорт во время заказа или действующего предложения")
+    previous_vehicle_id = driver.vehicle_id
+    if payload.vehicle_id is not None:
+        await db.execute(select(Vehicle.id).where(Vehicle.id == payload.vehicle_id).with_for_update())
+        vehicle = await _get_vehicle_or_404(db, payload.vehicle_id)
+        if not vehicle.is_active:
+            raise HTTPException(409, "Транспорт отключён")
+        await _ensure_vehicle_is_free(db, vehicle.id, exclude_driver_id=driver_id)
+    else:
+        vehicle = driver.vehicle
+    if vehicle is None:
+        vehicle = Vehicle(title=driver.name, is_active=True)
+        db.add(vehicle)
+        await db.flush()
+    if payload.delivery_option_id is not None:
+        option = await _get_delivery_option_or_404(db, payload.delivery_option_id)
+        if not option.is_active:
+            raise HTTPException(422, "Вариант доставки отключён")
+        vehicle.delivery_option_id = option.id
+    names = {"vehicle_brand": "brand", "vehicle_plate_number": "plate_number"}
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        if field not in ("vehicle_id", "delivery_option_id"):
+            setattr(vehicle, names.get(field, field), value)
+    await validate_vehicle_capacity(db, vehicle)
+    if not vehicle.transport_category_id and not vehicle.delivery_option_id:
+        raise HTTPException(422, "Укажите категорию транспорта или вариант доставки")
+    vehicle.title = _build_admin_vehicle_title(brand=vehicle.brand, plate_number=vehicle.plate_number, fallback_title=driver.name)
+    driver.vehicle_id, driver.vehicle = vehicle.id, vehicle
+    db.add(EventLog(event_type="driver_vehicle_updated", description=f"actor={actor.id} driver={driver_id} previous_vehicle={previous_vehicle_id} vehicle={vehicle.id}"))
+    await db.commit()
+    return await _load_driver_or_404(db, driver_id)
 
 
 class ModerationDecisionPayload(BaseModel):
@@ -2223,5 +2285,3 @@ async def delete_delivery_option(
     await db.delete(delivery_option)
     await db.commit()
     return DeleteResult(action="deleted", detail="Delivery option deleted")
-
-

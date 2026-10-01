@@ -15,8 +15,8 @@ export default function OperatorCityField({ value, onChange, all = true }: { val
       .catch((err) => { if (!controller.signal.aborted) setError(err.message); });
     return () => controller.abort();
   }, [token]);
-  return <label className="block text-sm font-semibold">Город
-    <select aria-label="Город" required={!all} value={value} className="ml-2 rounded-xl border bg-white p-2" onChange={(event) => onChange(event.target.value, cities.find((city) => city.id === event.target.value))}>
+  return <label className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-sm font-semibold">Город
+    <select aria-label="Город" required={!all} value={value} className="min-w-0 max-w-full flex-1 rounded-xl border bg-white p-2" onChange={(event) => onChange(event.target.value, cities.find((city) => city.id === event.target.value))}>
       <option value="">{all ? 'Все города' : 'Выберите город'}</option>
       {cities.filter((city) => all || city.is_active).map((city) => <option key={city.id} value={city.id}>{city.name}, {city.region}{city.is_active ? '' : ' (отключён)'}</option>)}
     </select>

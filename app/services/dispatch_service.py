@@ -1733,6 +1733,10 @@ async def accept_offer(session: AsyncSession, *, offer_id: UUID, driver_id: UUID
 
 
 async def decline_offer(session: AsyncSession, *, offer_id: UUID, driver_id: UUID, reason: str | None) -> Order:
+    order_id = await session.scalar(select(OrderOffer.order_id).where(OrderOffer.id == offer_id).execution_options(populate_existing=True))
+    if order_id is None:
+        raise HTTPException(404, "Offer not found")
+    await session.execute(select(Order.id).where(Order.id == order_id).with_for_update())
     result = await session.execute(
         select(OrderOffer)
         .options(
@@ -2238,6 +2242,7 @@ async def get_orders_needing_dispatch(session: AsyncSession, limit: int = 50) ->
 
 
 async def process_dispatch_for_order(session: AsyncSession, order_id: UUID) -> None:
+    await session.execute(select(Order.id).where(Order.id == order_id).with_for_update())
     order = await get_order_by_id(session, order_id)
 
     if await maybe_schedule_driver_order_reminder(session, order):

@@ -1509,7 +1509,7 @@ async def update_admin_driver(
         "tonnage_min": payload.tonnage_min,
         "tonnage_max": payload.tonnage_max,
     }
-    has_vehicle_profile_updates = any(value is not None for value in vehicle_profile_fields.values())
+    has_vehicle_profile_updates = any(value is not None for value in vehicle_profile_fields.values()) or "transport_category_id" in payload.model_fields_set
 
     next_phone = normalize_phone(payload.phone) if payload.phone is not None else driver.phone
     await _ensure_unique_driver_phone(
@@ -1564,7 +1564,7 @@ async def update_admin_driver(
             vehicle.delivery_option_id = payload.delivery_option_id
 
         for field, value in vehicle_profile_fields.items():
-            if value is not None:
+            if value is not None or (field == "transport_category_id" and field in payload.model_fields_set):
                 setattr(vehicle, field, value)
 
         vehicle.title = _build_admin_vehicle_title(

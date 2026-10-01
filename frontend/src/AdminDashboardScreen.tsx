@@ -241,6 +241,7 @@ export default function AdminDashboardScreen({
   const driverQueryRef = useRef({ filters: driverFilters, page: driverPage });
   driverQueryRef.current = { filters: driverFilters, page: driverPage };
   const cityId = useOperatorCityStore((state) => state.cityId);
+  useEffect(() => { if (cityId && driverFilters.without_city) setDriverFilters((current) => ({ ...current, without_city: "" })); setDriverHasMore(false); }, [cityId]);
   const [activeTab, setActiveTab] = useState<AdminTab>(initialTab);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
@@ -1454,7 +1455,7 @@ export default function AdminDashboardScreen({
         is_active: editingDriver.is_active ?? true,
         vehicle_type: editingDriver.vehicle_type,
         delivery_option_id: editingDriver.delivery_option_id || undefined,
-        transport_category_id: editingDriver.transport_category_id || undefined,
+        transport_category_id: editingDriver.transport_category_id || null,
         cubature_min: parseNumber(editingDriver.cubature_min),
         cubature_max: parseNumber(editingDriver.cubature_max),
         tonnage_min: parseNumber(editingDriver.tonnage_min),

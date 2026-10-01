@@ -299,6 +299,7 @@ export default function LogistDashboardScreen({
   const driverQueryRef = useRef({ filters: driverFilters, page: driverPage });
   driverQueryRef.current = { filters: driverFilters, page: driverPage };
   const cityId = useOperatorCityStore((state) => state.cityId);
+  useEffect(() => { if (cityId && driverFilters.without_city) setDriverFilters((current) => ({ ...current, without_city: "" })); setDriverHasMore(false); }, [cityId]);
   const [activeTab, setActiveTab] = useState<LogistTab>(initialTab);
   const [equipmentTab, setEquipmentTab] = useState<AdminEquipmentTab>("listings");
   const [equipmentPlacementFilter, setEquipmentPlacementFilter] =

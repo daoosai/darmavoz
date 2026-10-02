@@ -30,7 +30,7 @@ export default function DriverVehiclePanel({ driver, onClose, onSaved }: { drive
     let active = true;
     Promise.all([
       commerceApi(`/admin/drivers/${driver.id}/vehicles`),
-      commerceApi('/transport-categories'),
+      commerceApi('/catalog/transport-categories'),
       commerceApi('/catalog/delivery-options/'),
     ]).then(([available, categories, options]) => {
       if (!active) return;

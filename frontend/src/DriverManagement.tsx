@@ -40,7 +40,7 @@ export function DriverFilters({ value, onChange }: { value: Record<string, strin
   const cities = useOperatorCityStore((state) => state.cities);
   const cityId = useOperatorCityStore((state) => state.cityId);
   const [categories, setCategories] = useState<{ id: string; title: string }[]>([]);
-  useEffect(() => { const controller = new AbortController(); fetch(baseURL + "/transport-categories", { signal: controller.signal }).then(async (response) => { if (response.ok) setCategories(await response.json()); }).catch(() => {}); return () => controller.abort(); }, []);
+  useEffect(() => { const controller = new AbortController(); fetch(baseURL + "/catalog/transport-categories", { signal: controller.signal }).then(async (response) => { if (response.ok) setCategories(await response.json()); }).catch(() => {}); return () => controller.abort(); }, []);
   const set = (key: string, next: string) => onChange({ ...value, [key]: next });
   return <div className="mb-3 grid gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm sm:grid-cols-3">
     <input aria-label="Поиск водителя" placeholder="Имя, телефон или госномер" value={value.q || ''} onChange={(event) => set('q', event.target.value)} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2" />

@@ -90,7 +90,8 @@ async function session(browser: Browser, db: State, role: string | null, path = 
     if (path === '/payments/config') return json({ enabled: false, receipts_enabled: false });
     if (path === '/catalog/materials') return json([material]);
     if (path === '/catalog/delivery-options') return json(options);
-    if (path === '/transport-categories') return json([{ id: categoryId, title: 'Средние самосвалы', is_active: true }]);
+    if (path === '/transport-categories') return json({ detail: 'Not Found' }, 404);
+    if (path === '/catalog/transport-categories') return json([{ id: categoryId, title: 'Средние самосвалы', is_active: true }]);
     if (path === `/admin/drivers/${driverId}/vehicles`) return json([db.driver.vehicle]);
     if (path === `/admin/drivers/${driverId}/vehicle` && method === 'PATCH') {
       expect(role).toBe('logist');

@@ -85,7 +85,8 @@ for (const width of [390, 1440]) {
     const categoryId = '40000000-0000-4000-8000-000000000001';
     const vehicleId = '30000000-0000-4000-8000-000000000001';
     await page.setViewportSize({ width, height: 900 });
-    await page.route('**/api/v1/transport-categories', route => route.fulfill({ json: [{ id: categoryId, title: 'Самосвалы' }] }));
+    await page.route('**/api/v1/transport-categories', route => route.fulfill({ status: 404, json: { detail: 'Not Found' } }));
+    await page.route('**/api/v1/catalog/transport-categories', route => route.fulfill({ json: [{ id: categoryId, title: 'Самосвалы' }] }));
     await page.route('**/api/v1/admin/drivers/*/vehicles', route => route.fulfill({ json: [{ id: vehicleId, brand: 'КАМАЗ', plate_number: 'А001АА72', vehicle_type: 'Самосвал', cubature_min: 10, cubature_max: 20, transport_category_id: categoryId }] }));
     await page.goto('/logist/orders');
     await page.getByRole('button', { name: 'Водители', exact: true }).filter({ visible: true }).click();
@@ -127,3 +128,34 @@ for (const width of [390, 1440]) {
     expect(await page.evaluate(() => !!document.elementFromPoint(window.innerWidth - 30, window.innerHeight - 30)?.closest('[role="dialog"]'))).toBeTruthy();
   });
 }
+
+test('новый водитель без машины открывает пустую форму без 404', async ({ page }) => {
+  const categoryId = '40000000-0000-4000-8000-000000000001';
+  const currentVehicleRequests: string[] = [];
+  page.on('request', request => {
+    if (request.method() === 'GET' && new URL(request.url()).pathname.endsWith(`/drivers/${driverId}/vehicle`)) currentVehicleRequests.push(request.url());
+  });
+  await page.route('**/api/v1/transport-categories', route => route.fulfill({ status: 404, json: { detail: 'Not Found' } }));
+  await page.route('**/api/v1/catalog/transport-categories', route => route.fulfill({ json: [{ id: categoryId, title: 'Самосвалы' }] }));
+  await page.route('**/api/v1/admin/drivers/*/vehicles', route => route.fulfill({ json: [] }));
+  await page.goto('/logist/orders');
+  await page.getByRole('button', { name: 'Водители', exact: true }).filter({ visible: true }).click();
+  await page.getByRole('button', { name: 'Назначить машину', exact: true }).click();
+  const editor = page.getByRole('dialog', { name: 'Транспорт водителя', exact: true });
+  await expect(editor.getByLabel('Машина', { exact: true })).toHaveValue('');
+  await expect(editor.getByLabel('Машина', { exact: true }).locator('option')).toHaveCount(1);
+  await expect(editor.getByRole('alert')).toHaveCount(0);
+  await expect(editor.getByLabel('Госномер', { exact: true })).toHaveValue('');
+  await editor.getByLabel('Марка машины', { exact: true }).fill('КАМАЗ');
+  await editor.getByLabel('Госномер', { exact: true }).fill('А001АА72');
+  await editor.getByLabel('Тип машины', { exact: true }).fill('Самосвал');
+  await editor.getByLabel('Кубатура от, м³', { exact: true }).fill('10');
+  await editor.getByLabel('Кубатура до, м³', { exact: true }).fill('20');
+  await editor.getByLabel('Категория транспорта', { exact: true }).selectOption(categoryId);
+  await expect(editor.getByRole('button', { name: 'Сохранить', exact: true })).toBeEnabled();
+  const saved = page.waitForRequest(request => request.method() === 'PATCH' && request.url().endsWith('/vehicle'));
+  await editor.getByRole('button', { name: 'Сохранить', exact: true }).click();
+  expect((await saved).postDataJSON()).toMatchObject({ create_new_vehicle: true });
+  await expect(editor).toHaveCount(0);
+  expect(currentVehicleRequests).toEqual([]);
+});

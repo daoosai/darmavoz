@@ -11,6 +11,26 @@ from app.models.models import Vehicle
 from app.schemas.driver import OperatorDriverVehicleUpdate
 
 
+def test_vehicle_form_endpoints_are_registered():
+    from main import app
+
+    paths = app.openapi()["paths"]
+    assert "get" in paths["/api/v1/admin/drivers/{driver_id}/vehicles"]
+    assert "patch" in paths["/api/v1/admin/drivers/{driver_id}/vehicle"]
+    assert "get" in paths["/api/v1/catalog/transport-categories"]
+    assert "/api/v1/transport-categories" not in paths
+
+
+@pytest.mark.asyncio
+async def test_new_driver_without_vehicle_gets_empty_available_list(monkeypatch):
+    driver = SimpleNamespace(id=uuid4(), name="New driver", vehicle=None, vehicle_id=None)
+    db = AsyncMock()
+    db.scalars.return_value = SimpleNamespace(all=lambda: [])
+    monkeypatch.setattr(admin, "_load_driver_or_404", AsyncMock(return_value=driver))
+    monkeypatch.setattr(admin, "_list_admin_vehicles", AsyncMock(return_value=[]))
+    assert await admin.list_driver_available_vehicles(driver.id, db, SimpleNamespace(id=uuid4())) == []
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("create_new", [False, True])
 async def test_creation_preserves_previous_vehicle_and_legacy_edit(monkeypatch, create_new):

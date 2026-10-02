@@ -1214,7 +1214,7 @@ export default function LogistDashboardScreen({
                       key={driver.id}
                       className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex flex-col gap-4 text-left hover:shadow-md transition-shadow"
                     >
-                      <DriverSummary driver={driver} editable onSaved={() => void fetchDrivers()} />
+                      <DriverSummary driver={driver} editable showPushStatus={false} onSaved={() => void fetchDrivers()} />
                       <div className="flex justify-between items-start gap-3">
                         <div className="flex items-center gap-3 min-w-0">
                           <div className="bg-slate-100 p-3 rounded-full text-slate-500 shadow-sm border border-slate-200/50 shrink-0">

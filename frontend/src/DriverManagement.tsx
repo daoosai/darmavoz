@@ -10,7 +10,7 @@ export const driverReasonLabels: Record<string, string> = {
   dispatch_admission_denied: 'Нет допуска', vehicle_missing: 'Машина не привязана', vehicle_inactive: 'Машина отключена',
   category_missing: 'Категория требует проверки', volume_missing: 'Кубатура не указана',
 };
-export function DriverSummary({ driver, editable = false, onSaved }: { driver: any; editable?: boolean; onSaved?: () => void }) {
+export function DriverSummary({ driver, editable = false, showPushStatus = true, onSaved }: { driver: any; editable?: boolean; showPushStatus?: boolean; onSaved?: () => void }) {
   const cities = useOperatorCityStore((state) => state.cities);
   const [open, setOpen] = useState(false);
   const [vehicleOpen, setVehicleOpen] = useState(false);
@@ -29,7 +29,7 @@ export function DriverSummary({ driver, editable = false, onSaved }: { driver: a
       <span tabIndex={0} title={reasons || 'Доступен для подбора; геопозиция проверяется при распределении'} className={chip + (driver.is_active === false || status === 'offline' ? ' bg-red-50 text-red-700' : status === 'busy' ? ' bg-amber-50 text-amber-800' : ' bg-emerald-50 text-emerald-700')}>{driver.is_active === false ? 'Аккаунт отключён' : status === 'available' ? 'Свободен' : status === 'busy' ? 'Занят' : 'Недоступен'}</span>
       <span className={chip + (driver.is_on_shift ? ' bg-emerald-50 text-emerald-700' : ' bg-slate-100 text-slate-600')}>{driver.is_on_shift ? 'На смене' : 'Не на смене'}</span>
       <span title={category || undefined} className={chip + (hasCategory ? ' bg-emerald-50 text-emerald-700' : ' bg-amber-50 text-amber-800')}>{hasCategory ? category || 'Категория назначена' : 'Категория требует проверки'}</span>
-      <span tabIndex={0} title={pushLabel} aria-label={pushLabel} className={chip + (driver.has_push_token ? ' bg-emerald-50 text-emerald-700' : ' bg-slate-100 text-slate-500')}>{driver.has_push_token ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}</span>
+      {showPushStatus && <span tabIndex={0} title={pushLabel} aria-label={pushLabel} className={chip + (driver.has_push_token ? ' bg-emerald-50 text-emerald-700' : ' bg-slate-100 text-slate-500')}>{driver.has_push_token ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}</span>}
     </div>
     {driver.current_order_id && <p className="font-semibold text-amber-700">Текущий заказ №{driver.current_order_id.slice(0, 8)}</p>}
     {driver.last_location_updated_at && <p className="text-slate-500">Геопозиция: {new Date(driver.last_location_updated_at).toLocaleString('ru-RU')}</p>}

@@ -29,11 +29,13 @@ class WholesaleRequest(Base):
     contact_name: Mapped[str] = mapped_column(String(255))
     contact_phone: Mapped[str] = mapped_column(String(30))
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
-    status: Mapped[str] = mapped_column(String(32), default="draft", index=True)
-    moderation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default="pending", index=True)
+    reject_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     __table_args__ = (
+        CheckConstraint("status IN ('pending', 'approved', 'rejected', 'archived')", name="ck_wholesale_status"),
+        CheckConstraint("status != 'rejected' OR length(trim(reject_reason)) > 0 AND reject_reason IS NOT NULL", name="ck_wholesale_reject_reason"),
         CheckConstraint("volume > 0 AND vehicle_count > 0 AND price > 0", name="ck_wholesale_positive"),
         CheckConstraint("ends_on >= starts_on", name="ck_wholesale_dates"),
     )

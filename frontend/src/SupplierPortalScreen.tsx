@@ -11,7 +11,7 @@ import SupplierRegisterScreen from "./SupplierRegisterScreen";
 
 export default function SupplierPortalScreen({ onBack }: { onBack: () => void }) {
   const { token, role } = useAuthStore();
-  const [activeView, setActiveView] = useState<SupplierTab>("points");
+  const [activeView, setActiveView] = useState<SupplierTab>(new URLSearchParams(window.location.search).has("notification_wholesale") ? "wholesale" : "points");
 
   if (token && role === "supplier") {
     const handleLogout = async () => {

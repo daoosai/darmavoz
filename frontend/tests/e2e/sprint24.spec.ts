@@ -10,7 +10,7 @@ const request = {
   vehicle_count: 25, pickup_address: 'Карьер, очень длинный адрес места загрузки и подъезда для крупной техники',
   delivery_address: 'Стройка, очень длинный адрес доставки с дополнительной информацией о месте разгрузки',
   starts_on: '2026-10-01', ends_on: '2026-10-10', price: '450', price_basis: 'm3', contact_name: 'Заказчик',
-  contact_phone: '+79990000000', comment: 'Нужны самосвалы. Подъезд согласуем.', status: 'published', moderation_reason: null,
+  contact_phone: '+79990000000', comment: 'Нужны самосвалы. Подъезд согласуем.', status: 'approved', reject_reason: null,
   is_owner: false, is_favorite: false, created_at: '2026-09-30T10:00:00Z', updated_at: '2026-09-30T10:00:00Z',
 };
 const payment = { id: paymentId, order_id: orderId, client_id: 'buyer', amount: '145000', currency: 'RUB', status: 'succeeded',
@@ -27,7 +27,7 @@ test.beforeEach(async ({ page }) => {
     else if (path.endsWith('/wholesale-requests/access')) body = { enabled: true, can_moderate: true };
     else if (path.endsWith('/wholesale-requests')) body = { items: [request], total: 1, page: 1 };
     else if (path.endsWith(`/wholesale-requests/${requestId}`)) body = request;
-    else if (path.endsWith('/history')) body = [{ status: 'published', reason: null, created_at: request.created_at }];
+    else if (path.endsWith('/history')) body = [{ status: 'approved', reason: null, created_at: request.created_at }];
     else if (path.endsWith('/finance/payments')) body = { items: [payment], total: 1, page: 1, timezone: 'Asia/Irkutsk' };
     else if (path.endsWith('/finance/summary')) body = { paid: '145000', refunded: '0', net: '145000', successful_count: 1, failed_count: 0, timezone: 'Asia/Irkutsk' };
     else if (path.endsWith(`/payments/${paymentId}`)) body = { ...payment, events: [{ created_at: payment.paid_at, description: 'Оплачен заказ: 145000 ₽' }], refunds: [], settlement_receipt_status: null };
@@ -157,3 +157,80 @@ for (const role of ['equipment_owner', 'water_septic_partner']) {
     });
   }
 }
+
+test('модерация: причина обязательна, отклонённая заявка исправляется и одобряется', async ({ page }) => {
+  let current = { ...request, status: 'pending', reject_reason: null as string | null, is_owner: false };
+  await page.route('**/wholesale-requests**', async route => {
+    const url = new URL(route.request().url());
+    const method = route.request().method();
+    if (url.pathname.endsWith('/moderate')) {
+      const data = route.request().postDataJSON();
+      current = { ...current, status: data.action === 'reject' ? 'rejected' : 'approved', reject_reason: data.action === 'reject' ? data.reason : null };
+      return route.fulfill({ json: current });
+    }
+    if (method === 'PUT' && url.pathname.endsWith(requestId)) {
+      current = { ...current, ...route.request().postDataJSON(), status: 'pending', reject_reason: null };
+      return route.fulfill({ json: current });
+    }
+    if (url.pathname.endsWith('/history')) return route.fulfill({ json: [] });
+    if (url.pathname.endsWith(requestId)) return route.fulfill({ json: current });
+    return route.fulfill({ json: { items: [current], total: 1, page: 1 } });
+  });
+  await page.goto('/admin/moderation');
+  await page.getByRole('button', { name: /Оптовые заявки Модерация заявок/ }).click();
+  await expect(page.locator('section.fixed').getByRole('button', { name: 'Модерация', exact: true })).toBeVisible();
+  await page.getByRole('heading', { name: 'Песок', exact: true }).click();
+  await page.getByRole('button', { name: 'Отклонить', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Отклонить заявку', exact: true })).toBeDisabled();
+  await page.getByLabel('Причина отклонения', { exact: true }).fill('Уточните место загрузки');
+  await page.getByRole('button', { name: 'Отклонить заявку', exact: true }).click();
+  await expect(page.getByLabel('Причина отклонения', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Уточните место загрузки', { exact: true })).toBeVisible();
+
+  current = { ...current, is_owner: true };
+  await page.evaluate(() => localStorage.setItem('auth-storage', JSON.stringify({ state: { token: 'e2e-only', role: 'supplier' }, version: 0 })));
+  // The global init script is admin; the last init script sets the supplier role.
+  await page.addInitScript(() => localStorage.setItem('auth-storage', JSON.stringify({ state: { token: 'e2e-only', role: 'supplier' }, version: 0 })));
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Опт', exact: true }).click();
+  await page.getByRole('button', { name: 'Мои заявки', exact: true }).click();
+  await expect(page.getByText('Отклонено', { exact: true })).toBeVisible();
+  await expect(page.getByText('Причина отклонения: Уточните место загрузки', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Редактировать', exact: true }).click();
+  await expect(page.getByLabel('Название материала', { exact: true })).toHaveValue('Песок');
+  await page.getByLabel('Место доставки', { exact: true }).fill('Стройка Б, улица Тестовая 10');
+  await page.getByRole('button', { name: 'Сохранить', exact: true }).click();
+  await expect(page.getByText('На модерации', { exact: true })).toBeVisible();
+  await expect(page.getByText('Причина отклонения:', { exact: false })).toHaveCount(0);
+
+  current = { ...current, is_owner: false };
+  await page.addInitScript(() => localStorage.setItem('auth-storage', JSON.stringify({ state: { token: 'e2e-only', role: 'admin' }, version: 0 })));
+  await page.goto('/admin/moderation');
+  await page.getByRole('button', { name: /Оптовые заявки Модерация заявок/ }).click();
+  await page.getByRole('heading', { name: 'Песок', exact: true }).click();
+  await page.getByRole('button', { name: 'Одобрить', exact: true }).click();
+  await expect(page.getByText('Опубликовано', { exact: true })).toBeVisible();
+});
+
+test('колокольчик опта открывает уведомление и конкретную отклонённую заявку', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('auth-storage', JSON.stringify({
+    state: { token: 'e2e-only', role: 'supplier' }, version: 0,
+  })));
+  const reason = 'Укажите более точный адрес доставки';
+  await page.route('**/notifications**', route => route.fulfill({ json:
+    route.request().url().includes('unread-count') ? { count: 1 } :
+    route.request().method() === 'PATCH' ? { ok: true } :
+    [{ id: requestId, title: 'Оптовая заявка отклонена', body: 'Причина: ' + reason, is_read: false,
+       payload: { wholesale_request_id: requestId } }],
+  }));
+  await page.route(`**/wholesale-requests/${requestId}`, route => route.fulfill({ json: { ...request, is_owner: true, status: 'rejected', reject_reason: reason } }));
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Опт', exact: true }).click();
+  await page.locator('section.fixed').getByRole('button', { name: 'Открыть уведомления', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Центр уведомлений', exact: true });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: /Оптовая заявка отклонена Причина:/ }).click();
+  await expect(page).toHaveURL(new RegExp('notification_wholesale=' + requestId));
+  await expect(page.locator('section.fixed').getByText(reason, { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Редактировать', exact: true })).toBeVisible();
+});

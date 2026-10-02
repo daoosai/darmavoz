@@ -47,7 +47,7 @@ async def test_wholesale_role_access_moderation_and_ownership(client, session_fa
     assert (await client.get(f'/api/v1/wholesale-requests/{request_id}', headers=other_headers)).status_code == 404
     assert (await client.put(f'/api/v1/wholesale-requests/{request_id}', headers=other_headers, json=payload)).status_code == 403
     submitted = await client.post(f'/api/v1/wholesale-requests/{request_id}/submit', headers=partner_headers)
-    assert submitted.status_code == 200 and submitted.json()['status'] == 'pending_moderation'
+    assert submitted.status_code == 200 and submitted.json()['status'] == 'pending'
     assert (await client.get(f'/api/v1/wholesale-requests/{request_id}', headers=other_headers)).status_code == 404
     assert (await client.post(f'/api/v1/wholesale-requests/{request_id}/moderate', headers=partner_headers, json={'action': 'publish'})).status_code == 403
     response = await client.post(f'/api/v1/wholesale-requests/{request_id}/moderate', headers=admin, json={'action': 'publish'})
@@ -59,7 +59,7 @@ async def test_wholesale_role_access_moderation_and_ownership(client, session_fa
     response = await client.get('/api/v1/wholesale-requests?view=favorites', headers=other_headers)
     assert response.json()['items'][0]['is_favorite'] is True
     response = await client.put(f'/api/v1/wholesale-requests/{request_id}', headers=partner_headers, json={**payload, 'price': '500'})
-    assert response.status_code == 200 and response.json()['status'] == 'pending_moderation'
+    assert response.status_code == 200 and response.json()['status'] == 'pending'
     assert (await client.get(f'/api/v1/wholesale-requests/{request_id}', headers=other_headers)).status_code == 404
 
 
@@ -190,3 +190,94 @@ async def test_wholesale_rejects_blocked_accounts(client, session_factory, role,
     for path in ("/api/v1/wholesale-requests", "/api/v1/wholesale-requests/access"):
         assert (await client.get(path, headers=headers)).status_code == 401
     assert (await client.post("/api/v1/wholesale-requests", headers=headers, json={})).status_code == 401
+
+@pytest.mark.parametrize("author_role", ["supplier", "driver"])
+@pytest.mark.asyncio
+async def test_wholesale_full_moderation_and_push(client, session_factory, admin_token, monkeypatch, author_role):
+    from app.models.models import Driver, PushDelivery, UserNotification
+    from app.services.notification_outbox import run_delivery_tick
+    async with session_factory() as db:
+        author, headers = await create_actor(db, author_role)
+        reader, reader_headers = await create_actor(db, "driver")
+        city = await db.scalar(select(City).where(City.is_active.is_(True)).limit(1))
+        author.fcm_token = "test-wholesale-token" if author_role == "supplier" else None
+        if author_role == "driver":
+            db.add(Driver(name="Wholesale author", phone="+79990001234", user_id=author.id,
+                          fcm_token="test-driver-wholesale-token", status="offline", moderation_status="incomplete"))
+        await db.commit()
+        author_id = author.id
+        payload = dict(city_id=str(city.id), material_name="Песок", volume="500", unit="m3", vehicle_count=25,
+                       pickup_address="Карьер", delivery_address="Стройка", starts_on=str(today()),
+                       ends_on=str(today() + timedelta(days=10)), price="450", price_basis="m3",
+                       contact_name="Автор", contact_phone="+79990000000")
+    admin = {"Authorization": f"Bearer {admin_token}"}
+    created = await client.post("/api/v1/wholesale-requests", headers=headers, json=payload)
+    assert created.status_code == 201, created.text
+    request_id = created.json()["id"]
+    assert created.json()["status"] == "pending" and created.json()["reject_reason"] is None
+    assert request_id not in [r["id"] for r in (await client.get("/api/v1/wholesale-requests", headers=reader_headers)).json()["items"]]
+    queue = (await client.get("/api/v1/wholesale-requests?view=moderation", headers=admin)).json()["items"]
+    assert request_id in [r["id"] for r in queue]
+    path = f"/api/v1/wholesale-requests/{request_id}/moderate"
+    assert (await client.post(path, headers=admin, json={"action": "reject", "reason": "   "})).status_code == 422
+    reason = "Уточните место загрузки"
+    rejected = await client.post(path, headers=admin, json={"action": "reject", "reason": reason})
+    assert rejected.status_code == 200 and rejected.json()["reject_reason"] == reason
+    repeated = await client.post(path, headers=admin, json={"action": "reject", "reason": reason})
+    assert repeated.status_code == 200
+    mine = (await client.get("/api/v1/wholesale-requests?view=mine", headers=headers)).json()["items"]
+    assert any(r["id"] == request_id and r["status"] == "rejected" and r["reject_reason"] == reason for r in mine)
+    sent = []
+    monkeypatch.setattr("app.services.push_service._send_push", lambda token, title, body, data: sent.append((title, body, data)) or "test-fcm-id")
+    await run_delivery_tick(session_factory)
+    assert any(reason in body and data.get("wholesale_request_id") == request_id for _, body, data in sent)
+    edited = await client.put(f"/api/v1/wholesale-requests/{request_id}", headers=headers,
+                              json={**payload, "pickup_address": "Тюмень, карьер"})
+    assert edited.status_code == 200 and edited.json()["status"] == "pending"
+    assert edited.json()["reject_reason"] is None
+    assert (await client.get(f"/api/v1/wholesale-requests/{request_id}", headers=reader_headers)).status_code == 404
+    approved = await client.post(path, headers=admin, json={"action": "approve"})
+    assert approved.status_code == 200 and approved.json()["status"] == "approved"
+    assert (await client.post(path, headers=admin, json={"action": "approve"})).status_code == 200
+    await run_delivery_tick(session_factory)
+    assert any(data.get("wholesale_request_id") == request_id and data.get("status") == "approved" for _, _, data in sent)
+    async with session_factory() as db:
+        deliveries = list((await db.scalars(select(PushDelivery).where(PushDelivery.payload["wholesale_request_id"].astext == request_id))).all())
+        assert len(deliveries) == 2 and all(d.status == "sent" for d in deliveries)
+        assert all(d.recipient_type == ("driver" if author_role == "driver" else "user") for d in deliveries)
+        inbox = list((await db.scalars(select(UserNotification).where(UserNotification.user_id == author_id,
+                                    UserNotification.payload["wholesale_request_id"].astext == request_id))).all())
+        assert len(inbox) == 2
+    assert (await client.get(f"/api/v1/wholesale-requests/{request_id}", headers=reader_headers)).status_code == 200
+    assert (await client.post(f"/api/v1/wholesale-requests/{request_id}/close", headers=headers)).json()["status"] == "archived"
+    assert (await client.put(f"/api/v1/wholesale-requests/{request_id}", headers=headers, json=payload)).status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_wholesale_migration_preserves_legacy_records(session_factory):
+    import importlib.util
+    from sqlalchemy import text
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    spec = importlib.util.spec_from_file_location("wholesale_migration", "alembic/versions/s24_wholesale_moderation_cycle.py")
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    schema = "qa_wholesale_" + uuid4().hex[:12]
+    async with session_factory() as db:
+        conn = await db.connection()
+        await conn.execute(text(f"CREATE SCHEMA {schema}"))
+        await conn.execute(text(f"SET LOCAL search_path TO {schema}"))
+        await conn.execute(text("CREATE TABLE wholesale_requests (id serial PRIMARY KEY, status varchar(32), moderation_reason text)"))
+        await conn.execute(text("CREATE TABLE wholesale_events (status varchar(32))"))
+        for state in ("draft", "pending_moderation", "published", "hidden", "closed", "rejected"):
+            await conn.execute(text("INSERT INTO wholesale_requests (status, moderation_reason) VALUES (:s, 'Старая причина')"), {"s": state})
+            await conn.execute(text("INSERT INTO wholesale_events VALUES (:s)"), {"s": state})
+        def apply(sync_conn):
+            with Operations.context(MigrationContext.configure(sync_conn)):
+                migration.upgrade()
+        await conn.run_sync(apply)
+        rows = (await conn.execute(text("SELECT status, reject_reason FROM wholesale_requests ORDER BY id"))).all()
+        assert [s for s, _ in rows] == ["pending", "pending", "approved", "archived", "archived", "rejected"]
+        assert rows[-1][1] == "Старая причина" and all(reason is None for _, reason in rows[:-1])
+        assert (await conn.execute(text("SELECT count(*) FROM wholesale_events"))).scalar() == 6
+        await db.rollback()  # Drops the isolated test schema and all temporary records.

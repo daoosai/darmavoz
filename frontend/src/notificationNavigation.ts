@@ -16,7 +16,10 @@ export function openNotificationTarget(data?: Record<string, unknown> | null) {
   const role = useAuthStore.getState().role;
   const params = new URLSearchParams();
   let path = '/';
-  if (validId(data.order_id)) {
+  if (validId(data.wholesale_request_id)) {
+    params.set('notification_wholesale', data.wholesale_request_id);
+    if (role === 'admin') path = '/admin/moderation';
+  } else if (validId(data.order_id)) {
     params.set('notification_order', data.order_id);
     if (role === 'admin' || role === 'logist') {
       path = role === 'admin' ? '/admin/orders' : '/logist/orders';

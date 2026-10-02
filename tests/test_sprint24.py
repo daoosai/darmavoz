@@ -226,7 +226,7 @@ async def test_partner_access_ignores_legacy_whitelist(role):
 
 
 def test_expired_announcement_not_public():
-    assert not visible(SimpleNamespace(status="published", ends_on=date(2000, 1, 1)))
+    assert not visible(SimpleNamespace(status="approved", ends_on=date(2000, 1, 1)))
 
 
 def test_schema_rejects_invalid_dates():

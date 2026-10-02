@@ -111,7 +111,7 @@ export default function DriverOrdersScreen({
   onLogout,
 }: DriverOrdersScreenProps) {
   const { token } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<"orders" | "profile" | "support" | "wholesale">("orders");
+  const [activeTab, setActiveTab] = useState<"orders" | "profile" | "support" | "wholesale">(new URLSearchParams(window.location.search).has("notification_wholesale") ? "wholesale" : "orders");
   const [isOnShift, setIsOnShift] = useState(false);
   const [isUpdatingShift, setIsUpdatingShift] = useState(false);
   const [isPreparingShiftStart, setIsPreparingShiftStart] = useState(false);

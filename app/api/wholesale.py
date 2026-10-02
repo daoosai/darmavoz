@@ -8,9 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.db.database import get_db
-from app.models.models import City, Material, User
+from app.models.models import City, Driver, Material, User
 from app.models.commerce import WholesaleEvent, WholesaleFavorite, WholesaleRequest
 from app.schemas.commerce import AccessInput, ModerationInput, WholesaleInput, WholesaleOut
+from app.services.notification_outbox import enqueue
 from app.security.auth import OrderAccessActor, get_current_admin_user, get_current_order_actor
 
 router = APIRouter(prefix="/wholesale-requests", tags=["wholesale"])
@@ -42,7 +43,7 @@ def is_staff(user):
 
 
 def visible(request):
-    return request.status == "published" and request.ends_on >= today()
+    return request.status == "approved" and request.ends_on >= today()
 
 
 async def get_request(db, request_id, *, lock=False):
@@ -57,8 +58,10 @@ async def get_request(db, request_id, *, lock=False):
 
 def change_status(db, request, user, status, reason=None):
     request.status = status
-    request.moderation_reason = reason
-    db.add(WholesaleEvent(request_id=request.id, actor_id=user.id if user else None, status=status, reason=reason))
+    request.reject_reason = reason if status == "rejected" else None
+    event = WholesaleEvent(request_id=request.id, actor_id=user.id if user else None, status=status, reason=reason)
+    db.add(event)
+    return event
 
 
 async def serialize(db, request, user):
@@ -85,9 +88,9 @@ async def feed(view: str = Query("all", pattern="^(all|mine|favorites|moderation
     elif view == "moderation":
         if user.role.name != "admin":
             raise HTTPException(403, "Только администратор")
-        conditions.append(WholesaleRequest.status.in_(["pending_moderation", "published", "hidden", "rejected"]))
+        conditions.append(WholesaleRequest.status == "pending")
     else:
-        conditions.extend([WholesaleRequest.status == "published", WholesaleRequest.ends_on >= today()])
+        conditions.extend([WholesaleRequest.status == "approved", WholesaleRequest.ends_on >= today()])
     if view == "favorites":
         conditions.append(exists().where(WholesaleFavorite.request_id == WholesaleRequest.id, WholesaleFavorite.user_id == user.id, WholesaleFavorite.enabled.is_(True)))
     if q:
@@ -125,7 +128,7 @@ async def create(payload: WholesaleInput, user: User = Depends(board_user), db: 
     request = WholesaleRequest(**payload.model_dump(), author_id=user.id)
     db.add(request)
     await db.flush()
-    change_status(db, request, user, "draft")
+    change_status(db, request, user, "pending")
     await db.commit()
     await db.refresh(request)
     return await serialize(db, request, user)
@@ -144,10 +147,12 @@ async def edit(request_id: UUID, payload: WholesaleInput, user: User = Depends(b
     request = await get_request(db, request_id, lock=True)
     if request.author_id != user.id:
         raise HTTPException(403, "Можно изменять только свои заявки")
+    if request.status == "archived":
+        raise HTTPException(409, "Архивную заявку нельзя редактировать")
     await validate_input(db, payload)
     for key, value in payload.model_dump().items():
         setattr(request, key, value)
-    change_status(db, request, user, "pending_moderation" if request.status == "published" else "draft")
+    change_status(db, request, user, "pending")
     await db.commit()
     await db.refresh(request)
     return await serialize(db, request, user)
@@ -158,9 +163,9 @@ async def submit(request_id: UUID, user: User = Depends(board_user), db: AsyncSe
     request = await get_request(db, request_id, lock=True)
     if request.author_id != user.id:
         raise HTTPException(403, "Можно отправить только свою заявку")
-    if request.status not in {"draft", "rejected"} or request.ends_on < today():
+    if request.status not in {"pending", "rejected"} or request.ends_on < today():
         raise HTTPException(409, "Сначала отредактируйте заявку и проверьте сроки")
-    change_status(db, request, user, "pending_moderation")
+    change_status(db, request, user, "pending")
     await db.commit()
     await db.refresh(request)
     return await serialize(db, request, user)
@@ -171,7 +176,7 @@ async def close(request_id: UUID, user: User = Depends(board_user), db: AsyncSes
     request = await get_request(db, request_id, lock=True)
     if request.author_id != user.id and user.role.name != "admin":
         raise HTTPException(403, "Нет доступа")
-    change_status(db, request, user, "closed")
+    change_status(db, request, user, "archived")
     await db.commit()
     await db.refresh(request)
     return await serialize(db, request, user)
@@ -180,11 +185,31 @@ async def close(request_id: UUID, user: User = Depends(board_user), db: AsyncSes
 @router.post("/{request_id}/moderate", response_model=WholesaleOut)
 async def moderate(request_id: UUID, payload: ModerationInput, user: User = Depends(get_current_admin_user), db: AsyncSession = Depends(get_db)):
     request = await get_request(db, request_id, lock=True)
-    if payload.action == "publish" and (request.status not in {"pending_moderation", "hidden"} or request.ends_on < today()):
-        raise HTTPException(409, "Заявка не готова к публикации")
-    if payload.action != "publish" and not (payload.reason or "").strip():
-        raise HTTPException(422, "Укажите причину")
-    change_status(db, request, user, {"publish": "published", "reject": "rejected", "hide": "hidden"}[payload.action], payload.reason)
+    action = {"publish": "approve", "hide": "archive"}.get(payload.action, payload.action)
+    target = {"approve": "approved", "reject": "rejected", "archive": "archived"}[action]
+    reason = (payload.reason or "").strip()
+    if action == "reject" and not reason:
+        raise HTTPException(422, "Укажите причину отклонения")
+    # Repeated delivery of the same decision must not duplicate PUSH or history.
+    if request.status == target and (action != "reject" or request.reject_reason == reason):
+        return await serialize(db, request, user)
+    if action in {"approve", "reject"} and request.status != "pending":
+        raise HTTPException(409, "Решение можно принять только по заявке на модерации")
+    if action == "approve" and request.ends_on < today():
+        raise HTTPException(409, "Срок заявки закончился")
+    event = change_status(db, request, user, target, reason or None)
+    await db.flush()
+    if action in {"approve", "reject"}:
+        title = "Оптовая заявка одобрена" if action == "approve" else "Оптовая заявка отклонена"
+        body = ("Заявка опубликована в общей ленте." if action == "approve"
+                else f"Причина: {reason[:500]}" + ("…" if len(reason) > 500 else ""))
+        driver_id = await db.scalar(select(Driver.id).where(Driver.user_id == request.author_id))
+        await enqueue(db, key=f"wholesale:{event.id}:{request.author_id}",
+                      recipient_type="driver" if driver_id else "user",
+                      recipient_id=driver_id or request.author_id,
+                      event_type=f"wholesale_{target}", title=title, body=body,
+                      payload={"wholesale_request_id": str(request.id), "wholesale_event_id": str(event.id), "status": target},
+                      inbox=driver_id is None)
     await db.commit()
     await db.refresh(request)
     return await serialize(db, request, user)

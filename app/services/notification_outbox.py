@@ -65,6 +65,14 @@ async def enqueue_order_event(session, order, event_id, event_type):
 
 async def delivery_is_current(session, item):
     payload = item.payload
+    if payload.get('wholesale_request_id'):
+        from app.models.commerce import WholesaleEvent, WholesaleRequest
+        request_id = UUID(payload['wholesale_request_id'])
+        request = await session.get(WholesaleRequest, request_id)
+        latest = await session.scalar(select(WholesaleEvent.id).where(WholesaleEvent.request_id == request_id)
+                                      .order_by(WholesaleEvent.created_at.desc(), WholesaleEvent.id.desc()).limit(1))
+        if request is None or request.status != payload.get('status') or str(latest) != payload.get('wholesale_event_id'):
+            return False
     if payload.get('offer_id'):
         offer = await session.get(OrderOffer, UUID(payload['offer_id']))
         if offer is None or offer.status != 'pending' or offer.expires_at <= datetime.now(UTC): return False

@@ -49,8 +49,8 @@ class WholesaleOut(WholesaleInput):
     model_config = ConfigDict(from_attributes=True)
     id: UUID
     author_id: UUID
-    status: str
-    moderation_reason: str | None
+    status: Literal["pending", "approved", "rejected", "archived"]
+    reject_reason: str | None
     created_at: datetime
     updated_at: datetime
     is_favorite: bool = False
@@ -58,7 +58,7 @@ class WholesaleOut(WholesaleInput):
 
 
 class ModerationInput(BaseModel):
-    action: Literal["publish", "reject", "hide"]
+    action: Literal["approve", "reject", "archive", "publish", "hide"]
     reason: str | None = Field(default=None, max_length=2000)
 
 

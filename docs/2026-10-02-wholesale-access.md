@@ -15,3 +15,7 @@ Staff сохраняет инструменты модерации.
 Документ блока: blocks/wholesale-navigation.md.
 
 Адресные UI E2E: 11 passed.
+
+Доступ подтверждён внешним UI на активных supplier/driver с флагом допуска false.
+Commit f9675b73 доставлен вместе с 6416c4fa, CI success.
+Полный live-цикл и итог доставки: 2026-10-02-wholesale-moderation.md.

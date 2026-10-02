@@ -19,7 +19,7 @@ class WholesaleRequest(Base):
     material_name: Mapped[str] = mapped_column(String(255))
     volume: Mapped[Decimal] = mapped_column(Numeric(14, 3))
     unit: Mapped[str] = mapped_column(String(10))
-    vehicle_count: Mapped[int] = mapped_column(Integer)
+    vehicle_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     pickup_address: Mapped[str] = mapped_column(String(500))
     delivery_address: Mapped[str] = mapped_column(String(500))
     starts_on: Mapped[date] = mapped_column(Date)

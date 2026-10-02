@@ -74,14 +74,15 @@ test('новая оптовая заявка показывает предпро
   await page.getByRole('button', { name: 'Создать заявку', exact: true }).click();
   await page.getByLabel('Название материала', { exact: true }).fill('Щебень');
   await page.getByLabel('Общий объём', { exact: true }).fill('500');
-  await page.getByLabel('Количество машин', { exact: true }).fill('25');
+  await page.getByLabel('Количество машин (необязательно)', { exact: true }).fill('25');
   await page.getByLabel('Место загрузки', { exact: true }).fill('Тюмень, карьер');
   await page.getByLabel('Место доставки', { exact: true }).fill('Тюмень, стройка');
   await page.getByLabel('Контактное лицо', { exact: true }).fill('Заказчик');
   await page.getByLabel('Телефон', { exact: true }).fill('+79990000000');
   await page.getByLabel('Цена, ₽', { exact: true }).fill('450');
   await page.getByRole('button', { name: 'Предпросмотр', exact: true }).click();
-  await expect(page.getByText('Ищем перевозчиков. Щебень,', { exact: false })).toBeVisible();
+  await expect(page.getByTestId('wholesale-request-card').getByRole('heading', { name: 'Щебень', exact: true })).toBeVisible();
+  await expect(page.getByText('Нужно машин: 25', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Отправить на проверку', exact: true })).toBeVisible();
 });
 
@@ -196,7 +197,7 @@ test('модерация: причина обязательна, отклонё�
   await page.getByLabel('Причина отклонения', { exact: true }).fill('Уточните место загрузки');
   await page.getByRole('button', { name: 'Отклонить заявку', exact: true }).click();
   await expect(page.getByLabel('Причина отклонения', { exact: true })).toHaveCount(0);
-  await expect(page.getByText('Уточните место загрузки', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('wholesale-request-card').getByText('Уточните место загрузки', { exact: true })).toBeVisible();
 
   current = { ...current, is_owner: true };
   await page.evaluate(() => localStorage.setItem('auth-storage', JSON.stringify({ state: { token: 'e2e-only', role: 'supplier' }, version: 0 })));
@@ -291,4 +292,72 @@ test('адреса опта используют подсказки 2GIS и со
   }
   expect(searches[0].searchParams.get('location')).toBe('65,57');
   expect(searches[1].searchParams.has('location')).toBe(false);
+});
+
+test('карточка без количества машин одинакова в предпросмотре, модерации и ленте', async ({ page }) => {
+  await page.route('**/wholesale-requests**', async route => {
+    const row = { ...request, material_name: 'Бой кирпича', volume: '30', vehicle_count: null,
+      starts_on: '2026-10-02', ends_on: '2026-10-02', status: 'pending' };
+    const url = new URL(route.request().url());
+    const feed = url.pathname.endsWith('/wholesale-requests');
+    const role = await page.evaluate(() => JSON.parse(localStorage.getItem('auth-storage')!).state.role);
+    await route.fulfill({ json: feed ? { items: [{ ...row, status: role === 'driver' ? 'approved' : 'pending' }], total: 1 } : row });
+  });
+  await page.goto('/admin/profile');
+  await page.getByRole('button', { name: /Оптовые заявки Крупные/ }).click();
+  const card = page.getByTestId('wholesale-request-card');
+  await expect(card.getByRole('heading', { name: 'Бой кирпича' })).toBeVisible();
+  await expect(card.getByText('30 м³', { exact: true })).toBeVisible();
+  await expect(card.getByText('2 октября 2026 г.', { exact: true })).toBeVisible();
+  await expect(card.getByText(/Нужно машин/)).toHaveCount(0);
+  await expect(card.getByText('+7 (999) 000-00-00', { exact: true })).toBeVisible();
+  await card.getByRole('heading', { name: 'Бой кирпича' }).click();
+  await expect(page.getByRole('button', { name: 'Одобрить', exact: true })).toBeVisible();
+  await expect(card.getByText('2 октября 2026 г.', { exact: true })).toBeVisible();
+  await page.locator('section.fixed header').getByRole('button', { name: 'Назад', exact: true }).click();
+  await page.getByRole('button', { name: 'Создать заявку', exact: true }).click();
+  await page.getByLabel('Название материала', { exact: true }).fill('Бой кирпича');
+  await page.getByLabel('Общий объём', { exact: true }).fill('30');
+  const count = page.getByLabel('Количество машин (необязательно)', { exact: true });
+  expect(await count.evaluate((input: HTMLInputElement) => input.checkValidity())).toBe(true);
+  await page.getByRole('button', { name: 'Предпросмотр', exact: true }).click();
+  await expect(card.getByRole('heading', { name: 'Бой кирпича' })).toBeVisible();
+  await expect(card.getByText(/Нужно машин/)).toHaveCount(0);
+  await count.fill('2');
+  await expect(card.getByText('Нужно машин: 2', { exact: true })).toBeVisible();
+  await page.addInitScript(() => localStorage.setItem('auth-storage', JSON.stringify({
+    state: { token: 'e2e-only', role: 'driver' }, version: 0,
+  })));
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Опт', exact: true }).click();
+  await expect(card.getByText('Опубликовано', { exact: true })).toBeVisible();
+  await expect(card.getByRole('heading', { name: 'Бой кирпича' })).toBeVisible();
+  await expect(card.getByText(/Нужно машин/)).toHaveCount(0);
+});
+
+test('сохранение формы без количества машин передаёт null', async ({ page }) => {
+  let saved: any;
+  await page.addInitScript(() => localStorage.setItem('auth-storage', JSON.stringify({
+    state: { token: 'e2e-only', role: 'supplier' }, version: 0,
+  })));
+  await page.route('**/wholesale-requests**', route => {
+    if (route.request().method() === 'POST') {
+      saved = route.request().postDataJSON();
+      return route.fulfill({ status: 201, json: { ...request, ...saved, status: 'pending', is_owner: true } });
+    }
+    return route.fulfill({ json: { items: saved ? [{ ...request, ...saved, status: 'pending', is_owner: true }] : [], total: saved ? 1 : 0 } });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Опт', exact: true }).click();
+  await page.getByRole('button', { name: 'Создать заявку', exact: true }).click();
+  await page.getByLabel('Город загрузки', { exact: true }).selectOption(cityId);
+  for (const [label, value] of [['Название материала', 'Бой кирпича'], ['Общий объём', '30'],
+    ['Место загрузки', 'Карьер А'], ['Место доставки', 'Стройка Б'],
+    ['Контактное лицо', 'Автор'], ['Телефон', '+79990000000'], ['Цена, ₽', '150']]) {
+    await page.getByLabel(label, { exact: true }).fill(value);
+  }
+  await page.getByRole('button', { name: 'Сохранить', exact: true }).click();
+  await expect(page.getByText('На модерации', { exact: true })).toBeVisible();
+  expect(saved.vehicle_count).toBeNull();
+  await expect(page.getByTestId('wholesale-request-card').getByText(/Нужно машин/)).toHaveCount(0);
 });

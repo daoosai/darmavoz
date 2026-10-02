@@ -12,7 +12,7 @@ class WholesaleInput(BaseModel):
     material_name: str = Field(min_length=1, max_length=255)
     volume: Decimal = Field(gt=0, le=999999999, decimal_places=3)
     unit: Literal["m3", "t"] = "m3"
-    vehicle_count: int = Field(gt=0, le=100000)
+    vehicle_count: int | None = Field(default=None, gt=0, le=100000)
     pickup_address: str = Field(min_length=3, max_length=500)
     delivery_address: str = Field(min_length=3, max_length=500)
     starts_on: date
@@ -22,6 +22,11 @@ class WholesaleInput(BaseModel):
     contact_name: str = Field(min_length=1, max_length=255)
     contact_phone: str = Field(min_length=10, max_length=30, pattern=r"^\+?[0-9 ()-]+$")
     comment: str | None = Field(default=None, max_length=5000)
+
+    @field_validator("vehicle_count", mode="before")
+    @classmethod
+    def optional_vehicle_count(cls, value):
+        return None if value is None or value == "" or value == 0 or value == "0" else value
 
     @field_validator("material_name", "pickup_address", "delivery_address", "contact_name")
     @classmethod

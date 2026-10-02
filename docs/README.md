@@ -32,3 +32,5 @@
 - [Модерация оптовых заявок и PUSH](2026-10-02-wholesale-moderation.md).
 
 - [UX формы оптовых заявок и layout](2026-10-02-wholesale-form-layout.md)
+
+- [Необязательное количество машин и общая карточка](2026-10-02-wholesale-optional-count-card.md)

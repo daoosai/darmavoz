@@ -281,3 +281,34 @@ async def test_wholesale_migration_preserves_legacy_records(session_factory):
         assert rows[-1][1] == "Старая причина" and all(reason is None for _, reason in rows[:-1])
         assert (await conn.execute(text("SELECT count(*) FROM wholesale_events"))).scalar() == 6
         await db.rollback()  # Drops the isolated test schema and all temporary records.
+
+
+@pytest.mark.asyncio
+async def test_wholesale_optional_vehicle_count_roundtrip(client, session_factory, admin_token):
+    async with session_factory() as db:
+        _, headers = await create_actor(db, "supplier")
+        _, driver_headers = await create_actor(db, "driver")
+        city = await db.scalar(select(City).where(City.is_active.is_(True)).limit(1))
+        city_id = str(city.id)
+        await db.commit()
+    payload = dict(city_id=city_id, material_name="Бой кирпича", volume="30",
+                   pickup_address="Карьер А", delivery_address="Стройка Б",
+                   starts_on=str(today()), ends_on=str(today()), price="150",
+                   contact_name="Автор", contact_phone="+79990000000")
+    for extra in ({}, {"vehicle_count": None}, {"vehicle_count": 0}):
+        response = await client.post("/api/v1/wholesale-requests", headers=headers, json={**payload, **extra})
+        assert response.status_code == 201, response.text
+        row = response.json()
+        assert row["vehicle_count"] is None and row["status"] == "pending"
+        path = "/api/v1/wholesale-requests/" + row["id"]
+        updated = await client.put(path, headers=headers, json={**payload, "vehicle_count": 7})
+        assert updated.status_code == 200 and updated.json()["vehicle_count"] == 7
+        cleared = await client.put(path, headers=headers, json=payload)
+        assert cleared.status_code == 200 and cleared.json()["vehicle_count"] is None
+        approved = await client.post(path + "/moderate", headers={"Authorization": f"Bearer {admin_token}"}, json={"action": "approve"})
+        assert approved.status_code == 200
+        viewed = await client.get(path, headers=driver_headers)
+        assert viewed.status_code == 200 and viewed.json()["vehicle_count"] is None
+    for invalid in (-1, 1.5, 100001):
+        response = await client.post("/api/v1/wholesale-requests", headers=headers, json={**payload, "vehicle_count": invalid})
+        assert response.status_code == 422

@@ -241,7 +241,7 @@ export default function AdminDashboardScreen({
   const driverQueryRef = useRef({ filters: driverFilters, page: driverPage });
   driverQueryRef.current = { filters: driverFilters, page: driverPage };
   const cityId = useOperatorCityStore((state) => state.cityId);
-  useEffect(() => { if (cityId && driverFilters.without_city) setDriverFilters((current) => ({ ...current, without_city: "" })); setDriverHasMore(false); }, [cityId]);
+  useEffect(() => { setDriverFilters((current) => ({ ...current, city_id: "", without_city: "" })); setDriverHasMore(false); }, [cityId]);
   const [activeTab, setActiveTab] = useState<AdminTab>(initialTab);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
@@ -891,11 +891,11 @@ export default function AdminDashboardScreen({
     try {
       let res = await operatorFetch(`${baseURL}/admin/drivers?${new URLSearchParams([...Object.entries(driverQueryRef.current.filters as Record<string, string>).filter(([, value]) => value), ["offset", String(driverQueryRef.current.page * 50)], ["limit", "51"]])}`, {
         headers: { Authorization: `Bearer ${token}` },
-      });
+      }, driverQueryRef.current.filters.city_id || undefined);
       if (res.status === 404 || res.status === 405) {
         res = await operatorFetch(`${baseURL}/admin/drivers?${new URLSearchParams([...Object.entries(driverQueryRef.current.filters as Record<string, string>).filter(([, value]) => value), ["offset", String(driverQueryRef.current.page * 50)], ["limit", "51"]])}`, {
           headers: { Authorization: `Bearer ${token}` },
-        });
+        }, driverQueryRef.current.filters.city_id || undefined);
       }
       if (!res.ok) throw new Error("Ошибка загрузки водителей");
       const data = await res.json();
@@ -3090,6 +3090,7 @@ export default function AdminDashboardScreen({
                           <h3 className="font-bold text-slate-800 text-base truncate pr-2">
                             {d.name}
                           </h3>
+                          <DriverSummary driver={d} />
                           <div className="flex flex-col gap-0.5 mt-1">
                             <span className="text-sm font-medium text-slate-700">
                               Телефон: {d.phone}

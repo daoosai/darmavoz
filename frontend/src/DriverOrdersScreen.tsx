@@ -14,6 +14,7 @@ import {
   handleApiError,
 } from "./utils";
 import DriverProfileScreen from "./DriverProfileScreen";
+import NotificationCenter from "./components/shared/NotificationCenter";
 import {
   LogOut,
   MapPin,
@@ -668,7 +669,7 @@ export default function DriverOrdersScreen({
   return (
     <div className="flex flex-col min-h-screen bg-slate-50 sm:max-w-md sm:mx-auto shadow-2xl relative overflow-y-auto overflow-x-hidden pb-28">
       {/* Header */}
-      <div className="bg-white px-5 pt-3 pb-3 shadow-sm z-10 sticky top-0 border-b border-slate-100">
+      <div className="bg-white px-5 pt-[max(env(safe-area-inset-top),2.5rem)] pb-3 shadow-sm z-10 sticky top-0 border-b border-slate-100">
         <div className="flex justify-between items-center mb-3">
           <div>
             <h1 className="text-2xl font-black text-[#2DB0E6] tracking-tight">
@@ -678,12 +679,16 @@ export default function DriverOrdersScreen({
               Панель водителя
             </p>
           </div>
-          <button
-            onClick={handleLogout}
-            className="p-2.5 bg-slate-50 rounded-full hover:bg-slate-100 text-slate-600 transition-colors"
-          >
-            <LogOut className="w-5 h-5" />
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <NotificationCenter token={token} />
+            <button
+              aria-label="Выйти из аккаунта"
+              onClick={handleLogout}
+              className="p-2.5 bg-slate-50 rounded-full hover:bg-slate-100 text-slate-600 transition-colors"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
       </div>

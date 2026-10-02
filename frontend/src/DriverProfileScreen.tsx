@@ -29,7 +29,6 @@ import UpdateBanner from "./UpdateBanner";
 import toast from "react-hot-toast";
 import { DriverOrder, DriverOrderCard } from "./DriverOrdersScreen";
 import DeleteAccountButton from "./components/shared/DeleteAccountButton";
-import NotificationCenter from "./components/shared/NotificationCenter";
 import CommerceMenu from './CommerceMenu';
 
 interface DriverProfile {
@@ -817,7 +816,6 @@ export default function DriverProfileScreen({
           <h2 className="font-bold text-slate-800">Города обслуживания</h2>
           <p className="mt-2 text-sm text-slate-600">{profile?.city_names?.join(", ") || "Город не назначен. Обратитесь к логисту"}</p>
         </section>
-        <NotificationCenter token={useAuthStore.getState().token} />
         <NotificationToggle role="driver" />
         <button
           onClick={async () => {

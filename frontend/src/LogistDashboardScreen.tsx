@@ -299,7 +299,7 @@ export default function LogistDashboardScreen({
   const driverQueryRef = useRef({ filters: driverFilters, page: driverPage });
   driverQueryRef.current = { filters: driverFilters, page: driverPage };
   const cityId = useOperatorCityStore((state) => state.cityId);
-  useEffect(() => { if (cityId && driverFilters.without_city) setDriverFilters((current) => ({ ...current, without_city: "" })); setDriverHasMore(false); }, [cityId]);
+  useEffect(() => { setDriverFilters((current) => ({ ...current, city_id: "", without_city: "" })); setDriverHasMore(false); }, [cityId]);
   const [activeTab, setActiveTab] = useState<LogistTab>(initialTab);
   const [equipmentTab, setEquipmentTab] = useState<AdminEquipmentTab>("listings");
   const [equipmentPlacementFilter, setEquipmentPlacementFilter] =
@@ -477,7 +477,7 @@ export default function LogistDashboardScreen({
         headers: {
           Authorization: `Bearer ${token}`,
         },
-      });
+      }, driverQueryRef.current.filters.city_id || undefined);
 
       if (!res.ok) {
         throw new Error(`Server returned ${res.status}`);
@@ -1230,7 +1230,6 @@ export default function LogistDashboardScreen({
                           </div>
                         </div>
                         {(() => {
-                          const fleetStatus = getFleetDriverStatus(driver.status);
                           if (
                             driver.moderation_status === "pending_moderation"
                           ) {
@@ -1250,23 +1249,7 @@ export default function LogistDashboardScreen({
                               </span>
                             );
                           }
-                          return (
-                            <span
-                              className={`text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-lg border shrink-0 ${
-                                fleetStatus === "available"
-                                  ? "bg-green-50 text-green-700 border-green-200"
-                                  : fleetStatus === "busy"
-                                    ? "bg-orange-50 text-orange-700 border-orange-200"
-                                    : "bg-slate-50 text-slate-600 border-slate-200"
-                              }`}
-                            >
-                              {fleetStatus === "available"
-                                ? "Свободен"
-                                : fleetStatus === "busy"
-                                  ? "Занят"
-                                  : "Недоступен"}
-                            </span>
-                          );
+                          return null;
                         })()}
                       </div>
 

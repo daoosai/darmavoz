@@ -11,13 +11,14 @@ export const useOperatorCityStore = create<OperatorCityState>()(persist((set) =>
   setCities: (cities) => set((state) => ({ cities, cityId: cities.some((city) => city.id === state.cityId) ? state.cityId : '' })),
 }), { name: 'operator-city', partialize: (state) => ({ cityId: state.cityId }) }));
 const scopedLists = /^\/(?:admin\/(?:drivers|orders|suppliers|users|statistics|cars|pickup-points|quarries|equipment|water-points|septic-providers|moderation\/(?:pending|count)|sidebar\/counts|placements\/summary)|logist\/(?:orders|driver-map)|drivers)\/?$/;
-export async function operatorFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+export async function operatorFetch(input: RequestInfo | URL, init?: RequestInit, cityOverride?: string): Promise<Response> {
   const url = new URL(String(input), window.location.origin);
   const path = url.pathname.replace(/^\/api\/v1/, '');
   const scoped = (!init?.method || init.method.toUpperCase() === 'GET') && scopedLists.test(path);
   const cityId = useOperatorCityStore.getState().cityId;
+  const requestCityId = cityOverride ?? cityId;
   if (scoped) {
-    if (cityId) url.searchParams.set('city_id', cityId);
+    if (requestCityId) url.searchParams.set('city_id', requestCityId);
     else url.searchParams.delete('city_id');
   }
   const response = await fetch(scoped ? url : input, init);

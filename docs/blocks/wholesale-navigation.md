@@ -34,3 +34,7 @@ API-допуск сохранён: /wholesale-requests/access проверяет
 только driver и supplier. Для equipment_owner и water_septic_partner переходы
 убраны из нижней панели и CommerceMenu профиля. Staff сохраняет прежний доступ
 к модерации. Backend-права и данные пользователей не менялись.
+
+Итог ограничения ролей: 10 адресных E2E и lint прошли; CI success,
+runtime/image f2e120e3. Внешние кабинеты всех пяти ролей проверены на 320/1440px.
+Полный отчёт: ../2026-10-02-wholesale-role-visibility.md.

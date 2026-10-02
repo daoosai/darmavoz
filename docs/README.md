@@ -24,3 +24,5 @@
 - [Hotfix авторизации](2026-10-02-auth-hotfix.md).
 
 - [Исправление навигации опта](2026-10-02-wholesale-navigation.md).
+
+- [Видимость опта по ролям](2026-10-02-wholesale-role-visibility.md).

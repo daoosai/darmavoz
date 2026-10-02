@@ -86,7 +86,7 @@ test('новая оптовая заявка показывает предпро
 });
 
 // Start in the partner cabinet and click its navigation, never a wholesale URL.
-for (const role of ['driver', 'supplier', 'equipment_owner', 'water_septic_partner']) {
+for (const role of ['driver', 'supplier']) {
   for (const width of [320, 1440]) {
     test(`партнёр ${role} открывает Опт из навигации на ${width}px`, async ({ page }) => {
       await page.addInitScript(role => localStorage.setItem('auth-storage', JSON.stringify({
@@ -130,3 +130,21 @@ test('у клиента B2C нет вкладки Опт', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Опт', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Оптовые заявки/ })).toHaveCount(0);
 });
+
+for (const role of ['equipment_owner', 'water_septic_partner']) {
+  for (const width of [320, 1440]) {
+    test(`партнёр ${role} не видит Опт даже с допуском на ${width}px`, async ({ page }) => {
+      await page.addInitScript(role => localStorage.setItem('auth-storage', JSON.stringify({
+        state: { token: 'e2e-only', role }, version: 0,
+      })), role);
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/');
+      const profile = page.getByRole('button', { name: 'Профиль', exact: true });
+      await expect(profile).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Опт', exact: true })).toHaveCount(0);
+      await profile.click();
+      await expect(page.getByRole('button', { name: 'Опт', exact: true })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: /Оптовые заявки/ })).toHaveCount(0);
+    });
+  }
+}

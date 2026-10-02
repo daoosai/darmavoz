@@ -1,5 +1,4 @@
 import { useState } from "react";
-import WholesaleScreen from "./WholesaleScreen";
 
 import EquipmentOwnerProfileScreen from "./EquipmentOwnerProfileScreen";
 import SepticProviderProfileScreen from "./SepticProviderProfileScreen";
@@ -24,9 +23,7 @@ export default function WaterSepticPartnerPortalScreen({ onBack }: { onBack: () 
 
     return (
       <div className="min-h-screen bg-gray-50 pb-24 sm:mx-auto sm:max-w-md">
-        {activeView === "wholesale" ? (
-          <WholesaleScreen onClose={() => setActiveView("water")} />
-        ) : activeView === "water" ? (
+        {activeView === "water" ? (
           <SupplierWaterPointsScreen
             token={token}
             apiPrefix="/water-septic-partner"

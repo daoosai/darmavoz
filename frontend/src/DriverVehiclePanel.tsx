@@ -28,13 +28,19 @@ export default function DriverVehiclePanel({ driver, onClose, onSaved }: { drive
   const [error, setError] = useState('');
   useEffect(() => {
     let active = true;
+    setLoading(true); setLoadFailed(false); setError('');
     Promise.all([
+      commerceApi(`/admin/drivers/${driver.id}`),
       commerceApi(`/admin/drivers/${driver.id}/vehicles`),
       commerceApi('/catalog/transport-categories'),
       commerceApi('/catalog/delivery-options/'),
-    ]).then(([available, categories, options]) => {
+    ]).then(([currentDriver, available, categories, options]) => {
       if (!active) return;
-      setVehicles(available); setCategories(categories); setOptions(options.filter((option: any) => option.is_active !== false));
+      const currentVehicle = currentDriver.vehicle || available.find((vehicle: any) => vehicle.id === currentDriver.vehicle_id);
+      const selectableVehicles = currentVehicle && !available.some((vehicle: any) => vehicle.id === currentVehicle.id)
+        ? [currentVehicle, ...available] : available;
+      setForm(fieldsFrom(currentVehicle));
+      setVehicles(selectableVehicles); setCategories(categories); setOptions(options.filter((option: any) => option.is_active !== false));
     }).catch(error => { if (active) { setError(error.message); setLoadFailed(true); } }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [driver.id]);

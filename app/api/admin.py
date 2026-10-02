@@ -1630,7 +1630,9 @@ async def list_driver_available_vehicles(
 ):
     await _load_driver_or_404(db, driver_id)
     vehicles = await _list_admin_vehicles(db)
-    occupied = set((await db.scalars(select(Driver.vehicle_id).where(Driver.vehicle_id.is_not(None)))).all())
+    occupied = set((await db.scalars(select(Driver.vehicle_id).where(
+        Driver.vehicle_id.is_not(None), Driver.id != driver_id,
+    ))).all())
     return [vehicle for vehicle in vehicles if vehicle.is_active and vehicle.id not in occupied]
 
 

@@ -30,3 +30,5 @@
 - [Доступ к оптовым заявкам без whitelist](2026-10-02-wholesale-access.md).
 
 - [Модерация оптовых заявок и PUSH](2026-10-02-wholesale-moderation.md).
+
+- [UX формы оптовых заявок и layout](2026-10-02-wholesale-form-layout.md)

@@ -34,6 +34,7 @@ export default function SupplierPortalScreen({ onBack }: { onBack: () => void })
           <SupplierProfileScreen
             token={token}
             onLogout={handleLogout}
+            onOpenWholesale={() => setActiveView("wholesale")}
             onOpenSupport={() => setActiveView("support")}
           />
         )}

@@ -102,9 +102,20 @@ for (const role of ['driver', 'supplier']) {
       await tab.click();
       await expect(page.getByRole('heading', { name: 'Оптовые заявки', exact: true })).toBeVisible();
       await expect(page.getByRole('heading', { name: 'Песок', exact: true })).toBeVisible();
+      await expect(tab).toHaveAttribute('aria-current', 'page');
+      // Visibility alone misses a fullscreen layer intercepting the navigation.
+      await tab.click({ trial: true });
+      const bell = page.locator('section.fixed header').getByRole('button', { name: 'Открыть уведомления' });
+      await expect(bell).toBeVisible();
+      await bell.click({ trial: true });
       await page.screenshot({ path: `test-results/wholesale-nav-${role}-${width}.png`, fullPage: true });
       await page.locator('section.fixed').getByRole('button', { name: 'Назад', exact: true }).click();
       await expect(tab).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Оптовые заявки', exact: true })).toHaveCount(0);
+      await page.getByRole('button', { name: 'Профиль', exact: true }).click();
+      await page.getByRole('button', { name: /Оптовые заявки Крупные/ }).click();
+      await expect(tab).toHaveAttribute('aria-current', 'page');
+      await page.getByRole('button', { name: 'Профиль', exact: true }).click();
       await expect(page.getByRole('heading', { name: 'Оптовые заявки', exact: true })).toHaveCount(0);
     });
   }
@@ -233,4 +244,51 @@ test('колокольчик опта открывает уведомление 
   await expect(page).toHaveURL(new RegExp('notification_wholesale=' + requestId));
   await expect(page.locator('section.fixed').getByText(reason, { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Редактировать', exact: true })).toBeVisible();
+});
+
+test('форма опта загружает каталог, переключает ручной материал и маскирует телефон', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('auth-storage', JSON.stringify({
+    state: { token: 'e2e-only', role: 'supplier' }, version: 0,
+  })));
+  await page.route('**/catalog/materials/**', route => route.fulfill({ json: [
+    { id: '50000000-0000-4000-8000-000000000005', name: 'Щебень из каталога' },
+  ] }));
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Опт', exact: true }).click();
+  await page.getByRole('button', { name: 'Создать заявку', exact: true }).click();
+  await page.getByLabel('Материал', { exact: true }).selectOption('50000000-0000-4000-8000-000000000005');
+  await expect(page.getByLabel('Название материала')).toHaveCount(0);
+  await page.getByLabel('Материал', { exact: true }).selectOption('');
+  await page.getByLabel('Название материала').fill('Свой материал');
+  await page.getByLabel('Телефон', { exact: true }).fill('89041146809');
+  await expect(page.getByLabel('Телефон', { exact: true })).toHaveValue('+7 (904) 114-68-09');
+  await page.getByLabel('Телефон', { exact: true }).fill('123');
+  expect(await page.getByLabel('Телефон', { exact: true }).evaluate((el: HTMLInputElement) => el.checkValidity())).toBe(false);
+  await page.getByRole('button', { name: 'Опт', exact: true }).click({ trial: true });
+  await page.getByRole('button', { name: 'Точки', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Новая оптовая заявка' })).toHaveCount(0);
+});
+
+test('адреса опта используют подсказки 2GIS и сохраняют выбранный адрес', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('auth-storage', JSON.stringify({
+    state: { token: 'e2e-only', role: 'supplier' }, version: 0,
+  })));
+  const searches: URL[] = [];
+  await page.route('https://catalog.api.2gis.com/3.0/suggests**', route => {
+    searches.push(new URL(route.request().url()));
+    return route.fulfill({ json: { result: { items: [
+      { id: 'suggest-1', full_address_name: 'Тюмень, улица Республики, 10', type: 'building' },
+    ] } } });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Опт', exact: true }).click();
+  await page.getByRole('button', { name: 'Создать заявку', exact: true }).click();
+  await page.getByLabel('Город загрузки', { exact: true }).selectOption(cityId);
+  for (const label of ['Место загрузки', 'Место доставки']) {
+    await page.getByLabel(label, { exact: true }).fill('Республики');
+    await page.getByRole('listbox').getByRole('button', { name: 'Тюмень, улица Республики, 10' }).click();
+    await expect(page.getByLabel(label, { exact: true })).toHaveValue('Тюмень, улица Республики, 10');
+  }
+  expect(searches[0].searchParams.get('location')).toBe('65,57');
+  expect(searches[1].searchParams.has('location')).toBe(false);
 });

@@ -827,6 +827,7 @@ export default function DriverOrdersScreen({
           onLogout={handleLogout}
           onProfileUpdate={fetchProfile}
           hasActiveOrder={orders.length > 0}
+          onOpenWholesale={() => setActiveTab("wholesale")}
           onOpenSupport={() => setActiveTab("support")}
           isOnShift={isOnShift}
           isUpdatingShift={isShiftActionPending}

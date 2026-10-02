@@ -77,6 +77,7 @@ export default function DriverProfileScreen({
   onProfileUpdate,
   hasActiveOrder,
   onOpenSupport,
+  onOpenWholesale,
   isOnShift = false,
   isUpdatingShift = false,
   trackingState = "idle",
@@ -87,6 +88,7 @@ export default function DriverProfileScreen({
   onProfileUpdate?: () => void;
   hasActiveOrder?: boolean;
   onOpenSupport?: () => void;
+  onOpenWholesale?: () => void;
   isOnShift?: boolean;
   isUpdatingShift?: boolean;
   trackingState?: "idle" | "tracking" | "permission_denied" | "error";
@@ -539,7 +541,7 @@ export default function DriverProfileScreen({
   return (
     <div className="flex flex-col flex-1 bg-slate-50 w-full relative">
       <div className="flex-1 flex flex-col gap-4 p-5 pb-6">
-        <CommerceMenu />
+        <CommerceMenu onOpenWholesale={onOpenWholesale} />
         <UpdateBanner />
 
         {moderationStatus === "approved" && !isDriverInactive && (

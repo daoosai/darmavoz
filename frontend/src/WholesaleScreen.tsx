@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { ClipboardList, Copy, Heart, Loader2, MapPin, Phone, Plus, Search, Truck, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import CommerceShell from './CommerceShell';
@@ -8,7 +8,7 @@ import CommerceAddressInput from './CommerceAddressInput';
 import { buttonClass, commerceApi, dateTime, inputClass, rubles } from './commerceApi';
 import { useAuthStore } from './store';
 import { useCityStore } from './cityStore';
-import { baseURL } from './utils';
+import { baseURL, formatPhoneNumber } from './utils';
 
 interface Announcement {
   id: string; author_id: string; city_id: string; material_id: string | null; material_name: string; volume: string; unit: string;
@@ -74,8 +74,10 @@ export default function WholesaleScreen({ onClose, initialView = 'all' }: { onCl
     const id = new URLSearchParams(window.location.search).get('notification_wholesale');
     if (id && /^[0-9a-f-]{36}$/i.test(id)) void open({ id });
   }, []);
-  if (editing) return <WholesaleForm request={editing === 'new' ? null : editing} initialCity={cityId || ''} cities={cities.filter(c => c.is_active)} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setDetail(null); setView('mine'); setPage(1); void load(); }} />;
-  return <CommerceShell title="Оптовые заявки" subtitle="Крупные объёмы · прямые договорённости" onClose={detail ? () => { setDetail(null); setReasonAction(null); } : onClose}>
+  const embedded = role === 'driver' || role === 'supplier';
+  const headerActions = <NotificationCenter token={token} overlayZIndex={100001} />;
+  if (editing) return <WholesaleForm embedded={embedded} headerActions={headerActions} request={editing === 'new' ? null : editing} initialCity={cityId || ''} cities={cities.filter(c => c.is_active)} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setDetail(null); setView('mine'); setPage(1); void load(); }} />;
+  return <CommerceShell embedded={embedded} headerActions={headerActions} title="Оптовые заявки" subtitle="Крупные объёмы · прямые договорённости" onClose={detail ? () => { setDetail(null); setReasonAction(null); } : onClose}>
     {detail ? <>
       <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
         <div className="flex justify-between gap-3"><span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-bold text-sky-600">{states[detail.status]}</span><span className="text-xs text-slate-400">{dateTime(detail.created_at)}</span></div>
@@ -106,7 +108,6 @@ export default function WholesaleScreen({ onClose, initialView = 'all' }: { onCl
       </div>}
       {history.length > 0 && <div className="rounded-2xl bg-white p-4"><h3 className="mb-3 font-bold">История</h3>{history.map((h, i) => <p key={i} className="mb-2 text-sm text-slate-500">{dateTime(h.created_at)} · {states[h.status]} {h.reason && `— ${h.reason}`}</p>)}</div>}
     </> : <>
-      <div className="flex justify-end"><NotificationCenter token={token} overlayZIndex={100001} /></div>
       <div className="rounded-3xl bg-gradient-to-br from-sky-500 to-sky-600 p-5 text-white shadow-sm"><ClipboardList className="mb-3 h-7 w-7" /><h2 className="text-xl font-extrabold">Найдите перевозчиков</h2><p className="mt-2 text-sm leading-relaxed text-sky-50">Разместите объём и условия. Партнёры свяжутся с вами и договорятся о перевозке.</p><button className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-bold text-sky-600" onClick={() => setEditing('new')}><Plus className="h-4 w-4" />Создать заявку</button></div>
       <div className="flex gap-1 overflow-x-auto rounded-2xl bg-white p-1">{[['all', 'Все'], ['favorites', 'Избранное'], ['mine', 'Мои заявки'], ...(role === 'admin' ? [['moderation', 'Модерация']] : [])].map(([id, label]) => <button key={id} className={`min-h-11 flex-1 whitespace-nowrap rounded-xl px-3 text-xs font-bold ${view === id ? 'bg-sky-50 text-sky-600' : 'text-slate-500'}`} onClick={() => { setView(id); setPage(1); }}>{label}</button>)}</div>
       <div className="space-y-3 rounded-2xl bg-white p-4"><label className="relative block"><Search className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" /><input className={`${inputClass} pl-9`} placeholder="Поиск материала" value={q} onChange={e => { setQ(e.target.value); setPage(1); }} /></label><select aria-label="Город загрузки" className={inputClass} value={city} onChange={e => { setCity(e.target.value); setPage(1); }}><option value="">Все города загрузки</option>{cities.filter(c => c.is_active).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select><div className="grid grid-cols-2 gap-2"><label className="text-xs text-slate-500">Сроки от<input type="date" className={`${inputClass} mt-1`} value={from} onChange={e => { setFrom(e.target.value); setPage(1); }} /></label><label className="text-xs text-slate-500">До<input type="date" className={`${inputClass} mt-1`} value={to} onChange={e => { setTo(e.target.value); setPage(1); }} /></label></div></div>
@@ -117,18 +118,33 @@ export default function WholesaleScreen({ onClose, initialView = 'all' }: { onCl
   </CommerceShell>;
 }
 
-function WholesaleForm({ request, initialCity, cities, onClose, onSaved }: { request: Announcement | null; initialCity: string; cities: any[]; onClose: () => void; onSaved: () => void }) {
-  const [form, setForm] = useState<any>(request ? { ...request, material_id: request.material_id || '', comment: request.comment || '' } : blank(initialCity));
+function WholesaleForm({ embedded, headerActions, request, initialCity, cities, onClose, onSaved }: { embedded: boolean; headerActions: ReactNode; request: Announcement | null; initialCity: string; cities: any[]; onClose: () => void; onSaved: () => void }) {
+  const [form, setForm] = useState<any>(request ? { ...request, material_id: request.material_id || '', contact_phone: formatPhoneNumber(request.contact_phone), comment: request.comment || '' } : blank(initialCity));
   const [materials, setMaterials] = useState<any[]>([]);
+  const [materialsLoading, setMaterialsLoading] = useState(false);
+  const [materialsError, setMaterialsError] = useState(false);
+  const [materialsRetry, setMaterialsRetry] = useState(0);
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState(false);
-  useEffect(() => { if (form.city_id) fetch(`${baseURL}/catalog/materials?city_id=${form.city_id}`).then(r => r.ok ? r.json() : []).then(r => setMaterials(Array.isArray(r) ? r : [])).catch(() => setMaterials([])); }, [form.city_id]);
+  useEffect(() => {
+    const controller = new AbortController();
+    setMaterialsLoading(true); setMaterialsError(false); setMaterials([]);
+    const params = new URLSearchParams();
+    if (form.city_id) params.set('city_id', form.city_id);
+    fetch(`${baseURL}/catalog/materials/?${params}`, { signal: controller.signal })
+      .then(r => { if (!r.ok) throw new Error('Каталог недоступен'); return r.json(); })
+      .then(rows => { if (!controller.signal.aborted) setMaterials(Array.isArray(rows) ? rows : []); })
+      .catch(e => { if (e.name !== 'AbortError') setMaterialsError(true); })
+      .finally(() => { if (!controller.signal.aborted) setMaterialsLoading(false); });
+    return () => controller.abort();
+  }, [form.city_id, materialsRetry]);
   const field = (name: string, value: string) => setForm((f: any) => ({ ...f, [name]: value }));
   const save = async () => {
     setBusy(true);
     try {
       const names = Object.keys(blank(''));
       const body = Object.fromEntries(names.map(key => [key, form[key]]));
+      body.contact_phone = form.contact_phone.replace(/[^+\d]/g, '');
       body.material_id = form.material_id || null; body.vehicle_count = Number(form.vehicle_count);
       await commerceApi(`/wholesale-requests${request ? `/${request.id}` : ''}`, { method: request ? 'PUT' : 'POST', body: JSON.stringify(body) });
       toast.success('Заявка отправлена на модерацию'); onSaved();
@@ -136,15 +152,15 @@ function WholesaleForm({ request, initialCity, cities, onClose, onSaved }: { req
     finally { setBusy(false); }
   };
   const textFields = [['contact_name', 'Контактное лицо'], ['contact_phone', 'Телефон']] as const;
-  return <CommerceShell title={request ? 'Редактировать заявку' : 'Новая оптовая заявка'} subtitle="Укажите объём, маршрут и условия перевозки" onClose={onClose}>
+  return <CommerceShell embedded={embedded} headerActions={headerActions} title={request ? 'Редактировать заявку' : 'Новая оптовая заявка'} subtitle="Укажите объём, маршрут и условия перевозки" onClose={onClose}>
     <form className="space-y-4 rounded-3xl bg-white p-5 shadow-sm" onSubmit={e => { e.preventDefault(); void save(); }}>
-      <label className="block text-sm font-semibold">Город загрузки<select required className={`${inputClass} mt-2`} value={form.city_id} onChange={e => { field('city_id', e.target.value); field('material_id', ''); }}><option value="">Выберите город</option>{cities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
-      <label className="block text-sm font-semibold">Материал<select className={`${inputClass} mt-2`} value={form.material_id} onChange={e => { field('material_id', e.target.value); const m = materials.find(m => m.id === e.target.value); if (m) field('material_name', m.name); }}><option value="">Указать название самостоятельно</option>{materials.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select><input required maxLength={255} className={`${inputClass} mt-2`} aria-label="Название материала" value={form.material_name} onChange={e => field('material_name', e.target.value)} /></label>
+      <label className="block text-sm font-semibold">Город загрузки<select aria-label="Город загрузки" required className={`${inputClass} mt-2`} value={form.city_id} onChange={e => { field('city_id', e.target.value); field('material_id', ''); field('material_name', ''); }}><option value="">Выберите город</option>{cities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+      <label className="block text-sm font-semibold">Материал<select aria-label="Материал" disabled={materialsLoading} className={`${inputClass} mt-2`} value={form.material_id} onChange={e => { field('material_id', e.target.value); const m = materials.find(m => m.id === e.target.value); field('material_name', m ? m.name : ''); }}><option value="">Указать название самостоятельно</option>{materials.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select>{!form.material_id && <input required maxLength={255} className={`${inputClass} mt-2`} aria-label="Название материала" value={form.material_name} onChange={e => field('material_name', e.target.value)} />}{materialsLoading && <span className="mt-2 block text-xs text-slate-500">Загрузка материалов…</span>}{materialsError && <span className="mt-2 block text-xs text-red-700">Не удалось загрузить каталог. <button type="button" className="underline" onClick={() => setMaterialsRetry(n => n + 1)}>Повторить</button> или укажите название самостоятельно.</span>}</label>
       <div className="grid grid-cols-2 gap-3"><label className="text-sm font-semibold">Общий объём<input required type="number" min="0.001" max="999999999" step="0.001" className={`${inputClass} mt-2`} value={form.volume} onChange={e => field('volume', e.target.value)} /></label><label className="text-sm font-semibold">Единица<select className={`${inputClass} mt-2`} value={form.unit} onChange={e => field('unit', e.target.value)}><option value="m3">м³</option><option value="t">Тонны</option></select></label></div>
       <label className="block text-sm font-semibold">Количество машин<input required type="number" min="1" max="100000" step="1" className={`${inputClass} mt-2`} value={form.vehicle_count} onChange={e => field('vehicle_count', e.target.value)} /></label>
       <CommerceAddressInput label="Место загрузки" value={form.pickup_address} city={cities.find(c => c.id === form.city_id)} onChange={value => field('pickup_address', value)} />
       <CommerceAddressInput label="Место доставки" value={form.delivery_address} city={cities.find(c => c.id === form.city_id)} allCities onChange={value => field('delivery_address', value)} />
-      {textFields.map(([name, label]) => <label key={name} className="block text-sm font-semibold">{label}<input required type={name === 'contact_phone' ? 'tel' : 'text'} minLength={name === 'contact_phone' ? 10 : 1} maxLength={name.includes('address') ? 500 : name === 'contact_phone' ? 30 : 255} className={`${inputClass} mt-2`} value={form[name]} onChange={e => field(name, e.target.value)} /></label>)}
+      {textFields.map(([name, label]) => <label key={name} className="block text-sm font-semibold">{label}<input required type={name === 'contact_phone' ? 'tel' : 'text'} placeholder={name === 'contact_phone' ? '+7 (999) 999-99-99' : undefined} pattern={name === 'contact_phone' ? String.raw`\+7 \([0-9]{3}\) [0-9]{3}-[0-9]{2}-[0-9]{2}` : undefined} minLength={name === 'contact_phone' ? 18 : 1} maxLength={name.includes('address') ? 500 : name === 'contact_phone' ? 30 : 255} className={`${inputClass} mt-2`} value={form[name]} onChange={e => field(name, name === 'contact_phone' ? formatPhoneNumber(e.target.value) : e.target.value)} /></label>)}
       <div className="grid grid-cols-2 gap-3">{[['starts_on', 'Начало'], ['ends_on', 'Окончание']].map(([key, label]) => <label key={key} className="text-sm font-semibold">{label}<input required type="date" min={key === 'ends_on' ? form.starts_on : undefined} className={`${inputClass} mt-2`} value={form[key]} onChange={e => field(key, e.target.value)} /></label>)}</div>
       <div className="grid grid-cols-2 gap-3"><label className="text-sm font-semibold">Цена, ₽<input required type="number" min="0.01" max="99999999999" step="0.01" className={`${inputClass} mt-2`} value={form.price} onChange={e => field('price', e.target.value)} /></label><label className="text-sm font-semibold">За<select className={`${inputClass} mt-2`} value={form.price_basis} onChange={e => field('price_basis', e.target.value)}>{Object.entries(units).map(([key, value]) => <option key={key} value={key}>{value}</option>)}</select></label></div>
       <label className="block text-sm font-semibold">Комментарий<textarea maxLength={5000} className={`${inputClass} mt-2 min-h-28`} value={form.comment} onChange={e => field('comment', e.target.value)} /></label>

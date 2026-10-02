@@ -12,12 +12,14 @@ interface Props {
   token: string;
   onLogout: () => Promise<void>;
   onOpenSupport?: () => void;
+  onOpenWholesale?: () => void;
 }
 
 export default function SupplierProfileScreen({
   token,
   onLogout,
   onOpenSupport,
+  onOpenWholesale,
 }: Props) {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -93,7 +95,7 @@ export default function SupplierProfileScreen({
           </button>
         </div>
       </header>
-      <div className="mt-5"><CommerceMenu /></div>
+      <div className="mt-5"><CommerceMenu onOpenWholesale={onOpenWholesale} /></div>
       <div className="mt-5 rounded-2xl bg-white p-4"><NotificationToggle role="supplier" /></div>
 
       <form onSubmit={saveProfile} className="mt-8 space-y-5 rounded-2xl bg-white p-5 shadow-sm">

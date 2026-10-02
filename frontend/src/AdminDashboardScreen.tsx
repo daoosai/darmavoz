@@ -40,6 +40,7 @@ import {
   BarChart3,
   Building2,
   ClipboardList,
+  Briefcase,
   Headphones,
   Menu,
   X,
@@ -197,6 +198,7 @@ type AdminTab =
   | "delivery"
   | "drivers"
   | "moderation"
+  | "wholesale"
   | "water_septic"
   | "suppliers"
   | "equipment"
@@ -211,6 +213,7 @@ const ADMIN_TAB_PATHS: Record<AdminTab, string> = {
   delivery: "/admin/fleet",
   drivers: "/admin/drivers",
   moderation: "/admin/moderation",
+  wholesale: "/admin/wholesale",
   water_septic: "/admin/water-septic",
   suppliers: "/admin/suppliers",
   equipment: "/admin/equipment",
@@ -232,7 +235,7 @@ export default function AdminDashboardScreen({
   onNavigate,
 }: AdminDashboardScreenProps) {
   const { token } = useAuthStore();
-  const [wholesaleModerationOpen, setWholesaleModerationOpen] = useState(false);
+  const [wholesaleModerationOpen, setWholesaleModerationOpen] = useState(initialTab === "moderation" && new URLSearchParams(window.location.search).has("notification_wholesale"));
   const moderationRefreshNonce = useAdminModerationStore(
     (state) => state.refreshNonce,
   );
@@ -2051,6 +2054,7 @@ export default function AdminDashboardScreen({
           </div>
 
           <nav className="mt-4 flex flex-1 flex-col gap-1 overflow-y-auto" aria-label="Разделы администратора">
+            <button type="button" onClick={() => openSidebarSection("wholesale")} aria-current={activeTab === "wholesale" ? "page" : undefined} className={sidebarButtonClass("wholesale")}><Briefcase className="h-5 w-5" />Оптовые заявки</button>
             <button type="button" onClick={() => openSidebarSection("suppliers")} className={sidebarButtonClass("suppliers")}><Building2 className="h-5 w-5" />Поставщики</button>
             <button type="button" onClick={() => openSidebarSection("equipment")} className={sidebarButtonClass("equipment")}><Wrench className="h-5 w-5" />Спецтехника</button>
             <button type="button" onClick={() => openSidebarSection("water_septic")} className={sidebarButtonClass("water_septic")}><ClipboardCheck className="h-5 w-5" />Вода и септики{pendingWaterSepticCount > 0 ? <span className="ml-auto rounded-full bg-red-500 px-2 py-0.5 text-xs text-white">{pendingWaterSepticCount}</span> : null}</button>
@@ -3200,6 +3204,8 @@ export default function AdminDashboardScreen({
             </>
           ) : activeTab === "water_septic" ? (
             <div key={cityId}><WaterSepticModerationPanel token={token}  /></div>
+          ) : activeTab === "wholesale" ? (
+            <WholesaleScreen initialView="moderation" onClose={() => openSidebarSection("moderation")} />
           ) : activeTab === "moderation" ? (
             <>
               <button className="flex w-full items-center gap-3 rounded-2xl border border-sky-100 bg-white p-5 text-left shadow-sm hover:bg-sky-50" onClick={() => setWholesaleModerationOpen(true)}>

@@ -69,3 +69,11 @@ WholesaleRequestCard используется в preview, модерации и 
 структурированный маршрут, читаемые даты, ставка, контакты с маской.
 Одинаковые даты показываются один раз. Поле заданного числа сохраняет ограничения.
 Миграция s24_wholesale_optional_vehicles; отчёт ../2026-10-02-wholesale-optional-count-card.md.
+
+Админская навигация/уведомления: прямой пункт sidebar «Оптовые заявки» ->
+/admin/wholesale, очередь moderation. POST/PUT/rejected-submit уведомляют активных
+admin через inbox/outbox в транзакции, pending-submit идемпотентен.
+Deep link админа открывает конкретную карточку на новом маршруте.
+Карточка скрывает контактные действия для is_owner, разносит footer-кнопки
+и сокращает маршрут через formatShortAddress.
+Отчёт: ../2026-10-02-wholesale-admin-navigation-notifications.md.

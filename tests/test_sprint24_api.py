@@ -242,7 +242,8 @@ async def test_wholesale_full_moderation_and_push(client, session_factory, admin
     await run_delivery_tick(session_factory)
     assert any(data.get("wholesale_request_id") == request_id and data.get("status") == "approved" for _, _, data in sent)
     async with session_factory() as db:
-        deliveries = list((await db.scalars(select(PushDelivery).where(PushDelivery.payload["wholesale_request_id"].astext == request_id))).all())
+        deliveries = list((await db.scalars(select(PushDelivery).where(PushDelivery.payload["wholesale_request_id"].astext == request_id,
+                                                              PushDelivery.event_type.in_(["wholesale_approved", "wholesale_rejected"])))).all())
         assert len(deliveries) == 2 and all(d.status == "sent" for d in deliveries)
         assert all(d.recipient_type == ("driver" if author_role == "driver" else "user") for d in deliveries)
         inbox = list((await db.scalars(select(UserNotification).where(UserNotification.user_id == author_id,
@@ -312,3 +313,74 @@ async def test_wholesale_optional_vehicle_count_roundtrip(client, session_factor
     for invalid in (-1, 1.5, 100001):
         response = await client.post("/api/v1/wholesale-requests", headers=headers, json={**payload, "vehicle_count": invalid})
         assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_wholesale_admin_pending_notifications(client, session_factory, admin_token, monkeypatch):
+    from app.models.models import PushDelivery, UserNotification
+    from app.services.notification_outbox import delivery_is_current, run_delivery_tick
+    async with session_factory() as db:
+        author, headers = await create_actor(db, "supplier")
+        receiver, _ = await create_actor(db, "admin")
+        receiver.fcm_token = "fake-admin-fcm"
+        inactive, _ = await create_actor(db, "admin")
+        inactive.is_active = False
+        deleted, _ = await create_actor(db, "admin")
+        deleted.is_deleted = True
+        logist, _ = await create_actor(db, "logist")
+        city = await db.scalar(select(City).where(City.is_active.is_(True)).limit(1))
+        expected = set((await db.scalars(select(User.id).join(Role).where(
+            Role.name == "admin", User.is_active.is_(True), User.is_deleted.is_(False)))).all())
+        excluded = {inactive.id, deleted.id, logist.id, author.id}
+        receiver_id = receiver.id
+        await db.commit()
+        payload = dict(city_id=str(city.id), material_name="Бой кирпича", volume="30",
+                       pickup_address="Карьер А", delivery_address="Стройка Б",
+                       starts_on=str(today()), ends_on=str(today()), price="150",
+                       contact_name="Автор", contact_phone="+79990000000")
+    created = await client.post("/api/v1/wholesale-requests", headers=headers, json=payload)
+    assert created.status_code == 201
+    request_id = created.json()["id"]
+    path = "/api/v1/wholesale-requests/" + request_id
+    async with session_factory() as db:
+        deliveries = list((await db.scalars(select(PushDelivery).where(
+            PushDelivery.payload["wholesale_request_id"].astext == request_id,
+            PushDelivery.event_type == "wholesale_pending"))).all())
+        assert {d.recipient_id for d in deliveries} == expected
+        assert not {d.recipient_id for d in deliveries}.intersection(excluded)
+        inbox = list((await db.scalars(select(UserNotification).where(
+            UserNotification.payload["wholesale_request_id"].astext == request_id))).all())
+        assert {n.user_id for n in inbox} == expected
+        first_id = next(d.id for d in deliveries if d.recipient_id == receiver_id)
+    sent = []
+    monkeypatch.setattr("app.services.push_service._send_push",
+                        lambda token, title, body, data: sent.append((token, data)) or "test-fcm-id")
+    # A tick is intentionally limited to 30; earlier tests leave a queue backlog.
+    for _ in range(20):
+        await run_delivery_tick(session_factory)
+        if any(token == "fake-admin-fcm" and data.get("wholesale_request_id") == request_id
+               for token, data in sent):
+            break
+    assert any(token == "fake-admin-fcm" and data.get("wholesale_request_id") == request_id
+               and data.get("status") == "pending" for token, data in sent)
+    assert (await client.post(path + "/submit", headers=headers)).status_code == 200
+    async with session_factory() as db:
+        notes = list((await db.scalars(select(UserNotification).where(
+            UserNotification.user_id == receiver_id,
+            UserNotification.payload["wholesale_request_id"].astext == request_id))).all())
+        assert len(notes) == 1  # Legacy duplicate submit is idempotent.
+    edited = await client.put(path, headers=headers, json={**payload, "delivery_address": "Стройка Б, улица 10"})
+    assert edited.status_code == 200
+    async with session_factory() as db:
+        old = await db.get(PushDelivery, first_id)
+        assert not await delivery_is_current(db, old)
+    assert (await client.post(path + "/moderate", headers={"Authorization": f"Bearer {admin_token}"},
+                             json={"action": "reject", "reason": "Уточните адрес"})).status_code == 200
+    resubmitted = await client.put(path, headers=headers, json={**payload, "delivery_address": "Стройка Б, улица 12"})
+    assert resubmitted.status_code == 200 and resubmitted.json()["status"] == "pending"
+    async with session_factory() as db:
+        notes = list((await db.scalars(select(UserNotification).where(
+            UserNotification.user_id == receiver_id,
+            UserNotification.payload["wholesale_request_id"].astext == request_id))).all())
+        assert len(notes) == 3
+        assert sum(n.title == "Оптовая заявка снова на модерации" for n in notes) == 2

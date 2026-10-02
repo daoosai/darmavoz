@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.db.database import get_db
-from app.models.models import City, Driver, Material, User
+from app.models.models import City, Driver, Material, Role, User
 from app.models.commerce import WholesaleEvent, WholesaleFavorite, WholesaleRequest
 from app.schemas.commerce import AccessInput, ModerationInput, WholesaleInput, WholesaleOut
 from app.services.notification_outbox import enqueue
@@ -62,6 +62,22 @@ def change_status(db, request, user, status, reason=None):
     event = WholesaleEvent(request_id=request.id, actor_id=user.id if user else None, status=status, reason=reason)
     db.add(event)
     return event
+
+
+async def notify_admins_pending(db, request, event, *, resubmitted=False):
+    # The moderation event, inbox and PUSH outbox share the request transaction.
+    await db.flush()
+    recipients = await db.scalars(select(User.id).join(Role, User.role_id == Role.id).where(
+        Role.name == "admin", User.is_active.is_(True), User.is_deleted.is_(False),
+        User.id != request.author_id))
+    title = "Оптовая заявка снова на модерации" if resubmitted else "Новая оптовая заявка"
+    for admin_id in recipients:
+        await enqueue(db, key=f"wholesale:{event.id}:admin:{admin_id}",
+                      recipient_type="user", recipient_id=admin_id,
+                      event_type="wholesale_pending", title=title,
+                      body=f"{request.material_name[:200]}. Требуется проверка заявки.",
+                      payload={"wholesale_request_id": str(request.id), "wholesale_event_id": str(event.id),
+                               "status": "pending"}, inbox=True)
 
 
 async def serialize(db, request, user):
@@ -128,7 +144,8 @@ async def create(payload: WholesaleInput, user: User = Depends(board_user), db: 
     request = WholesaleRequest(**payload.model_dump(), author_id=user.id)
     db.add(request)
     await db.flush()
-    change_status(db, request, user, "pending")
+    event = change_status(db, request, user, "pending")
+    await notify_admins_pending(db, request, event)
     await db.commit()
     await db.refresh(request)
     return await serialize(db, request, user)
@@ -152,7 +169,8 @@ async def edit(request_id: UUID, payload: WholesaleInput, user: User = Depends(b
     await validate_input(db, payload)
     for key, value in payload.model_dump().items():
         setattr(request, key, value)
-    change_status(db, request, user, "pending")
+    event = change_status(db, request, user, "pending")
+    await notify_admins_pending(db, request, event, resubmitted=True)
     await db.commit()
     await db.refresh(request)
     return await serialize(db, request, user)
@@ -163,9 +181,12 @@ async def submit(request_id: UUID, user: User = Depends(board_user), db: AsyncSe
     request = await get_request(db, request_id, lock=True)
     if request.author_id != user.id:
         raise HTTPException(403, "Можно отправить только свою заявку")
+    if request.status == "pending" and request.ends_on >= today():
+        return await serialize(db, request, user)
     if request.status not in {"pending", "rejected"} or request.ends_on < today():
         raise HTTPException(409, "Сначала отредактируйте заявку и проверьте сроки")
-    change_status(db, request, user, "pending")
+    event = change_status(db, request, user, "pending")
+    await notify_admins_pending(db, request, event, resubmitted=True)
     await db.commit()
     await db.refresh(request)
     return await serialize(db, request, user)

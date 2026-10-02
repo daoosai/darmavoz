@@ -18,7 +18,7 @@ export function openNotificationTarget(data?: Record<string, unknown> | null) {
   let path = '/';
   if (validId(data.wholesale_request_id)) {
     params.set('notification_wholesale', data.wholesale_request_id);
-    if (role === 'admin') path = '/admin/moderation';
+    if (role === 'admin') path = '/admin/wholesale';
   } else if (validId(data.order_id)) {
     params.set('notification_order', data.order_id);
     if (role === 'admin' || role === 'logist') {

@@ -26,7 +26,7 @@ export default function WholesaleScreen({ onClose, initialView = 'all' }: { onCl
   const role = useAuthStore(s => s.role);
   const token = useAuthStore(s => s.token);
   const { cities, cityId, refresh } = useCityStore();
-  const [view, setView] = useState(new URLSearchParams(window.location.search).has('notification_wholesale') ? 'mine' : initialView);
+  const [view, setView] = useState(new URLSearchParams(window.location.search).has('notification_wholesale') ? (initialView === 'moderation' ? 'moderation' : 'mine') : initialView);
   const [q, setQ] = useState('');
   const [city, setCity] = useState('');
   const [from, setFrom] = useState('');

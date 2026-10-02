@@ -77,6 +77,7 @@ const ADMIN_DASHBOARD_PATHS = {
   "/admin/fleet": "delivery",
   "/admin/drivers": "drivers",
   "/admin/moderation": "moderation",
+  "/admin/wholesale": "wholesale",
   "/admin/water-septic": "water_septic",
   "/admin/suppliers": "suppliers",
   "/admin/equipment": "equipment",

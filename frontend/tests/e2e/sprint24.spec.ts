@@ -23,6 +23,11 @@ test.beforeEach(async ({ page }) => {
     const url = new URL(route.request().url()); const path = url.pathname;
     let body: unknown = [];
     if (path.endsWith('/cities/')) body = [{ id: cityId, name: 'Тюмень', code: 'tyumen', is_active: true, is_default: true, center_lat: 57, center_lon: 65, map_zoom: 10 }];
+    else if (path.endsWith('/admin/placements/summary')) {
+      const counts = { trial: 0, active: 0, confirmation_required: 0, hidden: 0, expired: 0, archived: 0 };
+      body = { totals: counts, by_entity: { quarry: counts, accumulator: counts, special_equipment: counts },
+        active_quarries: 0, active_accumulators: 0, active_equipment: 0, policy: { extension_days: 30 } };
+    }
     else if (path.endsWith('/admin/me')) body = { email: 'admin@example.invalid' };
     else if (path.endsWith('/wholesale-requests/access')) body = { enabled: true, can_moderate: true };
     else if (path.endsWith('/wholesale-requests')) body = { items: [request], total: 1, page: 1 };
@@ -360,4 +365,45 @@ test('сохранение формы без количества машин п�
   await expect(page.getByText('На модерации', { exact: true })).toBeVisible();
   expect(saved.vehicle_count).toBeNull();
   await expect(page.getByTestId('wholesale-request-card').getByText(/Нужно машин/)).toHaveCount(0);
+});
+
+for (const width of [390, 1440]) {
+  test(`админ открывает оптовую модерацию из меню на ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/admin/catalog');
+    await page.getByRole('button', { name: 'Открыть меню', exact: true }).click();
+    await page.getByRole('complementary', { name: 'Навигация администратора' }).getByRole('button', { name: 'Оптовые заявки', exact: true }).click();
+    await expect(page).toHaveURL(/\/admin\/wholesale$/);
+    await expect(page.getByRole('heading', { name: 'Оптовые заявки', exact: true })).toBeVisible();
+    await expect(page.locator('section.fixed').getByRole('button', { name: 'Модерация', exact: true })).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Оптовые заявки', exact: true })).toBeVisible();
+  });
+}
+test('уведомление админа открывает оптовую модерацию и конкретную заявку', async ({ page }) => {
+  await page.route('**/notifications**', route => route.fulfill({ json: route.request().url().includes('unread-count')
+    ? { count: 1 } : [{ id: requestId, title: 'Новая оптовая заявка', body: 'Требуется проверка заявки.',
+      is_read: false, payload: { wholesale_request_id: requestId, status: 'pending' } }] }));
+  await page.goto('/admin/catalog');
+  await page.getByRole('button', { name: 'Открыть уведомления', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Центр уведомлений' }).getByRole('button', { name: /Новая оптовая заявка/ }).click();
+  await expect(page).toHaveURL(new RegExp('/admin/wholesale[?]notification_wholesale=' + requestId));
+  await expect(page.getByTestId('wholesale-request-card').getByRole('heading', { name: 'Песок', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'История', exact: true })).toBeVisible();
+});
+test('своя карточка скрывает звонок, сокращает маршрут и разделяет действия', async ({ page }) => {
+  const row = { ...request, is_owner: true, pickup_address: 'Россия, Тюменская область, Тюмень, улица Республики, 10',
+    delivery_address: 'Россия, муниципальный округ Тюмень, Тюмень, улица Ленина, 20' };
+  await page.route('**/wholesale-requests**', route => route.fulfill({ json:
+    new URL(route.request().url()).pathname.endsWith('/wholesale-requests') ? { items: [row], total: 1 } : row }));
+  await page.goto('/admin/wholesale');
+  const card = page.getByTestId('wholesale-request-card');
+  await expect(card.getByRole('link', { name: 'Позвонить', exact: true })).toHaveCount(0);
+  await expect(card.getByRole('button', { name: 'Скопировать номер', exact: true })).toHaveCount(0);
+  await expect(card.getByText(/Россия|Тюменская область|муниципальный/)).toHaveCount(0);
+  await expect(card.getByText(/Тюмень, улица Республики, 10/)).toBeVisible();
+  const more = card.getByRole('button', { name: 'Подробнее о заявке', exact: true });
+  const edit = card.getByRole('button', { name: 'Редактировать', exact: true });
+  const first = await more.boundingBox(), second = await edit.boundingBox();
+  expect(first!.y + first!.height <= second!.y || first!.x + first!.width < second!.x).toBe(true);
 });

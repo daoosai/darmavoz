@@ -133,15 +133,15 @@ function WholesaleForm({ embedded, headerActions, request, initialCity, cities, 
     return () => controller.abort();
   }, [form.city_id, materialsRetry]);
   const field = (name: string, value: string) => setForm((f: any) => ({ ...f, [name]: value }));
-  const save = async () => {
+  const save = async (draft = false) => {
     setBusy(true);
     try {
       const names = Object.keys(blank(''));
       const body = Object.fromEntries(names.map(key => [key, form[key]]));
       body.contact_phone = form.contact_phone.replace(/[^+\d]/g, '');
       body.material_id = form.material_id || null; body.vehicle_count = form.vehicle_count === '' || form.vehicle_count == null ? null : Number(form.vehicle_count);
-      await commerceApi(`/wholesale-requests${request ? `/${request.id}` : ''}`, { method: request ? 'PUT' : 'POST', body: JSON.stringify(body) });
-      toast.success('Заявка отправлена на модерацию'); onSaved();
+      await commerceApi(`/wholesale-requests${request ? `/${request.id}` : ''}${draft ? '?draft=true' : ''}`, { method: request ? 'PUT' : 'POST', body: JSON.stringify(body) });
+      toast.success(draft ? 'Черновик сохранён' : 'Заявка отправлена на модерацию'); onSaved();
     } catch (e: any) { toast.error(e.message); }
     finally { setBusy(false); }
   };
@@ -158,9 +158,10 @@ function WholesaleForm({ embedded, headerActions, request, initialCity, cities, 
       <div className="grid grid-cols-2 gap-3">{[['starts_on', 'Начало'], ['ends_on', 'Окончание']].map(([key, label]) => <label key={key} className="text-sm font-semibold">{label}<input required type="date" min={key === 'ends_on' ? form.starts_on : undefined} className={`${inputClass} mt-2`} value={form[key]} onChange={e => field(key, e.target.value)} /></label>)}</div>
       <div className="grid grid-cols-2 gap-3"><label className="text-sm font-semibold">Цена, ₽<input required type="number" min="0.01" max="99999999999" step="0.01" className={`${inputClass} mt-2`} value={form.price} onChange={e => field('price', e.target.value)} /></label><label className="text-sm font-semibold">За<select className={`${inputClass} mt-2`} value={form.price_basis} onChange={e => field('price_basis', e.target.value)}>{Object.entries(units).map(([key, value]) => <option key={key} value={key}>{value}</option>)}</select></label></div>
       <label className="block text-sm font-semibold">Комментарий<textarea maxLength={5000} className={`${inputClass} mt-2 min-h-28`} value={form.comment} onChange={e => field('comment', e.target.value)} /></label>
-      <button disabled={busy} className={`${buttonClass} w-full`}>{busy ? "Сохранение…" : "Сохранить"}</button>
+      <button disabled={busy} className={`${buttonClass} w-full`}>{busy ? "Сохранение…" : "Отправить на модерацию"}</button>
+      <button type="button" disabled={busy} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-bold text-slate-600" onClick={e => { const formElement = e.currentTarget.closest('form'); if (formElement?.reportValidity()) void save(true); }}>Сохранить черновик</button>
       <button type="button" className="w-full rounded-xl bg-sky-50 p-3 text-sm font-bold text-sky-600" onClick={() => setPreview(true)}>Предпросмотр</button>
-      {preview && <div className="space-y-3"><WholesaleRequestCard request={{ ...form, status: undefined, reject_reason: null }} contactActions={false} /><button type="button" disabled={busy} className={`${buttonClass} w-full`} onClick={() => save()}>{busy ? 'Сохранение…' : 'Отправить на проверку'}</button></div>}
+      {preview && <div className="space-y-3"><WholesaleRequestCard request={{ ...form, status: undefined, reject_reason: null }} contactActions={false} /></div>}
     </form>
   </CommerceShell>;
 }

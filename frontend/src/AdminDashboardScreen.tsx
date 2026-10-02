@@ -1,4 +1,4 @@
-import WholesaleScreen from './WholesaleScreen';
+import AdminWholesaleScreen from './AdminWholesaleScreen';
 import DriverPagination from './DriverPagination';
 import { DriverFilters, DriverSummary } from './DriverManagement';
 import OperatorCityBar from './OperatorCityBar';
@@ -235,7 +235,6 @@ export default function AdminDashboardScreen({
   onNavigate,
 }: AdminDashboardScreenProps) {
   const { token } = useAuthStore();
-  const [wholesaleModerationOpen, setWholesaleModerationOpen] = useState(initialTab === "moderation" && new URLSearchParams(window.location.search).has("notification_wholesale"));
   const moderationRefreshNonce = useAdminModerationStore(
     (state) => state.refreshNonce,
   );
@@ -251,7 +250,7 @@ export default function AdminDashboardScreen({
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   useEffect(() => {
-    setActiveTab(initialTab);
+    setActiveTab(initialTab === "moderation" && new URLSearchParams(window.location.search).has("notification_wholesale") ? "wholesale" : initialTab);
   }, [initialTab]);
 
   const openSidebarSection = (tab: AdminTab) => {
@@ -3205,14 +3204,13 @@ export default function AdminDashboardScreen({
           ) : activeTab === "water_septic" ? (
             <div key={cityId}><WaterSepticModerationPanel token={token}  /></div>
           ) : activeTab === "wholesale" ? (
-            <WholesaleScreen initialView="moderation" onClose={() => openSidebarSection("moderation")} />
+            <AdminWholesaleScreen />
           ) : activeTab === "moderation" ? (
             <>
-              <button className="flex w-full items-center gap-3 rounded-2xl border border-sky-100 bg-white p-5 text-left shadow-sm hover:bg-sky-50" onClick={() => setWholesaleModerationOpen(true)}>
+              <button className="flex w-full items-center gap-3 rounded-2xl border border-sky-100 bg-white p-5 text-left shadow-sm hover:bg-sky-50" onClick={() => openSidebarSection("wholesale")}>
                 <ClipboardCheck className="h-7 w-7 text-sky-500" />
                 <div><h2 className="font-bold text-slate-800">Оптовые заявки</h2><p className="mt-1 text-sm text-slate-500">Модерация заявок на перевозку</p></div>
               </button>
-              {wholesaleModerationOpen && <WholesaleScreen initialView="moderation" onClose={() => setWholesaleModerationOpen(false)} />}
 
               <div className="flex justify-between items-center bg-white p-5 rounded-2xl shadow-sm border border-slate-100 mb-2">
                 <h2 className="text-xl font-bold text-slate-800">

@@ -11,7 +11,7 @@ export interface WholesaleCardData {
   contact_name: string; contact_phone: string; comment?: string | null;
   is_owner?: boolean; status?: string; reject_reason?: string | null;
 }
-export const wholesaleStates: Record<string, string> = { pending: 'На модерации', approved: 'Опубликовано', rejected: 'Отклонено', archived: 'В архиве' };
+export const wholesaleStates: Record<string, string> = { draft: 'Черновик', pending: 'На модерации', approved: 'Опубликовано', rejected: 'Отклонено', archived: 'В архиве' };
 const units: Record<string, string> = { m3: 'м³', t: 'т', vehicle: 'машину', total: 'весь объём' };
 function readableDate(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value || 'Не указано';

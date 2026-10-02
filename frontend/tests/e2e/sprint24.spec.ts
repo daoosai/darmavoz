@@ -50,14 +50,14 @@ for (const width of [320, 390, 768, 1440]) {
     await page.getByRole('button', { name: /Оптовые заявки Крупные/ }).click();
     await expect(page.getByRole('heading', { name: 'Оптовые заявки', exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Песок', exact: true })).toBeVisible();
-    const header = page.locator('section.fixed header');
+    const header = page.locator('header').first();
     expect(await header.evaluate(el => parseFloat(getComputedStyle(el).paddingTop))).toBeGreaterThanOrEqual(40);
-    expect(await page.locator('section.fixed').evaluate(el => el.scrollWidth <= el.clientWidth)).toBeTruthy();
+    expect(await page.getByRole('region', { name: 'Модерация оптовых заявок' }).evaluate(el => el.scrollWidth <= el.clientWidth)).toBeTruthy();
     await page.screenshot({ path: `test-results/sprint24-wholesale-${width}.png`, fullPage: true });
     await page.getByRole('heading', { name: 'Песок', exact: true }).click();
     await expect(page.getByRole('link', { name: 'Позвонить' })).toHaveAttribute('href', 'tel:+79990000000');
     await expect(page.getByText('Подъезд согласуем.', { exact: false })).toBeVisible();
-    expect(await page.locator('section.fixed').evaluate(el => el.scrollWidth <= el.clientWidth)).toBeTruthy();
+    expect(await page.getByRole('region', { name: 'Модерация оптовых заявок' }).evaluate(el => el.scrollWidth <= el.clientWidth)).toBeTruthy();
   });
   test(`финансовый реестр и возврат адаптированы на ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
@@ -75,7 +75,8 @@ for (const width of [320, 390, 768, 1440]) {
 }
 
 test('новая оптовая заявка показывает предпросмотр перед публикацией', async ({ page }) => {
-  await page.goto('/admin/profile'); await page.getByRole('button', { name: /Оптовые заявки Крупные/ }).click();
+  await page.addInitScript(() => localStorage.setItem('auth-storage', JSON.stringify({ state: { token: 'e2e-only', role: 'supplier' }, version: 0 })));
+  await page.goto('/'); await page.getByRole('button', { name: 'Опт', exact: true }).click();
   await page.getByRole('button', { name: 'Создать заявку', exact: true }).click();
   await page.getByLabel('Название материала', { exact: true }).fill('Щебень');
   await page.getByLabel('Общий объём', { exact: true }).fill('500');
@@ -88,7 +89,7 @@ test('новая оптовая заявка показывает предпро
   await page.getByRole('button', { name: 'Предпросмотр', exact: true }).click();
   await expect(page.getByTestId('wholesale-request-card').getByRole('heading', { name: 'Щебень', exact: true })).toBeVisible();
   await expect(page.getByText('Нужно машин: 25', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Отправить на проверку', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Отправить на модерацию', exact: true })).toBeVisible();
 });
 
 // Start in the partner cabinet and click its navigation, never a wholesale URL.
@@ -195,7 +196,7 @@ test('модерация: причина обязательна, отклонё�
   });
   await page.goto('/admin/moderation');
   await page.getByRole('button', { name: /Оптовые заявки Модерация заявок/ }).click();
-  await expect(page.locator('section.fixed').getByRole('button', { name: 'Модерация', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'На модерации', exact: true })).toBeVisible();
   await page.getByRole('heading', { name: 'Песок', exact: true }).click();
   await page.getByRole('button', { name: 'Отклонить', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Отклонить заявку', exact: true })).toBeDisabled();
@@ -216,7 +217,7 @@ test('модерация: причина обязательна, отклонё�
   await page.getByRole('button', { name: 'Редактировать', exact: true }).click();
   await expect(page.getByLabel('Название материала', { exact: true })).toHaveValue('Песок');
   await page.getByLabel('Место доставки', { exact: true }).fill('Стройка Б, улица Тестовая 10');
-  await page.getByRole('button', { name: 'Сохранить', exact: true }).click();
+  await page.getByRole('button', { name: 'Отправить на модерацию', exact: true }).click();
   await expect(page.getByText('На модерации', { exact: true })).toBeVisible();
   await expect(page.getByText('Причина отклонения:', { exact: false })).toHaveCount(0);
 
@@ -306,6 +307,7 @@ test('карточка без количества машин одинакова
     const url = new URL(route.request().url());
     const feed = url.pathname.endsWith('/wholesale-requests');
     const role = await page.evaluate(() => JSON.parse(localStorage.getItem('auth-storage')!).state.role);
+    if (url.pathname.endsWith('/history')) return route.fulfill({ json: [] });
     await route.fulfill({ json: feed ? { items: [{ ...row, status: role === 'driver' ? 'approved' : 'pending' }], total: 1 } : row });
   });
   await page.goto('/admin/profile');
@@ -319,7 +321,8 @@ test('карточка без количества машин одинакова
   await card.getByRole('heading', { name: 'Бой кирпича' }).click();
   await expect(page.getByRole('button', { name: 'Одобрить', exact: true })).toBeVisible();
   await expect(card.getByText('2 октября 2026 г.', { exact: true })).toBeVisible();
-  await page.locator('section.fixed header').getByRole('button', { name: 'Назад', exact: true }).click();
+  await page.addInitScript(() => localStorage.setItem('auth-storage', JSON.stringify({ state: { token: 'e2e-only', role: 'supplier' }, version: 0 })));
+  await page.goto('/'); await page.getByRole('button', { name: 'Опт', exact: true }).click();
   await page.getByRole('button', { name: 'Создать заявку', exact: true }).click();
   await page.getByLabel('Название материала', { exact: true }).fill('Бой кирпича');
   await page.getByLabel('Общий объём', { exact: true }).fill('30');
@@ -361,7 +364,7 @@ test('сохранение формы без количества машин п�
     ['Контактное лицо', 'Автор'], ['Телефон', '+79990000000'], ['Цена, ₽', '150']]) {
     await page.getByLabel(label, { exact: true }).fill(value);
   }
-  await page.getByRole('button', { name: 'Сохранить', exact: true }).click();
+  await page.getByRole('button', { name: 'Отправить на модерацию', exact: true }).click();
   await expect(page.getByText('На модерации', { exact: true })).toBeVisible();
   expect(saved.vehicle_count).toBeNull();
   await expect(page.getByTestId('wholesale-request-card').getByText(/Нужно машин/)).toHaveCount(0);
@@ -375,7 +378,7 @@ for (const width of [390, 1440]) {
     await page.getByRole('complementary', { name: 'Навигация администратора' }).getByRole('button', { name: 'Оптовые заявки', exact: true }).click();
     await expect(page).toHaveURL(/\/admin\/wholesale$/);
     await expect(page.getByRole('heading', { name: 'Оптовые заявки', exact: true })).toBeVisible();
-    await expect(page.locator('section.fixed').getByRole('button', { name: 'Модерация', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'На модерации', exact: true })).toBeVisible();
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Оптовые заявки', exact: true })).toBeVisible();
   });
@@ -396,7 +399,8 @@ test('своя карточка скрывает звонок, сокращае�
     delivery_address: 'Россия, муниципальный округ Тюмень, Тюмень, улица Ленина, 20' };
   await page.route('**/wholesale-requests**', route => route.fulfill({ json:
     new URL(route.request().url()).pathname.endsWith('/wholesale-requests') ? { items: [row], total: 1 } : row }));
-  await page.goto('/admin/wholesale');
+  await page.addInitScript(() => localStorage.setItem('auth-storage', JSON.stringify({ state: { token: 'e2e-only', role: 'supplier' }, version: 0 })));
+  await page.goto('/'); await page.getByRole('button', { name: 'Опт', exact: true }).click();
   const card = page.getByTestId('wholesale-request-card');
   await expect(card.getByRole('link', { name: 'Позвонить', exact: true })).toHaveCount(0);
   await expect(card.getByRole('button', { name: 'Скопировать номер', exact: true })).toHaveCount(0);
@@ -406,4 +410,91 @@ test('своя карточка скрывает звонок, сокращае�
   const edit = card.getByRole('button', { name: 'Редактировать', exact: true });
   const first = await more.boundingBox(), second = await edit.boundingBox();
   expect(first!.y + first!.height <= second!.y || first!.x + first!.width < second!.x).toBe(true);
+});
+
+for (const width of [320, 390, 768, 1440]) {
+  test(`отдельный экран админа сохраняет layout и модерирует карточки на ${width}px`, async ({ page }) => {
+    let current = { ...request, status: 'pending', reject_reason: null as string | null };
+    await page.setViewportSize({ width, height: 900 });
+    await page.route('**/wholesale-requests**', async route => {
+      const url = new URL(route.request().url());
+      if (url.pathname.endsWith('/moderate')) {
+        const body = route.request().postDataJSON();
+        current = { ...current, status: body.action === 'approve' ? 'approved' : 'rejected', reject_reason: body.reason || null };
+        return route.fulfill({ json: current });
+      }
+      if (url.pathname.endsWith('/history')) return route.fulfill({ json: [] });
+      if (url.pathname.endsWith(requestId)) return route.fulfill({ json: current });
+      expect(url.searchParams.get('view')).toBe('moderation');
+      const status = url.searchParams.get('status');
+      return route.fulfill({ json: { items: status === current.status || status === 'all' ? [current] : [], total: status === current.status || status === 'all' ? 1 : 0 } });
+    });
+    await page.goto('/admin/wholesale');
+    await expect(page.locator('header').first().getByText('Панель администратора', { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Открыть уведомления', exact: true })).toBeVisible();
+    for (const name of ['Создать заявку', 'Мои заявки', 'Избранное', 'Редактировать'])
+      await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0);
+    await expect(page.getByText('Найдите перевозчиков', { exact: true })).toHaveCount(0);
+    const card = page.getByTestId('wholesale-request-card');
+    await expect(card.getByRole('button', { name: 'Одобрить', exact: true })).toBeVisible();
+    await card.getByRole('button', { name: 'Отклонить', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Отклонить заявку', exact: true })).toBeDisabled();
+    await page.getByLabel('Причина отклонения', { exact: true }).fill('Укажите более точный адрес доставки');
+    await page.getByRole('button', { name: 'Отклонить заявку', exact: true }).click();
+    await expect(card).toHaveCount(0);
+    await page.getByRole('button', { name: 'Отклонённые', exact: true }).click();
+    await expect(card.getByText('Укажите более точный адрес доставки', { exact: true })).toBeVisible();
+    await expect(card.getByRole('button', { name: 'Одобрить', exact: true })).toHaveCount(0);
+    current = { ...current, status: 'pending', reject_reason: null };
+    await page.getByRole('button', { name: 'На модерации', exact: true }).click();
+    await card.getByRole('button', { name: 'Одобрить', exact: true }).click();
+    await expect(card).toHaveCount(0);
+    await page.getByRole('button', { name: 'Активные', exact: true }).click();
+    await expect(card.getByText('Опубликовано', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Открыть меню', exact: true }).click();
+    const nav = page.getByRole('complementary', { name: 'Навигация администратора' });
+    await expect(nav.getByRole('button', { name: 'Оптовые заявки', exact: true })).toHaveAttribute('aria-current', 'page');
+    await nav.getByRole('button', { name: 'Поставщики', exact: true }).click();
+    await expect(page).toHaveURL(/\/admin\/suppliers$/);
+  });
+}
+
+test('поставщик сохраняет черновик, редактирует и отправляет на модерацию', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('auth-storage', JSON.stringify({ state: { token: 'e2e-only', role: 'supplier' }, version: 0 })));
+  let saved: any = null;
+  await page.route('**/wholesale-requests**', async route => {
+    const url = new URL(route.request().url());
+    const method = route.request().method();
+    if (method === 'POST' || method === 'PUT') {
+      saved = { ...request, ...route.request().postDataJSON(), is_owner: true,
+        status: url.searchParams.get('draft') === 'true' ? 'draft' : 'pending' };
+      return route.fulfill({ status: method === 'POST' ? 201 : 200, json: saved });
+    }
+    return route.fulfill({ json: { items: saved ? [saved] : [], total: saved ? 1 : 0 } });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Опт', exact: true }).click();
+  await page.getByRole('button', { name: 'Создать заявку', exact: true }).click();
+  await page.getByLabel('Город загрузки', { exact: true }).selectOption(cityId);
+  for (const [label, value] of [['Название материала', 'Черновик песка'], ['Общий объём', '30'],
+    ['Место загрузки', 'Карьер А'], ['Место доставки', 'Стройка Б'], ['Контактное лицо', 'Автор'],
+    ['Телефон', '+79990000000'], ['Цена, ₽', '150']]) await page.getByLabel(label, { exact: true }).fill(value);
+  await expect(page.getByRole('button', { name: 'Сохранить', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Предпросмотр', exact: true }).click();
+  await expect(page.getByTestId('wholesale-request-card').getByRole('heading', { name: 'Черновик песка' })).toBeVisible();
+  await page.getByRole('button', { name: 'Сохранить черновик', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Мои заявки', exact: true })).toBeVisible();
+  await expect(page.getByText('Черновик', { exact: true })).toBeVisible();
+  expect(saved.status).toBe('draft');
+  await page.getByRole('button', { name: 'Редактировать', exact: true }).click();
+  await expect(page.getByLabel('Место доставки', { exact: true })).toHaveValue('Стройка Б');
+  await page.getByLabel('Место доставки', { exact: true }).fill('Стройка Б, улица 10');
+  await page.getByRole('button', { name: 'Сохранить черновик', exact: true }).click();
+  await expect(page.getByText('Черновик', { exact: true })).toBeVisible();
+  expect(saved.delivery_address).toBe('Стройка Б, улица 10');
+  await page.getByRole('button', { name: 'Редактировать', exact: true }).click();
+  await page.getByRole('button', { name: 'Отправить на модерацию', exact: true }).click();
+  await expect(page.getByText('На модерации', { exact: true })).toBeVisible();
+  await expect(page.getByText('Черновик', { exact: true })).toHaveCount(0);
+  expect(saved.status).toBe('pending');
 });

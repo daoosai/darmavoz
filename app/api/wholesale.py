@@ -96,15 +96,20 @@ async def access(user: User = Depends(board_user)):
 @router.get("")
 async def feed(view: str = Query("all", pattern="^(all|mine|favorites|moderation)$"), q: str = "", city_id: UUID | None = None,
                starts_on: str | None = None, ends_on: str | None = None, page: int = Query(1, ge=1),
-               page_size: int = Query(20, ge=1, le=100), user: User = Depends(board_user), db: AsyncSession = Depends(get_db)):
+               page_size: int = Query(20, ge=1, le=100),
+               status: str | None = Query(None, pattern="^(pending|approved|rejected|archived|all)$"), user: User = Depends(board_user), db: AsyncSession = Depends(get_db)):
     from datetime import date
     conditions = []
+    if status is not None and view != "moderation":
+        raise HTTPException(422, "Фильтр статуса доступен только в модерации")
     if view == "mine":
         conditions.append(WholesaleRequest.author_id == user.id)
     elif view == "moderation":
         if user.role.name != "admin":
             raise HTTPException(403, "Только администратор")
-        conditions.append(WholesaleRequest.status == "pending")
+        conditions.append(WholesaleRequest.status != "draft")
+        if status != "all":
+            conditions.append(WholesaleRequest.status == (status or "pending"))
     else:
         conditions.extend([WholesaleRequest.status == "approved", WholesaleRequest.ends_on >= today()])
     if view == "favorites":
@@ -139,13 +144,14 @@ async def validate_input(db, payload):
 
 
 @router.post("", response_model=WholesaleOut, status_code=201)
-async def create(payload: WholesaleInput, user: User = Depends(board_user), db: AsyncSession = Depends(get_db)):
+async def create(payload: WholesaleInput, draft: bool = False, user: User = Depends(board_user), db: AsyncSession = Depends(get_db)):
     await validate_input(db, payload)
     request = WholesaleRequest(**payload.model_dump(), author_id=user.id)
     db.add(request)
     await db.flush()
-    event = change_status(db, request, user, "pending")
-    await notify_admins_pending(db, request, event)
+    event = change_status(db, request, user, "draft" if draft else "pending")
+    if not draft:
+        await notify_admins_pending(db, request, event)
     await db.commit()
     await db.refresh(request)
     return await serialize(db, request, user)
@@ -154,13 +160,13 @@ async def create(payload: WholesaleInput, user: User = Depends(board_user), db: 
 @router.get("/{request_id}", response_model=WholesaleOut)
 async def detail(request_id: UUID, user: User = Depends(board_user), db: AsyncSession = Depends(get_db)):
     request = await get_request(db, request_id)
-    if request.author_id != user.id and not is_staff(user) and not visible(request):
+    if request.author_id != user.id and (request.status == "draft" or (not is_staff(user) and not visible(request))):
         raise HTTPException(404, "Заявка недоступна")
     return await serialize(db, request, user)
 
 
 @router.put("/{request_id}", response_model=WholesaleOut)
-async def edit(request_id: UUID, payload: WholesaleInput, user: User = Depends(board_user), db: AsyncSession = Depends(get_db)):
+async def edit(request_id: UUID, payload: WholesaleInput, draft: bool = False, user: User = Depends(board_user), db: AsyncSession = Depends(get_db)):
     request = await get_request(db, request_id, lock=True)
     if request.author_id != user.id:
         raise HTTPException(403, "Можно изменять только свои заявки")
@@ -169,8 +175,9 @@ async def edit(request_id: UUID, payload: WholesaleInput, user: User = Depends(b
     await validate_input(db, payload)
     for key, value in payload.model_dump().items():
         setattr(request, key, value)
-    event = change_status(db, request, user, "pending")
-    await notify_admins_pending(db, request, event, resubmitted=True)
+    event = change_status(db, request, user, "draft" if draft else "pending")
+    if not draft:
+        await notify_admins_pending(db, request, event, resubmitted=True)
     await db.commit()
     await db.refresh(request)
     return await serialize(db, request, user)
@@ -183,7 +190,7 @@ async def submit(request_id: UUID, user: User = Depends(board_user), db: AsyncSe
         raise HTTPException(403, "Можно отправить только свою заявку")
     if request.status == "pending" and request.ends_on >= today():
         return await serialize(db, request, user)
-    if request.status not in {"pending", "rejected"} or request.ends_on < today():
+    if request.status not in {"draft", "pending", "rejected"} or request.ends_on < today():
         raise HTTPException(409, "Сначала отредактируйте заявку и проверьте сроки")
     event = change_status(db, request, user, "pending")
     await notify_admins_pending(db, request, event, resubmitted=True)
@@ -251,7 +258,7 @@ async def favorite(request_id: UUID, payload: AccessInput, user: User = Depends(
 @router.get("/{request_id}/history")
 async def history(request_id: UUID, user: User = Depends(board_user), db: AsyncSession = Depends(get_db)):
     request = await get_request(db, request_id)
-    if request.author_id != user.id and user.role.name != "admin":
+    if request.author_id != user.id and (request.status == "draft" or user.role.name != "admin"):
         raise HTTPException(403, "Нет доступа")
     rows = (await db.scalars(select(WholesaleEvent).where(WholesaleEvent.request_id == request_id).order_by(WholesaleEvent.created_at))).all()
     return [{"status": r.status, "reason": r.reason, "created_at": r.created_at} for r in rows]

@@ -52,6 +52,16 @@ async def test_wholesale_role_access_moderation_and_ownership(client, session_fa
     assert (await client.post(f'/api/v1/wholesale-requests/{request_id}/moderate', headers=partner_headers, json={'action': 'publish'})).status_code == 403
     response = await client.post(f'/api/v1/wholesale-requests/{request_id}/moderate', headers=admin, json={'action': 'publish'})
     assert response.status_code == 200, response.text
+    response = await client.get('/api/v1/wholesale-requests?view=moderation&status=approved', headers=admin)
+    assert response.status_code == 200 and request_id in [row['id'] for row in response.json()['items']]
+    for status in ('pending', 'rejected', 'archived'):
+        response = await client.get(f'/api/v1/wholesale-requests?view=moderation&status={status}', headers=admin)
+        assert response.status_code == 200 and request_id not in [row['id'] for row in response.json()['items']]
+    response = await client.get('/api/v1/wholesale-requests?view=moderation&status=all', headers=admin)
+    assert response.status_code == 200 and request_id in [row['id'] for row in response.json()['items']]
+    assert (await client.get('/api/v1/wholesale-requests?view=moderation&status=all', headers=other_headers)).status_code == 403
+    assert (await client.get('/api/v1/wholesale-requests?status=pending', headers=other_headers)).status_code == 422
+    assert (await client.get('/api/v1/wholesale-requests?view=moderation&status=invalid', headers=admin)).status_code == 422
     response = await client.get('/api/v1/wholesale-requests', headers=other_headers)
     assert request_id in [row['id'] for row in response.json()['items']]
     response = await client.put(f'/api/v1/wholesale-requests/{request_id}/favorite', headers=other_headers, json={'enabled': True})
@@ -384,3 +394,51 @@ async def test_wholesale_admin_pending_notifications(client, session_factory, ad
             UserNotification.payload["wholesale_request_id"].astext == request_id))).all())
         assert len(notes) == 3
         assert sum(n.title == "Оптовая заявка снова на модерации" for n in notes) == 2
+
+
+@pytest.mark.asyncio
+async def test_private_draft_edit_and_submit(client, session_factory, admin_token):
+    from app.models.models import PushDelivery, UserNotification
+    async with session_factory() as db:
+        author, headers = await create_actor(db, "supplier")
+        _, driver_headers = await create_actor(db, "driver")
+        city = await db.scalar(select(City).where(City.is_active.is_(True)).limit(1))
+        await db.commit()
+        payload = dict(city_id=str(city.id), material_name="Черновик песка", volume="30",
+                       pickup_address="Карьер А", delivery_address="Стройка Б",
+                       starts_on=str(today()), ends_on=str(today()), price="150",
+                       contact_name="Автор", contact_phone="+79990000000")
+    admin = {"Authorization": f"Bearer {admin_token}"}
+    response = await client.post("/api/v1/wholesale-requests?draft=true", headers=headers, json=payload)
+    assert response.status_code == 201, response.text
+    assert response.json()["status"] == "draft"
+    request_id = response.json()["id"]
+    path = "/api/v1/wholesale-requests/" + request_id
+    async def assert_no_notifications():
+        async with session_factory() as db:
+            for model in (PushDelivery, UserNotification):
+                assert not (await db.scalars(select(model).where(model.payload["wholesale_request_id"].astext == request_id))).all()
+    await assert_no_notifications()
+    for reader in (admin, driver_headers):
+        assert (await client.get(path, headers=reader)).status_code == 404
+        assert (await client.get(path + "/history", headers=reader)).status_code == 403
+    for view in ("all", "moderation"):
+        feed = await client.get(f"/api/v1/wholesale-requests?view={view}", headers=admin)
+        assert request_id not in [row["id"] for row in feed.json()["items"]]
+    feed = await client.get("/api/v1/wholesale-requests?view=moderation&status=all", headers=admin)
+    assert request_id not in [row["id"] for row in feed.json()["items"]]
+    feed = await client.get("/api/v1/wholesale-requests?view=mine", headers=headers)
+    assert request_id in [row["id"] for row in feed.json()["items"]]
+    assert (await client.post(path + "/moderate", headers=admin, json={"action": "approve"})).status_code == 409
+    assert (await client.put(path + "?draft=true", headers=driver_headers, json=payload)).status_code == 403
+    response = await client.put(path + "?draft=true", headers=headers, json={**payload, "delivery_address": "Стройка Б, улица 10"})
+    assert response.status_code == 200 and response.json()["status"] == "draft"
+    await assert_no_notifications()
+    response = await client.put(path, headers=headers, json={**payload, "delivery_address": "Стройка Б, улица 20"})
+    assert response.status_code == 200 and response.json()["status"] == "pending"
+    assert response.json()["reject_reason"] is None
+    async with session_factory() as db:
+        assert (await db.scalars(select(UserNotification).where(UserNotification.payload["wholesale_request_id"].astext == request_id))).all()
+    response = await client.post(path + "/moderate", headers=admin, json={"action": "approve"})
+    assert response.status_code == 200 and response.json()["status"] == "approved"
+    assert (await client.get(path, headers=driver_headers)).status_code == 200

@@ -77,3 +77,18 @@ Deep link админа открывает конкретную карточку 
 Карточка скрывает контактные действия для is_owner, разносит footer-кнопки
 и сокращает маршрут через formatShortAddress.
 Отчёт: ../2026-10-02-wholesale-admin-navigation-notifications.md.
+
+## Отдельный экран админа и черновики
+
+/admin/wholesale использует AdminWholesaleScreen внутри AdminDashboard, без
+полноэкранного CommerceShell. Header/колокольчик/выдвижной sidebar доступны.
+Статусные фильтры используют GET /wholesale-requests?view=moderation&status=...
+(admin only); pending-карточки сразу показывают approve/reject с ReasonModal.
+Профиль и общий раздел модерации ведут на тот же маршрут, deep link открывает
+карточку и историю. Партнёрский banner/create/mine/favorites здесь отсутствуют.
+
+POST/PUT /wholesale-requests?draft=true сохраняют приватный draft/«Черновик»
+без уведомления admin. Черновик доступен автору в «Мои заявки» и форме
+редактирования; кнопка «Отправить на модерацию» отправляет pending и уведомление.
+«Сохранить черновик» и «Предпросмотр» доступны отдельно.
+Миграция s24_wholesale_drafts; отчёт ../2026-10-02-wholesale-admin-view-drafts.md.

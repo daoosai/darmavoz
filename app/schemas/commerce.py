@@ -54,7 +54,7 @@ class WholesaleOut(WholesaleInput):
     model_config = ConfigDict(from_attributes=True)
     id: UUID
     author_id: UUID
-    status: Literal["pending", "approved", "rejected", "archived"]
+    status: Literal["draft", "pending", "approved", "rejected", "archived"]
     reject_reason: str | None
     created_at: datetime
     updated_at: datetime

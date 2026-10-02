@@ -1,6 +1,6 @@
 """Integration tests exclusively in the disposable PostgreSQL fixture database."""
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import select
@@ -442,3 +442,45 @@ async def test_private_draft_edit_and_submit(client, session_factory, admin_toke
     response = await client.post(path + "/moderate", headers=admin, json={"action": "approve"})
     assert response.status_code == 200 and response.json()["status"] == "approved"
     assert (await client.get(path, headers=driver_headers)).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_supplier_all_includes_own_requests_without_leaking_others(client, session_factory):
+    from datetime import timedelta
+    from app.models.commerce import WholesaleRequest, WholesaleFavorite
+    async with session_factory() as db:
+        author, headers = await create_actor(db, "supplier")
+        other, other_headers = await create_actor(db, "supplier")
+        _, driver_headers = await create_actor(db, "driver")
+        city = await db.scalar(select(City).where(City.is_active.is_(True)).limit(1))
+        tag = "supplier-all-" + uuid4().hex
+        own, foreign = [], []
+        for user, target in ((author, own), (other, foreign)):
+            for status in ("draft", "pending", "rejected", "approved", "archived", "expired"):
+                row = WholesaleRequest(author_id=user.id, city_id=city.id, material_name=tag,
+                    volume=30, unit="m3", pickup_address="Карьер А", delivery_address="Стройка Б",
+                    starts_on=today() - timedelta(days=2),
+                    ends_on=today() - timedelta(days=1) if status == "expired" else today(),
+                    price=150, price_basis="m3", contact_name="Автор", contact_phone="+79990000000",
+                    status="approved" if status == "expired" else status,
+                    reject_reason="Уточните адрес" if status == "rejected" else None)
+                db.add(row); await db.flush(); target.append(str(row.id))
+        db.add(WholesaleFavorite(user_id=author.id, request_id=UUID(own[0]), enabled=True))
+        await db.commit()
+    async def feed(auth, **params):
+        response = await client.get("/api/v1/wholesale-requests", headers=auth, params={"q": tag, **params})
+        assert response.status_code == 200, response.text
+        return response.json()
+    result = await feed(headers, view="all")
+    assert result["total"] == 7
+    assert {row["id"] for row in result["items"]} == set(own + [foreign[3]])
+    assert sum(row["is_owner"] for row in result["items"]) == 6
+    assert any(row["status"] == "draft" for row in result["items"])
+    assert {row["id"] for row in (await feed(other_headers, view="all"))["items"]} == set(foreign + [own[3]])
+    assert {row["id"] for row in (await feed(driver_headers, view="all"))["items"]} == {own[3], foreign[3]}
+    assert (await feed(headers, view="favorites"))["total"] == 0
+    assert (await feed(headers, view="all", starts_on=str(today() + timedelta(days=1))))["total"] == 0
+    pages = [await feed(headers, view="all", page=number, page_size=3) for number in (1, 2, 3)]
+    assert all(page["total"] == 7 for page in pages)
+    ids = [row["id"] for page in pages for row in page["items"]]
+    assert len(ids) == len(set(ids)) == 7

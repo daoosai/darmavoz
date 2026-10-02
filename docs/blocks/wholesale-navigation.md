@@ -99,3 +99,11 @@ POST/PUT /wholesale-requests?draft=true сохраняют приватный dr
 создания, Моих заявок и редактирования. supplier сохраняет полный цикл.
 Старые уведомления driver выбирают all вместо скрытой mine.
 Отчёт: ../2026-10-02-wholesale-driver-view.md.
+
+## Все заявки поставщика
+
+GET /wholesale-requests?view=all для supplier возвращает опубликованную биржу
+и все заявки текущего автора (draft/pending/rejected/approved/archived, включая
+истёкшие). Поиск/город/сроки/пагинация применяются к одному SQL OR без дублей.
+Чужие неопубликованные скрыты; driver/favorites/moderation сохраняют правила.
+Отчёт: ../2026-10-02-wholesale-supplier-all.md.

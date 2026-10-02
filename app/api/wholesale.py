@@ -3,7 +3,7 @@ from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import exists, func, select
+from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -110,6 +110,9 @@ async def feed(view: str = Query("all", pattern="^(all|mine|favorites|moderation
         conditions.append(WholesaleRequest.status != "draft")
         if status != "all":
             conditions.append(WholesaleRequest.status == (status or "pending"))
+    elif view == "all" and user.role.name == "supplier":
+        conditions.append(or_(WholesaleRequest.author_id == user.id,
+                              and_(WholesaleRequest.status == "approved", WholesaleRequest.ends_on >= today())))
     else:
         conditions.extend([WholesaleRequest.status == "approved", WholesaleRequest.ends_on >= today()])
     if view == "favorites":

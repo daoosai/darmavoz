@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { ClipboardList, Copy, Heart, Loader2, MapPin, Phone, Plus, Search, ShieldCheck, Truck, X } from 'lucide-react';
+import { ClipboardList, Copy, Heart, Loader2, MapPin, Phone, Plus, Search, Truck, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import CommerceShell from './CommerceShell';
 import CommerceAddressInput from './CommerceAddressInput';
@@ -22,7 +22,6 @@ const blank = (cityId: string) => ({ city_id: cityId, material_id: '', material_
 export default function WholesaleScreen({ onClose }: { onClose: () => void }) {
   const role = useAuthStore(s => s.role);
   const { cities, cityId, refresh } = useCityStore();
-  const [access, setAccess] = useState<boolean | null>(null);
   const [view, setView] = useState('all');
   const [q, setQ] = useState('');
   const [city, setCity] = useState('');
@@ -39,10 +38,7 @@ export default function WholesaleScreen({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const [reasonAction, setReasonAction] = useState<'reject' | 'hide' | null>(null);
   const [reason, setReason] = useState('');
-  const [partnersOpen, setPartnersOpen] = useState(false);
-  const [partnerQuery, setPartnerQuery] = useState('');
-  const [partners, setPartners] = useState<any[]>([]);
-  useEffect(() => { void refresh(); commerceApi('/wholesale-requests/access').then(r => setAccess(r.enabled)).catch(e => setError(e.message)); }, [refresh]);
+  useEffect(() => { void refresh(); }, [refresh]);
   const load = useCallback(async (signal?: AbortSignal) => {
     setLoading(true); setError('');
     try {
@@ -55,7 +51,7 @@ export default function WholesaleScreen({ onClose }: { onClose: () => void }) {
     } catch (e: any) { if (e.name !== 'AbortError') setError(e.message); }
     finally { if (!signal?.aborted) setLoading(false); }
   }, [view, q, city, from, to, page]);
-  useEffect(() => { const controller = new AbortController(); if (access) void load(controller.signal); return () => controller.abort(); }, [access, load]);
+  useEffect(() => { const controller = new AbortController(); void load(controller.signal); return () => controller.abort(); }, [load]);
   const action = async (path: string, body: unknown = {}, method = 'POST') => {
     setBusy(true);
     try {
@@ -71,14 +67,9 @@ export default function WholesaleScreen({ onClose }: { onClose: () => void }) {
       if (data.is_owner || role === 'admin') setHistory(await commerceApi(`/wholesale-requests/${row.id}/history`));
     } catch (e: any) { toast.error(e.message); }
   };
-  const loadPartners = async () => {
-    try { setPartners(await commerceApi(`/wholesale-requests/partners?q=${encodeURIComponent(partnerQuery)}`)); }
-    catch (e: any) { toast.error(e.message); }
-  };
-  useEffect(() => { if (partnersOpen) void loadPartners(); }, [partnersOpen]);
   if (editing) return <WholesaleForm request={editing === 'new' ? null : editing} initialCity={cityId || ''} cities={cities.filter(c => c.is_active)} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setDetail(null); setView('mine'); setPage(1); void load(); }} />;
   return <CommerceShell title="Оптовые заявки" subtitle="Крупные объёмы · прямые договорённости" onClose={detail ? () => { setDetail(null); setReasonAction(null); } : onClose}>
-    {access === false ? <div className="rounded-3xl border border-sky-100 bg-white p-7 text-center"><ShieldCheck className="mx-auto mb-4 h-12 w-12 text-sky-400" /><h2 className="text-lg font-bold">Раздел для допущенных партнёров</h2><p className="mt-2 text-sm text-slate-500">Для доступа обратитесь к администратору через поддержку.</p></div> : access === null ? <p className="text-sm text-slate-500">{error || 'Проверяем доступ…'}</p> : detail ? <>
+    {detail ? <>
       <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
         <div className="flex justify-between gap-3"><span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-bold text-sky-600">{states[detail.status]}</span><span className="text-xs text-slate-400">{dateTime(detail.created_at)}</span></div>
         <h2 className="mt-4 text-2xl font-extrabold">{detail.material_name}</h2>
@@ -97,8 +88,7 @@ export default function WholesaleScreen({ onClose }: { onClose: () => void }) {
       <div className="rounded-3xl bg-gradient-to-br from-sky-500 to-sky-600 p-5 text-white shadow-sm"><ClipboardList className="mb-3 h-7 w-7" /><h2 className="text-xl font-extrabold">Найдите перевозчиков</h2><p className="mt-2 text-sm leading-relaxed text-sky-50">Разместите объём и условия. Партнёры свяжутся с вами и договорятся о перевозке.</p><button className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-bold text-sky-600" onClick={() => setEditing('new')}><Plus className="h-4 w-4" />Создать заявку</button></div>
       <div className="flex gap-1 overflow-x-auto rounded-2xl bg-white p-1">{[['all', 'Все'], ['favorites', 'Избранное'], ['mine', 'Мои'], ...(role === 'admin' ? [['moderation', 'Проверка']] : [])].map(([id, label]) => <button key={id} className={`min-h-11 flex-1 whitespace-nowrap rounded-xl px-3 text-xs font-bold ${view === id ? 'bg-sky-50 text-sky-600' : 'text-slate-500'}`} onClick={() => { setView(id); setPage(1); }}>{label}</button>)}</div>
       <div className="space-y-3 rounded-2xl bg-white p-4"><label className="relative block"><Search className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" /><input className={`${inputClass} pl-9`} placeholder="Поиск материала" value={q} onChange={e => { setQ(e.target.value); setPage(1); }} /></label><select aria-label="Город загрузки" className={inputClass} value={city} onChange={e => { setCity(e.target.value); setPage(1); }}><option value="">Все города загрузки</option>{cities.filter(c => c.is_active).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select><div className="grid grid-cols-2 gap-2"><label className="text-xs text-slate-500">Сроки от<input type="date" className={`${inputClass} mt-1`} value={from} onChange={e => { setFrom(e.target.value); setPage(1); }} /></label><label className="text-xs text-slate-500">До<input type="date" className={`${inputClass} mt-1`} value={to} onChange={e => { setTo(e.target.value); setPage(1); }} /></label></div></div>
-      {role === 'admin' && <button className="w-full rounded-xl bg-sky-50 p-3 text-sm font-bold text-sky-700" onClick={() => setPartnersOpen(!partnersOpen)}>Допуск партнёров</button>}
-      {partnersOpen && <div className="space-y-3 rounded-2xl bg-white p-4"><form className="flex gap-2" onSubmit={e => { e.preventDefault(); void loadPartners(); }}><input className={inputClass} placeholder="Имя / логин партнёра" value={partnerQuery} onChange={e => setPartnerQuery(e.target.value)} /><button className={buttonClass}>Найти</button></form>{partners.map(p => <div className="flex items-center justify-between gap-2 border-b border-slate-100 py-2" key={p.id}><div className="min-w-0"><p className="break-words text-sm font-bold">{p.name}</p><p className="text-xs text-slate-400">{p.role}{!p.active && ' · неактивен'}</p></div><button className={`shrink-0 rounded-xl px-3 py-2 text-xs font-bold ${p.enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`} onClick={async () => { try { await commerceApi(`/wholesale-requests/partners/${p.id}`, { method: 'PATCH', body: JSON.stringify({ enabled: !p.enabled }) }); await loadPartners(); } catch (e: any) { toast.error(e.message); } }}>{p.enabled ? 'Допущен ✓' : 'Допустить'}</button></div>)}</div>}
+
       {loading ? <div className="flex justify-center p-8"><Loader2 className="h-7 w-7 animate-spin text-sky-500" /></div> : error ? <div className="rounded-2xl bg-red-50 p-4 text-sm text-red-700">{error}<button className="ml-2 underline" onClick={() => load()}>Повторить</button></div> : !rows.length ? <div className="rounded-3xl bg-white p-10 text-center"><ClipboardList className="mx-auto mb-3 h-10 w-10 text-slate-300" /><p className="font-bold">Заявок пока нет</p><p className="mt-2 text-sm text-slate-500">Попробуйте изменить фильтры или создайте свою.</p></div> : rows.map(row => <article key={row.id} className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm"><div className="flex items-start justify-between gap-2"><button className="min-w-0 text-left" onClick={() => open(row)}><span className="text-xs font-bold text-sky-500">{states[row.status]}</span><h3 className="mt-2 text-xl font-extrabold">{row.material_name}</h3></button>{row.status === 'published' && <button disabled={busy} aria-label={row.is_favorite ? 'Убрать из избранного' : 'В избранное'} className="rounded-xl bg-slate-50 p-3" onClick={() => action(`${row.id}/favorite`, { enabled: !row.is_favorite }, 'PUT')}><Heart className={`h-5 w-5 ${row.is_favorite ? 'fill-sky-500 text-sky-500' : 'text-slate-400'}`} /></button>}</div><button className="mt-3 w-full text-left" onClick={() => open(row)}><p className="text-sm text-slate-500">{Number(row.volume).toLocaleString('ru-RU')} {units[row.unit]} · {row.vehicle_count} машин</p><p className="mt-3 line-clamp-2 break-words text-sm">{row.pickup_address} → {row.delivery_address}</p><p className="mt-2 text-xs text-slate-400">{row.starts_on} — {row.ends_on}</p><p className="mt-4 text-lg font-bold text-sky-600">{rubles(row.price)} <span className="text-xs">/ {units[row.price_basis]}</span></p></button></article>)}
       {total > 20 && <div className="flex items-center justify-between"><button disabled={page === 1} className={buttonClass} onClick={() => setPage(page - 1)}>Назад</button><span className="text-sm text-slate-500">{page} / {Math.ceil(total / 20)}</span><button disabled={page * 20 >= total} className={buttonClass} onClick={() => setPage(page + 1)}>Далее</button></div>}
     </>}

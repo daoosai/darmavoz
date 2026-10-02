@@ -23,20 +23,22 @@ async def create_actor(session, name, *, admitted=False):
     return user, headers
 
 
+@pytest.mark.parametrize("partner_role", ["supplier", "driver"])
 @pytest.mark.asyncio
-async def test_wholesale_admission_moderation_and_ownership(client, session_factory, admin_token):
+async def test_wholesale_role_access_moderation_and_ownership(client, session_factory, admin_token, partner_role):
     async with session_factory() as db:
-        partner, partner_headers = await create_actor(db, "supplier")
-        other, other_headers = await create_actor(db, "equipment_owner", admitted=True)
+        partner, partner_headers = await create_actor(db, partner_role)
+        other, other_headers = await create_actor(db, "driver" if partner_role == "supplier" else "supplier")
         city = await db.scalar(select(City).where(City.is_active.is_(True)).limit(1))
         customer = Client(name="s24-client", email=f"{uuid4().hex}@example.invalid"); db.add(customer)
         await db.commit()
         partner_id, city_id, customer_id = str(partner.id), str(city.id), str(customer.id)
     admin = {"Authorization": f"Bearer {admin_token}"}
     customer_headers = {"Authorization": f"Bearer {create_access_token({'sub': customer.email, 'role': 'client', 'client_id': customer_id})}"}
-    assert (await client.get('/api/v1/wholesale-requests', headers=partner_headers)).status_code == 403
+    assert (await client.get('/api/v1/wholesale-requests', headers=partner_headers)).status_code == 200
     assert (await client.get('/api/v1/wholesale-requests', headers=customer_headers)).status_code == 403
-    assert (await client.patch(f'/api/v1/wholesale-requests/partners/{partner_id}', headers=admin, json={'enabled': True})).status_code == 200
+    access = await client.get('/api/v1/wholesale-requests/access', headers=partner_headers)
+    assert access.status_code == 200 and access.json()['enabled'] is True
     payload = dict(city_id=city_id, material_name="Песок", volume="500", unit="m3", vehicle_count=25, pickup_address="Карьер",
                    delivery_address="Стройка", starts_on=str(today()), ends_on=str(today() + timedelta(days=10)), price="450", price_basis="m3", contact_name="Автор", contact_phone="+79990000000")
     response = await client.post('/api/v1/wholesale-requests', headers=partner_headers, json=payload)
@@ -44,7 +46,9 @@ async def test_wholesale_admission_moderation_and_ownership(client, session_fact
     request_id = response.json()['id']
     assert (await client.get(f'/api/v1/wholesale-requests/{request_id}', headers=other_headers)).status_code == 404
     assert (await client.put(f'/api/v1/wholesale-requests/{request_id}', headers=other_headers, json=payload)).status_code == 403
-    assert (await client.post(f'/api/v1/wholesale-requests/{request_id}/submit', headers=partner_headers)).status_code == 200
+    submitted = await client.post(f'/api/v1/wholesale-requests/{request_id}/submit', headers=partner_headers)
+    assert submitted.status_code == 200 and submitted.json()['status'] == 'pending_moderation'
+    assert (await client.get(f'/api/v1/wholesale-requests/{request_id}', headers=other_headers)).status_code == 404
     assert (await client.post(f'/api/v1/wholesale-requests/{request_id}/moderate', headers=partner_headers, json={'action': 'publish'})).status_code == 403
     response = await client.post(f'/api/v1/wholesale-requests/{request_id}/moderate', headers=admin, json={'action': 'publish'})
     assert response.status_code == 200, response.text
@@ -163,3 +167,26 @@ async def test_payment_receipt_refund_and_ledger_roundtrip(client, session_facto
     assert response.json()['net'] == '0.00'
     response = await client.get('/api/v1/finance/payments', headers=admin, params={'status': 'refunded', 'order_query': order_id})
     assert response.json()['total'] == 1 and response.json()['items'][0]['refund_status'] == 'succeeded'
+
+@pytest.mark.parametrize("role", ["equipment_owner", "water_septic_partner"])
+@pytest.mark.asyncio
+async def test_wholesale_rejects_other_partner_roles_even_with_legacy_flag(client, session_factory, role):
+    async with session_factory() as db:
+        user, headers = await create_actor(db, role, admitted=True)
+        await db.commit()
+    for path in ("/api/v1/wholesale-requests", "/api/v1/wholesale-requests/access"):
+        assert (await client.get(path, headers=headers)).status_code == 403
+    assert (await client.post("/api/v1/wholesale-requests", headers=headers, json={})).status_code == 403
+
+
+@pytest.mark.parametrize("role", ["supplier", "driver"])
+@pytest.mark.parametrize("blocked_field", ["is_active", "is_deleted"])
+@pytest.mark.asyncio
+async def test_wholesale_rejects_blocked_accounts(client, session_factory, role, blocked_field):
+    async with session_factory() as db:
+        user, headers = await create_actor(db, role)
+        setattr(user, blocked_field, blocked_field == "is_deleted")
+        await db.commit()
+    for path in ("/api/v1/wholesale-requests", "/api/v1/wholesale-requests/access"):
+        assert (await client.get(path, headers=headers)).status_code == 401
+    assert (await client.post("/api/v1/wholesale-requests", headers=headers, json={})).status_code == 401

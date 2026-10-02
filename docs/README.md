@@ -26,3 +26,5 @@
 - [Исправление навигации опта](2026-10-02-wholesale-navigation.md).
 
 - [Видимость опта по ролям](2026-10-02-wholesale-role-visibility.md).
+
+- [Доступ к оптовым заявкам без whitelist](2026-10-02-wholesale-access.md).

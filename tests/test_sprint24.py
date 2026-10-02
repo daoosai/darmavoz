@@ -218,9 +218,9 @@ def test_report_inclusive_end_and_timezone():
 
 @pytest.mark.parametrize("role", sorted(PARTNER_ROLES))
 @pytest.mark.asyncio
-async def test_partner_requires_explicit_admission(role):
-    u = SimpleNamespace(role=SimpleNamespace(name=role), wholesale_access_enabled=False)
-    with pytest.raises(HTTPException): await board_user(u)
+async def test_partner_access_ignores_legacy_whitelist(role):
+    u = SimpleNamespace(role=SimpleNamespace(name=role), wholesale_access_enabled=False, is_active=True, is_deleted=False, driver_profile=None)
+    assert await board_user(u) is u
     u.wholesale_access_enabled = True
     assert await board_user(u) is u
 

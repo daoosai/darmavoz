@@ -8,13 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.db.database import get_db
-from app.models.models import City, Material, Role, User
+from app.models.models import City, Material, User
 from app.models.commerce import WholesaleEvent, WholesaleFavorite, WholesaleRequest
 from app.schemas.commerce import AccessInput, ModerationInput, WholesaleInput, WholesaleOut
-from app.security.auth import OrderAccessActor, get_current_admin_user, get_current_order_actor, get_current_user
+from app.security.auth import OrderAccessActor, get_current_admin_user, get_current_order_actor
 
 router = APIRouter(prefix="/wholesale-requests", tags=["wholesale"])
-PARTNER_ROLES = {"driver", "supplier", "equipment_owner", "water_septic_partner"}
+PARTNER_ROLES = {"driver", "supplier"}
 
 
 def today():
@@ -25,11 +25,15 @@ async def board_user(actor: OrderAccessActor = Depends(get_current_order_actor))
     user = actor.user if isinstance(actor, OrderAccessActor) else actor
     if user is None:
         raise HTTPException(403, "Раздел доступен только партнёрам")
+    if not user.is_active or user.is_deleted:
+        raise HTTPException(401, "Аккаунт заблокирован")
+    if user.driver_profile is not None and user.driver_profile.moderation_status == "suspended":
+        raise HTTPException(403, "Профиль водителя заблокирован")
     role = user.role.name
     if role in {"admin", "logist"}:
         return user
-    if role not in PARTNER_ROLES or not user.wholesale_access_enabled:
-        raise HTTPException(403, "Доступ к оптовым заявкам выдаёт администратор")
+    if role not in PARTNER_ROLES:
+        raise HTTPException(403, "Раздел доступен только водителям и поставщикам")
     return user
 
 
@@ -66,27 +70,8 @@ async def serialize(db, request, user):
 
 
 @router.get("/access")
-async def access(user: User = Depends(get_current_user)):
-    return {"enabled": is_staff(user) or (user.role.name in PARTNER_ROLES and user.wholesale_access_enabled), "can_moderate": user.role.name == "admin"}
-
-
-@router.get("/partners")
-async def partners(q: str = "", user: User = Depends(get_current_admin_user), db: AsyncSession = Depends(get_db)):
-    rows = (await db.execute(select(User, Role.name).join(Role).where(
-        Role.name.in_(PARTNER_ROLES), User.is_deleted.is_(False),
-        (User.username.ilike(f"%{q}%") | User.display_name.ilike(f"%{q}%")),
-    ).order_by(User.username).limit(200))).all()
-    return [{"id": u.id, "name": u.display_name or u.username, "role": role, "enabled": u.wholesale_access_enabled, "active": u.is_active} for u, role in rows]
-
-
-@router.patch("/partners/{user_id}")
-async def partner_access(user_id: UUID, payload: AccessInput, admin: User = Depends(get_current_admin_user), db: AsyncSession = Depends(get_db)):
-    partner = await db.scalar(select(User).join(Role).where(User.id == user_id, Role.name.in_(PARTNER_ROLES), User.is_deleted.is_(False)))
-    if not partner:
-        raise HTTPException(404, "Партнёр не найден")
-    partner.wholesale_access_enabled = payload.enabled
-    await db.commit()
-    return {"enabled": payload.enabled}
+async def access(user: User = Depends(board_user)):
+    return {"enabled": is_staff(user) or user.role.name in PARTNER_ROLES, "can_moderate": user.role.name == "admin"}
 
 
 @router.get("")

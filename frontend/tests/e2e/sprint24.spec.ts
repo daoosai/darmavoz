@@ -110,16 +110,25 @@ for (const role of ['driver', 'supplier']) {
   }
 }
 
-test('партнёр без допуска видит Опт и пояснение доступа', async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('auth-storage', JSON.stringify({
-    state: { token: 'e2e-only', role: 'supplier' }, version: 0,
-  })));
-  await page.route('**/wholesale-requests/access', route => route.fulfill({ json: { enabled: false, can_moderate: false } }));
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Опт', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Раздел для допущенных партнёров' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Песок', exact: true })).toHaveCount(0);
-});
+for (const role of ['supplier', 'driver']) {
+  test(`партнёр ${role} создаёт заявку без whitelist API`, async ({ page }) => {
+    await page.addInitScript(role => localStorage.setItem('auth-storage', JSON.stringify({
+      state: { token: 'e2e-only', role }, version: 0,
+    })), role);
+    let accessCalls = 0;
+    await page.route('**/wholesale-requests/access', route => {
+      accessCalls += 1;
+      return route.fulfill({ json: { enabled: false, can_moderate: false } });
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Опт', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Песок', exact: true })).toBeVisible();
+    await expect(page.getByText('Раздел для допущенных партнёров')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Создать заявку', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Новая оптовая заявка', exact: true })).toBeVisible();
+    expect(accessCalls).toBe(0);
+  });
+}
 
 test('у клиента B2C нет вкладки Опт', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('auth-storage', JSON.stringify({

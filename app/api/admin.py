@@ -1406,7 +1406,7 @@ async def get_admin_sidebar_counts(
 async def get_admin_driver(
     driver_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_admin: User = Depends(get_current_admin_user),
+    current_admin: User = Depends(get_current_logist_user),
 ):
     del current_admin
     return await _load_driver_or_404(db, driver_id)
@@ -1415,7 +1415,7 @@ async def get_admin_driver(
 @router.get("/vehicles", response_model=list[VehicleOut])
 async def list_admin_vehicles(
     db: AsyncSession = Depends(get_db),
-    current_admin: User = Depends(get_current_admin_user),
+    current_admin: User = Depends(get_current_logist_user),
 ):
     del current_admin
     return await _list_admin_vehicles(db)

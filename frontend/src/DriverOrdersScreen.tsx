@@ -13,9 +13,11 @@ import {
   orderStatusColors,
   handleApiError,
 } from "./utils";
+import WholesaleScreen from "./WholesaleScreen";
 import DriverProfileScreen from "./DriverProfileScreen";
 import NotificationCenter from "./components/shared/NotificationCenter";
 import {
+  Briefcase,
   LogOut,
   MapPin,
   Clock,
@@ -109,7 +111,7 @@ export default function DriverOrdersScreen({
   onLogout,
 }: DriverOrdersScreenProps) {
   const { token } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<"orders" | "profile" | "support">("orders");
+  const [activeTab, setActiveTab] = useState<"orders" | "profile" | "support" | "wholesale">("orders");
   const [isOnShift, setIsOnShift] = useState(false);
   const [isUpdatingShift, setIsUpdatingShift] = useState(false);
   const [isPreparingShiftStart, setIsPreparingShiftStart] = useState(false);
@@ -818,6 +820,8 @@ export default function DriverOrdersScreen({
             </PullToRefresh>
           )}
         </div>
+      ) : activeTab === "wholesale" ? (
+        <WholesaleScreen onClose={() => setActiveTab("orders")} />
       ) : activeTab === "profile" ? (
         <DriverProfileScreen
           onLogout={handleLogout}
@@ -885,6 +889,18 @@ export default function DriverOrdersScreen({
               <ClipboardList className="w-6 h-6" />
             </div>
             <span className="text-[10px] font-bold">Заказы</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("wholesale")}
+            aria-current={activeTab === "wholesale" ? "page" : undefined}
+            className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${activeTab === "wholesale" ? "text-[#2DB0E6]" : "text-slate-400 hover:text-slate-600"}`}
+          >
+            <div className={`p-1.5 rounded-xl transition-colors ${activeTab === "wholesale" ? "bg-[#2DB0E6]/10" : ""}`}>
+              <Briefcase className="w-6 h-6" />
+            </div>
+            <span className="text-[10px] font-bold">Опт</span>
           </button>
 
           <button

@@ -84,3 +84,49 @@ test('новая оптовая заявка показывает предпро
   await expect(page.getByText('Ищем перевозчиков. Щебень,', { exact: false })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Отправить на проверку', exact: true })).toBeVisible();
 });
+
+// Start in the partner cabinet and click its navigation, never a wholesale URL.
+for (const role of ['driver', 'supplier', 'equipment_owner', 'water_septic_partner']) {
+  for (const width of [320, 1440]) {
+    test(`партнёр ${role} открывает Опт из навигации на ${width}px`, async ({ page }) => {
+      await page.addInitScript(role => localStorage.setItem('auth-storage', JSON.stringify({
+        state: { token: 'e2e-only', role }, version: 0,
+      })), role);
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/');
+      const tab = page.getByRole('button', { name: 'Опт', exact: true });
+      await expect(tab).toBeVisible();
+      const bounds = await tab.boundingBox();
+      expect(bounds!.x).toBeGreaterThanOrEqual(0);
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
+      await tab.click();
+      await expect(page.getByRole('heading', { name: 'Оптовые заявки', exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Песок', exact: true })).toBeVisible();
+      await page.screenshot({ path: `test-results/wholesale-nav-${role}-${width}.png`, fullPage: true });
+      await page.locator('section.fixed').getByRole('button', { name: 'Назад', exact: true }).click();
+      await expect(tab).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Оптовые заявки', exact: true })).toHaveCount(0);
+    });
+  }
+}
+
+test('партнёр без допуска видит Опт и пояснение доступа', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('auth-storage', JSON.stringify({
+    state: { token: 'e2e-only', role: 'supplier' }, version: 0,
+  })));
+  await page.route('**/wholesale-requests/access', route => route.fulfill({ json: { enabled: false, can_moderate: false } }));
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Опт', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Раздел для допущенных партнёров' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Песок', exact: true })).toHaveCount(0);
+});
+
+test('у клиента B2C нет вкладки Опт', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('auth-storage', JSON.stringify({
+    state: { token: 'e2e-only', role: 'client' }, version: 0,
+  })));
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: 'Главная', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Опт', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Оптовые заявки/ })).toHaveCount(0);
+});

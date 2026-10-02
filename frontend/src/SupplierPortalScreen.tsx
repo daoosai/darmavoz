@@ -1,4 +1,5 @@
 import { useState } from "react";
+import WholesaleScreen from "./WholesaleScreen";
 
 import { logoutCurrentSession } from "./pushAuth";
 import SupportScreen from "./SupportScreen";
@@ -20,7 +21,9 @@ export default function SupplierPortalScreen({ onBack }: { onBack: () => void })
 
     return (
       <div className="min-h-screen bg-gray-50 pb-24 sm:mx-auto sm:max-w-md">
-        {activeView === "support" ? (
+        {activeView === "wholesale" ? (
+          <WholesaleScreen onClose={() => setActiveView("points")} />
+        ) : activeView === "support" ? (
           <SupportScreen onBack={() => setActiveView("profile")} />
         ) : activeView === "points" ? (
           <SupplierDashboardScreen

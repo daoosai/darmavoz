@@ -1,4 +1,5 @@
 import { useState } from "react";
+import WholesaleScreen from "./WholesaleScreen";
 
 import EquipmentOwnerBottomNav, { type EquipmentOwnerTab } from "./EquipmentOwnerBottomNav";
 import EquipmentOwnerProfileScreen from "./EquipmentOwnerProfileScreen";
@@ -20,7 +21,9 @@ export default function EquipmentOwnerPortalScreen({ onBack }: { onBack: () => v
 
     return (
       <div className="min-h-screen bg-gray-50 pb-24 sm:mx-auto sm:max-w-md">
-        {activeView === "support" ? (
+        {activeView === "wholesale" ? (
+          <WholesaleScreen onClose={() => setActiveView("equipment")} />
+        ) : activeView === "support" ? (
           <SupportScreen onBack={() => setActiveView("profile")} />
         ) : activeView === "equipment" ? (
           <SupplierEquipmentScreen token={token} apiPrefix="/equipment-owner" />

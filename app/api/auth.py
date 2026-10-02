@@ -8,7 +8,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import selectinload
 
 from app.db.database import get_db
@@ -339,13 +339,32 @@ async def _get_user_by_email(db: AsyncSession, email: str) -> User | None:
     return result.scalar_one_or_none()
 
 
-async def _get_user_by_phone(db: AsyncSession, phone: str) -> User | None:
+async def _get_login_user(db: AsyncSession, login_value: str) -> User | None:
+    # Preserve literal employee usernames before applying phone normalization.
+    value = login_value.strip()
+    options = (selectinload(User.role), selectinload(User.driver_profile))
+    user = await db.scalar(select(User).where(User.username == value).options(*options))
+    if user is not None:
+        return user
+
+    phone = normalize_phone_like_username(value)
+    if not phone.startswith("+") or not phone[1:].isdigit():
+        return None
+    aliases = {phone, phone[1:]}
+    if len(phone) == 12 and phone.startswith("+7"):
+        aliases.update({"8" + phone[2:], phone[2:]})
     result = await db.execute(
         select(User)
-        .where(User.username == phone)
-        .options(selectinload(User.role), selectinload(User.driver_profile))
+        .where(or_(User.username.in_(aliases), User.driver_profile.has(Driver.phone.in_(aliases))))
+        .options(*options)
     )
-    return result.scalar_one_or_none()
+    matches = result.scalars().all()
+    # A phone shared by different accounts must never select an arbitrary user.
+    return matches[0] if len(matches) == 1 else None
+
+
+async def _get_user_by_phone(db: AsyncSession, phone: str) -> User | None:
+    return await _get_login_user(db, phone)
 
 
 async def _get_client_by_email(db: AsyncSession, email: str) -> Client | None:
@@ -353,7 +372,7 @@ async def _get_client_by_email(db: AsyncSession, email: str) -> Client | None:
 
 
 def _ensure_user_can_authenticate(user: User) -> None:
-    if not user.is_active:
+    if not user.is_active or user.is_deleted:
         raise _blocked_profile_exception()
     if user.driver_profile is not None and user.driver_profile.moderation_status == ModerationStatus.suspended.value:
         raise _blocked_profile_exception()
@@ -609,14 +628,7 @@ async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db),
 ):
-    normalized_phone = normalize_phone_like_username(form_data.username)
-    query = (
-        select(User)
-        .where(User.username == normalized_phone)
-        .options(selectinload(User.role), selectinload(User.driver_profile))
-    )
-    result = await db.execute(query)
-    user = result.scalar_one_or_none()
+    user = await _get_login_user(db, form_data.username)
 
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
@@ -625,13 +637,16 @@ async def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    if not user.is_active:
+    if not user.is_active or user.is_deleted:
         raise _blocked_profile_exception()
     if user.driver_profile is not None and user.driver_profile.moderation_status == ModerationStatus.suspended.value:
         raise _blocked_profile_exception()
 
     role_name = user.role.name if user.role else None
     if role_name == "driver":
+        normalized_phone = normalize_phone(
+            user.driver_profile.phone if user.driver_profile else user.username
+        )
         return await _issue_driver_login_code(
             normalized_phone=normalized_phone,
             user_id=str(user.id),
@@ -674,15 +689,10 @@ async def verify_driver_login(
     ):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неверный код")
 
-    result = await db.execute(
-        select(User)
-        .where(User.username == normalized_phone)
-        .options(selectinload(User.role), selectinload(User.driver_profile))
-    )
-    user = result.scalar_one_or_none()
+    user = await _get_user_by_phone(db, normalized_phone)
     if user is None or str(user.id) != pending_user_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
-    if not user.is_active:
+    if not user.is_active or user.is_deleted:
         raise _blocked_profile_exception()
     if user.driver_profile is not None and user.driver_profile.moderation_status == ModerationStatus.suspended.value:
         raise _blocked_profile_exception()

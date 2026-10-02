@@ -51,7 +51,7 @@ export default function LoginScreen({
 
   const submitLogin = async () => {
     const formData = new URLSearchParams();
-    formData.append("username", normalizePhoneValue(username));
+    formData.append("username", username.trim());
     formData.append("password", password);
 
     const response = await fetch(`${baseURL}/auth/login`, {

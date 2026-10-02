@@ -8,7 +8,7 @@ from sqlalchemy import select
 from app.api.wholesale import today
 from app.core.config import settings
 from app.models.commerce import Payment, PaymentQuote
-from app.models.models import City, Client, Order, Role, User
+from app.models.models import City, Client, Driver, Order, Role, User, Vehicle
 from app.security.jwt import create_access_token
 from app.services import payments
 
@@ -19,6 +19,12 @@ async def create_actor(session, name, *, admitted=False):
         role = Role(name=name, description=name); session.add(role); await session.flush()
     user = User(username=f"s24-{uuid4().hex}", role_id=role.id, hashed_password="test-only", wholesale_access_enabled=admitted)
     session.add(user); await session.flush()
+    if name == "driver":
+        vehicle = Vehicle(title="QA approved vehicle", brand="QA", plate_number=uuid4().hex[:10], moderation_status="approved", is_active=True)
+        session.add(vehicle); await session.flush()
+        user.driver_profile = Driver(name="QA approved driver", phone="+7" + str(int(uuid4().hex[:10], 16))[-10:],
+                                     vehicle=vehicle, moderation_status="approved", is_active=True)
+        await session.flush()
     headers = {"Authorization": f"Bearer {create_access_token({'sub': user.username, 'role': name})}"}
     return user, headers
 
@@ -212,8 +218,7 @@ async def test_wholesale_full_moderation_and_push(client, session_factory, admin
         city = await db.scalar(select(City).where(City.is_active.is_(True)).limit(1))
         author.fcm_token = "test-wholesale-token" if author_role == "supplier" else None
         if author_role == "driver":
-            db.add(Driver(name="Wholesale author", phone="+79990001234", user_id=author.id,
-                          fcm_token="test-driver-wholesale-token", status="offline", moderation_status="incomplete"))
+            author.driver_profile.fcm_token = "test-driver-wholesale-token"
         await db.commit()
         author_id = author.id
         payload = dict(city_id=str(city.id), material_name="Песок", volume="500", unit="m3", vehicle_count=25,
@@ -484,3 +489,30 @@ async def test_supplier_all_includes_own_requests_without_leaking_others(client,
     assert all(page["total"] == 7 for page in pages)
     ids = [row["id"] for page in pages for row in page["items"]]
     assert len(ids) == len(set(ids)) == 7
+
+
+@pytest.mark.parametrize("driver_status,vehicle_status", [
+    ("incomplete", "approved"), ("pending_moderation", "approved"), ("rejected", "approved"),
+    ("approved", "incomplete"), ("approved", "pending_moderation"), ("approved", "rejected"),
+    ("approved", "missing"), ("missing", "approved"), ("approved", "inactive"),
+])
+@pytest.mark.asyncio
+async def test_wholesale_requires_approved_driver_and_vehicle(client, session_factory, driver_status, vehicle_status):
+    async with session_factory() as db:
+        user, headers = await create_actor(db, "driver")
+        driver = user.driver_profile
+        if driver_status == "missing":
+            await db.delete(driver)
+        else:
+            driver.moderation_status = driver_status
+            if vehicle_status == "missing":
+                driver.vehicle = None
+            elif vehicle_status == "inactive":
+                driver.vehicle.is_active = False
+            else:
+                driver.vehicle.moderation_status = vehicle_status
+        await db.commit()
+    for suffix in ("?view=all", "?view=mine", "?view=favorites", "/access", "/" + str(uuid4()), "/" + str(uuid4()) + "/history"):
+        response = await client.get("/api/v1/wholesale-requests" + suffix, headers=headers)
+        assert response.status_code == 403, response.text
+    assert (await client.post("/api/v1/wholesale-requests", headers=headers, json={})).status_code == 403

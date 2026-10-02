@@ -136,7 +136,7 @@ for (const role of ['supplier', 'driver']) {
     let accessCalls = 0;
     await page.route('**/wholesale-requests/access', route => {
       accessCalls += 1;
-      return route.fulfill({ json: { enabled: false, can_moderate: false } });
+      return route.fulfill({ json: { enabled: role === 'driver', can_moderate: false } });
     });
     await page.goto('/');
     await page.getByRole('button', { name: 'Опт', exact: true }).click();
@@ -154,7 +154,8 @@ for (const role of ['supplier', 'driver']) {
       await expect(page.getByRole('button', { name: 'Избранное', exact: true })).toHaveClass(/bg-sky-50/);
       await page.getByRole('button', { name: 'Все', exact: true }).click();
     }
-    expect(accessCalls).toBe(0);
+    if (role === 'driver') expect(accessCalls).toBeGreaterThan(0);
+    else expect(accessCalls).toBe(0);
   });
 }
 
@@ -189,6 +190,7 @@ for (const role of ['equipment_owner', 'water_septic_partner']) {
 test('модерация: причина обязательна, отклонённая заявка исправляется и одобряется', async ({ page }) => {
   let current = { ...request, status: 'pending', reject_reason: null as string | null, is_owner: false };
   await page.route('**/wholesale-requests**', async route => {
+    if (new URL(route.request().url()).pathname.endsWith('/access')) return route.fulfill({ json: { enabled: true } });
     const url = new URL(route.request().url());
     const method = route.request().method();
     if (url.pathname.endsWith('/moderate')) {
@@ -312,6 +314,7 @@ test('адреса опта используют подсказки 2GIS и со
 
 test('карточка без количества машин одинакова в предпросмотре, модерации и ленте', async ({ page }) => {
   await page.route('**/wholesale-requests**', async route => {
+    if (new URL(route.request().url()).pathname.endsWith('/access')) return route.fulfill({ json: { enabled: true } });
     const row = { ...request, material_name: 'Бой кирпича', volume: '30', vehicle_count: null,
       starts_on: '2026-10-02', ends_on: '2026-10-02', status: 'pending' };
     const url = new URL(route.request().url());
@@ -427,6 +430,7 @@ for (const width of [320, 390, 768, 1440]) {
     let current = { ...request, status: 'pending', reject_reason: null as string | null };
     await page.setViewportSize({ width, height: 900 });
     await page.route('**/wholesale-requests**', async route => {
+    if (new URL(route.request().url()).pathname.endsWith('/access')) return route.fulfill({ json: { enabled: true } });
       const url = new URL(route.request().url());
       if (url.pathname.endsWith('/moderate')) {
         const body = route.request().postDataJSON();
@@ -473,6 +477,7 @@ test('поставщик сохраняет черновик, редактиру
   await page.addInitScript(() => localStorage.setItem('auth-storage', JSON.stringify({ state: { token: 'e2e-only', role: 'supplier' }, version: 0 })));
   let saved: any = null;
   await page.route('**/wholesale-requests**', async route => {
+    if (new URL(route.request().url()).pathname.endsWith('/access')) return route.fulfill({ json: { enabled: true } });
     const url = new URL(route.request().url());
     const method = route.request().method();
     if (method === 'POST' || method === 'PUT') {
@@ -508,3 +513,28 @@ test('поставщик сохраняет черновик, редактиру
   await expect(page.getByText('Черновик', { exact: true })).toHaveCount(0);
   expect(saved.status).toBe('pending');
 });
+
+for (const blockedAt of ['access', 'feed']) {
+  test(`водителю показывается замок при 403 в ${blockedAt}`, async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('auth-storage', JSON.stringify({ state: { token: 'e2e-only', role: 'driver' }, version: 0 })));
+    let feedCalls = 0;
+    await page.route('**/wholesale-requests**', async route => {
+      const url = new URL(route.request().url());
+      if (url.pathname.endsWith('/access')) return route.fulfill(blockedAt === 'access'
+        ? { status: 403, json: { detail: 'Профиль и машина должны пройти модерацию' } }
+        : { json: { enabled: true } });
+      feedCalls++;
+      return route.fulfill({ status: 403, json: { detail: 'Профиль и машина должны пройти модерацию' } });
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Опт', exact: true }).click();
+    const screen = page.locator('section.fixed');
+    await expect(screen.getByRole('heading', { name: 'Доступ закрыт', exact: true })).toBeVisible();
+    await expect(screen.getByText('Для просмотра оптовых заявок необходимо завершить оформление профиля и пройти модерацию администратором.', { exact: true })).toBeVisible();
+    for (const name of ['Все', 'Избранное', 'Мои заявки']) await expect(screen.getByRole('button', { name, exact: true })).toHaveCount(0);
+    await expect(screen.getByPlaceholder('Поиск материала')).toHaveCount(0);
+    await expect(page.getByTestId('wholesale-request-card')).toHaveCount(0);
+    await expect(page.getByText('Профиль и машина должны пройти модерацию', { exact: true })).toHaveCount(0);
+    if (blockedAt === 'access') expect(feedCalls).toBe(0);
+  });
+}

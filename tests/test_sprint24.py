@@ -220,6 +220,9 @@ def test_report_inclusive_end_and_timezone():
 @pytest.mark.asyncio
 async def test_partner_access_ignores_legacy_whitelist(role):
     u = SimpleNamespace(role=SimpleNamespace(name=role), wholesale_access_enabled=False, is_active=True, is_deleted=False, driver_profile=None)
+    if role == "driver":
+        u.driver_profile = SimpleNamespace(moderation_status="approved", is_active=True,
+                                           vehicle=SimpleNamespace(moderation_status="approved", is_active=True))
     assert await board_user(u) is u
     u.wholesale_access_enabled = True
     assert await board_user(u) is u

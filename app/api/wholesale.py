@@ -31,6 +31,12 @@ async def board_user(actor: OrderAccessActor = Depends(get_current_order_actor))
     if user.driver_profile is not None and user.driver_profile.moderation_status == "suspended":
         raise HTTPException(403, "Профиль водителя заблокирован")
     role = user.role.name
+    if role == "driver":
+        driver = user.driver_profile
+        vehicle = driver.vehicle if driver else None
+        if (not driver or not driver.is_active or driver.moderation_status != "approved"
+                or not vehicle or not vehicle.is_active or vehicle.moderation_status != "approved"):
+            raise HTTPException(403, "Для просмотра оптовых заявок необходимо завершить оформление профиля и пройти модерацию администратором.")
     if role in {"admin", "logist"}:
         return user
     if role not in PARTNER_ROLES:

@@ -8,7 +8,9 @@ export async function commerceApi(path: string, options: RequestInit = {}) {
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(typeof body.detail === 'string' ? body.detail : 'Не удалось выполнить запрос');
+    const error = new Error(typeof body.detail === 'string' ? body.detail : 'Не удалось выполнить запрос');
+    Object.assign(error, { status: response.status });
+    throw error;
   }
   return response.json();
 }

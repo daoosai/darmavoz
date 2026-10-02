@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import { ClipboardList, Heart, Loader2, Plus, Search } from 'lucide-react';
+import { ClipboardList, Heart, Loader2, Lock, Plus, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import CommerceShell from './CommerceShell';
 import WholesaleRequestCard, { wholesaleStates as states } from './WholesaleRequestCard';
@@ -26,6 +26,8 @@ export default function WholesaleScreen({ onClose, initialView = 'all' }: { onCl
   const role = useAuthStore(s => s.role);
   const token = useAuthStore(s => s.token);
   const canPublish = role === 'supplier';
+  const [driverAccess, setDriverAccess] = useState(role === 'driver' ? 'checking' : 'allowed');
+  const [accessRetry, setAccessRetry] = useState(0);
   const { cities, cityId, refresh } = useCityStore();
   const [view, setView] = useState(new URLSearchParams(window.location.search).has('notification_wholesale') ? (initialView === 'moderation' ? 'moderation' : canPublish ? 'mine' : 'all') : initialView);
   const [q, setQ] = useState('');
@@ -44,7 +46,23 @@ export default function WholesaleScreen({ onClose, initialView = 'all' }: { onCl
   const [reasonAction, setReasonAction] = useState<'reject' | null>(null);
   const [reason, setReason] = useState('');
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    if (role !== 'driver') { setDriverAccess('allowed'); return; }
+    const controller = new AbortController();
+    setDriverAccess('checking');
+    commerceApi('/wholesale-requests/access', { signal: controller.signal })
+      .then(data => { if (!controller.signal.aborted) setDriverAccess(data.enabled ? 'allowed' : 'blocked'); })
+      .catch(e => { if (e.name !== 'AbortError') setDriverAccess(e.status === 403 ? 'blocked' : 'error'); });
+    return () => controller.abort();
+  }, [role, token, accessRetry]);
+  const blockedByModeration = (e: any) => {
+    if (role !== 'driver' || e.status !== 403) return false;
+    setDriverAccess('blocked'); setRows([]); setDetail(null); setHistory([]);
+    return true;
+  };
+
   const load = useCallback(async (signal?: AbortSignal) => {
+    if (driverAccess !== 'allowed') return;
     setLoading(true); setError('');
     try {
       const params = new URLSearchParams({ view, q, page: String(page) });
@@ -53,9 +71,9 @@ export default function WholesaleScreen({ onClose, initialView = 'all' }: { onCl
       if (to) params.set('ends_on', to);
       const data = await commerceApi(`/wholesale-requests?${params}`, { signal });
       setRows(data.items); setTotal(data.total);
-    } catch (e: any) { if (e.name !== 'AbortError') setError(e.message); }
+    } catch (e: any) { if (e.name !== 'AbortError' && !blockedByModeration(e)) setError(e.message); }
     finally { if (!signal?.aborted) setLoading(false); }
-  }, [view, q, city, from, to, page]);
+  }, [view, q, city, from, to, page, driverAccess, role]);
   useEffect(() => { const controller = new AbortController(); void load(controller.signal); return () => controller.abort(); }, [load]);
   const action = async (path: string, body: unknown = {}, method = 'POST') => {
     setBusy(true);
@@ -63,21 +81,26 @@ export default function WholesaleScreen({ onClose, initialView = 'all' }: { onCl
       const result = await commerceApi(`/wholesale-requests/${path}`, { method, body: JSON.stringify(body) });
       if (result.id) setDetail(result);
       await load(); toast.success('Сохранено'); return true;
-    } catch (e: any) { toast.error(e.message); return false; }
+    } catch (e: any) { if (!blockedByModeration(e)) toast.error(e.message); return false; }
     finally { setBusy(false); }
   };
   const open = async (row: Pick<Announcement, 'id'>) => {
     try {
       const data = await commerceApi(`/wholesale-requests/${row.id}`); setDetail(data); setHistory([]);
       if (data.is_owner || role === 'admin') setHistory(await commerceApi(`/wholesale-requests/${row.id}/history`));
-    } catch (e: any) { toast.error(e.message); }
+    } catch (e: any) { if (!blockedByModeration(e)) toast.error(e.message); }
   };
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get('notification_wholesale');
-    if (id && /^[0-9a-f-]{36}$/i.test(id)) void open({ id });
-  }, []);
+    if (driverAccess === 'allowed' && id && /^[0-9a-f-]{36}$/i.test(id)) void open({ id });
+  }, [driverAccess]);
   const embedded = role === 'driver' || role === 'supplier';
   const headerActions = <NotificationCenter token={token} overlayZIndex={100001} />;
+  if (role === 'driver' && driverAccess !== 'allowed') return <CommerceShell embedded={embedded} headerActions={headerActions} title="Оптовые заявки" subtitle="Крупные объёмы · прямые договорённости" onClose={onClose}>
+    {driverAccess === 'checking' ? <div className="flex justify-center p-10"><Loader2 aria-label="Проверка доступа" className="h-8 w-8 animate-spin text-slate-400" /></div>
+      : driverAccess === 'blocked' ? <div className="rounded-3xl border border-slate-100 bg-white px-6 py-12 text-center shadow-sm"><Lock className="mx-auto mb-5 h-16 w-16 text-slate-300" /><h2 className="text-xl font-bold text-slate-800">Доступ закрыт</h2><p className="mt-3 text-sm leading-relaxed text-slate-500">Для просмотра оптовых заявок необходимо завершить оформление профиля и пройти модерацию администратором.</p></div>
+      : <div className="rounded-3xl bg-white p-8 text-center text-slate-500"><p>Не удалось проверить доступ.</p><button className="mt-4 font-bold text-sky-600" onClick={() => setAccessRetry(n => n + 1)}>Повторить</button></div>}
+  </CommerceShell>;
   if (canPublish && editing) return <WholesaleForm embedded={embedded} headerActions={headerActions} request={editing === 'new' ? null : editing} initialCity={cityId || ''} cities={cities.filter(c => c.is_active)} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setDetail(null); setView('mine'); setPage(1); void load(); }} />;
   return <CommerceShell embedded={embedded} headerActions={headerActions} title="Оптовые заявки" subtitle="Крупные объёмы · прямые договорённости" onClose={detail ? () => { setDetail(null); setReasonAction(null); } : onClose}>
     {detail ? <>

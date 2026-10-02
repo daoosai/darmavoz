@@ -129,7 +129,7 @@ for (const role of ['driver', 'supplier']) {
 }
 
 for (const role of ['supplier', 'driver']) {
-  test(`партнёр ${role} создаёт заявку без whitelist API`, async ({ page }) => {
+  test(`партнёр ${role} открывает биржу без whitelist API`, async ({ page }) => {
     await page.addInitScript(role => localStorage.setItem('auth-storage', JSON.stringify({
       state: { token: 'e2e-only', role }, version: 0,
     })), role);
@@ -142,8 +142,18 @@ for (const role of ['supplier', 'driver']) {
     await page.getByRole('button', { name: 'Опт', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Песок', exact: true })).toBeVisible();
     await expect(page.getByText('Раздел для допущенных партнёров')).toHaveCount(0);
-    await page.getByRole('button', { name: 'Создать заявку', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Новая оптовая заявка', exact: true })).toBeVisible();
+    if (role === 'supplier') {
+      await expect(page.getByRole('button', { name: 'Мои заявки', exact: true })).toBeVisible();
+      await page.getByRole('button', { name: 'Создать заявку', exact: true }).click();
+      await expect(page.getByRole('heading', { name: 'Новая оптовая заявка', exact: true })).toBeVisible();
+    } else {
+      await expect(page.getByText('Найдите перевозчиков', { exact: true })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Создать заявку', exact: true })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Мои заявки', exact: true })).toHaveCount(0);
+      await page.getByRole('button', { name: 'Избранное', exact: true }).click();
+      await expect(page.getByRole('button', { name: 'Избранное', exact: true })).toHaveClass(/bg-sky-50/);
+      await page.getByRole('button', { name: 'Все', exact: true }).click();
+    }
     expect(accessCalls).toBe(0);
   });
 }

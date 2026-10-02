@@ -38,3 +38,5 @@
 - [Админская навигация и уведомления оптовых заявок](2026-10-02-wholesale-admin-navigation-notifications.md)
 
 - [Админская модерация и черновики опта](2026-10-02-wholesale-admin-view-drafts.md)
+
+- [Интерфейс опта для водителя](2026-10-02-wholesale-driver-view.md)

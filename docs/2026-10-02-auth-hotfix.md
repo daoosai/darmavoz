@@ -16,6 +16,34 @@
 Обновлён FakeRedis для текущих rate limits; тест регистрации reviewer освобождает
 заранее созданный миграцией номер только в временной БД.
 
-Проверки и доставка: npm run lint пройден. Pytest: 11 passed (auth hotfix + driver OTP). Итог commit/push, deployment
-и live-проверка будут записаны после завершения.
+Проверки: npm run lint и npm run build пройдены. Pytest: 11 passed
+(auth hotfix + driver OTP) в отдельной временной БД.
+Коммит: 960b51a611713ae70e17523955c7bbf6b4772206,
+fix: CRITICAL restore global authentication logic for all roles.
+Push origin develop выполнен с ноды.
+Сначала выполнена срочная локальная пересборка backend и доставка frontend;
+затем штатный GitHub Actions Deploy Test Environment завершился success:
+https://github.com/daoosai/darmavoz/actions/runs/36996317926
+Build Test Android APK также success:
+https://github.com/daoosai/darmavoz/actions/runs/36996317874
+Runtime /opt/darmavoz_test_deploy и revision image backend_test — 960b51a6.
+Health снаружи: 200.
+
+В браузере внешнего test.darmavoz.ru/app:
+- admin: 200, JWT, открыта панель администратора;
+- водитель, указанный владельцем: 200 sms_sent, затем verify-login 200,
+  JWT role driver, открыта панель водителя;
+- неверный пароль обоих аккаунтов: 401.
+Пароль администратора восстановлен в тестовой БД по указанию владельца,
+auth_version увеличен для аннулирования старых токенов. Пароль водителя не изменялся.
+После перезапуска admin успешно вошёл через локальный и внешний API (200).
+Скриншоты проверены визуально и сохранены на ноде:
+ /opt/darmavoz_auth_artifacts/2026-10-02/admin.png
+ /opt/darmavoz_auth_artifacts/2026-10-02/driver.png
+
+Ограничения: точная причина последнего изменения старого хеша admin не установлена;
+массовая неисправность паролей водителей не воспроизведена. Проверен конкретный
+аккаунт владельца и регрессионные варианты в временной БД. На панели проверенного
+водителя требуется завершение модерации автомобиля, это не ошибка входа.
+Production не изменялся. Незавершённых шагов данного hotfix нет.
 Документ блока: blocks/authentication.md.

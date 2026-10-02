@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { commerceApi, inputClass, buttonClass } from './commerceApi';
@@ -7,8 +8,8 @@ const fieldsFrom = (vehicle: any) => ({
   vehicle_id: vehicle?.id || '',
   vehicle_brand: vehicle?.brand || '',
   vehicle_plate_number: vehicle?.plate_number || '',
-  vehicle_type: vehicle?.vehicle_type || 'Самосвал',
-  transport_category_id: vehicle?.transport_category_id || vehicle?.transport_category?.id || '',
+  vehicle_type: vehicle?.vehicle_type || '',
+  transport_category_id: vehicle?.transport_category_id || vehicle?.transport_category?.id || vehicle?.delivery_option?.transport_category_id || vehicle?.delivery_option?.transport_category?.id || '',
   delivery_option_id: vehicle?.delivery_option_id || vehicle?.delivery_option?.id || '',
   cubature_min: String(vehicle?.cubature_min ?? ''),
   cubature_max: String(vehicle?.cubature_max ?? ''),
@@ -17,7 +18,7 @@ const fieldsFrom = (vehicle: any) => ({
 });
 
 export default function DriverVehiclePanel({ driver, onClose, onSaved }: { driver: any; onClose: () => void; onSaved?: () => void }) {
-  const [form, setForm] = useState(() => fieldsFrom(driver.vehicle));
+  const [form, setForm] = useState(() => fieldsFrom(null));
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [options, setOptions] = useState<any[]>([]);
@@ -43,14 +44,14 @@ export default function DriverVehiclePanel({ driver, onClose, onSaved }: { drive
     if (Number(form.cubature_min) > Number(form.cubature_max)) { setError('Минимальная кубатура не может превышать максимальную'); return; }
     setSaving(true);
     try {
-      const payload: any = { ...form, vehicle_id: form.vehicle_id || undefined, delivery_option_id: form.delivery_option_id || undefined, transport_category_id: form.transport_category_id || null };
+      const payload: any = { ...form, vehicle_id: form.vehicle_id || undefined, create_new_vehicle: !form.vehicle_id, delivery_option_id: form.delivery_option_id || undefined, transport_category_id: form.transport_category_id || null };
       for (const field of ['cubature_min', 'cubature_max', 'tonnage_min', 'tonnage_max']) payload[field] = form[field] ? Number(form[field]) : null;
       await commerceApi(`/admin/drivers/${driver.id}/vehicle`, { method: 'PATCH', body: JSON.stringify(payload) });
       toast.success('Транспорт водителя сохранён'); onSaved?.(); onClose();
     } catch (error: any) { setError(error.message); }
     finally { setSaving(false); }
   };
-  return <section role="dialog" aria-modal="true" aria-label="Транспорт водителя" className="fixed inset-0 z-[10000] flex flex-col overflow-y-auto bg-slate-50 text-slate-900">
+  return createPortal(<section role="dialog" aria-modal="true" aria-label="Транспорт водителя" className="fixed inset-0 z-[10000] flex flex-col overflow-y-auto bg-slate-50 text-slate-900">
     <header className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-5 pb-4 pt-[max(env(safe-area-inset-top),2.5rem)]">
       <div><h2 className="text-lg font-bold">Транспорт водителя</h2><p className="text-xs text-slate-500">{driver.name}</p></div>
       <button type="button" aria-label="Закрыть транспорт" disabled={saving} onClick={onClose} className="rounded-xl bg-slate-100 p-3"><X className="h-5 w-5" /></button>
@@ -58,7 +59,7 @@ export default function DriverVehiclePanel({ driver, onClose, onSaved }: { drive
     <form onSubmit={save} className="mx-auto flex w-full max-w-xl flex-col gap-4 p-5 pb-[max(env(safe-area-inset-bottom),2rem)]">
       {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {loading ? <p>Загружаем транспорт…</p> : <>
-        <label className="text-sm font-bold">Машина<select aria-label="Машина" className={inputClass} value={form.vehicle_id} onChange={event => setForm(fieldsFrom(vehicles.find(vehicle => vehicle.id === event.target.value)))}><option value="">Заполнить транспорт водителя</option>{vehicles.map(vehicle => <option key={vehicle.id} value={vehicle.id}>{vehicle.title || vehicle.brand} · {vehicle.plate_number || 'Без номера'}</option>)}</select></label>
+        <label className="text-sm font-bold">Машина<select aria-label="Машина" className={inputClass} value={form.vehicle_id} onChange={event => setForm(fieldsFrom(vehicles.find(vehicle => vehicle.id === event.target.value)))}><option value="">➕ Создать новую машину</option>{vehicles.map(vehicle => <option key={vehicle.id} value={vehicle.id}>{vehicle.brand || vehicle.title || 'Машина'} ({vehicle.plate_number || 'Без номера'})</option>)}</select></label>
         <label className="text-sm font-bold">Марка машины<input required className={inputClass} value={form.vehicle_brand} onChange={event => set('vehicle_brand', event.target.value)} /></label>
         <label className="text-sm font-bold">Госномер<input required className={inputClass} value={form.vehicle_plate_number} onChange={event => set('vehicle_plate_number', event.target.value.toUpperCase())} /></label>
         <label className="text-sm font-bold">Тип машины<input required className={inputClass} value={form.vehicle_type} onChange={event => set('vehicle_type', event.target.value)} /></label>
@@ -68,5 +69,5 @@ export default function DriverVehiclePanel({ driver, onClose, onSaved }: { drive
         <button disabled={saving || loadFailed} className={buttonClass}>{saving ? 'Сохраняем…' : 'Сохранить'}</button>
       </>}
     </form>
-  </section>;
+  </section>, document.body);
 }

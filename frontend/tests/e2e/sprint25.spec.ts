@@ -79,3 +79,51 @@ for (const role of ['driver', 'supplier', 'equipment_owner', 'water_septic_partn
     await page.screenshot({ path: testInfo.outputPath('profile-header.png'), fullPage: true });
   });
 }
+
+for (const width of [390, 1440]) {
+  test('назначение свободной и создание новой машины на ' + width, async ({ page }) => {
+    const categoryId = '40000000-0000-4000-8000-000000000001';
+    const vehicleId = '30000000-0000-4000-8000-000000000001';
+    await page.setViewportSize({ width, height: 900 });
+    await page.route('**/api/v1/transport-categories', route => route.fulfill({ json: [{ id: categoryId, title: 'Самосвалы' }] }));
+    await page.route('**/api/v1/admin/drivers/*/vehicles', route => route.fulfill({ json: [{ id: vehicleId, brand: 'КАМАЗ', plate_number: 'А001АА72', vehicle_type: 'Самосвал', cubature_min: 10, cubature_max: 20, transport_category_id: categoryId }] }));
+    await page.goto('/logist/orders');
+    await page.getByRole('button', { name: 'Водители', exact: true }).filter({ visible: true }).click();
+    await page.getByRole('button', { name: 'Назначить машину', exact: true }).click();
+    const editor = page.getByRole('dialog', { name: 'Транспорт водителя', exact: true });
+    await expect(editor.getByLabel('Машина', { exact: true }).locator('option').first()).toHaveText('➕ Создать новую машину');
+    await expect(editor.getByLabel('Машина', { exact: true }).locator('option').nth(1)).toHaveText('КАМАЗ (А001АА72)');
+    expect(await page.evaluate(() => !!document.elementFromPoint(30, 110)?.closest('[role="dialog"]'))).toBeTruthy();
+    await editor.getByLabel('Машина', { exact: true }).selectOption(vehicleId);
+    await expect(editor.getByLabel('Госномер', { exact: true })).toHaveValue('А001АА72');
+    await expect(editor.getByLabel('Кубатура от, м³', { exact: true })).toHaveValue('10');
+    await expect(editor.getByLabel('Кубатура до, м³', { exact: true })).toHaveValue('20');
+    await expect(editor.getByLabel('Категория транспорта', { exact: true })).toHaveValue(categoryId);
+    const existingRequest = page.waitForRequest(request => request.method() === 'PATCH' && request.url().endsWith('/vehicle'));
+    await editor.getByRole('button', { name: 'Сохранить', exact: true }).click();
+    expect((await existingRequest).postDataJSON()).toMatchObject({ vehicle_id: vehicleId, create_new_vehicle: false });
+    await expect(editor).toHaveCount(0);
+    await page.getByRole('button', { name: 'Назначить машину', exact: true }).click();
+    await editor.getByLabel('Машина', { exact: true }).selectOption(vehicleId);
+    await editor.getByLabel('Машина', { exact: true }).selectOption('');
+    for (const label of ['Марка машины', 'Госномер', 'Тип машины', 'Кубатура от, м³', 'Кубатура до, м³', 'Категория транспорта']) {
+      await expect(editor.getByLabel(label, { exact: true })).toHaveValue('');
+    }
+    await editor.getByLabel('Марка машины', { exact: true }).fill('МАЗ');
+    await editor.getByLabel('Госномер', { exact: true }).fill('В002ВВ72');
+    await editor.getByLabel('Тип машины', { exact: true }).fill('Самосвал');
+    await editor.getByLabel('Кубатура от, м³', { exact: true }).fill('15');
+    await editor.getByLabel('Кубатура до, м³', { exact: true }).fill('25');
+    await editor.getByLabel('Категория транспорта', { exact: true }).selectOption(categoryId);
+    const newRequest = page.waitForRequest(request => request.method() === 'PATCH' && request.url().endsWith('/vehicle'));
+    await editor.getByRole('button', { name: 'Сохранить', exact: true }).click();
+    const payload = (await newRequest).postDataJSON();
+    expect(payload).toMatchObject({ create_new_vehicle: true, vehicle_brand: 'МАЗ', cubature_min: 15, cubature_max: 25 });
+    expect(payload).not.toHaveProperty('vehicle_id');
+    await expect(editor).toHaveCount(0);
+    await page.getByRole('button', { name: 'Открыть уведомления', exact: true }).filter({ visible: true }).click();
+    const notifications = page.getByRole('dialog', { name: 'Центр уведомлений' });
+    await expect(notifications).toBeVisible();
+    expect(await page.evaluate(() => !!document.elementFromPoint(window.innerWidth - 30, window.innerHeight - 30)?.closest('[role="dialog"]'))).toBeTruthy();
+  });
+}

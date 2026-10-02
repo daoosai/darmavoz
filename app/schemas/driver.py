@@ -138,6 +138,7 @@ class OperatorDriverVehicleUpdate(BaseModel):
     """Transport-only permissions; account and admission fields are forbidden."""
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
     vehicle_id: UUID | None = None
+    create_new_vehicle: bool = False
     delivery_option_id: UUID | None = None
     transport_category_id: UUID | None = None
     vehicle_brand: str | None = Field(default=None, max_length=255)

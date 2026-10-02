@@ -1630,7 +1630,7 @@ async def list_driver_available_vehicles(
 ):
     await _load_driver_or_404(db, driver_id)
     vehicles = await _list_admin_vehicles(db)
-    occupied = set((await db.scalars(select(Driver.vehicle_id).where(Driver.id != driver_id, Driver.vehicle_id.is_not(None)))).all())
+    occupied = set((await db.scalars(select(Driver.vehicle_id).where(Driver.vehicle_id.is_not(None)))).all())
     return [vehicle for vehicle in vehicles if vehicle.is_active and vehicle.id not in occupied]
 
 
@@ -1644,6 +1644,8 @@ async def update_operator_driver_vehicle(
     from app.services.driver_eligibility import ACTIVE_STATUSES
     from app.services.vehicle_validation import validate_vehicle_capacity
 
+    if payload.create_new_vehicle and payload.vehicle_id is not None:
+        raise HTTPException(422, "Выберите существующую машину или создание новой")
     await db.execute(select(Driver.id).where(Driver.id == driver_id).with_for_update())
     driver = await _load_driver_or_404(db, driver_id)
     active_order = await db.scalar(select(Order.id).where(Order.driver_id == driver_id, Order.status.in_(ACTIVE_STATUSES)).limit(1))
@@ -1658,7 +1660,7 @@ async def update_operator_driver_vehicle(
             raise HTTPException(409, "Транспорт отключён")
         await _ensure_vehicle_is_free(db, vehicle.id, exclude_driver_id=driver_id)
     else:
-        vehicle = driver.vehicle
+        vehicle = None if payload.create_new_vehicle else driver.vehicle
     if vehicle is None:
         vehicle = Vehicle(title=driver.name, is_active=True)
         db.add(vehicle)
@@ -1670,7 +1672,7 @@ async def update_operator_driver_vehicle(
         vehicle.delivery_option_id = option.id
     names = {"vehicle_brand": "brand", "vehicle_plate_number": "plate_number"}
     for field, value in payload.model_dump(exclude_unset=True).items():
-        if field not in ("vehicle_id", "delivery_option_id"):
+        if field not in ("vehicle_id", "delivery_option_id", "create_new_vehicle"):
             setattr(vehicle, names.get(field, field), value)
     await validate_vehicle_capacity(db, vehicle)
     if not vehicle.transport_category_id and not vehicle.delivery_option_id:

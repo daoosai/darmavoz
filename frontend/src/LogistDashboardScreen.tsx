@@ -1202,7 +1202,9 @@ export default function LogistDashboardScreen({
                 </button>
               </div>
 
-              {isLoadingDrivers ? (
+              {/* Keep driver editors mounted during a same-city list refresh.
+                  City changes already clear drivers in the city effect above. */}
+              {isLoadingDrivers && drivers.length === 0 ? (
                 <div className="flex flex-col items-center justify-center p-20 text-slate-400">
                   <Loader2 className="w-10 h-10 animate-spin mb-4 text-[#2DB0E6]" />
                   <p className="font-medium text-lg">Загрузка водителей...</p>

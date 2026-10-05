@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, Loader2, RefreshCw, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import WholesaleRequestCard, { type WholesaleCardData, wholesaleStates } from './WholesaleRequestCard';
 import ReasonModal from './components/admin/ReasonModal';
 import { commerceApi, dateTime, inputClass } from './commerceApi';
+
+import { useOperatorCityStore } from './operatorCityStore';
 
 interface Announcement extends WholesaleCardData { id: string; status: string }
 const filters = [['pending', 'На модерации'], ['approved', 'Активные'], ['rejected', 'Отклонённые'], ['archived', 'Архив'], ['all', 'Все']] as const;
@@ -12,7 +14,11 @@ const filters = [['pending', 'На модерации'], ['approved', 'Акти�
 export default function AdminWholesaleScreen() {
   const [status, setStatus] = useState('pending');
   const [q, setQ] = useState('');
-  const [page, setPage] = useState(1);
+  const cityId = useOperatorCityStore(state => state.cityId);
+  const [pagination, setPagination] = useState({ cityId, page: 1 });
+  const page = pagination.cityId === cityId ? pagination.page : 1;
+  const setPage = (page: number) => setPagination({ cityId, page });
+  const listController = useRef<AbortController | null>(null);
   const [rows, setRows] = useState<Announcement[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -22,23 +28,32 @@ export default function AdminWholesaleScreen() {
   const [reason, setReason] = useState('');
   const [detail, setDetail] = useState<Announcement | null>(null);
   const [history, setHistory] = useState<{ status: string; reason?: string; created_at: string }[]>([]);
-  const load = useCallback(async (signal?: AbortSignal) => {
+  const load = useCallback(async () => {
+    if (cityId !== useOperatorCityStore.getState().cityId) return;
+    listController.current?.abort();
+    const controller = new AbortController();
+    listController.current = controller;
+    const { signal } = controller;
+    const current = () => !signal.aborted && cityId === useOperatorCityStore.getState().cityId;
     setLoading(true); setError('');
     try {
       const params = new URLSearchParams({ view: 'moderation', status, q, page: String(page) });
+      if (cityId) params.set('city_id', cityId);
       const result = await commerceApi(`/wholesale-requests?${params}`, { signal });
-      if (!signal?.aborted) { setRows(result.items); setTotal(result.total); }
-    } catch (e: any) { if (e.name !== 'AbortError') setError(e.message); }
-    finally { if (!signal?.aborted) setLoading(false); }
-  }, [status, q, page]);
-  useEffect(() => { const controller = new AbortController(); void load(controller.signal); return () => controller.abort(); }, [load]);
+      if (current()) { setRows(result.items); setTotal(result.total); }
+    } catch (e: any) { if (current() && e.name !== 'AbortError') setError(e.message); }
+    finally { if (current()) setLoading(false); }
+  }, [status, q, page, cityId]);
+  useEffect(() => { void load(); return () => listController.current?.abort(); }, [load]);
+  useEffect(() => { setPagination({ cityId, page: 1 }); setDetail(null); setHistory([]); setRejecting(null); setReason(''); }, [cityId]);
   const open = useCallback(async (id: string, signal?: AbortSignal) => {
+    const requestCity = useOperatorCityStore.getState().cityId;
     try {
       const [request, events] = await Promise.all([
         commerceApi(`/wholesale-requests/${id}`, { signal }),
         commerceApi(`/wholesale-requests/${id}/history`, { signal }),
       ]);
-      if (!signal?.aborted) { setDetail(request); setHistory(events); }
+      if (!signal?.aborted && requestCity === useOperatorCityStore.getState().cityId) { setDetail(request); setHistory(events); }
     } catch (e: any) { if (e.name !== 'AbortError') toast.error(e.message); }
   }, []);
   useEffect(() => {

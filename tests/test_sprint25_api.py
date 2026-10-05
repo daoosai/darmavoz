@@ -151,6 +151,20 @@ async def test_offer_reserves_driver_and_expired_offer_cannot_be_accepted(sessio
 
 @pytest.mark.asyncio
 async def test_delivery_is_transactional_deduplicated_and_retried(session_factory, monkeypatch):
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+    # Keep all worker commits inside a rollback-only isolated outer transaction.
+    async with session_factory.kw['bind'].connect() as connection:
+        transaction = await connection.begin()
+        isolated_factory = async_sessionmaker(connection, expire_on_commit=False,
+                                             join_transaction_mode='create_savepoint')
+        try:
+            await connection.execute(PushDelivery.__table__.delete())
+            await _check_delivery_retry(isolated_factory, monkeypatch)
+        finally:
+            await transaction.rollback()
+
+
+async def _check_delivery_retry(session_factory, monkeypatch):
     async with session_factory() as db:
         role = await db.scalar(select(Role).where(Role.name == 'admin'))
         if role is None:

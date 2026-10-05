@@ -18,7 +18,11 @@ const payment = { id: paymentId, order_id: orderId, client_id: 'buyer', amount: 
   receipt_status: 'succeeded', needs_review: false, reconciliation_status: 'matched', checked_at: '2026-09-30T10:06:00Z', provider_id: 'test-provider', client_name: 'Покупатель с длинным именем организации' };
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('auth-storage', JSON.stringify({ state: { token: 'e2e-only', role: 'admin' }, version: 0 })));
+  await page.addInitScript(() => {
+    // Playwright does not guarantee the order of multiple init scripts.
+    if (!localStorage.getItem('auth-storage')) localStorage.setItem('auth-storage',
+      JSON.stringify({ state: { token: 'e2e-only', role: 'admin' }, version: 0 }));
+  });
   await page.route('**/api/v1/**', async route => {
     const url = new URL(route.request().url()); const path = url.pathname;
     let body: unknown = [];
@@ -219,8 +223,6 @@ test('модерация: причина обязательна, отклонё�
 
   current = { ...current, is_owner: true };
   await page.evaluate(() => localStorage.setItem('auth-storage', JSON.stringify({ state: { token: 'e2e-only', role: 'supplier' }, version: 0 })));
-  // The global init script is admin; the last init script sets the supplier role.
-  await page.addInitScript(() => localStorage.setItem('auth-storage', JSON.stringify({ state: { token: 'e2e-only', role: 'supplier' }, version: 0 })));
   await page.goto('/');
   await page.getByRole('button', { name: 'Опт', exact: true }).click();
   await page.getByRole('button', { name: 'Мои заявки', exact: true }).click();
@@ -234,7 +236,8 @@ test('модерация: причина обязательна, отклонё�
   await expect(page.getByText('Причина отклонения:', { exact: false })).toHaveCount(0);
 
   current = { ...current, is_owner: false };
-  await page.addInitScript(() => localStorage.setItem('auth-storage', JSON.stringify({ state: { token: 'e2e-only', role: 'admin' }, version: 0 })));
+  await page.evaluate(() => localStorage.setItem('auth-storage',
+    JSON.stringify({ state: { token: 'e2e-only', role: 'admin' }, version: 0 })));
   await page.goto('/admin/moderation');
   await page.getByRole('button', { name: /Оптовые заявки Модерация заявок/ }).click();
   await page.getByRole('heading', { name: 'Песок', exact: true }).click();
@@ -334,7 +337,7 @@ test('карточка без количества машин одинакова
   await card.getByRole('heading', { name: 'Бой кирпича' }).click();
   await expect(page.getByRole('button', { name: 'Одобрить', exact: true })).toBeVisible();
   await expect(card.getByText('2 октября 2026 г.', { exact: true })).toBeVisible();
-  await page.addInitScript(() => localStorage.setItem('auth-storage', JSON.stringify({ state: { token: 'e2e-only', role: 'supplier' }, version: 0 })));
+  await page.evaluate(() => localStorage.setItem('auth-storage', JSON.stringify({ state: { token: 'e2e-only', role: 'supplier' }, version: 0 })));
   await page.goto('/'); await page.getByRole('button', { name: 'Опт', exact: true }).click();
   await page.getByRole('button', { name: 'Создать заявку', exact: true }).click();
   await page.getByLabel('Название материала', { exact: true }).fill('Бой кирпича');
@@ -346,7 +349,7 @@ test('карточка без количества машин одинакова
   await expect(card.getByText(/Нужно машин/)).toHaveCount(0);
   await count.fill('2');
   await expect(card.getByText('Нужно машин: 2', { exact: true })).toBeVisible();
-  await page.addInitScript(() => localStorage.setItem('auth-storage', JSON.stringify({
+  await page.evaluate(() => localStorage.setItem('auth-storage', JSON.stringify({
     state: { token: 'e2e-only', role: 'driver' }, version: 0,
   })));
   await page.goto('/');
@@ -538,3 +541,66 @@ for (const blockedAt of ['access', 'feed']) {
     if (blockedAt === 'access') expect(feedCalls).toBe(0);
   });
 }
+
+test('город оптовой модерации меняет запрос, сбрасывает страницу и сохраняет фильтры', async ({ page }) => {
+  const second = '10000000-0000-4000-8000-000000000005';
+  await page.route('**/cities/', route => route.fulfill({ json: [
+    { id: cityId, name: 'Тюмень', code: 'tyumen', is_active: true, is_default: true },
+    { id: second, name: 'Салехард', code: 'salekhard', is_active: true },
+  ] }));
+  const queries: URLSearchParams[] = [];
+  await page.route('**/wholesale-requests?**', route => {
+    const params = new URL(route.request().url()).searchParams;
+    queries.push(params);
+    return route.fulfill({ json: { items: params.get('city_id') === second ? [] : [request], total: params.get('city_id') === second ? 0 : 21 } });
+  });
+  await page.goto('/admin/wholesale');
+  await expect(page.getByTestId('wholesale-request-card')).toHaveCount(1);
+  await page.getByLabel('Город', { exact: true }).selectOption(cityId);
+  await expect.poll(() => queries.at(-1)?.get('city_id')).toBe(cityId);
+  await page.getByRole('button', { name: 'Активные', exact: true }).click();
+  await page.getByLabel('Поиск материала', { exact: true }).fill('Песок');
+  await expect.poll(() => queries.at(-1)?.get('q')).toBe('Песок');
+  await page.getByRole('button', { name: 'Далее', exact: true }).click();
+  await expect.poll(() => queries.at(-1)?.get('page')).toBe('2');
+  await page.getByLabel('Город', { exact: true }).selectOption(second);
+  await expect.poll(() => queries.at(-1)?.get('city_id')).toBe(second);
+  expect(queries.at(-1)?.get('page')).toBe('1');
+  expect(queries.at(-1)?.get('status')).toBe('approved');
+  expect(queries.at(-1)?.get('q')).toBe('Песок');
+  await expect(page.getByTestId('wholesale-request-card')).toHaveCount(0);
+  await page.getByLabel('Город', { exact: true }).selectOption('');
+  await expect.poll(() => queries.at(-1)?.has('city_id')).toBe(false);
+  expect(queries.at(-1)?.get('page')).toBe('1');
+  await expect(page.getByTestId('wholesale-request-card')).toHaveCount(1);
+});
+
+test('запоздавший ответ оптовой модерации не возвращает карточки предыдущего города', async ({ page }) => {
+  const second = '10000000-0000-4000-8000-000000000005';
+  await page.route('**/cities/', route => route.fulfill({ json: [
+    { id: cityId, name: 'Тюмень', code: 'tyumen', is_active: true, is_default: true },
+    { id: second, name: 'Салехард', code: 'salekhard', is_active: true },
+  ] }));
+  let release: () => void = () => {};
+  const delayed = new Promise<void>(resolve => { release = resolve; });
+  let finished: () => void = () => {};
+  const oldResponse = new Promise<void>(resolve => { finished = resolve; });
+  await page.route('**/wholesale-requests?**', async route => {
+    const city = new URL(route.request().url()).searchParams.get('city_id');
+    if (city === cityId) {
+      await delayed;
+      try { await route.fulfill({ json: { items: [request], total: 1 } }); } finally { finished(); }
+    } else await route.fulfill({ json: { items: [], total: 0 } });
+  });
+  await page.goto('/admin/wholesale');
+  const oldRequest = page.waitForRequest(req => req.url().includes('/wholesale-requests?') && new URL(req.url()).searchParams.get('city_id') === cityId);
+  await page.getByLabel('Город', { exact: true }).selectOption(cityId);
+  await oldRequest;
+  await page.getByLabel('Город', { exact: true }).selectOption(second);
+  await expect(page.getByText('В этом статусе заявок пока нет', { exact: true })).toBeVisible();
+  release();
+  await oldResponse;
+  await expect(page.getByLabel('Город', { exact: true })).toHaveValue(second);
+  await expect(page.getByTestId('wholesale-request-card')).toHaveCount(0);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});

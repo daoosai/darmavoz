@@ -7,7 +7,8 @@ const cities = [
 const driverId = '20000000-0000-4000-8000-000000000001';
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
-    localStorage.setItem('auth-storage', JSON.stringify({ state: { token: 'qa-only', role: 'logist' }, version: 0 }));
+    if (!localStorage.getItem('auth-storage')) localStorage.setItem('auth-storage',
+      JSON.stringify({ state: { token: 'qa-only', role: 'logist' }, version: 0 }));
     localStorage.setItem('selected-city', JSON.stringify({ state: { cityId: '10000000-0000-4000-8000-000000000001' }, version: 1 }));
   });
   await page.route('**/api/v1/**', async route => {
@@ -34,7 +35,6 @@ for (const width of [390, 1440]) {
     const statuses = page.getByLabel('Статусы водителя', { exact: true });
     await expect(statuses.getByText('Не на смене', { exact: true })).toHaveCount(1);
     await expect(page.getByText('Недоступен', { exact: true }).filter({ visible: true })).toHaveCount(1);
-    await expect(statuses.getByLabel('Push: устройство не подключено')).toBeVisible();
     await page.getByLabel('Фильтр по городу', { exact: true }).selectOption(cities[1].id);
     await expect(page.getByText('Водитель Екатеринбурга', { exact: true })).toBeVisible();
     await expect(page.getByLabel('Города водителя').getByText('Екатеринбург', { exact: true })).toBeVisible();

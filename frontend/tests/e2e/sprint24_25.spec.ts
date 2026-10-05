@@ -16,7 +16,7 @@ const options = [10, 30].map(capacity => ({ id: `50000000-0000-4000-8000-${Strin
 const material = { id: 'material-sand', name: 'Песок', unit: 'м³', price: 450, description: 'Песок для E2E', delivery_options: options };
 const vehicle = { id: '30000000-0000-4000-8000-000000000001', brand: 'КАМАЗ', plate_number: 'А001АА72', vehicle_type: 'Самосвал', cubature_min: 10, cubature_max: 10, body_volume_m3: 10, delivery_option: options[0], is_active: true, media_files: [] };
 const categoryId = '40000000-0000-4000-8000-000000000001';
-const initialDriver = () => ({ id: driverId, name: driverName, phone: '+79990000001', city_ids: [tyumen], city_names: ['Тюмень'], status: 'available', is_active: true, is_on_shift: false, moderation_status: 'approved', vehicle_moderation_status: 'approved', dispatch_exclusion_reasons: [], vehicle });
+const initialDriver = () => ({ id: driverId, name: driverName, phone: '+79990000001', city_ids: [tyumen], city_names: ['Тюмень'], status: 'available', is_active: true, is_on_shift: false, is_auto_dispatch_enabled: true, is_dispatch_eligible: true, moderation_status: 'approved', vehicle_moderation_status: 'approved', dispatch_exclusion_reasons: [], vehicle });
 type State = { driver: ReturnType<typeof initialDriver>; announcement: any; orders: any[]; registration: any; checkouts: any[]; cityQueries: string[] };
 const state = (): State => ({ driver: initialDriver(), announcement: null, orders: [], registration: null, checkouts: [], cityQueries: [] });
 
@@ -40,19 +40,21 @@ async function session(browser: Browser, db: State, role: string | null, path = 
     if (path === '/wholesale-requests/access') return json({ enabled: role !== 'client', can_moderate: role === 'admin' });
     if (path === '/wholesale-requests') {
       if (method === 'POST') {
-        db.announcement = { ...body, id: 'wholesale-sand', author_id: 'supplier', status: 'draft', moderation_reason: null, is_favorite: false, created_at: new Date().toISOString() };
+        db.announcement = { ...body, id: 'wholesale-sand', author_id: 'supplier', status: url.searchParams.get('draft') === 'true' ? 'draft' : 'pending', reject_reason: null, is_favorite: false, created_at: new Date().toISOString() };
         return json({ ...db.announcement, is_owner: true }, 201);
       }
       const view = url.searchParams.get('view');
-      const visible = db.announcement && (view === 'moderation' ? role === 'admin' && db.announcement.status === 'pending_moderation' : view === 'mine' ? role === 'supplier' : db.announcement.status === 'published');
+      const visible = db.announcement && (view === 'moderation'
+        ? role === 'admin' && (url.searchParams.get('status') === db.announcement.status || url.searchParams.get('status') === 'all')
+        : view === 'mine' ? role === 'supplier' : db.announcement.status === 'approved' || role === 'supplier');
       return json({ items: visible ? [{ ...db.announcement, is_owner: role === 'supplier' }] : [], total: visible ? 1 : 0, page: 1 });
     }
     if (path.startsWith('/wholesale-requests/wholesale-sand')) {
       if (path.endsWith('/history')) return json([]);
-      if (path.endsWith('/submit')) db.announcement.status = 'pending_moderation';
+      if (path.endsWith('/submit')) db.announcement.status = 'pending';
       if (path.endsWith('/moderate')) {
-        expect(role).toBe('admin'); expect(body.action).toBe('publish');
-        db.announcement.status = 'published';
+        expect(role).toBe('admin'); expect(body.action).toBe('approve');
+        db.announcement.status = 'approved';
       }
       return json({ ...db.announcement, is_owner: role === 'supplier' });
     }
@@ -121,23 +123,23 @@ test('Спринт 24: оптовая заявка — клиент, поста�
   await client.context().close();
   const supplier = await session(browser, db, 'supplier', '/supplier'); await profile(supplier); await wholesale(supplier);
   await supplier.getByRole('button', { name: 'Создать заявку' }).click();
-  for (const [label, value] of Object.entries({ 'Название материала': 'Песок', 'Общий объём': '500', 'Количество машин': '25', 'Место загрузки': 'Тюмень, карьер', 'Место доставки': 'Тюмень, стройплощадка', 'Контактное лицо': 'Партнёр E2E', 'Телефон': '+79990000002', 'Цена, ₽': '450' })) await supplier.getByLabel(label, { exact: true }).fill(value);
+  for (const [label, value] of Object.entries({ 'Название материала': 'Песок', 'Общий объём': '500', 'Количество машин (необязательно)': '25', 'Место загрузки': 'Тюмень, карьер', 'Место доставки': 'Тюмень, стройплощадка', 'Контактное лицо': 'Партнёр E2E', 'Телефон': '+79990000002', 'Цена, ₽': '450' })) await supplier.getByLabel(label, { exact: true }).fill(value);
   await supplier.getByRole('button', { name: 'Предпросмотр' }).click();
-  await supplier.getByRole('button', { name: 'Отправить на проверку' }).click();
-  await expect.poll(() => db.announcement?.status).toBe('pending_moderation');
+  await supplier.getByRole('button', { name: 'Отправить на модерацию' }).click();
+  await expect.poll(() => db.announcement?.status).toBe('pending');
   expect(Number(db.announcement.volume)).toBe(500); expect(db.announcement.vehicle_count).toBe(25);
   await supplier.context().close();
   const driver = await session(browser, db, 'driver', '/driver'); await profile(driver); await wholesale(driver);
   await expect(driver.getByText('Заявок пока нет', { exact: true })).toBeVisible();
-  const admin = await session(browser, db, 'admin', '/admin/profile'); await wholesale(admin);
-  await admin.getByRole('button', { name: 'Проверка', exact: true }).click();
-  await admin.getByRole('heading', { name: 'Песок', exact: true }).click();
-  await admin.getByRole('button', { name: 'Опубликовать', exact: true }).click();
-  await expect(admin.getByText('Опубликована', { exact: true })).toBeVisible();
+  const admin = await session(browser, db, 'admin', '/admin/wholesale');
+  await admin.getByRole('button', { name: 'Одобрить', exact: true }).click();
+  await expect.poll(() => db.announcement.status).toBe('approved');
   await admin.context().close();
-  await driver.reload(); await profile(driver); await wholesale(driver);
+  await driver.reload();
+  await driver.getByRole('button', { name: 'Опт', exact: true }).click();
   await expect(driver.getByRole('heading', { name: 'Песок', exact: true })).toBeVisible();
-  await expect(driver.getByText('500 м³ · 25 машин', { exact: true })).toBeVisible();
+  await expect(driver.getByTestId('wholesale-request-card').getByText('500 м³', { exact: true })).toBeVisible();
+  await expect(driver.getByText('Нужно машин: 25', { exact: true })).toBeVisible();
 });
 
 test('Спринт 25: регистрация без города, логист назначает Тюмень и машину, смена', async ({ browser }) => {
@@ -196,9 +198,11 @@ test('Спринт 25: 100 м³ — ручной подбор по кубату�
   for (const capacity of [10, 30]) {
     // Seed a cart selection; edit volume and submit checkout through the actual UI.
     const client = await session(browser, db, 'client', '/', capacity);
-    await client.getByRole('button', { name: /Корзина/ }).last().click();
+    await expect(client.locator('nav')).toBeVisible();
+    await client.locator('nav').getByRole('button', { name: /Корзина/ }).click();
     await client.getByRole('button', { name: 'Изменить вариант доставки для Песок', exact: true }).click();
-    await client.getByRole('button').filter({ hasText: options.find(o => o.capacity_m3 === capacity)!.title }).filter({ visible: true }).last().click();
+    // Match the option's accessible name, not text on the cart button behind the sheet.
+    await client.getByRole('button', { name: capacity === 10 ? /Средние машины/ : /Большие самосвалы/ }).click();
     await client.getByRole('button', { name: 'В корзину', exact: true }).click();
     await client.getByLabel('Объём Песок', { exact: true }).fill('100');
     await client.getByLabel('Объём Песок', { exact: true }).blur();

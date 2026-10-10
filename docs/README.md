@@ -48,3 +48,6 @@
 - [Спринт 25: городской фильтр оптовой модерации и автотесты](blocks/sprint25-wholesale-city-tests.md).
 - [Отложенные старые тесты вне спринтов 24–25](2026-10-05-deferred-legacy-tests.md).
 - [Отчёт исправления фильтра и тестов спринтов 24–25](2026-10-05-sprint25-city-tests-fix.md).
+
+- [HTTPS и Caddy](blocks/https-caddy.md).
+- [Восстановление HTTPS 10.10.2026](2026-10-10-https-recovery.md).

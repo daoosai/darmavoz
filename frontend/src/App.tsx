@@ -463,9 +463,13 @@ export default function App() {
         toastOptions={{
           duration: 2000,
           style: {
-            background: "#10B981",
-            color: "#fff",
             zIndex: 999,
+          },
+          success: {
+            style: { background: "#10B981", color: "#fff" },
+          },
+          error: {
+            style: { background: "#DC2626", color: "#fff" },
           },
         }}
       />

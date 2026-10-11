@@ -24,6 +24,7 @@ import { baseURL, handleApiError } from "./utils";
 import { useAuthStore, useAddressStore } from "./store";
 import toast from "react-hot-toast";
 import SwipeableBottomSheet from "./SwipeableBottomSheet";
+import ClientAuthBottomSheet from "./ClientAuthBottomSheet";
 import MapWebGLFallback, { tryCreate2GisMap } from "./components/MapWebGLFallback";
 
 interface Address {
@@ -99,6 +100,8 @@ export default function ClientAddressBottomSheet({
   const [lat, setLat] = useState<number | null>(null);
   const [lon, setLon] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [requiresAuthentication, setRequiresAuthentication] = useState(false);
+  const [showAuthentication, setShowAuthentication] = useState(false);
   const [isMapUnavailable, setIsMapUnavailable] = useState(false);
   const [localSelectedId, setLocalSelectedId] = useState<string | null>(null);
   const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
@@ -181,6 +184,8 @@ export default function ClientAddressBottomSheet({
     if (isOpen) return;
     setEditingAddressId(null);
     setIsAdding(false);
+    setRequiresAuthentication(false);
+    setShowAuthentication(false);
   }, [isOpen]);
 
   useEffect(() => {
@@ -580,7 +585,14 @@ export default function ClientAddressBottomSheet({
         if (closeOnSelect) onClose();
         else void fetchAddresses();
       } else {
-        toast.error("Не удалось сохранить адрес");
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 401) setRequiresAuthentication(true);
+        // Preserve the entered address and report the actual API rejection.
+        toast.error(
+          res.status === 401
+            ? "Сессия истекла. Войдите в профиль и повторите сохранение адреса."
+            : handleApiError({ status: res.status, data }, "Не удалось сохранить адрес"),
+        );
       }
     } catch (err: any) {
       console.error(err);
@@ -606,6 +618,7 @@ export default function ClientAddressBottomSheet({
   if (!isOpen) return null;
 
   const sheet = (
+    <>
     <SwipeableBottomSheet
       isOpen={isOpen}
       onClose={onClose}
@@ -629,6 +642,13 @@ export default function ClientAddressBottomSheet({
           )}
         </div>
 
+        {requiresAuthentication && (
+          <div className="px-6 py-3 text-sm text-red-700" role="alert">
+            <p>Сессия истекла. Войдите повторно, чтобы сохранить адрес.</p>
+            <button type="button" onClick={() => setShowAuthentication(true)}
+              className="mt-2 font-bold underline">Войти повторно</button>
+          </div>
+        )}
         <div className="flex-1 overflow-y-auto flex flex-col">
           <div className="flex flex-col shrink-0 bg-slate-50 px-6 pt-4">
             {/* Map Container */}
@@ -789,6 +809,19 @@ export default function ClientAddressBottomSheet({
           )}
         </div>
     </SwipeableBottomSheet>
+    {showAuthentication && (
+      <div className="fixed inset-0 z-[10001]">
+        <ClientAuthBottomSheet
+          isOpen={showAuthentication}
+          onClose={() => setShowAuthentication(false)}
+          onAuthenticated={() => {
+            setRequiresAuthentication(false);
+            setShowAuthentication(false);
+          }}
+        />
+      </div>
+    )}
+    </>
   );
 
   if (typeof document === "undefined") {

@@ -51,3 +51,6 @@
 
 - [HTTPS и Caddy](blocks/https-caddy.md).
 - [Восстановление HTTPS 10.10.2026](2026-10-10-https-recovery.md).
+
+- [Адреса клиента](blocks/client-addresses.md).
+- [Расследование сохранения адресов 11.10.2026](2026-10-11-client-address-saving.md).

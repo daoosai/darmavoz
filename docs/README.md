@@ -54,3 +54,6 @@
 
 - [Адреса клиента](blocks/client-addresses.md).
 - [Расследование сохранения адресов 11.10.2026](2026-10-11-client-address-saving.md).
+
+- [Подбор точек в корзине](blocks/cart-pickup-point-validation.md).
+- [Аудит Лесного песка 11.10.2026](2026-10-11-forest-sand-cart-audit.md).

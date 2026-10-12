@@ -152,20 +152,22 @@ def city_distance_km(lat: float, lon: float, city: City) -> float:
 
 
 async def resolve_delivery_city(db: AsyncSession, city_id: UUID | None, lat: float | None, lon: float | None) -> City:
-    """Resolve parser-discovered suburbs to a nearby configured delivery market.
+    """Resolve a suburb without inventory to a nearby operational market.
 
-    Existing markets (including ones with disabled tariffs) retain their scope.
-    City bounds are search bounds, not a hard boundary for suburban delivery.
+    Sprint 23 seeded identical tariffs for every locality; these rows alone do
+    not establish a separate delivery market. Custom/disabled tariffs and own
+    priced inventory retain the locality's scope.
     """
     city = await resolve_city(db, city_id)
-    configured = await db.scalar(select(DeliveryTariff.id).where(DeliveryTariff.city_id == city.id).limit(1))
-    inventory = await db.scalar(select(Quarry.id).join(quarry_materials, quarry_materials.c.quarry_id == Quarry.id).join(
-        Material, Material.id == quarry_materials.c.material_id,
-    ).where(
-        Quarry.city_id == city.id, quarry_materials.c.is_active.is_(True), Material.is_active.is_(True),
+    if city.code == LEGACY_CITY_CODE:
+        return city
+    inventory_cities = select(Quarry.city_id).join(
+        quarry_materials, quarry_materials.c.quarry_id == Quarry.id,
+    ).join(Material, Material.id == quarry_materials.c.material_id).where(
+        quarry_materials.c.is_active.is_(True), Material.is_active.is_(True),
         (quarry_materials.c.price > 0) | Material.is_free.is_(True),
-    ).limit(1))
-    if city.code == LEGACY_CITY_CODE or configured is not None or inventory is not None:
+    )
+    if await db.scalar(select(City.id).where(City.id == city.id, City.id.in_(inventory_cities))):
         return city
     if lat is None or lon is None or not isfinite(lat) or not isfinite(lon) or not (-90 <= lat <= 90 and -180 <= lon <= 180):
         return city
@@ -173,7 +175,25 @@ async def resolve_delivery_city(db: AsyncSession, city_id: UUID | None, lat: flo
         return city
     candidates = list((await db.scalars(select(City).where(
         City.is_active.is_(True),
-        (City.code == LEGACY_CITY_CODE) | City.id.in_(select(DeliveryTariff.city_id).where(DeliveryTariff.is_active.is_(True))),
+        (City.code == LEGACY_CITY_CODE) | City.id.in_(inventory_cities),
     ))).all())
     nearby = sorted((city_distance_km(lat, lon, candidate), str(candidate.id), candidate) for candidate in candidates)
-    return nearby[0][2] if nearby and nearby[0][0] <= 100 else city
+    if not nearby or nearby[0][0] > 100:
+        return city
+    parent = nearby[0][2]
+    own_tariffs = list((await db.scalars(select(DeliveryTariff).where(DeliveryTariff.city_id == city.id))).all())
+    if own_tariffs:
+        parent_tariffs = list((await db.scalars(select(DeliveryTariff).where(DeliveryTariff.city_id == parent.id))).all())
+        def signature(tariff):
+            return (tariff.transport_category_id, tariff.distance_from_km, tariff.distance_to_km,
+                    tariff.rate_per_km, tariff.min_price_quarry, tariff.min_price_warehouse,
+                    tariff.is_active, tariff.sort_order)
+        identical_defaults = {signature(t) for t in own_tariffs} == {signature(t) for t in parent_tariffs}
+        # All initial city tariffs were inserted by one migration transaction.
+        # Preserve inheritance if the parent later edits its seeded prices.
+        parent_batches = {(t.transport_category_id, t.created_at) for t in parent_tariffs}
+        same_seed_batch = all(t.updated_at == t.created_at and
+                              (t.transport_category_id, t.created_at) in parent_batches for t in own_tariffs)
+        if not all(t.is_active for t in own_tariffs) or not (identical_defaults or same_seed_batch):
+            return city
+    return parent

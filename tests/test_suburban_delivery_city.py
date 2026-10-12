@@ -9,8 +9,10 @@ from app.models.models import (
     Client,
     CrmStatus,
     DeliveryOption,
+    DeliveryTariff,
     Material,
     Quarry,
+    TransportCategory,
     quarry_materials,
 )
 from app.services.cities import resolve_delivery_city
@@ -37,6 +39,31 @@ def locality(name="Патрушева", lat=57.09, lon=65.53):
     )
 
 
+async def seed_reference_tariffs(db, market):
+    rows = list(
+        (
+            await db.scalars(
+                select(DeliveryTariff).where(DeliveryTariff.city_id == market.id)
+            )
+        ).all()
+    )
+    if not rows:
+        category = await db.scalar(select(TransportCategory).limit(1))
+        tariff = DeliveryTariff(
+            city_id=market.id,
+            transport_category_id=category.id,
+            distance_from_km=0,
+            rate_per_km=200,
+            min_price_quarry=5000,
+            min_price_warehouse=3000,
+            is_active=True,
+        )
+        db.add(tariff)
+        await db.flush()
+        rows = [tariff]
+    return rows
+
+
 @pytest.mark.asyncio
 async def test_suburb_matching_pricing_checkout_and_address(
     client, session_factory, monkeypatch
@@ -56,6 +83,28 @@ async def test_suburb_matching_pricing_checkout_and_address(
         )
         db.add_all([village, category, customer])
         await db.flush()
+        # Reproduce production: Sprint 23 also seeded default tariffs for the suburb.
+        root_tariffs = await seed_reference_tariffs(db, market)
+        inherited_tariffs = [
+            DeliveryTariff(
+                city_id=village.id,
+                **{
+                    key: getattr(t, key)
+                    for key in (
+                        "transport_category_id",
+                        "distance_from_km",
+                        "distance_to_km",
+                        "rate_per_km",
+                        "min_price_quarry",
+                        "min_price_warehouse",
+                        "is_active",
+                        "sort_order",
+                    )
+                },
+            )
+            for t in root_tariffs
+        ]
+        db.add_all(inherited_tariffs)
         material = Material(
             name="Лесной песок",
             category_id=category.id,
@@ -162,6 +211,8 @@ async def test_suburb_matching_pricing_checkout_and_address(
             params={"city_id": str(village.id), "lat": lat, "lon": lon},
         )
         assert result.status_code == 200 and result.json()["id"] == str(market.id)
+        for tariff in inherited_tariffs:
+            await db.delete(tariff)
         await db.delete(village)
         await db.commit()
 
@@ -205,4 +256,53 @@ async def test_configured_market_keeps_scope_when_tariffs_are_disabled(session_f
         assert (await resolve_delivery_city(db, city.id, 57.09, 65.53)).id == city.id
         await db.delete(tariff)
         await db.delete(city)
+        await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_seeded_inheritance_survives_parent_price_edit_but_custom_tariff_keeps_scope(
+    session_factory,
+):
+    async with session_factory() as db:
+        root = await db.scalar(select(City).where(City.code == "tyumen"))
+        tariffs = await seed_reference_tariffs(db, root)
+        suburb, custom = locality(), locality("Собственный тариф")
+        db.add_all([suburb, custom])
+        await db.flush()
+        fields = (
+            "transport_category_id",
+            "distance_from_km",
+            "distance_to_km",
+            "rate_per_km",
+            "min_price_quarry",
+            "min_price_warehouse",
+            "is_active",
+            "sort_order",
+        )
+        seeded = [
+            DeliveryTariff(
+                city_id=suburb.id,
+                created_at=t.created_at,
+                updated_at=t.created_at,
+                **{key: getattr(t, key) for key in fields},
+            )
+            for t in tariffs
+        ]
+        custom_tariff = DeliveryTariff(
+            city_id=custom.id, **{key: getattr(tariffs[0], key) for key in fields}
+        )
+        custom_tariff.rate_per_km += 7
+        db.add_all([*seeded, custom_tariff])
+        old_rate = tariffs[0].rate_per_km
+        tariffs[0].rate_per_km += 11
+        await db.commit()
+        assert (await resolve_delivery_city(db, suburb.id, 57.09, 65.53)).id == root.id
+        assert (
+            await resolve_delivery_city(db, custom.id, 57.09, 65.53)
+        ).id == custom.id
+        tariffs[0].rate_per_km = old_rate
+        for tariff in [*seeded, custom_tariff]:
+            await db.delete(tariff)
+        await db.delete(suburb)
+        await db.delete(custom)
         await db.commit()

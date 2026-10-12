@@ -1,0 +1,10 @@
+{
+  "versionCode": 324,
+  "versionName": "3.3.6",
+  "package": "ru.darmavoz.app.test",
+  "map_geolocation_present": true,
+  "api_origin": "test",
+  "url": "https://test.darmavoz.ru/static/darmavoz-test.apk",
+  "size": 19765423,
+  "sha256": "e607c19fd1bb4d642dfbfca0cc3d2f476992194dd9b34439aaa42757271be332"
+}

@@ -1,0 +1,26 @@
+[
+  {
+    "contour": "https://test.darmavoz.ru",
+    "api_version": {
+      "android_version": "3.3.6",
+      "web_version": "3.3.6",
+      "ios_version": "3.1.5"
+    },
+    "health": "online",
+    "source_version": "3.3.6",
+    "versionCode": 324,
+    "runtime": "bc6a28baeb94a9e4630fad4d7f9e25d61fd862f6"
+  },
+  {
+    "contour": "https://darmavoz.ru",
+    "api_version": {
+      "android_version": "3.1.6",
+      "web_version": "3.1.6",
+      "ios_version": "3.1.5"
+    },
+    "health": "online",
+    "source_version": "3.1.6",
+    "versionCode": 317,
+    "runtime": "6498e0d81cbab0bb8c315efa234b10d3553ac7bf"
+  }
+]

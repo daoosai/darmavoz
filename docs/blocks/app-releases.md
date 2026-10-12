@@ -7,3 +7,5 @@ Main публикует подписанные release APK и AAB через bui
 Без полного слияния release изменения делают отдельно в исходниках develop и main (изолированный source worktree), коммитят и пушат с ноды. Обязательные проверки: lint/build, CI, фактический manifest опубликованного APK (package/versionName/versionCode), правильный API origin, совпадение серверной версии и health. iOS и магазины не публикуются автоматически задачей выпуска серверного APK.
 
 Отчёт: ../2026-10-12-apk-release.md.
+
+12.10.2026 опубликованы test 3.3.6 (324) и production 3.1.6 (317), подтверждены manifest APK, API версии, web JS, health и backup .env. Отдельные release-коммиты, без полного merge; подробности в отчёте выпуска.

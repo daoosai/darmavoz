@@ -1,0 +1,26 @@
+[
+  {
+    "width": 1440,
+    "center": [
+      65.533642,
+      57.09158600000001
+    ],
+    "gpsCalls": 0,
+    "requests": [
+      "https://test.darmavoz.ru/api/v1/catalog/pickup-points/global?lat=57.091586&lon=65.533642"
+    ],
+    "guest": true
+  },
+  {
+    "width": 390,
+    "center": [
+      65.533642,
+      57.09158600000001
+    ],
+    "gpsCalls": 0,
+    "requests": [
+      "https://test.darmavoz.ru/api/v1/catalog/pickup-points/global?lat=57.091586&lon=65.533642"
+    ],
+    "guest": true
+  }
+]

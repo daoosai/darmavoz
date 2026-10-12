@@ -1,4 +1,4 @@
-import { cityFetch, cityMapCenter, cityMapZoom, useCityStore } from './cityStore';
+import { cityMapCenter, cityMapZoom, useCityStore } from './cityStore';
 import { Capacitor } from "@capacitor/core";
 import { Geolocation } from "@capacitor/geolocation";
 import { useEffect, useRef, useState } from "react";
@@ -76,6 +76,7 @@ export default function GlobalMapScreen({
   const [selectedPoint, setSelectedPoint] = useState<GlobalPickupPoint | null>(null);
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
   const [loading, setLoading] = useState(true);
+  const [locationResolved, setLocationResolved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isMapReady, setIsMapReady] = useState(false);
   const [isMapUnavailable, setIsMapUnavailable] = useState(false);
@@ -174,12 +175,18 @@ export default function GlobalMapScreen({
   useEffect(() => {
     let cancelled = false;
 
+    if (!locationResolved) return;
+
     const load = async () => {
       setLoading(true);
       setError(null);
 
       try {
-        const response = await cityFetch(`${baseURL}/catalog/pickup-points/global`, {
+        const params = new URLSearchParams({
+          lat: String(userLocation?.lat ?? activeCenterLat),
+          lon: String(userLocation?.lon ?? activeCenterLon),
+        });
+        const response = await fetch(`${baseURL}/catalog/pickup-points/global?${params}`, {
           cache: "no-store",
         });
         if (!response.ok) {
@@ -208,15 +215,16 @@ export default function GlobalMapScreen({
     return () => {
       cancelled = true;
     };
-  }, [cityId]);
+  }, [activeCenterLat, activeCenterLon, locationResolved, userLocation]);
 
   useEffect(() => {
     let cancelled = false;
 
     const resolveInitialUserLocation = async () => {
       const nextLocation = await requestUserLocation(false);
-      if (!cancelled && nextLocation) {
-        setUserLocation(nextLocation);
+      if (!cancelled) {
+        if (nextLocation) setUserLocation(nextLocation);
+        setLocationResolved(true);
       }
     };
 
@@ -356,18 +364,25 @@ export default function GlobalMapScreen({
     if (
       !isMapReady ||
       loading ||
+      !locationResolved ||
       initialViewportAppliedRef.current ||
       selectedPoint
     ) {
       return;
     }
 
-    centerMapOnCoordinates(
-      { lat: activeCenterLat, lon: activeCenterLon },
-      activeMapZoom,
-    );
+    const origin = userLocation ?? { lat: activeCenterLat, lon: activeCenterLon };
+    if (points.length > 0 && typeof mapRef.current.fitBounds === "function") {
+      const locations = [origin, ...points];
+      mapRef.current.fitBounds({
+        southWest: [Math.min(...locations.map((p) => p.lon)), Math.min(...locations.map((p) => p.lat))],
+        northEast: [Math.max(...locations.map((p) => p.lon)), Math.max(...locations.map((p) => p.lat))],
+      }, { padding: { top: 220, bottom: 110, left: 45, right: 45 }, maxZoom: activeMapZoom });
+    } else {
+      centerMapOnCoordinates(origin, activeMapZoom);
+    }
     initialViewportAppliedRef.current = true;
-  }, [activeCenterLat, activeCenterLon, activeMapZoom, isMapReady, loading, selectedPoint]);
+  }, [activeCenterLat, activeCenterLon, activeMapZoom, isMapReady, loading, locationResolved, points, selectedPoint, userLocation]);
 
   useEffect(() => {
     if (!selectedPoint || !mapRef.current) {

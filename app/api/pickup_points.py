@@ -2,7 +2,7 @@ from app.services.cities import resolve_city, ensure_same_city
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from sqlalchemy import String, and_, cast, literal, select
+from sqlalchemy import String, and_, cast, func, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
@@ -147,24 +147,36 @@ async def list_pickup_points(
 async def list_global_pickup_points(
     response: Response,
     city_id: UUID | None = None,
+    lat: float | None = Query(default=None, ge=-90, le=90, allow_inf_nan=False),
+    lon: float | None = Query(default=None, ge=-180, le=180, allow_inf_nan=False),
+    radius_km: float = Query(default=50, gt=0, le=200, allow_inf_nan=False),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict]:
-    city = await resolve_city(db, city_id)
+    if (lat is None) != (lon is None):
+        raise HTTPException(422, "Передайте обе координаты: lat и lon")
     _disable_map_cache(response)
-    result = await db.execute(
-        select(Quarry)
-        .where(
-            _client_map_crm_filter(),
-            Quarry.city_id == city.id,
-            Quarry.lat.is_not(None),
-            Quarry.lon.is_not(None),
-        )
-        .order_by(
-            Quarry.is_vip.desc(),
-            Quarry.manual_priority.desc(),
-            Quarry.name.asc(),
-        )
+    stmt = select(Quarry).where(
+        _client_map_crm_filter(),
+        Quarry.lat.is_not(None),
+        Quarry.lon.is_not(None),
     )
+    if lat is not None and lon is not None:
+        # The discovery map follows location, not the delivery market stored in
+        # the browser. Adjacent localities must not hide nearby public points.
+        haversine = (
+            func.power(func.sin(func.radians(Quarry.lat - lat) / 2), 2)
+            + func.cos(func.radians(lat)) * func.cos(func.radians(Quarry.lat))
+            * func.power(func.sin(func.radians(Quarry.lon - lon) / 2), 2)
+        )
+        distance_km = 12742 * func.asin(func.sqrt(func.least(1.0, haversine)))
+        stmt = stmt.where(distance_km <= radius_km)
+    else:
+        # Preserve city-scoped behavior for existing catalog/mobile consumers.
+        city = await resolve_city(db, city_id)
+        stmt = stmt.where(Quarry.city_id == city.id)
+    result = await db.execute(stmt.order_by(
+        Quarry.is_vip.desc(), Quarry.manual_priority.desc(), Quarry.name.asc(),
+    ))
     items: list[dict] = []
     for point in result.scalars().all():
         payload = await pickup_point_payload(db, point)

@@ -1,4 +1,4 @@
-from app.services.cities import resolve_city
+from app.services.cities import resolve_delivery_city
 import asyncio
 import logging
 from dataclasses import dataclass
@@ -17,7 +17,6 @@ from app.models.models import (
     DeliveryTariff,
     Material,
     MediaFile,
-    ModerationStatus,
     Quarry,
     quarry_materials,
 )
@@ -379,7 +378,7 @@ async def calculate_client_order_options(
     quarry_id: UUID | None = None,
     city_id: UUID | None = None,
 ) -> list[ClientOrderPricing]:
-    city = await resolve_city(session, city_id)
+    city = await resolve_delivery_city(session, city_id, delivery_lat, delivery_lon)
     material = await session.get(Material, material_id)
     if material is None or not material.is_active:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Материал недоступен.")

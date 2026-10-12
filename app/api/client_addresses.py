@@ -1,4 +1,4 @@
-from app.services.cities import resolve_city, ensure_same_city
+from app.services.cities import resolve_city, resolve_delivery_city, ensure_same_city
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -68,7 +68,7 @@ async def create_client_address(
     current_client: Client = Depends(get_current_client),
     db: AsyncSession = Depends(get_db),
 ) -> ClientAddress:
-    city = await resolve_city(db, payload.city_id)
+    city = await resolve_delivery_city(db, payload.city_id, payload.lat, payload.lon)
     existing_addresses = list(
         (
             await db.execute(

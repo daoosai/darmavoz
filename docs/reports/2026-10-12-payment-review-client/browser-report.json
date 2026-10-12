@@ -1,0 +1,27 @@
+[
+  {
+    "host": "test.darmavoz.ru",
+    "sendStatus": 200,
+    "verifyStatus": 200,
+    "role": "client",
+    "cartOpened": true,
+    "checkoutButton": 1,
+    "checkoutDisabled": false,
+    "errors": [],
+    "material": "Песок кладочный",
+    "point": "Диво",
+    "total": 4592,
+    "note": "Captured in the first successful combined browser run; no order/payment submitted."
+  },
+  {
+    "host": "darmavoz.ru",
+    "sendStatus": 200,
+    "verifyStatus": 200,
+    "role": "client",
+    "cartOpened": true,
+    "checkoutButton": 1,
+    "checkoutDisabled": true,
+    "errors": [],
+    "cartText": "Товар добавлен в корзину\nВход выполнен\nКорзина\nПесок лесной\nЗил (машина до 5 м³)\nМалые машины\nАдрес доставки\nПатрушева, Садовая улица, 3а\nИтого:\n1 000 ₽\nОформить заказ\nГлавная\nЗаказы\n1\nКорзина\nКарта\nВода/септики\nПрофиль"
+  }
+]

@@ -1,0 +1,30 @@
+[
+  {
+    "host": "test.darmavoz.ru",
+    "send_code": 200,
+    "verify_code": 200,
+    "role": "client",
+    "profile": 200,
+    "employee_access": 401,
+    "repeat_login": 200,
+    "same_client": true,
+    "wrong_code": 400,
+    "other_phone_zero": 400,
+    "catalog": 200,
+    "materials": 10
+  },
+  {
+    "host": "darmavoz.ru",
+    "send_code": 200,
+    "verify_code": 200,
+    "role": "client",
+    "profile": 200,
+    "employee_access": 401,
+    "repeat_login": 200,
+    "same_client": true,
+    "wrong_code": 400,
+    "other_phone_zero": 400,
+    "catalog": 200,
+    "materials": 14
+  }
+]

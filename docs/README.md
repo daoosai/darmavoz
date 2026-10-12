@@ -57,3 +57,6 @@
 
 - [Подбор точек в корзине](blocks/cart-pickup-point-validation.md).
 - [Аудит Лесного песка 11.10.2026](2026-10-11-forest-sand-cart-audit.md).
+
+- [Клиент ЮKassa](blocks/payment-review-client.md).
+- [Whitelist и доставка 12.10.2026](2026-10-12-payment-review-client.md).

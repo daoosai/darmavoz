@@ -1044,7 +1044,7 @@ def order_load_options() -> tuple:
         selectinload(Order.quarry),
         selectinload(Order.items).selectinload(OrderItem.material),
         selectinload(Order.current_offer),
-        selectinload(Order.offers).selectinload(OrderOffer.driver).selectinload(Driver.vehicle),
+        selectinload(Order.offers).selectinload(OrderOffer.driver).selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option),
     )
 
 

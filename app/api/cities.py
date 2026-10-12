@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import ValidationError
 from sqlalchemy import func, select, text, update
 from sqlalchemy.exc import IntegrityError
@@ -10,7 +10,7 @@ from app.db.database import get_db
 from app.models.models import City
 from app.schemas.city import CityCreate, CityOut, CityUpdate
 from app.security.auth import get_current_admin_user, get_current_logist_user
-from app.services.cities import LEGACY_CITY_CODE, default_bounds, generated_city_code
+from app.services.cities import LEGACY_CITY_CODE, default_bounds, generated_city_code, resolve_delivery_city
 
 router = APIRouter()
 admin_router = APIRouter(dependencies=[Depends(get_current_admin_user)])
@@ -30,6 +30,16 @@ CITY_REFERENCE_TABLES = (
 @router.get("/cities/", response_model=list[CityOut])
 async def list_cities(db: AsyncSession = Depends(get_db)):
     return list((await db.scalars(select(City).where(City.is_active.is_(True)).order_by(City.sort_order, City.name))).all())
+
+
+@router.get("/cities/delivery", response_model=CityOut)
+async def delivery_city(
+    lat: float = Query(ge=-90, le=90, allow_inf_nan=False),
+    lon: float = Query(ge=-180, le=180, allow_inf_nan=False),
+    city_id: UUID | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    return await resolve_delivery_city(db, city_id, lat, lon)
 
 
 @admin_router.get("/cities/", response_model=list[CityOut])

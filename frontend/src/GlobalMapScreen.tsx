@@ -1,4 +1,4 @@
-import { cityMapCenter, cityMapZoom, useCityStore } from './cityStore';
+import { cityFetch, cityMapCenter, cityMapZoom, useCityStore } from './cityStore';
 import { Capacitor } from "@capacitor/core";
 import { Geolocation } from "@capacitor/geolocation";
 import { useEffect, useRef, useState } from "react";
@@ -7,6 +7,7 @@ import toast from "react-hot-toast";
 
 import MapWebGLFallback, { load2GisMapSdk, tryCreate2GisMap } from "./components/MapWebGLFallback";
 import { handleOpenNavigator } from "./openNavigator";
+import { useAddressStore } from "./store";
 import { baseURL, formatPhoneNumber, resolveMediaUrl } from "./utils";
 
 interface GlobalPickupPointMaterial {
@@ -71,6 +72,11 @@ export default function GlobalMapScreen({
   );
   const [activeCenterLon, activeCenterLat] = cityMapCenter(activeCity);
   const activeMapZoom = cityMapZoom(activeCity);
+  const selectedAddress = useAddressStore((state) => state.selectedAddress);
+  const addressCoordinates = useAddressStore((state) => state.selectedAddressCoordinates);
+  const addressLat = selectedAddress.trim() && addressCoordinates && Number.isFinite(addressCoordinates.lat) && Number.isFinite(addressCoordinates.lon)
+    ? addressCoordinates.lat : null;
+  const addressLon = addressLat !== null ? addressCoordinates!.lon : null;
   const [points, setPoints] = useState<GlobalPickupPoint[]>([]);
   const [selectedMaterials, setSelectedMaterials] = useState<string[]>([]);
   const [selectedPoint, setSelectedPoint] = useState<GlobalPickupPoint | null>(null);
@@ -152,7 +158,6 @@ export default function GlobalMapScreen({
         lat: Number(position.coords.latitude),
         lon: Number(position.coords.longitude),
       };
-      setUserLocation(nextLocation);
       return nextLocation;
     } catch (locationError) {
       console.warn("Геолокация недоступна или запрещена пользователем", locationError);
@@ -164,11 +169,16 @@ export default function GlobalMapScreen({
   };
 
   const handleLocateMe = async () => {
+    if (selectedAddress.trim()) {
+      if (addressLat !== null && addressLon !== null) centerMapOnCoordinates({ lat: addressLat, lon: addressLon }, 14);
+      return;
+    }
     const nextLocation = await requestUserLocation(true);
     if (!nextLocation) {
       return;
     }
 
+    setUserLocation(nextLocation);
     upsertUserMarker(nextLocation);
     centerMapOnCoordinates(nextLocation, 14);
   };
@@ -184,8 +194,8 @@ export default function GlobalMapScreen({
 
       try {
         const params = new URLSearchParams({
-          lat: String(userLocation?.lat ?? activeCenterLat),
-          lon: String(userLocation?.lon ?? activeCenterLon),
+          lat: String(addressLat ?? userLocation?.lat ?? activeCenterLat),
+          lon: String(addressLon ?? userLocation?.lon ?? activeCenterLon),
         });
         const response = await fetch(`${baseURL}/catalog/pickup-points/global?${params}`, {
           cache: "no-store",
@@ -216,11 +226,33 @@ export default function GlobalMapScreen({
     return () => {
       cancelled = true;
     };
-  }, [activeCenterLat, activeCenterLon, locationResolved, userLocation]);
+  }, [activeCenterLat, activeCenterLon, addressLat, addressLon, locationResolved, userLocation]);
 
   useEffect(() => {
     let cancelled = false;
 
+    initialViewportAppliedRef.current = false;
+    if (addressLat !== null && addressLon !== null) {
+      setUserLocation(null);
+      setLocationResolved(true);
+      return;
+    }
+    if (selectedAddress.trim()) {
+      setUserLocation(null);
+      setLocationResolved(false);
+      void cityFetch(`${baseURL}/geo/geocode?address=${encodeURIComponent(selectedAddress)}`)
+        .then(async (response) => {
+          if (!response.ok) throw new Error("Адрес не найден");
+          const data = await response.json();
+          const lat = Number(data.lat), lon = Number(data.lon);
+          if (!Number.isFinite(lat) || !Number.isFinite(lon)) throw new Error("Нет координат адреса");
+          if (!cancelled) useAddressStore.getState().setSelectedAddress(selectedAddress, { lat, lon });
+        })
+        .catch(() => !cancelled && toast.error("Не удалось определить координаты выбранного адреса"))
+        .finally(() => !cancelled && setLocationResolved(true));
+      return () => { cancelled = true; };
+    }
+    setLocationResolved(false);
     const resolveInitialUserLocation = async () => {
       const nextLocation = await requestUserLocation(false);
       if (!cancelled) {
@@ -234,7 +266,7 @@ export default function GlobalMapScreen({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [addressLat, addressLon, selectedAddress]);
 
   const materials = Array.from(
     points.reduce((materialMap, point) => {
@@ -279,7 +311,7 @@ export default function GlobalMapScreen({
         if (disposed || !mapContainerRef.current || mapRef.current) return;
         const mapInstance = tryCreate2GisMap(
           () => new mapgl.Map(mapContainerRef.current, {
-            center: [activeCenterLon, activeCenterLat],
+            center: [addressLon ?? activeCenterLon, addressLat ?? activeCenterLat],
             zoom: activeMapZoom,
             key,
           }),
@@ -310,7 +342,7 @@ export default function GlobalMapScreen({
 
   useEffect(() => {
     if (!isMapReady || !mapRef.current) return;
-    mapRef.current.setCenter?.([activeCenterLon, activeCenterLat], {
+    mapRef.current.setCenter?.([addressLon ?? activeCenterLon, addressLat ?? activeCenterLat], {
       easing: "easeOutCubic",
       duration: 500,
     });
@@ -319,7 +351,7 @@ export default function GlobalMapScreen({
       duration: 500,
     });
     initialViewportAppliedRef.current = false;
-  }, [activeCenterLat, activeCenterLon, activeMapZoom, isMapReady]);
+  }, [activeCenterLat, activeCenterLon, activeMapZoom, addressLat, addressLon, isMapReady]);
 
   useEffect(() => {
     const mapgl = (window as any).mapgl;
@@ -359,8 +391,8 @@ export default function GlobalMapScreen({
   }, [isMapReady, selectedPoint?.id, visiblePoints]);
 
   useEffect(() => {
-    upsertUserMarker(userLocation);
-  }, [isMapReady, userLocation]);
+    upsertUserMarker(addressLat === null ? userLocation : null);
+  }, [addressLat, isMapReady, userLocation]);
 
   useEffect(() => {
     if (
@@ -373,8 +405,10 @@ export default function GlobalMapScreen({
       return;
     }
 
-    const origin = userLocation ?? { lat: activeCenterLat, lon: activeCenterLon };
-    if (points.length > 0 && typeof mapRef.current.fitBounds === "function") {
+    const origin = addressLat !== null && addressLon !== null
+      ? { lat: addressLat, lon: addressLon }
+      : userLocation ?? { lat: activeCenterLat, lon: activeCenterLon };
+    if (addressLat === null && points.length > 0 && typeof mapRef.current.fitBounds === "function") {
       const locations = [origin, ...points];
       mapRef.current.fitBounds({
         southWest: [Math.min(...locations.map((p) => p.lon)), Math.min(...locations.map((p) => p.lat))],
@@ -384,7 +418,7 @@ export default function GlobalMapScreen({
       centerMapOnCoordinates(origin, activeMapZoom);
     }
     initialViewportAppliedRef.current = true;
-  }, [activeCenterLat, activeCenterLon, activeMapZoom, isMapReady, loading, locationResolved, points, selectedPoint, userLocation]);
+  }, [activeCenterLat, activeCenterLon, activeMapZoom, addressLat, addressLon, isMapReady, loading, locationResolved, points, selectedPoint, userLocation]);
 
   useEffect(() => {
     if (!selectedPoint || !mapRef.current) {
@@ -510,7 +544,7 @@ export default function GlobalMapScreen({
         <button
           type="button"
           onClick={() => void handleLocateMe()}
-          aria-label="Моё местоположение"
+          aria-label={selectedAddress.trim() ? "Адрес доставки" : "Моё местоположение"}
           className="absolute bottom-24 right-4 z-[50] flex h-12 w-12 items-center justify-center rounded-full bg-white shadow-lg transition hover:bg-slate-50"
         >
           <LocateFixed className="h-5 w-5 text-sky-600" />

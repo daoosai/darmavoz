@@ -127,7 +127,7 @@ export default function PickupPointMapScreen({
   onSelect,
   deliveryLocation,
 }: Props) {
-  const { selectedAddress: currentDeliveryAddress } = useAddressStore();
+  const { selectedAddress: currentDeliveryAddress, selectedAddressCoordinates: storedDeliveryCoordinates } = useAddressStore();
   const addressSelectionCommittedRef = useRef(false);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
@@ -153,6 +153,8 @@ export default function PickupPointMapScreen({
   const [selectedDeliveryLocation, setSelectedDeliveryLocation] = useState<UserLocation | null>(
     deliveryLocation || null,
   );
+  const pointSearchLocation = deliveryLocation || selectedDeliveryLocation || storedDeliveryCoordinates;
+  const deliveryQuery = pointSearchLocation ? `&lat=${pointSearchLocation.lat}&lon=${pointSearchLocation.lon}` : "";
   const hasDeliveryAddress = Boolean(currentDeliveryAddress.trim());
   const distanceLocation = deliveryLocation || selectedDeliveryLocation || userLocation;
 
@@ -330,7 +332,7 @@ export default function PickupPointMapScreen({
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
-    cityFetch(`${baseURL}/catalog/pickup-points?material_id=${material.id}`)
+    cityFetch(`${baseURL}/catalog/pickup-points?material_id=${material.id}${deliveryQuery}`)
       .then(async (response) => {
         if (!response.ok) throw new Error("Не удалось загрузить точки забора");
         return response.json();
@@ -343,7 +345,7 @@ export default function PickupPointMapScreen({
     return () => {
       cancelled = true;
     };
-  }, [material.id]);
+  }, [material.id, deliveryQuery]);
 
   useEffect(() => {
     let disposed = false;
@@ -477,7 +479,7 @@ export default function PickupPointMapScreen({
     setDetailsLoadingId(point.id);
     try {
       const response = await cityFetch(
-        `${baseURL}/catalog/pickup-points/${point.id}?material_id=${material.id}`,
+        `${baseURL}/catalog/pickup-points/${point.id}?material_id=${material.id}${deliveryQuery}`,
         { signal: controller.signal },
       );
       if (!response.ok) throw new Error("Точка больше недоступна");

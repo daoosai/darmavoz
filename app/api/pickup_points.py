@@ -1,4 +1,4 @@
-from app.services.cities import resolve_city, ensure_same_city
+from app.services.cities import resolve_city, resolve_delivery_city, ensure_same_city
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -65,9 +65,13 @@ async def list_pickup_points(
     point_type: str | None = None,
     limit: int = Query(default=300, ge=1, le=1000),
     city_id: UUID | None = None,
+    lat: float | None = Query(default=None, ge=-90, le=90, allow_inf_nan=False),
+    lon: float | None = Query(default=None, ge=-180, le=180, allow_inf_nan=False),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict]:
-    city = await resolve_city(db, city_id)
+    if (lat is None) != (lon is None):
+        raise HTTPException(422, "Передайте обе координаты доставки")
+    city = await resolve_delivery_city(db, city_id, lat, lon) if lat is not None else await resolve_city(db, city_id)
     _disable_map_cache(response)
     material = await db.get(Material, material_id)
     if material is None or not material.is_active:
@@ -219,9 +223,13 @@ async def get_pickup_point(
     point_id: UUID,
     material_id: UUID | None = None,
     city_id: UUID | None = None,
+    lat: float | None = Query(default=None, ge=-90, le=90, allow_inf_nan=False),
+    lon: float | None = Query(default=None, ge=-180, le=180, allow_inf_nan=False),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    city = await resolve_city(db, city_id)
+    if (lat is None) != (lon is None):
+        raise HTTPException(422, "Передайте обе координаты доставки")
+    city = await resolve_delivery_city(db, city_id, lat, lon) if lat is not None else await resolve_city(db, city_id)
     point = await db.get(Quarry, point_id)
     ensure_same_city(city.id, point)
     if point is None or (

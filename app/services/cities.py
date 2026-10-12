@@ -1,10 +1,11 @@
+from math import asin, cos, isfinite, radians, sin, sqrt
 from uuid import UUID
 
 from fastapi import HTTPException
 from sqlalchemy import false, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.models import City, Driver, User, driver_cities, user_cities
+from app.models.models import City, DeliveryTariff, Driver, Material, Quarry, User, quarry_materials, driver_cities, user_cities
 from sqlalchemy.dialects.postgresql import insert
 
 LEGACY_CITY_CODE = "tyumen"
@@ -143,3 +144,36 @@ async def initialize_service_cities(db: AsyncSession, *, user_id: UUID | None = 
             await db.execute(insert(user_cities).values(user_id=user_id, city_id=city_id).on_conflict_do_nothing())
         if driver_id is not None:
             await db.execute(insert(driver_cities).values(driver_id=driver_id, city_id=city_id).on_conflict_do_nothing())
+
+
+def city_distance_km(lat: float, lon: float, city: City) -> float:
+    a = sin(radians(city.center_lat - lat) / 2) ** 2 + cos(radians(lat)) * cos(radians(city.center_lat)) * sin(radians(city.center_lon - lon) / 2) ** 2
+    return 12742 * asin(sqrt(min(1.0, a)))
+
+
+async def resolve_delivery_city(db: AsyncSession, city_id: UUID | None, lat: float | None, lon: float | None) -> City:
+    """Resolve parser-discovered suburbs to a nearby configured delivery market.
+
+    Existing markets (including ones with disabled tariffs) retain their scope.
+    City bounds are search bounds, not a hard boundary for suburban delivery.
+    """
+    city = await resolve_city(db, city_id)
+    configured = await db.scalar(select(DeliveryTariff.id).where(DeliveryTariff.city_id == city.id).limit(1))
+    inventory = await db.scalar(select(Quarry.id).join(quarry_materials, quarry_materials.c.quarry_id == Quarry.id).join(
+        Material, Material.id == quarry_materials.c.material_id,
+    ).where(
+        Quarry.city_id == city.id, quarry_materials.c.is_active.is_(True), Material.is_active.is_(True),
+        (quarry_materials.c.price > 0) | Material.is_free.is_(True),
+    ).limit(1))
+    if city.code == LEGACY_CITY_CODE or configured is not None or inventory is not None:
+        return city
+    if lat is None or lon is None or not isfinite(lat) or not isfinite(lon) or not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        return city
+    if city_distance_km(lat, lon, city) > 100:
+        return city
+    candidates = list((await db.scalars(select(City).where(
+        City.is_active.is_(True),
+        (City.code == LEGACY_CITY_CODE) | City.id.in_(select(DeliveryTariff.city_id).where(DeliveryTariff.is_active.is_(True))),
+    ))).all())
+    nearby = sorted((city_distance_km(lat, lon, candidate), str(candidate.id), candidate) for candidate in candidates)
+    return nearby[0][2] if nearby and nearby[0][0] <= 100 else city

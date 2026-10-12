@@ -9,7 +9,7 @@ from sqlalchemy import Select, and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.services.cities import resolve_city, ensure_same_city, driver_city_clause, ensure_driver_city
+from app.services.cities import resolve_city, resolve_delivery_city, ensure_same_city, driver_city_clause, ensure_driver_city
 from app.core.config import settings
 from app.services.google_play_reviewer import GOOGLE_PLAY_REVIEWER_PHONE_VALUES
 from app.models.models import (
@@ -597,6 +597,8 @@ async def create_checkout_order(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="delivery coordinates are required to calculate the route",
         )
+
+    city = await resolve_delivery_city(session, city.id, resolved_delivery_lat, resolved_delivery_lon)
 
     selected_quarry: Quarry | None = None
     # Client-provided mileage is intentionally ignored. Delivery price must only

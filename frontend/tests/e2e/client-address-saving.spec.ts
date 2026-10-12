@@ -18,7 +18,8 @@ async function setup(page: Page, saveStatus = 201, detail: unknown = undefined) 
   await page.route("**/api/v1/**", async route => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith("/auth/email/verify")) return route.fulfill({ json: { access_token: "fresh-session" } });
-    if (path.endsWith("/cities/")) return route.fulfill({ json: [city] });
+    if (path.endsWith("/cities/delivery")) return route.fulfill({ json: city });
+    if (path.endsWith("/cities/")) return route.fulfill({ json: [city, { ...city, id: "22222222-2222-4222-8222-222222222222", code: "d-patrusheva", name: "д. Патрушева", center_lat:57.094663, center_lon:65.527353, is_default:false }] });
     if (path.endsWith("/client/addresses")) {
       if (route.request().method() === "POST") {
         const payload = route.request().postDataJSON();

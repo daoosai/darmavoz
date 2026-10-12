@@ -100,6 +100,7 @@ export default function ClientAddressBottomSheet({
   const [lat, setLat] = useState<number | null>(null);
   const [lon, setLon] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isResolvingCity, setIsResolvingCity] = useState(false);
   const [requiresAuthentication, setRequiresAuthentication] = useState(false);
   const [showAuthentication, setShowAuthentication] = useState(false);
   const [isMapUnavailable, setIsMapUnavailable] = useState(false);
@@ -302,6 +303,7 @@ export default function ClientAddressBottomSheet({
   ) => {
     const val = e.target.value;
     const requestId = ++suggestionRequestRef.current;
+    setIsResolvingCity(false);
     setNewAddress(val);
     setLat(null);
     setLon(null);
@@ -314,7 +316,7 @@ export default function ClientAddressBottomSheet({
   };
 
   const selectSuggestion = async (suggestion: AddressSuggestion) => {
-    suggestionRequestRef.current += 1;
+    const requestId = ++suggestionRequestRef.current;
     const address = suggestion.address.trim() || suggestion.label.trim();
     if (
       !address ||
@@ -342,7 +344,7 @@ export default function ClientAddressBottomSheet({
       },
       undefined,
     );
-    const matchedCity = exactCity
+    let matchedCity = exactCity
       ?? (closestCity && closestCity.distanceKm < CITY_MATCH_RADIUS_KM ? closestCity.city : undefined);
 
     console.info("[city-matching] address suggestion resolved", {
@@ -358,6 +360,25 @@ export default function ClientAddressBottomSheet({
     if (cityName && !matchedCity) {
       showWarning(`В г. ${cityName} доставка пока недоступна. Выберите адрес в поддерживаемом регионе.`);
       return;
+    }
+
+    if (matchedCity) {
+      setIsResolvingCity(true);
+      try {
+        const params = new URLSearchParams({ city_id: matchedCity.id, lat: String(suggestion.lat), lon: String(suggestion.lon) });
+        const response = await fetch(`${baseURL}/cities/delivery?${params}`, { cache: "no-store" });
+        if (!response.ok) throw new Error("Не удалось определить город доставки");
+        const deliveryCity = await response.json();
+        if (requestId !== suggestionRequestRef.current) return;
+        matchedCity = supportedCities.find((city) => city.id === deliveryCity.id);
+        if (!matchedCity) throw new Error("Город доставки недоступен");
+      } catch {
+        if (requestId !== suggestionRequestRef.current) return;
+        showWarning("Не удалось определить город доставки. Попробуйте выбрать адрес ещё раз.");
+        return;
+      } finally {
+        if (requestId === suggestionRequestRef.current) setIsResolvingCity(false);
+      }
     }
 
     setPendingCityId(matchedCity?.id ?? null);
@@ -709,7 +730,7 @@ export default function ClientAddressBottomSheet({
                 <div className="mt-auto pt-2 pb-4">
                   <button
                     onClick={handleAddAddress}
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || isResolvingCity}
                     className="w-full bg-[#2DB0E6] text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 active:bg-[#209dd0] transition-colors disabled:opacity-50 text-[16px]"
                   >
                     {isSubmitting ? (

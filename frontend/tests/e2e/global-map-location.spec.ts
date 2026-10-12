@@ -15,7 +15,7 @@ for (const scenario of [
       navigator.geolocation.getCurrentPosition = (_success, error) => error?.({ code: 1, message: "denied", PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 });
     });
     await page.addInitScript(() => localStorage.setItem("selected-city", JSON.stringify({ state: { cityId: "village" }, version: 1 })));
-    await page.route("https://mapgl.2gis.com/**", route => route.fulfill({ contentType: "application/javascript", body: `window.mapgl={Map:class{constructor(el){this.el=el}destroy(){}setCenter(){}setZoom(){}fitBounds(bounds){window.testMapBounds=bounds}},HtmlMarker:class{constructor(map,{html}){this.el=html;map.el.appendChild(html)}destroy(){this.el.remove()}}};` }));
+    await page.route("https://mapgl.2gis.com/**", route => route.fulfill({ contentType: "application/javascript", body: `window.mapgl={Map:class{constructor(el){this.el=el}destroy(){}setCenter(){}setZoom(){}fitBounds(bounds){window.testMapBounds=bounds}},HtmlMarker:class{constructor(map,{html,zIndex}){this.el=html;html.style.position="absolute";html.style.left="50%";html.style.top=html.className==="global-user-marker"?"300px":"400px";html.style.zIndex=String(zIndex??0);map.el.appendChild(html)}destroy(){this.el.remove()}}};` }));
     const requests: URL[] = [];
     await page.route("**/api/v1/**", async route => {
       const url = new URL(route.request().url());
@@ -39,6 +39,8 @@ for (const scenario of [
     await page.getByRole("button", { name: "Карта", exact: true }).click();
     await expect(page.locator(".global-pickup-marker--activated")).toHaveCount(1);
     await expect(page.locator(".global-pickup-marker--inactive")).toHaveCount(1);
+    const green = page.locator(".global-pickup-marker--activated");
+    expect(await green.evaluate(el => { const r=el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)); })).toBe(true);
     expect(requests.at(-1)?.searchParams.has("city_id")).toBe(false);
     expect(Number(requests.at(-1)?.searchParams.get("lat"))).toBe(scenario.allowed ? 57.094663 : 57.09);
     expect(Number(requests.at(-1)?.searchParams.get("lon"))).toBe(scenario.allowed ? 65.527353 : 65.52);

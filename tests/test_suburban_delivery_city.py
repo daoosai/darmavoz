@@ -306,3 +306,52 @@ async def test_seeded_inheritance_survives_parent_price_edit_but_custom_tariff_k
         await db.delete(suburb)
         await db.delete(custom)
         await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_hidden_nearby_inventory_does_not_redirect_suburb(session_factory):
+    async with session_factory() as db:
+        root = await db.scalar(select(City).where(City.code == "tyumen"))
+        suburb = locality()
+        inactive_market = locality(
+            "Ближайший скрытый рынок", lat=57.091586, lon=65.533642
+        )
+        material = await db.scalar(
+            select(Material).where(Material.is_active.is_(True)).limit(1)
+        )
+        db.add_all([suburb, inactive_market])
+        await db.flush()
+        point = Quarry(
+            name="Hidden nearby inventory",
+            address="Test",
+            city_id=inactive_market.id,
+            lat=57.091586,
+            lon=65.533642,
+            is_active=False,
+            crm_status=CrmStatus.activated.value,
+            moderation_status="approved",
+            placement_status="hidden",
+        )
+        db.add(point)
+        await db.flush()
+        await db.execute(
+            quarry_materials.insert().values(
+                quarry_id=point.id, material_id=material.id, price=180, is_active=True
+            )
+        )
+        await db.commit()
+        assert (
+            await resolve_delivery_city(db, suburb.id, 57.091586, 65.533642)
+        ).id == root.id
+        # Existing own inventory retains its city even while temporarily hidden.
+        assert (
+            await resolve_delivery_city(db, inactive_market.id, 57.091586, 65.533642)
+        ).id == inactive_market.id
+        await db.execute(
+            quarry_materials.delete().where(quarry_materials.c.quarry_id == point.id)
+        )
+        await db.delete(point)
+        await db.flush()
+        await db.delete(suburb)
+        await db.delete(inactive_market)
+        await db.commit()

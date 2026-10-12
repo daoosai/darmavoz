@@ -173,9 +173,11 @@ async def resolve_delivery_city(db: AsyncSession, city_id: UUID | None, lat: flo
         return city
     if city_distance_km(lat, lon, city) > 100:
         return city
+    from app.services.pickup_points import public_pickup_point_filters
+    operational_cities = inventory_cities.where(*public_pickup_point_filters())
     candidates = list((await db.scalars(select(City).where(
         City.is_active.is_(True),
-        (City.code == LEGACY_CITY_CODE) | City.id.in_(inventory_cities),
+        (City.code == LEGACY_CITY_CODE) | City.id.in_(operational_cities),
     ))).all())
     nearby = sorted((city_distance_km(lat, lon, candidate), str(candidate.id), candidate) for candidate in candidates)
     if not nearby or nearby[0][0] > 100:

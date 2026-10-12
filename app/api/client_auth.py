@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.db.database import get_db
 from app.models.models import Client
 from app.schemas.client import (
@@ -31,6 +30,26 @@ logger = logging.getLogger("uvicorn.error")
 
 CLIENT_CODE_TTL_SECONDS = 300
 CLIENT_REGISTRATION_PREFIX = "pending:client_registration"
+# Explicitly authorized review identity; never apply this exception to employee OTPs.
+PAYMENT_REVIEW_CLIENT_PHONE = "+79999999999"
+PAYMENT_REVIEW_CLIENT_CODE = "0000"
+
+
+def _is_payment_review_client(phone: str) -> bool:
+    return normalize_phone(phone) == PAYMENT_REVIEW_CLIENT_PHONE
+
+
+async def _send_client_code(
+    redis, normalized_phone: str, *, log_prefix: str = "client_sms_auth"
+) -> str:
+    if _is_payment_review_client(normalized_phone):
+        return PAYMENT_REVIEW_CLIENT_CODE
+    await enforce_sms_rate_limit(redis, normalized_phone)
+    return await send_auth_sms_code(
+        phone_number=normalize_sms_phone(normalized_phone),
+        code=generate_otp_code(),
+        log_prefix=log_prefix,
+    )
 
 
 def _normalize_email(email: str | None) -> str | None:
@@ -66,11 +85,8 @@ async def send_code(
     db: AsyncSession = Depends(get_db),
 ):
     normalized_phone = _normalize_phone_number(payload.phone_number)
-    sms_phone = normalize_sms_phone(normalized_phone)
     redis = get_redis()
-    await enforce_sms_rate_limit(redis, normalized_phone)
-    code = generate_otp_code()
-    code = await send_auth_sms_code(phone_number=sms_phone, code=code, log_prefix="client_sms_auth")
+    code = await _send_client_code(redis, normalized_phone)
 
     client = await db.scalar(select(Client).where(Client.phone == normalized_phone))
     is_new_user = client is None
@@ -107,11 +123,8 @@ async def register_client(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Client with this email already exists")
 
     redis = get_redis()
-    await enforce_sms_rate_limit(redis, normalized_phone)
-    code = await send_auth_sms_code(
-        phone_number=normalize_sms_phone(normalized_phone),
-        code=generate_otp_code(),
-        log_prefix="client_registration_sms_auth",
+    code = await _send_client_code(
+        redis, normalized_phone, log_prefix="client_registration_sms_auth"
     )
     await redis.setex(_code_key(normalized_phone), CLIENT_CODE_TTL_SECONDS, code)
     await redis.setex(
@@ -138,16 +151,21 @@ async def verify_code(
     redis = get_redis()
     saved_code = await redis.get(_code_key(normalized_phone))
 
-    if saved_code is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Код истек или не запрашивался")
-    if not await validate_sms_otp(
-        redis=redis,
-        phone_number=normalized_phone,
-        otp_key=_code_key(normalized_phone),
-        submitted_code=code,
-        stored_code=saved_code,
-    ):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неверный код")
+    if _is_payment_review_client(normalized_phone):
+        # The review client can sign in repeatedly without an SMS/Redis challenge.
+        if code != PAYMENT_REVIEW_CLIENT_CODE:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неверный код")
+    else:
+        if saved_code is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Код истек или не запрашивался")
+        if not await validate_sms_otp(
+            redis=redis,
+            phone_number=normalized_phone,
+            otp_key=_code_key(normalized_phone),
+            submitted_code=code,
+            stored_code=saved_code,
+        ):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неверный код")
 
     client = await db.scalar(select(Client).where(Client.phone == normalized_phone))
     if client is None:

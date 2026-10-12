@@ -52,6 +52,10 @@ async def get_current_user(
         username: str = payload.get("sub")
         if username is None:
             raise credentials_exception
+        # Client and employee identities can share a phone/sub claim.
+        # A client JWT must never authenticate a matching employee record.
+        if payload.get("role") == "client" or payload.get("client_id") is not None:
+            raise credentials_exception
         token_data = TokenData(
             username=username,
             role=payload.get("role"),

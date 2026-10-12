@@ -5,21 +5,7 @@ from app.models.models import Client
 from app.security.jwt import create_access_token
 
 
-class FakeRedis:
-    def __init__(self) -> None:
-        self.storage: dict[str, str] = {}
-        self.ttl_by_key: dict[str, int] = {}
-
-    async def setex(self, key: str, ttl: int, value: str) -> None:
-        self.storage[key] = value
-        self.ttl_by_key[key] = ttl
-
-    async def get(self, key: str) -> str | None:
-        return self.storage.get(key)
-
-    async def delete(self, key: str) -> None:
-        self.storage.pop(key, None)
-        self.ttl_by_key.pop(key, None)
+from tests.test_driver_auth_otp import FakeRedis
 
 
 def client_auth_headers(*, phone: str, client_id) -> dict[str, str]:

@@ -1,0 +1,86 @@
+[
+  {
+    "origin": "https://darmavoz.ru",
+    "width": 1440,
+    "guest": true,
+    "storedCity": "19b142d4-1a76-4b56-9998-76b4d7162b79",
+    "requests": [
+      "https://darmavoz.ru/api/v1/catalog/pickup-points/global?lat=57.094663&lon=65.527353"
+    ],
+    "markers": [
+      {
+        "name": "Карьер Масстрой-Светлый",
+        "color": "rgb(22, 163, 74)",
+        "x": 891,
+        "y": 490,
+        "width": 44,
+        "height": 44,
+        "visible": true,
+        "uncovered": true
+      },
+      {
+        "name": "Дуванский",
+        "color": "rgb(22, 163, 74)",
+        "x": 829,
+        "y": 517,
+        "width": 44,
+        "height": 44,
+        "visible": true,
+        "uncovered": true
+      },
+      {
+        "name": "Карьер Нижнетавдинский 2",
+        "color": "rgb(22, 163, 74)",
+        "x": 750,
+        "y": 419,
+        "width": 44,
+        "height": 44,
+        "visible": true,
+        "uncovered": true
+      }
+    ],
+    "userMarker": 1
+  },
+  {
+    "origin": "https://darmavoz.ru",
+    "width": 390,
+    "guest": true,
+    "storedCity": "19b142d4-1a76-4b56-9998-76b4d7162b79",
+    "requests": [
+      "https://darmavoz.ru/api/v1/catalog/pickup-points/global?lat=57.094663&lon=65.527353"
+    ],
+    "markers": [
+      {
+        "name": "Карьер Масстрой-Светлый",
+        "color": "rgb(22, 163, 74)",
+        "x": 345,
+        "y": 415,
+        "width": 44,
+        "height": 44,
+        "visible": true,
+        "uncovered": true
+      },
+      {
+        "name": "Дуванский",
+        "color": "rgb(22, 163, 74)",
+        "x": 291,
+        "y": 439,
+        "width": 44,
+        "height": 44,
+        "visible": true,
+        "uncovered": true
+      },
+      {
+        "name": "Карьер Нижнетавдинский 2",
+        "color": "rgb(22, 163, 74)",
+        "x": 221,
+        "y": 353,
+        "width": 44,
+        "height": 44,
+        "visible": true,
+        "uncovered": true
+      }
+    ],
+    "userMarker": 1
+  }
+]

@@ -1,0 +1,46 @@
+[
+  {
+    "origin": "https://test.darmavoz.ru",
+    "width": 1440,
+    "guest": true,
+    "storedCity": "19b142d4-1a76-4b56-9998-76b4d7162b79",
+    "requests": [
+      "https://test.darmavoz.ru/api/v1/catalog/pickup-points/global?lat=57.094663&lon=65.527353"
+    ],
+    "markers": [
+      {
+        "name": "Диво",
+        "color": "rgb(22, 163, 74)",
+        "x": 720,
+        "y": 486,
+        "width": 44,
+        "height": 44,
+        "visible": true,
+        "uncovered": true
+      }
+    ],
+    "userMarker": 1
+  },
+  {
+    "origin": "https://test.darmavoz.ru",
+    "width": 390,
+    "guest": true,
+    "storedCity": "19b142d4-1a76-4b56-9998-76b4d7162b79",
+    "requests": [
+      "https://test.darmavoz.ru/api/v1/catalog/pickup-points/global?lat=57.094663&lon=65.527353"
+    ],
+    "markers": [
+      {
+        "name": "Диво",
+        "color": "rgb(22, 163, 74)",
+        "x": 195,
+        "y": 412,
+        "width": 44,
+        "height": 44,
+        "visible": true,
+        "uncovered": true
+      }
+    ],
+    "userMarker": 1
+  }
+]

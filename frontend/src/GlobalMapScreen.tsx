@@ -114,6 +114,7 @@ export default function GlobalMapScreen({
     userMarkerRef.current = new mapgl.HtmlMarker(mapRef.current, {
       coordinates,
       html: element,
+      zIndex: 3,
     });
   };
 
@@ -352,6 +353,7 @@ export default function GlobalMapScreen({
       return new mapgl.HtmlMarker(mapRef.current, {
         coordinates: [point.lon, point.lat],
         html: element,
+        zIndex: point.id === selectedPoint?.id ? 4 : markerStatus === "activated" ? 2 : 1,
       });
     });
   }, [isMapReady, selectedPoint?.id, visiblePoints]);

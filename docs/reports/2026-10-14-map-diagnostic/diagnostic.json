@@ -1,0 +1,89 @@
+[
+  {
+    "width": 1440,
+    "webgl": true,
+    "sdk": true,
+    "canvases": [
+      {
+        "width": 432,
+        "height": 728
+      }
+    ],
+    "fallback": false,
+    "markers": 10,
+    "errors": [
+      "Service Worker registration blocked by Playwright",
+      "[.WebGL-0x2740015d600]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+      "[.WebGL-0x2740015d600]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+      "[.WebGL-0x2740015d600]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+      "[.WebGL-0x2740015d600]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)",
+      "performance warning: READ-usage buffer was written, then fenced, but written again before being read back. This discarded the shadow copy that was created to accelerate readback.",
+      "performance warning: READ-usage buffer was written, then fenced, but written again before being read back. This discarded the shadow copy that was created to accelerate readback.",
+      "No available adapters."
+    ],
+    "failed": [
+      {
+        "host": "tile3-sdk.maps.2gis.com",
+        "path": "/vt",
+        "error": "net::ERR_ABORTED"
+      },
+      {
+        "host": "tile0-sdk.maps.2gis.com",
+        "path": "/vt",
+        "error": "net::ERR_ABORTED"
+      },
+      {
+        "host": "s1.bss.2gis.com",
+        "path": "/bss/3",
+        "error": "net::ERR_ABORTED"
+      }
+    ],
+    "responses": []
+  },
+  {
+    "width": 390,
+    "webgl": true,
+    "sdk": true,
+    "canvases": [
+      {
+        "width": 390,
+        "height": 894
+      }
+    ],
+    "fallback": false,
+    "markers": 10,
+    "errors": [
+      "Service Worker registration blocked by Playwright",
+      "performance warning: READ-usage buffer was written, then fenced, but written again before being read back. This discarded the shadow copy that was created to accelerate readback.",
+      "No available adapters."
+    ],
+    "failed": [
+      {
+        "host": "tile2-sdk.maps.2gis.com",
+        "path": "/vt",
+        "error": "net::ERR_ABORTED"
+      },
+      {
+        "host": "tile0-sdk.maps.2gis.com",
+        "path": "/vt",
+        "error": "net::ERR_ABORTED"
+      },
+      {
+        "host": "tile0-sdk.maps.2gis.com",
+        "path": "/vt",
+        "error": "net::ERR_ABORTED"
+      },
+      {
+        "host": "tile2-sdk.maps.2gis.com",
+        "path": "/vt",
+        "error": "net::ERR_ABORTED"
+      },
+      {
+        "host": "s1.bss.2gis.com",
+        "path": "/bss/3",
+        "error": "net::ERR_ABORTED"
+      }
+    ],
+    "responses": []
+  }
+]

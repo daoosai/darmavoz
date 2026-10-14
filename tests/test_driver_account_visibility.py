@@ -177,3 +177,38 @@ async def test_moderation_lists_and_counts_exclude_archived_accounts(
         assert result.status_code == 200, result.text
         key = "count" if "pending-moderation" in path else "drivers"
         assert result.json()[key] - baseline[key] == 3
+
+
+@pytest.mark.asyncio
+async def test_saved_recommendations_hide_currently_archived_accounts(
+    session_factory, fleet
+):
+    from datetime import UTC, datetime
+    from unittest.mock import AsyncMock
+
+    from app.services.smart_matching import smart_matching_service
+
+    _, drivers, _, _ = fleet
+    rows = [{"driver_id": str(value)} for value in drivers.values()]
+    record = SimpleNamespace(
+        order_id=uuid4(),
+        calculated_at=datetime.now(UTC),
+        trigger_source="manual",
+        algorithm_version="test",
+        recommended_driver_id=drivers["user_deleted"],
+        selected_driver_id=None,
+        distance_source="haversine",
+        twogis_status="not_requested",
+        candidates_snapshot={"candidates": rows, "not_recommended": rows},
+    )
+    async with session_factory() as db:
+        # The saved snapshot is simulated; account filtering uses the real database.
+        session = SimpleNamespace(
+            scalar=AsyncMock(return_value=record), scalars=db.scalars
+        )
+        result = await smart_matching_service.latest(session, record.order_id)
+    expected = {str(drivers[k]) for k in ("active", "busy", "unlinked")}
+    for key in ("candidates", "not_recommended"):
+        assert {r["driver_id"] for r in result[key]} == expected
+    assert result["recommended_driver_id"] is None
+    assert len(record.candidates_snapshot["candidates"]) == 7

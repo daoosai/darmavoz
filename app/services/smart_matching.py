@@ -5,7 +5,6 @@ import json
 import logging
 import math
 from datetime import UTC, datetime, timedelta
-from typing import Iterable
 from uuid import UUID
 
 import httpx
@@ -15,6 +14,7 @@ from sqlalchemy.orm import selectinload
 
 from app.services.cities import driver_city_clause
 from app.core.config import settings
+from app.services.driver_accounts import active_driver_account_clause
 from app.services.google_play_reviewer import GOOGLE_PLAY_REVIEWER_PHONE_VALUES
 from app.models.models import Driver, Order, OrderDistributionHistory, OrderOffer, OrderOfferStatus, Vehicle
 from app.services.redis_client import get_redis
@@ -210,7 +210,7 @@ class SmartMatchingService:
     ) -> dict:
         excluded_driver_ids = excluded_driver_ids or set()
         query = (
-            select(Driver).where(driver_city_clause(getattr(order, "city_id", None)))
+            select(Driver).where(active_driver_account_clause(), driver_city_clause(getattr(order, "city_id", None)))
             .options(selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option))
             .where(Driver.vehicle_id.is_not(None))
             .where(Driver.phone.notin_(GOOGLE_PLAY_REVIEWER_PHONE_VALUES))
@@ -353,18 +353,34 @@ class SmartMatchingService:
         if record is None:
             return None
         candidate_data = record.candidates_snapshot or {}
+        # This endpoint is a current selection view; the stored audit is untouched.
+        visible_ids = {
+            str(driver_id)
+            for driver_id in await session.scalars(
+                select(Driver.id).where(active_driver_account_clause())
+            )
+        }
+        candidates = [
+            row for row in candidate_data.get("candidates", [])
+            if str(row.get("driver_id")) in visible_ids
+        ]
+        not_recommended = [
+            row for row in candidate_data.get("not_recommended", [])
+            if str(row.get("driver_id")) in visible_ids
+        ]
+        recommended_id = str(record.recommended_driver_id) if record.recommended_driver_id else None
         return {
             "order_id": str(record.order_id),
             "calculated_at": record.calculated_at.isoformat(),
             "trigger_source": record.trigger_source,
             "algorithm_version": record.algorithm_version,
-            "recommended_driver_id": str(record.recommended_driver_id) if record.recommended_driver_id else None,
+            "recommended_driver_id": recommended_id if recommended_id in visible_ids else None,
             "selected_driver_id": str(record.selected_driver_id) if record.selected_driver_id else None,
             "distance_source": record.distance_source,
             "twogis_status": record.twogis_status,
             "message": candidate_data.get("message"),
-            "candidates": candidate_data.get("candidates", []),
-            "not_recommended": candidate_data.get("not_recommended", []),
+            "candidates": candidates,
+            "not_recommended": not_recommended,
         }
 
     async def _cycle_offer_ids(self, session: AsyncSession, order: Order) -> tuple[set[UUID], set[UUID]]:

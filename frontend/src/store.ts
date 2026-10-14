@@ -65,6 +65,9 @@ export interface ClientOrderSummary {
   delivery_option?: {
     capacity_m3: number;
     title: string;
+    primary_image_url?: string | null;
+    image_url?: string | null;
+    media_files?: { public_url?: string | null; is_primary?: boolean }[];
   };
 }
 

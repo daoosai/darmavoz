@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.services.cities import resolve_city, resolve_delivery_city, ensure_same_city, driver_city_clause, ensure_driver_city
+from app.services.catalog_media import attach_catalog_media
 from app.core.config import settings
 from app.services.google_play_reviewer import GOOGLE_PLAY_REVIEWER_PHONE_VALUES
 from app.models.models import (
@@ -1256,7 +1257,11 @@ async def list_orders_for_client(session: AsyncSession, client_id: UUID) -> list
         .where(Order.client_id == client_id, active_order_clause())
         .order_by(Order.created_at.desc())
     )
-    return hydrate_orders_route_fields(list(result.scalars().unique().all()))
+    orders = hydrate_orders_route_fields(list(result.scalars().unique().all()))
+    materials = {item.material.id: item.material for order in orders for item in order.items if item.material}
+    options = {order.delivery_option.id: order.delivery_option for order in orders if order.delivery_option}
+    await attach_catalog_media(session, list(materials.values()), list(options.values()))
+    return orders
 
 
 async def delete_order_by_id(session: AsyncSession, order_id: UUID) -> None:

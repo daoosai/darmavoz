@@ -118,15 +118,27 @@ const getOrderDeliverySummary = (order: ClientOrder) => {
   return `${getOrderQuantity(order)} шт. · ${vehicleTitle}`;
 };
 
-const getOrderMaterialImage = (order: ClientOrder) => {
-  const material = order.items?.[0]?.material;
-  const imageUrl =
-    material?.primary_image_url ||
-    material?.media_files?.find((file) => file.is_primary)?.public_url ||
-    material?.media_files?.[0]?.public_url ||
-    material?.image_url;
-
-  return resolveMediaUrl(imageUrl);
+const getOrderImages = (order: ClientOrder) => {
+  const sources = [
+    { entity: order.items?.[0]?.material, alt: getOrderMaterialTitle(order) },
+    { entity: order.delivery_option, alt: order.delivery_option?.title || "Транспорт для доставки" },
+  ];
+  const images = sources.flatMap(({ entity, alt }) => [
+    entity?.primary_image_url,
+    entity?.media_files?.find((file) => file.is_primary)?.public_url,
+    ...(entity?.media_files?.map((file) => file.public_url) || []),
+    entity?.image_url,
+  ].flatMap((value) => {
+    const url = resolveMediaUrl(value);
+    return url ? [{ url, alt }] : [];
+  }));
+  if (order.delivery_option) {
+    const origin = new URL(baseURL, window.location.origin).origin;
+    const truck = order.delivery_option.capacity_m3 <= 5 ? "zil" : "kamaz";
+    images.push({ url: new URL(`/static/vehicles/${truck}-dump-truck.svg`, origin).href,
+      alt: order.delivery_option.title });
+  }
+  return images.filter((image, index) => images.findIndex((item) => item.url === image.url) === index);
 };
 
 function OrderCard({
@@ -139,7 +151,8 @@ function OrderCard({
   onReply?: (order: ClientOrder) => void;
 }) {
   const status = order.status.toLowerCase();
-  const materialImage = getOrderMaterialImage(order);
+  const [failedImages, setFailedImages] = useState<string[]>([]);
+  const image = getOrderImages(order).find(({ url }) => !failedImages.includes(url));
   const clarificationQuestion =
     order.clarification_comment?.trim() ||
     order.clarification_reasons?.filter(Boolean).join(", ") ||
@@ -150,7 +163,8 @@ function OrderCard({
       layout
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm"
+      data-order-id={order.id}
+      className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm sm:p-5"
     >
       <div className="flex items-start justify-between gap-3">
         <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
@@ -165,30 +179,31 @@ function OrderCard({
         </span>
       </div>
 
-      <h3 className="mt-3 text-xl font-bold leading-snug text-slate-900">{getOrderMaterialTitle(order)}</h3>
-      <p className="mt-2 flex items-center gap-1.5 text-sm text-slate-500">
+      <h3 className="mt-2 text-lg font-bold leading-snug text-slate-900">{getOrderMaterialTitle(order)}</h3>
+      <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-500">
         <Truck className="h-4 w-4 shrink-0 text-sky-500" />
         {getOrderDeliverySummary(order)}
       </p>
 
-      <div className="mt-4 overflow-hidden rounded-xl bg-sky-50">
-        {materialImage ? (
-          <img src={materialImage} alt={getOrderMaterialTitle(order)} className="h-48 w-full object-cover" />
+      <div className="mt-3 overflow-hidden rounded-xl bg-sky-50">
+        {image ? (
+          <img src={image.url} alt={image.alt} className="h-32 w-full object-cover sm:h-40"
+            onError={() => setFailedImages((current) => current.includes(image.url) ? current : [...current, image.url])} />
         ) : (
-          <div className="flex h-48 w-full items-center justify-center text-sky-300">
+          <div className="flex h-32 sm:h-40 w-full items-center justify-center text-sky-300">
             <Package className="h-12 w-12" />
           </div>
         )}
       </div>
 
-      <div className="mt-4">
+      <div className="mt-3">
         <p className="text-xs text-slate-400">Сумма</p>
         <p className="mt-1 text-xl font-bold text-slate-900">{formatAmount(order)}</p>
       </div>
 
       <OrderPaymentsPanel orderId={order.id} />
       {status === "requires_clarification" ? (
-        <section className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+        <section className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
           <p className="text-sm font-bold text-amber-900">Вопрос от логиста</p>
           <p className="mt-1 text-sm leading-relaxed text-amber-800">{clarificationQuestion}</p>
           {clientClarificationReply ? (
@@ -209,7 +224,7 @@ function OrderCard({
       ) : null}
 
       {order.driver ? (
-        <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50 p-4">
+        <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 p-3">
           <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Водитель</p>
           <p className="mt-1 font-bold text-slate-900">{order.driver.name}</p>
           <p className="text-sm text-slate-500">
@@ -219,14 +234,14 @@ function OrderCard({
       ) : null}
 
       {order.address ? (
-        <p className="mt-4 flex items-start gap-2 text-sm text-slate-600">
+        <p className="mt-3 flex items-start gap-2 text-sm text-slate-600">
           <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
           {formatShortAddress(order.address)}
         </p>
       ) : null}
       {order.city_name && <p className="mt-2 text-xs text-slate-500">Город: {order.city_name}</p>}
-      <p className="mt-4 text-xs text-slate-400">Создан: {formatDateTime(order.created_at)}</p>
-      {onCancel && cancellableClientOrderStatuses.has(status) ? <button type="button" onClick={() => onCancel(order)} className="mt-4 w-full rounded-xl border border-red-200 py-3 text-sm font-bold text-red-600">Отменить заказ</button> : null}
+      <p className="mt-3 text-xs text-slate-400">Создан: {formatDateTime(order.created_at)}</p>
+      {onCancel && cancellableClientOrderStatuses.has(status) ? <button type="button" onClick={() => onCancel(order)} className="mt-3 w-full rounded-xl border border-red-200 py-3 text-sm font-bold text-red-600">Отменить заказ</button> : null}
     </motion.article>
   );
 }
@@ -253,6 +268,16 @@ export default function OrdersScreen({
   const [clarificationReply, setClarificationReply] = useState("");
   const [clarificationReplyError, setClarificationReplyError] = useState("");
   const [isClarificationReplySaving, setIsClarificationReplySaving] = useState(false);
+
+  useEffect(() => {
+    if (role !== "client") return;
+    // Mobile scrolls the document; desktop scrolls the app's main container.
+    const targets = [document.documentElement, document.body].filter(
+      (element) => !element.classList.contains("hide-scrollbar"),
+    );
+    targets.forEach((element) => element.classList.add("hide-scrollbar"));
+    return () => targets.forEach((element) => element.classList.remove("hide-scrollbar"));
+  }, [role]);
 
   const fetchOrders = async () => {
     if (role !== "client") {
@@ -455,7 +480,7 @@ export default function OrdersScreen({
   }
 
   return (
-    <div ref={screenRef} className="min-h-[calc(100vh-68px)] bg-gray-50">
+    <div ref={screenRef} className="hide-scrollbar min-h-[calc(100vh-68px)] bg-gray-50">
       <div className="relative z-10 bg-gray-50 px-4 pb-2 pt-4">
         {focusedOrderId ? (
           <button
@@ -555,7 +580,7 @@ export default function OrdersScreen({
       </PullToRefresh>
       {cancelling ? (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="cancel-order-title">
-          <div className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
+          <div className="w-full max-w-md max-h-[90vh] overflow-y-auto hide-scrollbar rounded-2xl bg-white p-5 shadow-xl">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 id="cancel-order-title" className="text-lg font-black text-slate-900">Отменить заказ?</h3>

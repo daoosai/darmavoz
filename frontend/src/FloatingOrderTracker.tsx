@@ -160,6 +160,7 @@ export default function FloatingOrderTracker({ onOpenOrder }: Props) {
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-slate-500">{materialName}</p>
           <p className="truncate font-bold text-slate-900">{progress.text}</p>
+          {progress.description ? <p className="text-xs text-slate-500">{progress.description}</p> : null}
         </div>
         <span className="text-sm font-black text-sky-600">{progress.percentage}%</span>
       </div>

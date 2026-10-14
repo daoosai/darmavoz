@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 const orderId = '11111111-2222-4333-8444-555555555555';
 const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="160"><rect width="320" height="160" fill="#38bdf8"/></svg>';
-async function setup(page: Page, { material = '/s3/qa/material.svg', truck = '/s3/qa/truck.svg', state = 'unconfirmed', canPay = true, openOrders = true } = {}) {
+async function setup(page: Page, { material = '/s3/qa/material.svg', truck = '/s3/qa/truck.svg', state = 'unconfirmed', canPay = true, openOrders = true, orderStatus = 'driver_assigned' } = {}) {
   await page.addInitScript(() => {
     localStorage.setItem('auth-storage', JSON.stringify({ state: { token: 'e2e-client', role: 'client' }, version: 0 }));
     localStorage.setItem('selected-city', JSON.stringify({ state: { cityId: 'tyumen' }, version: 1 }));
@@ -14,7 +14,7 @@ async function setup(page: Page, { material = '/s3/qa/material.svg', truck = '/s
     const p = new URL(route.request().url()).pathname.replace(/\/$/, '');
     let body: unknown = [];
     if (p.endsWith('/cities')) body = [{ id: 'tyumen', code: 'tyumen', name: 'Тюмень', is_active: true, is_default: true, center_lat: 57.15, center_lon: 65.53 }];
-    else if (p.endsWith('/clients/me/orders')) body = [{ id: orderId, status: 'driver_assigned', payment_status: state === 'unconfirmed' || state === 'confirmed' ? null : state === 'paid' ? 'succeeded' : state, trip_count: 2, driver: { name: 'Тестовый водитель', phone: '+79000000001', vehicle: { brand: 'КамАЗ', plate_number: 'А123АА72' } }, total_amount: 78500, delivery_cost: 5000, address: 'Тюмень, Республики, 1', city_name: 'Тюмень', created_at: '2026-10-14T10:00:00Z', items: [{ quantity: 1, volume: 10, material: { name: 'Песок лесной', unit: 'м³', primary_image_url: material || null } }], delivery_option: { title: 'Самосвал', capacity_m3: 10, primary_image_url: truck || null } }];
+    else if (p.endsWith('/clients/me/orders')) body = [{ id: orderId, status: orderStatus, payment_status: state === 'unconfirmed' || state === 'confirmed' ? null : state === 'paid' ? 'succeeded' : state, trip_count: 2, driver: orderStatus === 'driver_assigned' ? { name: 'Тестовый водитель', phone: '+79000000001', vehicle: { brand: 'КамАЗ', plate_number: 'А123АА72' } } : null, total_amount: 78500, delivery_cost: 5000, address: 'Тюмень, Республики, 1', city_name: 'Тюмень', created_at: '2026-10-14T10:00:00Z', items: [{ quantity: 1, volume: 10, material: { name: 'Песок лесной', unit: 'м³', primary_image_url: material || null } }], delivery_option: { title: 'Самосвал', capacity_m3: 10, primary_image_url: truck || null } }];
     else if (p.endsWith('/payments/config')) body = { enabled: true, test_mode: true, receipts_enabled: true };
     else if (p.endsWith(`/orders/${orderId}/payments`)) body = { quote: state === 'unconfirmed' ? null : { amount: '78500.00' }, can_pay: canPay && ['confirmed', 'pending', 'waiting_for_payment'].includes(state), items: state === 'paid' || state === 'pending' || state === 'waiting_for_payment' ? [{ id: 'payment-1', status: state === 'paid' ? 'succeeded' : state, amount: '78500.00' }] : [] };
     else if (p.endsWith('/system/version')) body = { android_version: '3.3.6', download_url: '/static/darmavoz-test.apk' };
@@ -128,4 +128,39 @@ test('successful payment restores logistics status in card and tracker', async (
   await expect(card.getByText('Водитель назначен', { exact: true })).toBeVisible();
   await expect(card.getByText('Оплачено', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Открыть активный заказ: Песок лесной', exact: true })).toContainText('Водитель назначен');
+});
+
+for (const width of [390, 1440]) {
+  for (const orderStatus of ['new', 'created', 'searching_driver', 'offered_to_driver', 'no_driver_found', 'timeout']) {
+    test(`unreviewed ${orderStatus} awaits logist at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 1000 });
+      const card = await setup(page, { orderStatus });
+      await expect(card.getByText('Заказ оформлен', { exact: true })).toBeVisible();
+      await expect(card.getByText('Ожидает проверки логистом', { exact: true })).toBeVisible();
+      const tracker = page.getByRole('button', { name: 'Открыть активный заказ: Песок лесной', exact: true });
+      await expect(tracker).toContainText('Заказ оформлен');
+      await expect(tracker).toContainText('Ожидает проверки логистом');
+      await expect(tracker).toContainText('10%');
+      if (orderStatus === 'searching_driver') await page.screenshot({ path: `test-results/awaiting-logist-${width}.png` });
+      await expect(page.getByText('Ищем водителя...', { exact: true })).toHaveCount(0);
+    });
+  }
+}
+
+test('confirmed quote enables payment, then paid unassigned order searches for a driver', async ({ page }) => {
+  const card = await setup(page, { orderStatus: 'searching_driver', state: 'confirmed' });
+  const tracker = page.getByRole('button', { name: 'Открыть активный заказ: Песок лесной', exact: true });
+  await expect(tracker).toContainText('Ожидает оплаты');
+  await expect(card.getByText('Ожидает проверки логистом', { exact: true })).toHaveCount(0);
+  await page.route(`**/orders/${orderId}/payments`, route => route.fulfill({ json: {
+    can_pay: false, quote: { amount: '78500.00' }, items: [{ status: 'succeeded' }],
+  } }));
+  await card.getByRole('button', { name: 'Обновить оплату', exact: true }).click();
+  await expect(tracker).toContainText('Ищем водителя...');
+  await expect(card.getByText('Поиск водителя', { exact: true })).toBeVisible();
+});
+
+test('confirmed quote proves review even when online payment is disabled', async ({ page }) => {
+  await setup(page, { orderStatus: 'searching_driver', state: 'confirmed', canPay: false });
+  await expect(page.getByRole('button', { name: 'Открыть активный заказ: Песок лесной', exact: true })).toContainText('Ищем водителя...');
 });

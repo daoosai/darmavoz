@@ -24,6 +24,7 @@ export const ORDER_STATUSES_RU: Record<string, string> = {
 };
 
 export const ORDER_TRACKER_PROGRESS: Record<string, { percentage: number; text: string }> = {
+  new: { percentage: 10, text: "Заказ оформлен" },
   created: { percentage: 10, text: "Заказ оформлен" },
   searching_driver: { percentage: 20, text: "Ищем водителя..." },
   offered_to_driver: { percentage: 20, text: "Ищем водителя..." },
@@ -62,6 +63,7 @@ export const getOrderStatusText = (status: string | undefined | null) => {
 
 export const getClientOrderStatusText = (status: string | undefined | null) => {
   const normalizedStatus = status?.toLowerCase();
+  if (normalizedStatus === "awaiting_logist_review") return "Заказ оформлен";
   if (normalizedStatus === "waiting_for_payment") return "Ожидает оплаты";
   if (normalizedStatus === "no_driver_found" || normalizedStatus === "timeout") {
     return ORDER_STATUSES_RU.searching_driver;
@@ -86,6 +88,7 @@ export const toClientOrderPaymentState = (data: {
   items?: { status: string }[];
 }): ClientOrderPaymentState => ({
   canPay: data.can_pay === true,
+  quoteConfirmed: Boolean(data.quote),
   status: data.items?.some((payment) => payment.status === "succeeded")
     ? "succeeded"
     : data.items?.[0]?.status ?? (data.quote ? "waiting_for_payment" : null),
@@ -100,6 +103,12 @@ export const getClientOrderDisplayStatus = (
     "cancelled_by_client", "cancelled_by_operator"].includes(status);
   const paymentStatus = payment?.status ?? order.payment_status?.toLowerCase();
   const paid = ["succeeded", "refunded"].includes(order.payment_status?.toLowerCase() ?? "");
+  // Dispatch may start at checkout; a confirmed quote/payment proves review.
+  const awaitingDriver = ["new", "created", "searching_driver", "offered_to_driver",
+    "no_driver_found", "timeout"].includes(status);
+  if (awaitingDriver && !paid && !payment?.quoteConfirmed && !paymentStatus) {
+    return "awaiting_logist_review";
+  }
   return !closed && !paid && payment?.canPay &&
     ["pending", "waiting_for_payment"].includes(paymentStatus ?? "")
     ? "waiting_for_payment" : status;
@@ -109,8 +118,14 @@ export const getClientOrderTrackerProgress = (
   order: ClientOrderSummary,
   payment?: ClientOrderPaymentState,
 ) => {
+  const displayStatus = getClientOrderDisplayStatus(order, payment);
+  if (displayStatus === "awaiting_logist_review") {
+    return { percentage: 10, text: "Заказ оформлен", description: "Ожидает проверки логистом" };
+  }
   const progress = getOrderTrackerProgress(order.status);
-  return progress && getClientOrderDisplayStatus(order, payment) === "waiting_for_payment"
-    ? { ...progress, text: "Ожидает оплаты" }
-    : progress;
+  return progress ? {
+    ...progress,
+    text: displayStatus === "waiting_for_payment" ? "Ожидает оплаты" : progress.text,
+    description: undefined,
+  } : null;
 };

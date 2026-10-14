@@ -93,6 +93,7 @@ export const normalizeClientOrderSummary = <T extends ClientOrderSummary>(order:
 };
 
 export interface ClientOrderPaymentState {
+  quoteConfirmed?: boolean;
   status: string | null;
   canPay: boolean;
 }

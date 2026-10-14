@@ -17,6 +17,7 @@ import {
 type ClientOrder = ClientOrderSummary;
 
 const activeStatuses = new Set([
+  "new",
   "created",
   "requires_clarification",
   "searching_driver",
@@ -174,6 +175,10 @@ function OrderCard({
           {getClientOrderStatusText(displayStatus)}
         </span>
       </div>
+
+      {displayStatus === "awaiting_logist_review" ? (
+        <p className="mt-2 text-sm text-slate-500">Ожидает проверки логистом</p>
+      ) : null}
 
       {status === "requires_clarification" ? (
         <section className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">

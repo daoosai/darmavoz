@@ -1260,7 +1260,10 @@ async def list_orders_for_client(session: AsyncSession, client_id: UUID) -> list
     orders = hydrate_orders_route_fields(list(result.scalars().unique().all()))
     materials = {item.material.id: item.material for order in orders for item in order.items if item.material}
     options = {order.delivery_option.id: order.delivery_option for order in orders if order.delivery_option}
-    await attach_catalog_media(session, list(materials.values()), list(options.values()))
+    # Route fallbacks above only prepare this response. Flushing them here would
+    # expire the loaded payment/city column properties before serialization.
+    with session.no_autoflush:
+        await attach_catalog_media(session, list(materials.values()), list(options.values()))
     return orders
 
 

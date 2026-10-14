@@ -48,6 +48,7 @@ async def test_client_orders_include_primary_material_and_delivery_media(
             client_id=buyer.id,
             delivery_option_id=truck.id,
             status="created",
+            address="Тюмень, тестовый адрес, 1",
             total_amount=100,
         )
         db.add(order)

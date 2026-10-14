@@ -5,3 +5,5 @@ OrdersScreen получает заказы текущего клиента че�
 Backend list_orders_for_client прикрепляет опубликованные MediaFile материалов и DeliveryOption через attach_catalog_media. UI обрабатывает сетевые ошибки фотографий и переключается материал → машина → локальная иллюстрация. Абсолютные/относительные media URL разрешает resolveMediaUrl. Полоса прокрутки скрыта через hide-scrollbar, прокрутка сохраняется; карточка компактнее на mobile.
 
 Файлы: frontend/src/OrdersScreen.tsx, OrderPaymentsPanel.tsx, App.tsx, store.ts; app/services/catalog_media.py, dispatch_service.py, app/api/catalog.py. Проверки: frontend/tests/e2e/client-order-card.spec.ts, tests/test_client_order_media.py; они включены в test CI. Отчёт: ../2026-10-14-client-order-card.md.
+
+14.10.2026: media-запрос в списке заказов выполняется с no_autoflush. Заполнение старых адресных полей для ответа не должно выполнять UPDATE и истекать вычисляемые поля оплаты/города. Регрессия воспроизводится в test_client_order_media.py с address без delivery_address.

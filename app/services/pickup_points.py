@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from datetime import datetime
 from decimal import Decimal
+import re
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -187,6 +188,14 @@ async def sync_delivery_options(
         )
 
 
+def display_contact_phone(value: str | None) -> str | None:
+    """Usernames may be emails or archived identifiers, never expose those as phones."""
+    value = (value or "").strip()
+    if not value or len(value) > 20 or not re.fullmatch(r"[+\d\s().-]+", value):
+        return None
+    return value if any(char.isdigit() for char in value) else None
+
+
 async def pickup_point_payload(
     db: AsyncSession,
     point: Quarry,
@@ -254,6 +263,7 @@ async def pickup_point_payload(
     )
     owner = await db.get(User, point.owner_user_id) if point.owner_user_id else None
 
+    owner_phone = display_contact_phone(owner.username) if owner else None
     active_offers = [row for row in offer_rows if row.is_active]
     material_by_id = {
         row.material_id: Material(id=row.material_id, name=row.name, unit=row.unit, price=row.price, is_free=row.is_free)
@@ -288,7 +298,7 @@ async def pickup_point_payload(
         "point_type": point.point_type,
         "address": point.address,
         "description": point.description,
-        "contact_phone": owner.username if owner else point.contact_phone,
+        "contact_phone": owner_phone or display_contact_phone(point.contact_phone),
         "subscription_end_date": point.subscription_end_date,
         "lat": point.lat,
         "lon": point.lon,
@@ -323,7 +333,7 @@ async def pickup_point_payload(
     }
     if include_owner_contacts:
         payload["owner_name"] = owner.display_name if owner else None
-        payload["owner_phone"] = owner.username if owner else None
+        payload["owner_phone"] = owner_phone
     return payload
 
 

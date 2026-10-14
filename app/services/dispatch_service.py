@@ -2129,6 +2129,7 @@ async def get_current_incoming_offer_for_driver(session: AsyncSession, driver_id
 
 
 async def get_current_assigned_order_for_driver(session: AsyncSession, driver_id: UUID) -> Order | None:
+    # Shift/auto-dispatch eligibility must never hide an existing assignment.
     result = await session.execute(
         select(Order)
         .options(*order_load_options())

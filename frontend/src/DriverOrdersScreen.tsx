@@ -223,7 +223,11 @@ export default function DriverOrdersScreen({
     }
   };
 
-  const handleShiftChange = async (nextValue: boolean, shouldTrack = false) => {
+  const handleShiftChange = async (
+    nextValue: boolean,
+    shouldTrack = false,
+    successMessage?: string,
+  ) => {
     const currentToken = useAuthStore.getState().token;
     if (!currentToken) return;
 
@@ -252,7 +256,8 @@ export default function DriverOrdersScreen({
       if (isDriverAvailabilityStatus(data?.status)) {
         setDriverStatus(data.status);
       }
-      toast.success(nextValue ? "Смена начата" : "Смена завершена");
+      if (successMessage) toast(successMessage);
+      else toast.success(nextValue ? "Смена начата" : "Смена завершена");
     } catch (error) {
       console.warn("Не удалось изменить статус смены", error);
       toast.error("Не удалось изменить статус смены");
@@ -292,37 +297,37 @@ export default function DriverOrdersScreen({
     const shouldStartShift = shouldStartShiftAfterDisclosure;
     setIsPreparingShiftStart(true);
 
+    let hasLocationPermission = false;
     try {
-      let hasLocationPermission = false;
-      if (Capacitor.isNativePlatform()) {
-        const perm = await Geolocation.requestPermissions();
-        hasLocationPermission = perm.location === "granted";
-      } else {
-        // Browsers show their permission prompt only when location is actually requested.
-        await Geolocation.getCurrentPosition({
-          enableHighAccuracy: false,
-          timeout: 10_000,
-          maximumAge: 0,
-        });
-        hasLocationPermission = true;
-      }
-
-      if (!hasLocationPermission) {
-        setIsLocationTrackingPermitted(false);
-        toast.error("Разрешение на фоновую геолокацию не выдано");
-        return;
+      try {
+        if (Capacitor.isNativePlatform()) {
+          const perm = await Geolocation.requestPermissions();
+          hasLocationPermission = perm.location === "granted";
+        } else {
+          // Browser location is optional; an unavailable GPS must not block work.
+          await Geolocation.getCurrentPosition({
+            enableHighAccuracy: false,
+            timeout: 10_000,
+            maximumAge: 0,
+          });
+          hasLocationPermission = true;
+        }
+      } catch (error) {
+        console.warn("Геопозиция недоступна при начале смены", error);
       }
 
       setIsLocationDisclosureOpen(false);
+      setIsLocationTrackingPermitted(hasLocationPermission);
       if (shouldStartShift) {
-        await handleShiftChange(true, true);
-      } else {
-        setIsLocationTrackingPermitted(true);
+        const message = !hasLocationPermission
+          ? Capacitor.getPlatform() === "web"
+            ? "Фоновая геопозиция недоступна в браузере, но смена начата"
+            : "Геопозиция недоступна, но смена начата"
+          : undefined;
+        await handleShiftChange(true, hasLocationPermission, message);
+      } else if (!hasLocationPermission) {
+        toast("Геопозиция недоступна. Смена остаётся активной");
       }
-    } catch (error) {
-      console.error(error);
-      setIsLocationTrackingPermitted(false);
-      toast.error("Не удалось запросить разрешение на геолокацию");
     } finally {
       setIsPreparingShiftStart(false);
       setShouldStartShiftAfterDisclosure(false);
@@ -376,6 +381,7 @@ export default function DriverOrdersScreen({
     }
   }, [onLogout]);
 
+  // Assigned orders are loaded independently of shift/location availability.
   const fetchOrders = React.useCallback(
     async (silent = false) => {
       try {
@@ -863,6 +869,7 @@ export default function DriverOrdersScreen({
               </button>
               <button
                 type="button"
+                disabled={isShiftActionPending}
                 onClick={() => void handleLocationDisclosureContinue()}
                 className="flex-1 rounded-xl bg-[#2DB0E6] px-4 py-3 font-bold text-white transition hover:bg-[#209dd0]"
               >

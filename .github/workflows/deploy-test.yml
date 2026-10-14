@@ -37,7 +37,7 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       - name: Verify migration and city isolation in disposable CI database
-        run: python -m pytest -q tests/test_sprint22_unit.py tests/test_sprint22_api.py tests/test_sprint24.py tests/test_sprint24_api.py tests/test_sprint25_api.py tests/test_sprint25_unit.py tests/test_dispatch_volume_matching.py tests/test_smart_matching_unit.py tests/test_client_order_media.py tests/test_admin_point_contacts.py tests/test_driver_account_visibility.py
+        run: python -m pytest -q tests/test_sprint22_unit.py tests/test_sprint22_api.py tests/test_sprint24.py tests/test_sprint24_api.py tests/test_sprint25_api.py tests/test_sprint25_unit.py tests/test_dispatch_volume_matching.py tests/test_smart_matching_unit.py tests/test_client_order_media.py tests/test_admin_point_contacts.py tests/test_driver_account_visibility.py tests/test_driver_order_route_fields.py
 
   deploy-test:
     needs: sprint22-checks
@@ -75,7 +75,7 @@ jobs:
           node --import tsx --test src/bulkCalculator.test.ts
           npm run build
           npx playwright install --with-deps chromium
-          npm run test:e2e -- tests/e2e/sprint22.spec.ts tests/e2e/sprint24.spec.ts tests/e2e/sprint25.spec.ts tests/e2e/sprint24_25.spec.ts tests/e2e/client-order-card.spec.ts tests/e2e/payment-return.spec.ts --workers=1
+          npm run test:e2e -- tests/e2e/sprint22.spec.ts tests/e2e/sprint24.spec.ts tests/e2e/sprint25.spec.ts tests/e2e/sprint24_25.spec.ts tests/e2e/client-order-card.spec.ts tests/e2e/payment-return.spec.ts tests/e2e/driver-shift-orders.spec.ts --workers=1
           tar -C dist -cf ../frontend-dist.tar .
 
       - name: Setup SSH agent

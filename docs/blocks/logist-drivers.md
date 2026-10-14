@@ -48,3 +48,7 @@ TypeScript, production build и diff --check прошли. В браузере �
 модерационные счётчики, ручной/автоматический допуск), существующие
 `tests/test_dispatch_volume_matching.py`. Новый тест включён в deploy-test.
 Отчёт доставки: [driver-account-visibility](../2026-10-14-driver-account-visibility.md).
+
+Аудит Ивана Ивана Степановича: [14.10.2026](../2026-10-14-stepanovich-assignment-audit.md).
+Диапазон кузова и категория проверяются отдельно: вместимость 30 м³
+не отменяет несовпадение «Средние машины» / «Большие самосвалы».

@@ -9,3 +9,5 @@ Main публикует подписанные release APK и AAB через bui
 Отчёт: ../2026-10-12-apk-release.md.
 
 12.10.2026 опубликованы test 3.3.6 (324) и production 3.1.6 (317), подтверждены manifest APK, API версии, web JS, health и backup .env. Отдельные release-коммиты, без полного merge; подробности в отчёте выпуска.
+
+14.10.2026 production API обновлений переведён на Google Play: https://play.google.com/store/apps/details?id=ru.darmavoz.app. Исправлен main fallback APK_DOWNLOAD_URL в app/core/config.py; .env и frontend не менялись, тестовый APK URL сохранён. Runtime b95eae2c, CI и публичные проверки успешны. Подробности: ../2026-10-14-production-update-google-play.md.

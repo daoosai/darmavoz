@@ -45,7 +45,6 @@ from app.models.models import (
     quarry_materials,
     user_cities,
 )
-from app.schemas.client import ClientFcmTokenIn, ClientFcmTokenOut
 from app.schemas.catalog import (
     CategoryCreate,
     CategoryOut,
@@ -85,6 +84,8 @@ from app.services.vehicle_moderation import (
     vehicle_has_required_photos,
     vehicle_has_required_profile,
 )
+
+from app.services.driver_accounts import active_driver_account_clause
 
 router = APIRouter()
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -764,7 +765,7 @@ async def _list_admin_drivers(db: AsyncSession, *, city_id=None, without_city=Fa
             selectinload(Driver.user),
             selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option),
         )
-        .where(_reviewer_driver_exclusion_clause(), *filters)
+        .where(active_driver_account_clause(), _reviewer_driver_exclusion_clause(), *filters)
         .order_by(Driver.name.asc(), Driver.id.asc())
         .offset(offset).limit(limit)
     )
@@ -966,7 +967,7 @@ async def _list_admin_cars(
         )
         .where(Driver.vehicle_id.is_not(None))
         .where(driver_city_clause(city_id) if city_id else True)
-        .where(_reviewer_driver_exclusion_clause())
+        .where(active_driver_account_clause(), _reviewer_driver_exclusion_clause())
     )
 
     if volume is not None:
@@ -1022,7 +1023,7 @@ async def _get_admin_car_stats(db: AsyncSession, *, city_id=None) -> AdminCarSta
         .outerjoin(DeliveryOption, Vehicle.delivery_option_id == DeliveryOption.id)
         .options(selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option))
         .where(Driver.vehicle_id.is_not(None))
-        .where(_reviewer_driver_exclusion_clause())
+        .where(active_driver_account_clause(), _reviewer_driver_exclusion_clause())
         .where(Driver.is_active.is_(True))
         .where(driver_city_clause(city_id) if city_id else True)
         .where(Vehicle.is_active.is_(True))
@@ -1057,7 +1058,7 @@ async def _list_pending_moderation_items(db: AsyncSession, *, city_id=None) -> l
         )
         .where(Driver.vehicle_id.is_not(None))
         .where(driver_city_clause(city_id) if city_id else True)
-        .where(_reviewer_driver_exclusion_clause())
+        .where(active_driver_account_clause(), _reviewer_driver_exclusion_clause())
         .where(
             Vehicle.moderation_status.in_(MODERATION_PENDING_STATUSES)
         )
@@ -1322,6 +1323,7 @@ async def get_pending_driver_moderation_count(
         .where(
             Driver.vehicle_id.is_not(None),
             driver_city_clause(city_id) if city_id else True,
+            active_driver_account_clause(),
             _reviewer_driver_exclusion_clause(),
             Vehicle.moderation_status.in_(MODERATION_PENDING_STATUSES),
         )
@@ -1342,6 +1344,7 @@ async def get_moderation_counts(
         .where(
             Driver.vehicle_id.is_not(None),
             driver_city_clause(city_id) if city_id else True,
+            active_driver_account_clause(),
             _reviewer_driver_exclusion_clause(),
             Vehicle.moderation_status.in_(MODERATION_PENDING_STATUSES),
         )

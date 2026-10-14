@@ -8,9 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
-from app.models.models import Driver, DriverStatus, ModerationStatus, Order, User, Vehicle
+from app.models.models import Driver, DriverStatus, ModerationStatus, Order, Vehicle
 from app.schemas.driver import DriverMapResponse
 from app.services.dispatch_service import ACTIVE_ASSIGNED_ORDER_STATUSES
+from app.services.driver_accounts import active_driver_account_clause
 from app.services.google_play_reviewer import GOOGLE_PLAY_REVIEWER_PHONE_VALUES
 from app.services.redis_client import get_redis
 
@@ -142,8 +143,7 @@ async def list_driver_map(db: AsyncSession, city_id: UUID | None = None) -> list
         select(Driver)
         .join(Driver.user)
         .join(Driver.vehicle)
-        .where(User.is_active.is_(True))
-        .where(Driver.is_active.is_(True))
+        .where(active_driver_account_clause())
         .where(Driver.phone.notin_(GOOGLE_PLAY_REVIEWER_PHONE_VALUES))
         .where(driver_city_clause(city_id) if city_id is not None else True)
         .where(Driver.moderation_status == ModerationStatus.approved.value)

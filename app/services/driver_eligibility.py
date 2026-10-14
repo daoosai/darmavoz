@@ -1,7 +1,8 @@
 """Shared hard constraints; geography only changes ranking, never admission."""
-from datetime import datetime, UTC
 from sqlalchemy import and_, exists, func, select
-from app.models.models import City, DeliveryOption, Driver, Order, OrderOffer, User, Vehicle
+from app.models.models import City, DeliveryOption, Driver, Order, OrderOffer, Vehicle
+
+from app.services.driver_accounts import active_driver_account_clause
 
 ACTIVE_STATUSES = ('driver_assigned', 'driver_accepted', 'heading_to_pickup', 'arrived_at_pickup', 'loading', 'heading_to_client', 'delivered')
 
@@ -25,8 +26,7 @@ def category_match_clause(order):
 
 def driver_constraints(order, *, automatic=True):
     physical_capacity = func.coalesce(Vehicle.body_volume_m3, Vehicle.cubature_max, select(DeliveryOption.capacity_m3).where(DeliveryOption.id == Vehicle.delivery_option_id).scalar_subquery())
-    constraints = [physical_capacity > 0, Driver.is_active.is_(True), Driver.status == 'available',
-        (Driver.user_id.is_(None) | exists(select(User.id).where(User.id == Driver.user_id, User.is_active.is_(True), User.is_deleted.is_(False)).correlate(Driver))),
+    constraints = [physical_capacity > 0, active_driver_account_clause(), Driver.status == 'available',
         Driver.moderation_status.in_(('approved', 'incomplete')), Vehicle.is_active.is_(True),
         Vehicle.moderation_status.in_(('approved', 'incomplete')), category_match_clause(order),
         exists(select(City.id).where(City.id == getattr(order, 'city_id', None), City.is_active.is_(True))),

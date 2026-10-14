@@ -11,9 +11,10 @@ from app.models.models import DeliveryOption, Driver, DriverStatus, MediaFile, M
 from app.schemas.driver import DriverCreate, DriverFleetResponse, DriverResponse
 from app.security.auth import get_current_logist_user
 from app.services.dispatch_service import build_vehicle_volume_match_clause, get_order_trip_capacity
+from app.services.driver_accounts import active_driver_account_clause
 from app.services.google_play_reviewer import GOOGLE_PLAY_REVIEWER_PHONE_VALUES
 from app.services.storage import StorageNotConfiguredError, get_storage_service
-from app.services.cities import driver_city_clause, resolve_city, initialize_service_cities
+from app.services.cities import driver_city_clause, resolve_city
 
 router = APIRouter()
 
@@ -92,8 +93,7 @@ def build_driver_list_query(
     stmt = (
         select(Driver)
         .join(Driver.user)
-        .where(User.is_active.is_(True))
-        .where(Driver.is_active.is_(True))
+        .where(active_driver_account_clause())
         .where(Driver.phone.notin_(GOOGLE_PLAY_REVIEWER_PHONE_VALUES))
         .options(selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option))
         .order_by(Driver.name.asc())

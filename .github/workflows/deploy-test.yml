@@ -37,7 +37,7 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       - name: Verify migration and city isolation in disposable CI database
-        run: python -m pytest -q tests/test_sprint22_unit.py tests/test_sprint22_api.py tests/test_sprint24.py tests/test_sprint24_api.py tests/test_sprint25_api.py tests/test_sprint25_unit.py tests/test_dispatch_volume_matching.py tests/test_smart_matching_unit.py tests/test_client_order_media.py tests/test_admin_point_contacts.py
+        run: python -m pytest -q tests/test_sprint22_unit.py tests/test_sprint22_api.py tests/test_sprint24.py tests/test_sprint24_api.py tests/test_sprint25_api.py tests/test_sprint25_unit.py tests/test_dispatch_volume_matching.py tests/test_smart_matching_unit.py tests/test_client_order_media.py tests/test_admin_point_contacts.py tests/test_driver_account_visibility.py
 
   deploy-test:
     needs: sprint22-checks

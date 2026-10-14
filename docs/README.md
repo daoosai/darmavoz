@@ -70,3 +70,6 @@
 - [12.10.2026 — точечный перенос пригородной корзины и карты на production](2026-10-12-suburbs-production.md)
 
 - [14.10.2026 — production обновления через Google Play](2026-10-14-production-update-google-play.md)
+
+- [14.10.2026 — живая проверка тестовой ЮKassa](2026-10-14-yookassa-live-e2e.md)
+- [Оплата и проверка платежей](blocks/payments.md)

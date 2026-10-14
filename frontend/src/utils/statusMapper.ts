@@ -1,3 +1,5 @@
+import type { ClientOrderPaymentState, ClientOrderSummary } from "../store";
+
 export const ORDER_STATUSES_RU: Record<string, string> = {
   draft: "Черновик",
   created: "Заказ создан",
@@ -60,6 +62,7 @@ export const getOrderStatusText = (status: string | undefined | null) => {
 
 export const getClientOrderStatusText = (status: string | undefined | null) => {
   const normalizedStatus = status?.toLowerCase();
+  if (normalizedStatus === "waiting_for_payment") return "Ожидает оплаты";
   if (normalizedStatus === "no_driver_found" || normalizedStatus === "timeout") {
     return ORDER_STATUSES_RU.searching_driver;
   }
@@ -74,4 +77,40 @@ export const getOrderTrackerProgress = (status: string | undefined | null) => {
 export const getOrderStepIndex = (status: string | undefined | null) => {
   if (!status) return -1;
   return STEP_INDEX_BY_STATUS[status] ?? -1;
+};
+
+// Payment availability comes from the authorized payments endpoint, not logistics.
+export const toClientOrderPaymentState = (data: {
+  can_pay?: boolean;
+  quote?: unknown;
+  items?: { status: string }[];
+}): ClientOrderPaymentState => ({
+  canPay: data.can_pay === true,
+  status: data.items?.some((payment) => payment.status === "succeeded")
+    ? "succeeded"
+    : data.items?.[0]?.status ?? (data.quote ? "waiting_for_payment" : null),
+});
+
+export const getClientOrderDisplayStatus = (
+  order: Pick<ClientOrderSummary, "status" | "payment_status">,
+  payment?: ClientOrderPaymentState,
+) => {
+  const status = order.status.toLowerCase();
+  const closed = ["completed", "delivered", "cancelled", "canceled",
+    "cancelled_by_client", "cancelled_by_operator"].includes(status);
+  const paymentStatus = payment?.status ?? order.payment_status?.toLowerCase();
+  const paid = ["succeeded", "refunded"].includes(order.payment_status?.toLowerCase() ?? "");
+  return !closed && !paid && payment?.canPay &&
+    ["pending", "waiting_for_payment"].includes(paymentStatus ?? "")
+    ? "waiting_for_payment" : status;
+};
+
+export const getClientOrderTrackerProgress = (
+  order: ClientOrderSummary,
+  payment?: ClientOrderPaymentState,
+) => {
+  const progress = getOrderTrackerProgress(order.status);
+  return progress && getClientOrderDisplayStatus(order, payment) === "waiting_for_payment"
+    ? { ...progress, text: "Ожидает оплаты" }
+    : progress;
 };

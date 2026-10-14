@@ -5,10 +5,12 @@ import { Capacitor } from '@capacitor/core';
 import { CreditCard, History, Loader2, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { buttonClass, commerceApi, dateTime, inputClass, paymentLabels, refundLabels, rubles } from './commerceApi';
-import { useAuthStore } from './store';
+import { useAuthStore, useClientOrdersStore } from './store';
+import { toClientOrderPaymentState } from './utils/statusMapper';
 
 export default function OrderPaymentsPanel({ orderId, materialAmount = 0, deliveryAmount = 0 }: { orderId: string; materialAmount?: number; deliveryAmount?: number }) {
   const { role, token } = useAuthStore();
+  const setOrderPaymentState = useClientOrdersStore(state => state.setOrderPaymentState);
   const staff = role === 'admin' || role === 'logist';
   const [data, setData] = useState<any>(null);
   const [config, setConfig] = useState<any>(null);
@@ -24,8 +26,9 @@ export default function OrderPaymentsPanel({ orderId, materialAmount = 0, delive
     try {
       const [next, cfg] = await Promise.all([commerceApi(`/orders/${orderId}/payments`), commerceApi('/payments/config')]);
       setData(next); setConfig(cfg); setError('');
+      if (role === 'client') setOrderPaymentState(orderId, toClientOrderPaymentState(next));
     } catch (e: any) { setError(e.message); }
-  }, [orderId, token]);
+  }, [orderId, token, role, setOrderPaymentState]);
   const refresh = useCallback(async () => {
     try {
       const state = await commerceApi(`/orders/${orderId}/payments`);
@@ -66,7 +69,7 @@ export default function OrderPaymentsPanel({ orderId, materialAmount = 0, delive
   });
   const latest = data?.items?.[0];
   const awaitingConfirmation = !staff && !!data && !latest && !data.quote;
-  return <section className="mt-3 rounded-2xl border border-sky-100 bg-sky-50/60 p-3">
+  return <section aria-label="Оплата заказа" className="mt-3 rounded-2xl border border-sky-100 bg-sky-50/60 p-3">
     <div className="flex items-center justify-between gap-3"><h3 className="flex items-center gap-2 text-sm font-bold text-slate-800"><CreditCard className="h-5 w-5 text-sky-500" />{awaitingConfirmation ? 'Ожидает подтверждения' : 'Оплата заказа'}</h3><button disabled={busy} aria-label="Обновить оплату" className="rounded-lg p-2 text-sky-600" onClick={() => run(refresh)}><RefreshCw className={`h-4 w-4 ${busy ? 'animate-spin' : ''}`} /></button></div>
     {error ? <p className="mt-2 text-sm text-red-600">{error}</p> : !data ? <p className="mt-2 text-xs text-slate-400">Загрузка…</p> : <>
       {awaitingConfirmation ? <p className="mt-2 text-xs leading-relaxed text-slate-500">Оплата станет доступна после проверки заказа логистом</p> : <p className="mt-2 text-sm font-bold text-slate-700">{latest ? (latest.refund_status ? refundLabels[latest.refund_status] : paymentLabels[latest.status]) : data.quote ? 'Ожидает оплаты' : 'Стоимость уточняется'}</p>}

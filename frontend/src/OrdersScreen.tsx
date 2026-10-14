@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, Info, List, MapPin, Package, Truck, X } from "lucide-react";
 
 import { baseURL, clientOrderStatusColors, formatShortAddress, resolveMediaUrl } from "./utils";
-import { getClientOrderStatusText } from "./utils/statusMapper";
+import { getClientOrderDisplayStatus, getClientOrderStatusText } from "./utils/statusMapper";
 import { formatTripsCount } from "./utils/pluralize";
 import {
   ClientOrderSummary,
@@ -106,16 +106,8 @@ const getOrderVolume = (order: ClientOrder) => {
 
 const getOrderDeliverySummary = (order: ClientOrder) => {
   const tripCount = getOrderTripsCount(order);
-  const volume = getOrderVolume(order);
   const vehicleTitle = order.delivery_option?.title || "Самосвал";
-
-  if (volume !== null || tripCount !== null) {
-    const volumeText = volume !== null ? `${formatVolume(volume)} м³` : "Объём не указан";
-    const tripsText = tripCount !== null ? ` (${formatTripsCount(tripCount)})` : "";
-    return `${volumeText}${tripsText} · ${vehicleTitle}`;
-  }
-
-  return `${getOrderQuantity(order)} шт. · ${vehicleTitle}`;
+  return tripCount !== null ? `${vehicleTitle} · ${formatTripsCount(tripCount)}` : vehicleTitle;
 };
 
 const getOrderImages = (order: ClientOrder) => {
@@ -151,6 +143,9 @@ function OrderCard({
   onReply?: (order: ClientOrder) => void;
 }) {
   const status = order.status.toLowerCase();
+  const paymentState = useClientOrdersStore(state => state.paymentStates[order.id]);
+  const displayStatus = getClientOrderDisplayStatus(order, paymentState);
+  const volume = getOrderVolume(order);
   const [failedImages, setFailedImages] = useState<string[]>([]);
   const image = getOrderImages(order).find(({ url }) => !failedImages.includes(url));
   const clarificationQuestion =
@@ -169,39 +164,17 @@ function OrderCard({
       <div className="flex items-start justify-between gap-3">
         <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
           Заказ #{order.id.slice(-6).toUpperCase()}
+          <span className="mt-1 block text-[10px] font-normal normal-case tracking-normal">Создан: {formatDateTime(order.created_at)}</span>
         </p>
         <span
           className={`shrink-0 rounded-full px-3 py-1 text-[10px] font-bold ${
-            clientOrderStatusColors[status] || "border border-slate-200 bg-slate-100 text-slate-600"
+            displayStatus === "waiting_for_payment" ? "border border-amber-200 bg-amber-50 text-amber-800" : clientOrderStatusColors[status] || "border border-slate-200 bg-slate-100 text-slate-600"
           }`}
         >
-          {getClientOrderStatusText(status)}
+          {getClientOrderStatusText(displayStatus)}
         </span>
       </div>
 
-      <h3 className="mt-2 text-lg font-bold leading-snug text-slate-900">{getOrderMaterialTitle(order)}</h3>
-      <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-500">
-        <Truck className="h-4 w-4 shrink-0 text-sky-500" />
-        {getOrderDeliverySummary(order)}
-      </p>
-
-      <div className="mt-3 overflow-hidden rounded-xl bg-sky-50">
-        {image ? (
-          <img src={image.url} alt={image.alt} className="h-32 w-full object-cover sm:h-40"
-            onError={() => setFailedImages((current) => current.includes(image.url) ? current : [...current, image.url])} />
-        ) : (
-          <div className="flex h-32 sm:h-40 w-full items-center justify-center text-sky-300">
-            <Package className="h-12 w-12" />
-          </div>
-        )}
-      </div>
-
-      <div className="mt-3">
-        <p className="text-xs text-slate-400">Сумма</p>
-        <p className="mt-1 text-xl font-bold text-slate-900">{formatAmount(order)}</p>
-      </div>
-
-      <OrderPaymentsPanel orderId={order.id} />
       {status === "requires_clarification" ? (
         <section className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
           <p className="text-sm font-bold text-amber-900">Вопрос от логиста</p>
@@ -223,24 +196,52 @@ function OrderCard({
         </section>
       ) : null}
 
+      <h3 className="mt-2 text-lg font-bold leading-snug text-slate-900">{getOrderMaterialTitle(order)} <span className="whitespace-nowrap text-slate-500">· {volume !== null ? `${formatVolume(volume)} м³` : `${getOrderQuantity(order)} шт.`}</span></h3>
+      <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-500">
+        <Truck className="h-4 w-4 shrink-0 text-sky-500" />
+        {getOrderDeliverySummary(order)}
+      </p>
+
+      <div className="mt-3 overflow-hidden rounded-xl bg-sky-50">
+        {image ? (
+          <img src={image.url} alt={image.alt} className="h-32 w-full object-cover sm:h-40"
+            onError={() => setFailedImages((current) => current.includes(image.url) ? current : [...current, image.url])} />
+        ) : (
+          <div className="flex h-32 sm:h-40 w-full items-center justify-center text-sky-300">
+            <Package className="h-12 w-12" />
+          </div>
+        )}
+      </div>
+
+      <div className="mt-3">
+        <p className="text-xs text-slate-400">Сумма</p>
+        <p className="mt-1 text-xl font-bold text-slate-900">{formatAmount(order)}</p>
+      </div>
+
       {order.driver ? (
-        <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 p-3">
+        <section aria-label="Водитель" className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 p-3">
           <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Водитель</p>
           <p className="mt-1 font-bold text-slate-900">{order.driver.name}</p>
           <p className="text-sm text-slate-500">
             {order.driver.vehicle?.brand || order.driver.vehicle?.title || "Транспорт назначен"}
           </p>
-        </div>
+          {order.driver.vehicle?.plate_number && <p className="text-sm font-semibold text-slate-600">Госномер: {order.driver.vehicle.plate_number}</p>}
+        </section>
       ) : null}
 
-      {order.address ? (
-        <p className="mt-3 flex items-start gap-2 text-sm text-slate-600">
-          <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-          {formatShortAddress(order.address)}
-        </p>
+      {order.address || order.city_name ? (
+        <section aria-label="Адрес доставки" className="mt-3">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Адрес доставки</p>
+          {order.address ? (
+            <p className="mt-1 flex items-start gap-2 text-sm text-slate-600">
+              <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+              {formatShortAddress(order.address)}
+            </p>
+          ) : null}
+          {order.city_name && <p className="mt-2 text-xs text-slate-500">Город: {order.city_name}</p>}
+        </section>
       ) : null}
-      {order.city_name && <p className="mt-2 text-xs text-slate-500">Город: {order.city_name}</p>}
-      <p className="mt-3 text-xs text-slate-400">Создан: {formatDateTime(order.created_at)}</p>
+      <OrderPaymentsPanel orderId={order.id} />
       {onCancel && cancellableClientOrderStatuses.has(status) ? <button type="button" onClick={() => onCancel(order)} className="mt-3 w-full rounded-xl border border-red-200 py-3 text-sm font-bold text-red-600">Отменить заказ</button> : null}
     </motion.article>
   );

@@ -1,0 +1,17 @@
+{
+  "commit": "020d6f20",
+  "environment": "test.darmavoz.ru",
+  "browserTestsPassed": 12,
+  "apiMocked": true,
+  "realOrdersChanged": false,
+  "realShiftsChanged": false,
+  "health": "online",
+  "runtime": "020d6f20",
+  "deployRun": 38520837374,
+  "apkRun": 38520837425,
+  "activeAssignedOrdersFoundInTestDB": 0,
+  "viewports": [
+    390,
+    1440
+  ]
+}

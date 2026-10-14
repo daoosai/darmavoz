@@ -77,7 +77,8 @@ for (const width of [390, 1440]) {
     const payment = card.getByRole('region', { name: 'Оплата заказа', exact: true });
     await expect(driver).toContainText('Тестовый водитель');
     await expect(driver).toContainText('КамАЗ');
-    await expect(driver).toContainText('А123АА72');
+    await expect(driver).not.toContainText('А123АА72');
+    await expect(driver).not.toContainText('Госномер');
     await expect(address).toContainText('Город: Тюмень');
     await expect(payment.getByRole('textbox', { name: 'Почта для чека' })).toBeVisible();
     await expect(payment.getByRole('button', { name: 'Продолжить оплату', exact: true })).toBeVisible();

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Home,
   List,
@@ -264,12 +264,12 @@ export default function App() {
     }
   }, [focusedClientOrderId, role]);
 
-  const openClientOrder = (orderId: string) => {
+  const openClientOrder = useCallback((orderId: string) => {
     const nextPath = `/client/orders/${orderId}`;
     window.history.pushState({}, "", nextPath);
     setCurrentPath(nextPath);
     setActiveTab("orders");
-  };
+  }, []);
 
   const clearFocusedClientOrder = () => {
     if (!focusedClientOrderId) return;
@@ -476,7 +476,7 @@ export default function App() {
       <InstallPWA />
       <AdminNotificationToastListener />
       {renderContent()}
-      <PaymentReturn />
+      <PaymentReturn onOpenOrder={openClientOrder} />
     </>
   );
 }

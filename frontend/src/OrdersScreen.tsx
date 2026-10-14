@@ -225,7 +225,6 @@ function OrderCard({
           <p className="text-sm text-slate-500">
             {order.driver.vehicle?.brand || order.driver.vehicle?.title || "Транспорт назначен"}
           </p>
-          {order.driver.vehicle?.plate_number && <p className="text-sm font-semibold text-slate-600">Госномер: {order.driver.vehicle.plate_number}</p>}
         </section>
       ) : null}
 

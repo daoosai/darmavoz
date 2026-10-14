@@ -63,6 +63,7 @@ export const getOrderStatusText = (status: string | undefined | null) => {
 
 export const getClientOrderStatusText = (status: string | undefined | null) => {
   const normalizedStatus = status?.toLowerCase();
+  if (normalizedStatus === "heading_to_client") return "Едет к вам";
   if (normalizedStatus === "awaiting_logist_review") return "Заказ оформлен";
   if (normalizedStatus === "waiting_for_payment") return "Ожидает оплаты";
   if (normalizedStatus === "no_driver_found" || normalizedStatus === "timeout") {

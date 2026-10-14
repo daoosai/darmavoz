@@ -69,8 +69,12 @@ export default function OrderPaymentsPanel({ orderId, materialAmount = 0, delive
   });
   const latest = data?.items?.[0];
   const awaitingConfirmation = !staff && !!data && !latest && !data.quote;
+  const paid = data?.items?.some((payment: any) => ['succeeded', 'paid'].includes(payment.status));
+  const awaitingPayment = ['creating', 'unknown', 'pending', 'waiting_for_capture', 'waiting_for_payment'].includes(latest?.status)
+    || (!latest && !!data?.quote);
+  const showRefresh = staff || (!paid && awaitingPayment);
   return <section aria-label="Оплата заказа" className="mt-3 rounded-2xl border border-sky-100 bg-sky-50/60 p-3">
-    <div className="flex items-center justify-between gap-3"><h3 className="flex items-center gap-2 text-sm font-bold text-slate-800"><CreditCard className="h-5 w-5 text-sky-500" />{awaitingConfirmation ? 'Ожидает подтверждения' : 'Оплата заказа'}</h3><button disabled={busy} aria-label="Обновить оплату" className="rounded-lg p-2 text-sky-600" onClick={() => run(refresh)}><RefreshCw className={`h-4 w-4 ${busy ? 'animate-spin' : ''}`} /></button></div>
+    <div className="flex items-center justify-between gap-3"><h3 className="flex items-center gap-2 text-sm font-bold text-slate-800"><CreditCard className="h-5 w-5 text-sky-500" />{awaitingConfirmation ? 'Ожидает подтверждения' : 'Оплата заказа'}</h3>{showRefresh && <button disabled={busy} aria-label="Обновить оплату" className="rounded-lg p-2 text-sky-600" onClick={() => run(refresh)}><RefreshCw className={`h-4 w-4 ${busy ? 'animate-spin' : ''}`} /></button>}</div>
     {error ? <p className="mt-2 text-sm text-red-600">{error}</p> : !data ? <p className="mt-2 text-xs text-slate-400">Загрузка…</p> : <>
       {awaitingConfirmation ? <p className="mt-2 text-xs leading-relaxed text-slate-500">Оплата станет доступна после проверки заказа логистом</p> : <p className="mt-2 text-sm font-bold text-slate-700">{latest ? (latest.refund_status ? refundLabels[latest.refund_status] : paymentLabels[latest.status]) : data.quote ? 'Ожидает оплаты' : 'Стоимость уточняется'}</p>}
       {data.quote && <p className="mt-1 text-lg font-extrabold text-sky-600">{rubles(data.quote.amount)} <span className="text-xs font-normal text-slate-500">включая доставку</span></p>}

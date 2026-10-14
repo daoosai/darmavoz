@@ -14,7 +14,7 @@ from app.models.models import (
 from app.security.jwt import create_access_token
 
 
-async def make_order_graph(db, actor, *, payment_status="succeeded", archived=False, remaining_job=False, on_shift=True):
+async def make_order_graph(db, actor, *, payment_status=None, archived=False, remaining_job=False, on_shift=True):
     """No provider requests; use only in an isolated DB or a labeled QA fixture."""
     suffix = uuid4().hex
     client_record = Client(name=f"QA hard delete {suffix}")
@@ -59,9 +59,13 @@ async def make_order_graph(db, actor, *, payment_status="succeeded", archived=Fa
         ]
         from app.models.models import EventLog
         children.append(EventLog(order_id=order.id, event_type="qa", description="QA"))
+        if label == "target" and payment_status is None:
+            children = [child for child in children if not isinstance(child, (PaymentEvent, Refund, SettlementReceipt))]
+            await db.delete(payment)
+            await db.flush()
         db.add_all(children)
         await db.flush()
-        records.extend((type(obj), obj.id, label) for obj in [order, offer, dialogue, quote, payment, *children])
+        records.extend((type(obj), obj.id, label) for obj in [order, offer, dialogue, quote, *([payment] if label != "target" or payment_status is not None else []), *children])
     await db.commit()
     return dict(target_id=target.id, other_id=other.id, driver_id=driver.id, client_id=client_record.id,
                 material_id=material.id, channel_id=channel.id, records=records)
@@ -86,7 +90,7 @@ async def graph_factory(session_factory):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("payment_status,archived", [("pending", False), ("succeeded", False), ("failed", True)])
+@pytest.mark.parametrize("payment_status,archived", [(None, False), (None, True)])
 async def test_admin_hard_delete_removes_complete_graph(client, session_factory, graph_factory, payment_status, archived):
     graph = await graph_factory(payment_status=payment_status, archived=archived)
     response = await client.delete(f"/api/v1/admin/orders/{graph['target_id']}/hard", headers=graph["headers"])
@@ -163,3 +167,16 @@ async def test_hard_delete_requires_admin(client, session_factory, graph_factory
     assert forbidden.status_code == 403
     async with session_factory() as db:
         assert await db.get(Order, graph["target_id"]) is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("payment_status", ["pending", "succeeded", "failed", "canceled"])
+async def test_financial_order_cannot_be_hard_deleted(client, session_factory, graph_factory, payment_status):
+    graph = await graph_factory(payment_status=payment_status)
+    response = await client.delete(f"/api/v1/admin/orders/{graph['target_id']}/hard", headers=graph["headers"])
+    assert response.status_code == 409
+    assert "финансовыми транзакциями" in response.json()["detail"]
+    async with session_factory() as db:
+        for model, record_id, label in graph["records"]:
+            assert await db.get(model, record_id) is not None
+        assert (await db.get(Order, graph["target_id"])).status == "driver_assigned"

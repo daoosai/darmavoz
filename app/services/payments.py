@@ -134,10 +134,14 @@ async def apply_payment(db, payment, data, order):
     payment.confirmation_url = (data.get("confirmation") or {}).get("confirmation_url") or payment.confirmation_url
     payment.checked_at = now()
     payment.reconciliation_status = "matched"
-    if money((data.get("refunded_amount") or {}).get("value", "0")) > 0 and payment.refund_status != "succeeded":
+    from app.services.refunds import balances
+    ledger = await balances(db, payment)
+    if money((data.get("refunded_amount") or {}).get("value", "0")) != money(ledger["refunded_amount"]):
         payment.needs_review = True
         payment.reconciliation_status = "mismatch"
     local = "pending" if status == "waiting_for_capture" else status
+    if local == "succeeded" and payment.refund_status == "succeeded" and payment.reconciliation_status == "matched":
+        payment.needs_review = False
     if local != payment.status:
         payment.status = local
         if status == "succeeded":
@@ -206,75 +210,38 @@ async def create_payment(db, order_id, client, email=None):
 
 
 async def resolve_refund(db, refund, payment, order):
-    try:
-        if refund.provider_id:
-            data = await provider("GET", f"/refunds/{refund.provider_id}")
-        else:
-            if now() - refund.created_at > timedelta(hours=23):
-                payment.needs_review = True
-                payment.reconciliation_status = "manual_review"
-                return
-            body = refund.request_body or {"payment_id": payment.provider_id, "amount": {"value": str(refund.amount), "currency": "RUB"}}
-            data = await provider("POST", "/refunds", body, refund.idempotence_key)
-        if data.get("payment_id") != payment.provider_id or money(data["amount"]["value"]) != refund.amount or data["amount"]["currency"] != "RUB":
-            payment.needs_review = True
-            payment.reconciliation_status = "mismatch"
-            return
-        old = refund.status
-        refund.provider_id = data["id"]
-        refund.status = data["status"]
-        payment.refund_status = refund.status
-        if refund.status == "succeeded" and old != "succeeded":
-            refund.refunded_at = now()
-            payment.needs_review = False
-            record(db, payment, "refund_succeeded", f"Возвращено {refund.amount} ₽. Причина: {refund.reason}", order)
-    except ProviderError as error:
-        refund.status = "failed" if error.definitive else "unknown"
-        payment.refund_status = refund.status
-        payment.reconciliation_status = "error"
+    from app.services.refunds import resolve
+    await resolve(db, refund, payment, order)
 
 
 async def import_provider_refund(db, payment, provider_refund_id):
-    """Import a full cabinet refund only after authenticated verification."""
-    data = await provider("GET", f"/refunds/{provider_refund_id}")
-    order = await locked_order(db, payment.order_id)
-    payment = await db.get(Payment, payment.id, populate_existing=True)
-    if data.get("payment_id") != payment.provider_id or data.get("status") != "succeeded" or data["amount"]["currency"] != "RUB":
-        raise HTTPException(409, "Возврат не прошёл сверку")
-    amount = money(data["amount"]["value"])
-    if amount != payment.amount:
-        payment.needs_review = True
-        payment.reconciliation_status = "mismatch"
-        await db.commit()
-        return
-    row = await db.scalar(select(Refund).where(Refund.payment_id == payment.id, Refund.provider_id == data["id"]))
-    if not row:
-        row = await db.scalar(select(Refund).where(Refund.payment_id == payment.id, Refund.status.in_(["creating", "unknown", "pending"])))
-    if not row:
-        row = Refund(payment_id=payment.id, amount=amount, initiated_by=None, reason="Возврат в кабинете ЮKassa", idempotence_key=str(uuid.uuid4()), request_body={})
-        db.add(row)
-    if row.status != "succeeded":
-        row.provider_id = data["id"]
-        row.status = "succeeded"
-        row.refunded_at = datetime.fromisoformat(data["created_at"].replace("Z", "+00:00")) if data.get("created_at") else now()
-        record(db, payment, "refund_succeeded", f"Подтверждён возврат {amount} ₽. {row.reason}", order)
-    payment.refund_status = "succeeded"
-    payment.needs_review = False
-    payment.reconciliation_status = "matched"
-    await db.commit()
+    from app.services.refunds import import_refund
+    await import_refund(db, payment, provider_refund_id)
 
 
 async def settlement_receipt(db, payment, order):
-    if order.status != "completed" or payment.refund_status in {"creating", "unknown", "pending", "succeeded"}:
+    if order.status != "completed":
+        return
+    from app.services.refunds import RESERVED, balances, allocate_receipt
+    if payment.refund_status in RESERVED:
+        return
+    remaining = payment.amount - money((await balances(db, payment))["refunded_amount"])
+    if remaining <= 0:
         return
     original = payment.request_body.get("receipt")
     if not original or not any(i["payment_mode"] == "full_prepayment" for i in original["items"]):
         return
     receipt = await db.scalar(select(SettlementReceipt).where(SettlementReceipt.payment_id == payment.id))
     if not receipt:
-        body = {**original, "items": [{**i, "payment_mode": "full_payment"} for i in original["items"]],
+        successful = (await db.scalars(select(Refund).where(Refund.payment_id == payment.id, Refund.status == "succeeded"))).all()
+        try:
+            unreturned = allocate_receipt(original, remaining, successful)
+        except HTTPException:
+            payment.needs_review = True
+            return
+        body = {**unreturned, "items": [{**i, "payment_mode": "full_payment"} for i in unreturned["items"]],
                 "payment_id": payment.provider_id, "type": "payment", "send": True,
-                "settlements": [{"type": "prepayment", "amount": {"value": str(payment.amount), "currency": "RUB"}}]}
+                "settlements": [{"type": "prepayment", "amount": {"value": str(remaining), "currency": "RUB"}}]}
         receipt = SettlementReceipt(payment_id=payment.id, idempotence_key=str(uuid.uuid4()), request_body=body)
         db.add(receipt)
         await db.flush()
@@ -298,14 +265,18 @@ async def sync_payment(db, payment_id):
     payment = await db.get(Payment, payment_id)
     if not payment:
         raise HTTPException(404, "Платёж не найден")
-    order = await locked_order(db, payment.order_id)
-    payment = await db.get(Payment, payment_id, populate_existing=True)
+    from app.services.refunds import lock_payment, ensure_automatic
+    order, payment = await lock_payment(db, payment_id)
     await resolve_payment(db, payment, order)
+    if payment.auto_refund_requested and payment.provider_status == "waiting_for_capture":
+        try:
+            data = await provider("POST", f"/payments/{payment.provider_id}/cancel", {}, payment.cancel_idempotence_key)
+            await apply_payment(db, payment, data, order)
+        except ProviderError:
+            payment.reconciliation_status = "error"
     if payment.status == "succeeded":
-        refunds = (await db.scalars(select(Refund).where(Refund.payment_id == payment.id, Refund.status.in_(["creating", "unknown", "pending"])))).all()
-        for refund in refunds:
-            await resolve_refund(db, refund, payment, order)
-        if order.is_deleted or order.status in CANCELED_ORDERS:
+        await ensure_automatic(db, payment, order)
+        if (order.is_deleted or order.status in CANCELED_ORDERS) and not payment.auto_refund_requested:
             payment.needs_review = payment.refund_status != "succeeded"
         await settlement_receipt(db, payment, order)
     await db.commit()

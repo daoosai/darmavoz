@@ -7,7 +7,7 @@ from sqlalchemy import select, text
 
 from app.core.config import settings
 from app.db.database import AsyncSessionLocal
-from app.models.commerce import Payment, WholesaleEvent, WholesaleRequest
+from app.models.commerce import Payment, Refund, WholesaleEvent, WholesaleRequest
 from app.services import payments
 
 logger = logging.getLogger(__name__)
@@ -25,6 +25,18 @@ async def tick():
         await db.commit()
     if not payments.configured():
         return
+    from app.services import refunds
+    async with AsyncSessionLocal() as db:
+        jobs = (await db.scalars(select(Refund.id).where(
+            Refund.status.in_(refunds.RUNNABLE),
+            (Refund.next_attempt_at.is_(None)) | (Refund.next_attempt_at <= payments.now())
+        ).order_by(Refund.next_attempt_at.asc().nulls_first(), Refund.created_at).limit(20))).all()
+    for job in jobs:
+        try:
+            async with AsyncSessionLocal() as db:
+                await refunds.process(db, job)
+        except Exception:
+            logger.error("refund_job_failed refund_id=%s", job)
     async with AsyncSessionLocal() as db:
         ids = (await db.scalars(select(Payment.id).where(Payment.status.in_(payments.ACTIVE)).where(
             (Payment.checked_at.is_(None)) | (Payment.checked_at < payments.now() - timedelta(seconds=settings.PAYMENT_POLL_INTERVAL_SECONDS))

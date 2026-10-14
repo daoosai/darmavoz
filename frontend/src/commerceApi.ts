@@ -8,7 +8,7 @@ export async function commerceApi(path: string, options: RequestInit = {}) {
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    const error = new Error(typeof body.detail === 'string' ? body.detail : 'Не удалось выполнить запрос');
+    const error = new Error(typeof body.detail === 'string' ? body.detail : body.detail?.message || 'Не удалось выполнить запрос');
     Object.assign(error, { status: response.status });
     throw error;
   }
@@ -22,6 +22,6 @@ export const paymentLabels: Record<string, string> = {
   creating: 'Подготовка оплаты', unknown: 'Проверяем оплату', pending: 'Ожидает оплаты', succeeded: 'Оплачено',
   canceled: 'Отменено / отклонено', failed: 'Ошибка', refunded: 'Возвращено',
 };
-export const refundLabels: Record<string, string> = { creating: 'Подготовка возврата', unknown: 'Проверяем возврат', pending: 'Возврат обрабатывается', succeeded: 'Возвращено', canceled: 'Возврат отменён', failed: 'Ошибка возврата' };
+export const refundLabels: Record<string, string> = { queued: 'Возврат в очереди', partial: 'Частично возвращено', manual_review: 'Возврат требует сверки', creating: 'Подготовка возврата', unknown: 'Проверяем возврат', pending: 'Возврат обрабатывается', succeeded: 'Возвращено', canceled: 'Возврат отменён', failed: 'Ошибка возврата' };
 export const inputClass = 'w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100';
 export const buttonClass = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-sky-500 px-4 py-3 text-sm font-bold text-white transition hover:bg-sky-600 disabled:opacity-50';

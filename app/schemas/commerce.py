@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -84,6 +84,8 @@ class QuoteInput(BaseModel):
 
 
 class RefundInput(BaseModel):
+    amount: Annotated[Decimal, Field(gt=0, le=99999999999, decimal_places=2)] | None = None
+    request_id: UUID
     reason: str = Field(min_length=3, max_length=2000)
 
     @field_validator("reason")

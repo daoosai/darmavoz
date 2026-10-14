@@ -29,3 +29,7 @@ Capacitor appUrlOpen/getLaunchUrl и кнопка возврата в прило
 
 Проверки: frontend/tests/e2e/payment-return.spec.ts и client-order-card.spec.ts,
 включены в deploy-test. Отчёт: ../2026-10-14-payment-return-ux.md.
+
+## 14.10.2026 — финансовые возвраты
+
+Автоматические и ручные частичные возвраты, очередь, блокировки, webhook и остатки описаны в [refunds.md](refunds.md). Payment.status не заменяется на refunded. Hard Delete финансовых заказов запрещён. Старые отменённые заказы без нового обязательства автоматически не возвращаются.

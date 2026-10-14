@@ -89,6 +89,8 @@ class Payment(Base):
     refund_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
     needs_review: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     failure_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    auto_refund_requested: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    cancel_idempotence_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
     customer_contact: Mapped[dict] = mapped_column(JSONB, default=dict)
     request_body: Mapped[dict] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
@@ -123,7 +125,13 @@ class Refund(Base):
     status: Mapped[str] = mapped_column(String(32), default="creating")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     refunded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
-    __table_args__ = (Index("uq_refund_active", "payment_id", unique=True, postgresql_where=text("status IN ('creating', 'unknown', 'pending', 'succeeded')")),)
+    request_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, unique=True)
+    origin: Mapped[str] = mapped_column(String(24), default="manual", server_default="manual")
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    first_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    last_error: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    __table_args__ = (CheckConstraint("amount > 0", name="ck_refund_amount"), Index("uq_refund_active", "payment_id", unique=True, postgresql_where=text("status IN ('queued', 'creating', 'unknown', 'pending', 'manual_review')")),)
 
 
 class SettlementReceipt(Base):
@@ -145,3 +153,5 @@ from app.models.models import Order
 Order.payment_status = column_property(select(Payment.status).where(Payment.order_id == Order.id).order_by(Payment.created_at.desc(), Payment.id).limit(1).correlate_except(Payment).scalar_subquery())
 Order.confirmed_payment_amount = column_property(select(PaymentQuote.amount).where(PaymentQuote.order_id == Order.id, PaymentQuote.is_valid.is_(True)).order_by(PaymentQuote.version.desc()).limit(1).correlate_except(PaymentQuote).scalar_subquery())
 Order.refund_status = column_property(select(Payment.refund_status).where(Payment.order_id == Order.id).order_by(Payment.created_at.desc(), Payment.id).limit(1).correlate_except(Payment).scalar_subquery())
+
+Order.has_financial_transactions = column_property(select(Payment.id).where(Payment.order_id == Order.id).correlate_except(Payment).exists())

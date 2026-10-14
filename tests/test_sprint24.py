@@ -25,6 +25,7 @@ class FakeDB:
         self.flush = AsyncMock()
         self.get = AsyncMock()
         self.scalar = AsyncMock()
+        self.scalars = AsyncMock(return_value=SimpleNamespace(all=lambda: [r for r in self.added if isinstance(r, Refund)]))
 
     def add(self, row):
         self.added.append(row)
@@ -185,6 +186,7 @@ async def test_order_read_authorization():
 async def test_full_refund_duplicate_result(config, monkeypatch):
     db = FakeDB(); p = payment(); p.status = "succeeded"
     r = Refund(payment_id=p.id, amount=p.amount, provider_id="refund", status="pending", reason="Отмена заказа", created_at=datetime.now(UTC))
+    db.added.append(r)
     response = {"id": "refund", "payment_id": p.provider_id, "status": "succeeded", "amount": {"value": str(p.amount), "currency": "RUB"}}
     monkeypatch.setattr(payments, "provider", AsyncMock(return_value=response))
     await payments.resolve_refund(db, r, p, order(p)); count = len(db.added)

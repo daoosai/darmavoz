@@ -13,7 +13,7 @@ const request = {
   contact_phone: '+79990000000', comment: 'Нужны самосвалы. Подъезд согласуем.', status: 'approved', reject_reason: null,
   is_owner: false, is_favorite: false, created_at: '2026-09-30T10:00:00Z', updated_at: '2026-09-30T10:00:00Z',
 };
-const payment = { id: paymentId, order_id: orderId, client_id: 'buyer', amount: '145000', currency: 'RUB', status: 'succeeded',
+const payment = { refundable_amount: '145000.00', refunded_amount: '0.00', reserved_refund_amount: '0.00', id: paymentId, order_id: orderId, client_id: 'buyer', amount: '145000', currency: 'RUB', status: 'succeeded',
   payment_method: 'sbp', created_at: '2026-09-30T10:00:00Z', paid_at: '2026-09-30T10:05:00Z', refund_status: null,
   receipt_status: 'succeeded', needs_review: false, reconciliation_status: 'matched', checked_at: '2026-09-30T10:06:00Z', provider_id: 'test-provider', client_name: 'Покупатель с длинным именем организации' };
 
@@ -72,9 +72,9 @@ for (const width of [320, 390, 768, 1440]) {
     expect(await page.locator('section.fixed').evaluate(el => el.scrollWidth <= el.clientWidth)).toBeTruthy();
     await page.screenshot({ path: `test-results/sprint24-finance-${width}.png`, fullPage: true });
     await page.getByText('Покупатель с длинным именем организации').filter({ visible: true }).click();
-    await page.getByRole('button', { name: 'Полный возврат', exact: true }).click();
-    await expect(page.getByText('Вернуть покупателю всю сумму:', { exact: false })).toBeVisible();
-    await expect(page.getByRole('checkbox', { name: 'Подтверждаю полный возврат' })).toBeVisible();
+    await page.getByRole('button', { name: 'Оформить возврат', exact: true }).click();
+    await expect(page.getByText('Доступно к возврату:', { exact: false })).toBeVisible();
+    await expect(page.getByRole('checkbox', { name: 'Подтверждаю возврат указанной суммы' })).toBeVisible();
   });
 }
 

@@ -33,6 +33,7 @@ interface AdminListOrder {
   status: string;
   created_at: string;
   is_deleted: boolean;
+  has_financial_transactions?: boolean;
 }
 
 export default function AdminOrdersListScreen({
@@ -79,10 +80,10 @@ export default function AdminOrdersListScreen({
     fetchOrders();
   }, [token, cityId]);
 
-  const handleHardDelete = async (orderId: string) => {
+  const handleHardDelete = async (orderId: string, archive = false) => {
     if (
       !window.confirm(
-        "ВНИМАНИЕ! Заказ будет удален из базы НАВСЕГДА. Продолжить?",
+        archive ? "Отменить заказ и перенести в архив? До выезда водителя остаток оплаты будет возвращён автоматически." : "ВНИМАНИЕ! Заказ будет удален из базы НАВСЕГДА. Продолжить?",
       )
     ) {
       return;
@@ -90,7 +91,7 @@ export default function AdminOrdersListScreen({
 
     try {
       setDeletingId(orderId);
-      const res = await operatorFetch(`${baseURL}/admin/orders/${orderId}/hard`, {
+      const res = await operatorFetch(`${baseURL}/admin/orders/${orderId}${archive ? "" : "/hard"}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -107,7 +108,7 @@ export default function AdminOrdersListScreen({
         );
       }
 
-      toast.success("Заказ удален навсегда");
+      toast.success(archive ? "Заказ перенесён в архив" : "Заказ удален навсегда");
       await fetchOrders();
     } catch (error: any) {
       if (error?.name === "AbortError") return;
@@ -149,7 +150,7 @@ export default function AdminOrdersListScreen({
               </h1>
               <p className="text-sm text-slate-500 max-w-2xl">
                 {
-                  "Все активные записи из базы с возможностью hard delete."
+                  "Заказы с финансовыми транзакциями сохраняются в архиве."
                 }
               </p>
             </div>
@@ -259,8 +260,8 @@ export default function AdminOrdersListScreen({
                     </div>
 
                     <button
-                      onClick={() => handleHardDelete(order.id)}
-                      disabled={deletingId === order.id}
+                      onClick={() => handleHardDelete(order.id, !!order.has_financial_transactions)}
+                      disabled={deletingId === order.id || (order.has_financial_transactions && order.is_deleted)}
                       className="w-full h-12 rounded-2xl bg-red-50 text-red-600 font-bold flex items-center justify-center gap-2 border border-red-100 hover:bg-red-100 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
                     >
                       {deletingId === order.id ? (
@@ -268,7 +269,7 @@ export default function AdminOrdersListScreen({
                       ) : (
                         <Trash2 className="w-4 h-4" />
                       )}
-                      {"Удалить"}
+                      {order.has_financial_transactions ? (order.is_deleted ? "В архиве · финансовая история сохранена" : "В архив") : "Удалить"}
                     </button>
                   </div>
                 );

@@ -173,9 +173,13 @@ async def test_payment_receipt_refund_and_ledger_roundtrip(client, session_facto
     receipts = [c for c in calls if c[:2] == ('POST', '/receipts')]
     assert len(receipts) == 1 and receipts[0][2]['settlements'][0]['amount']['value'] == '123.45'
     assert (await client.post(f'/api/v1/payments/{payment_id}/refund', headers=buyer, json={'reason': 'Test refund'})).status_code in (401, 403)
+    request_id = str(uuid4())
     for _ in range(2):
-        response = await client.post(f'/api/v1/payments/{payment_id}/refund', headers=admin, json={'reason': 'Test refund'})
-        assert response.status_code == 200 and response.json()['status'] == 'succeeded', response.text
+        response = await client.post(f'/api/v1/payments/{payment_id}/refund', headers=admin, json={'reason': 'Test refund', 'request_id': request_id})
+        assert response.status_code == 202 and response.json()['status'] == 'queued', response.text
+    from app.services.refunds import process
+    async with session_factory() as db:
+        await process(db, UUID(response.json()['id']))
     refunds = [c for c in calls if c[:2] == ('POST', '/refunds')]
     assert len(refunds) == 1 and all(i['payment_mode'] == 'full_payment' for i in refunds[0][2]['receipt']['items'])
     response = await client.get('/api/v1/finance/summary', headers=admin, params={'order_query': order_id})

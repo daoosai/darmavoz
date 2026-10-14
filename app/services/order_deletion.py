@@ -11,7 +11,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.commerce import Payment, PaymentEvent, PaymentQuote, Refund, SettlementReceipt
+from app.models.commerce import Payment, PaymentQuote
 from app.models.models import (
     Dialogue, Driver, DriverStatus, EventLog, Order, OrderDistributionHistory,
     OrderEvent, OrderItem, OrderOffer, PushDelivery, UserNotification,
@@ -28,6 +28,11 @@ async def hard_delete_order_by_id(
         order = await db.scalar(select(Order).where(Order.id == order_id).with_for_update())
         if order is None:
             raise HTTPException(status_code=404, detail="Order not found")
+        if await db.scalar(select(Payment.id).where(Payment.order_id == order_id).limit(1)):
+            raise HTTPException(409, detail={
+                "code": "ORDER_HAS_FINANCIAL_TRANSACTIONS",
+                "message": "Заказ с финансовыми транзакциями нельзя удалить. Используйте отмену или архив.",
+            })
         driver_id = order.driver_id
 
         # Break both cycles before removing children. Conversations remain intact.
@@ -36,10 +41,6 @@ async def hard_delete_order_by_id(
         ))
         await db.execute(update(Dialogue).where(Dialogue.order_id == order_id).values(order_id=None))
 
-        payment_ids = select(Payment.id).where(Payment.order_id == order_id)
-        for model in (PaymentEvent, Refund, SettlementReceipt):
-            await db.execute(delete(model).where(model.payment_id.in_(payment_ids)))
-        await db.execute(delete(Payment).where(Payment.order_id == order_id))
         await db.execute(delete(PaymentQuote).where(PaymentQuote.order_id == order_id))
 
         # Inbox/outbox order links are JSON, not foreign keys. Remove stale deliveries too.

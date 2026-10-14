@@ -2,7 +2,7 @@ import csv
 import io
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
-from uuid import UUID, uuid4
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -33,9 +33,11 @@ async def authorized_order(db, order_id, actor):
     raise HTTPException(403, "Нет доступа к платежам заказа")
 
 
-def payment_out(payment):
+async def payment_out(payment, db):
     fields = ("id", "order_id", "client_id", "amount", "currency", "status", "payment_method", "created_at", "paid_at", "receipt_status", "refund_status", "needs_review", "failure_reason", "checked_at", "reconciliation_status", "provider_id")
-    return {key: str(payment.amount) if key == "amount" else getattr(payment, key) for key in fields}
+    from app.services.refunds import balances
+    return {**{key: str(payment.amount) if key == "amount" else getattr(payment, key) for key in fields},
+            **await balances(db, payment)}
 
 
 @router.get("/payments/config")
@@ -73,14 +75,14 @@ async def order_payments(order_id: UUID, actor: OrderAccessActor = Depends(get_c
     return {"order_id": order_id, "quote": {"amount": str(quote.amount), "version": quote.version, "items": quote.items} if quote else None,
             "can_pay": bool(service.configured() and quote and not order.is_deleted and order.status not in service.CANCELED_ORDERS
                             and not any(p.status == "succeeded" for p in rows)),
-            "requires_refund_review": any(p.status == "succeeded" and p.refund_status != "succeeded" for p in rows) and (order.is_deleted or order.status in service.CANCELED_ORDERS),
-            "items": [payment_out(p) for p in rows]}
+            "requires_refund_review": any(p.needs_review for p in rows) and (order.is_deleted or order.status in service.CANCELED_ORDERS),
+            "items": [await payment_out(p, db) for p in rows]}
 
 
 @router.post("/orders/{order_id}/payments")
 async def pay(order_id: UUID, payload: PaymentInput, client: Client = Depends(get_current_client), db: AsyncSession = Depends(get_db)):
     payment = await service.create_payment(db, order_id, client, payload.email)
-    return {**payment_out(payment), "confirmation_url": payment.confirmation_url if payment.status == "pending" else None}
+    return {**await payment_out(payment, db), "confirmation_url": payment.confirmation_url if payment.status == "pending" else None}
 
 
 @router.get("/payments/{payment_id}")
@@ -92,8 +94,8 @@ async def detail(payment_id: UUID, actor: OrderAccessActor = Depends(get_current
     events = (await db.scalars(select(PaymentEvent).where(PaymentEvent.payment_id == payment_id).order_by(PaymentEvent.created_at))).all()
     refunds = (await db.scalars(select(Refund).where(Refund.payment_id == payment_id).order_by(Refund.created_at))).all()
     receipt = await db.scalar(select(SettlementReceipt).where(SettlementReceipt.payment_id == payment_id))
-    return {**payment_out(payment), "events": [{"type": e.event_type, "description": e.description, "created_at": e.created_at} for e in events],
-            "refunds": [{"id": r.id, "amount": str(r.amount), "reason": r.reason, "status": r.status, "refunded_at": r.refunded_at} for r in refunds],
+    return {**await payment_out(payment, db), "events": [{"type": e.event_type, "description": e.description, "created_at": e.created_at} for e in events],
+            "refunds": [{"id": r.id, "amount": str(r.amount), "reason": r.reason, "status": r.status, "refunded_at": r.refunded_at, "origin": r.origin, "last_error": r.last_error, "attempts": r.attempts, "initiated_by": r.initiated_by} for r in refunds],
             "settlement_receipt_status": receipt.status if receipt else None}
 
 
@@ -104,41 +106,20 @@ async def refresh(payment_id: UUID, actor: OrderAccessActor = Depends(get_curren
         raise HTTPException(404, "Платёж не найден")
     await authorized_order(db, payment.order_id, actor)
     if payment.checked_at and service.now() - payment.checked_at < timedelta(seconds=10):
-        return payment_out(payment)
-    return payment_out(await service.sync_payment(db, payment_id))
+        return await payment_out(payment, db)
+    return await payment_out(await service.sync_payment(db, payment_id), db)
 
 
-@router.post("/payments/{payment_id}/refund")
-async def refund(payment_id: UUID, payload: RefundInput, admin: User = Depends(get_current_admin_user), db: AsyncSession = Depends(get_db)):
-    service.ensure_configured()
-    payment = await db.get(Payment, payment_id)
-    if not payment:
-        raise HTTPException(404, "Платёж не найден")
-    order = await service.locked_order(db, payment.order_id)
-    payment = await db.get(Payment, payment_id, populate_existing=True)
-    if payment.status != "succeeded":
-        raise HTTPException(409, "Возврат доступен только для оплаченного заказа")
-    existing = await db.scalar(select(Refund).where(Refund.payment_id == payment.id, Refund.status.in_(service.ACTIVE)))
-    if existing:
-        return {"status": existing.status, "amount": str(existing.amount)}
-    row = Refund(payment_id=payment.id, amount=payment.amount, initiated_by=admin.id, reason=payload.reason,
-                 idempotence_key=str(uuid4()), status="creating")
-    row.request_body = {"payment_id": payment.provider_id, "amount": {"value": str(payment.amount), "currency": "RUB"}}
-    if payment.request_body.get("receipt"):
-        receipt = dict(payment.request_body["receipt"])
-        settlement = await db.scalar(select(SettlementReceipt).where(SettlementReceipt.payment_id == payment.id, SettlementReceipt.status == "succeeded"))
-        if settlement:
-            receipt["items"] = [{**i, "payment_mode": "full_payment"} for i in receipt["items"]]
-        row.request_body["receipt"] = receipt
-    db.add(row)
-    payment.refund_status = "creating"
-    await db.flush()
-    service.record(db, payment, "refund_created", f"Запрошен полный возврат: {payload.reason}", order)
+@router.post("/payments/{payment_id}/refund", status_code=202)
+async def refund(payment_id: UUID, payload: RefundInput, user: User = Depends(get_current_logist_user), db: AsyncSession = Depends(get_db)):
+    from app.services.refunds import lock_payment, enqueue, balances
+    order, payment = await lock_payment(db, payment_id)
+    row = await enqueue(db, payment, order, amount=payload.amount, reason=payload.reason,
+                        actor_id=user.id, request_id=payload.request_id)
     await db.commit()
-    order = await service.locked_order(db, payment.order_id)
-    await service.resolve_refund(db, row, payment, order)
-    await db.commit()
-    return {"status": row.status, "amount": str(row.amount)}
+    return {"id": row.id, "status": row.status, "amount": str(row.amount),
+            "request_id": row.request_id, "payment_id": payment.id,
+            **await balances(db, payment)}
 
 
 @router.post("/webhooks/yookassa")
@@ -168,7 +149,6 @@ async def webhook(request: Request, db: AsyncSession = Depends(get_db)):
     elif event == "refund.succeeded":
         payment = await db.scalar(select(Payment).where(Payment.provider_id == obj.get("payment_id")))
         if payment:
-            await service.sync_payment(db, payment.id)
             try:
                 await service.import_provider_refund(db, payment, provider_id)
             except service.ProviderError:
@@ -212,7 +192,7 @@ async def ledger(start: date | None = None, end: date | None = None, status: str
     conditions = filters(start, end, status, method, order_query, date_field)
     total = await db.scalar(select(func.count()).select_from(Payment).where(*conditions))
     rows = (await db.execute(select(Payment, Client.name).join(Client).where(*conditions).order_by(Payment.created_at.desc(), Payment.id).offset((page - 1) * page_size).limit(page_size))).all()
-    return {"items": [{**payment_out(p), "client_name": name} for p, name in rows], "total": total, "page": page,
+    return {"items": [{**await payment_out(p, db), "client_name": name} for p, name in rows], "total": total, "page": page,
             "timezone": settings.PAYMENT_REPORT_TIMEZONE}
 
 

@@ -1268,10 +1268,13 @@ async def list_orders_for_client(session: AsyncSession, client_id: UUID) -> list
 
 
 async def delete_order_by_id(session: AsyncSession, order_id: UUID) -> None:
-    order = await session.get(Order, order_id)
+    order = await session.scalar(select(Order).where(Order.id == order_id).with_for_update())
     if order is None or order.is_deleted:
         raise HTTPException(status_code=404, detail="Order not found")
 
+    from app.services.refunds import CANCELLABLE, mark_cancellation
+    if order.status in CANCELLABLE:
+        await mark_cancellation(session, order)
     cancelled_driver_id = order.driver_id
     order.is_deleted = True
     order.status = OrderStatus.cancelled.value

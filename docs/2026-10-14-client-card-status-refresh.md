@@ -21,3 +21,19 @@
   API перехватывается; реальные заказы и платежи не меняются.
 
 Фактическая доставка будет дополнена после push.
+
+Итоговая доставка:
+- Commit 4a3bbc2f с указанным пользователем сообщением; push develop успешен.
+- Deploy Test Environment 38527254036 — success.
+- Build Test Android APK 38527254011 — success.
+- Runtime /opt/darmavoz_test_deploy — 4a3bbc2f.
+- GET https://test.darmavoz.ru/health — online, версия 3.3.6.
+- На опубликованном frontend повторены 20 браузерных проверок, все успешны.
+  API перехватывался; новые платежи и заказы не создавались.
+- Реальный оплаченный заказ f0004656-434a-4d49-a723-49dcf14e161b проверен
+  только чтением на 390/1440px: «Оплачено», кнопка обновления отсутствует.
+- Скриншот оплаченного heading_to_client на 390px визуально просмотрен:
+  бейдж «Едет к вам», refresh отсутствует, трекер сохраняет 80%.
+- Артефакты: docs/reports/2026-10-14-client-card-status-refresh/
+  browser-check.json, live-paid-readonly.json и скриншоты paid/real-paid.
+- .env, версии и production не менялись. Физическое устройство не проверялось.

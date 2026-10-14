@@ -1,0 +1,41 @@
+{
+  "base": "https://test.darmavoz.ru",
+  "checks": [
+    {
+      "endpoint": "/admin/pickup-points",
+      "status": 200,
+      "count": 18
+    },
+    {
+      "endpoint": "/admin/pickup-points?placement_status=hidden",
+      "status": 200,
+      "count": 9
+    }
+  ],
+  "clientChecks": [
+    {
+      "status": 200,
+      "orderCount": 28
+    },
+    {
+      "status": 200,
+      "orderCount": 1
+    },
+    {
+      "status": 200,
+      "orderCount": 1
+    }
+  ],
+  "screens": [
+    {
+      "width": 1440,
+      "pointsStatus": 200,
+      "hiddenStatus": 200
+    },
+    {
+      "width": 390,
+      "pointsStatus": 200,
+      "hiddenStatus": 200
+    }
+  ]
+}

@@ -178,7 +178,8 @@ async def test_logist_can_delete_order_with_items_offers_and_events(client, sess
     remaining_offers_list = list(remaining_offers)
     assert len(remaining_offers_list) == 1
     assert remaining_offers_list[0].status == OrderOfferStatus.cancelled.value
-    assert len(list(remaining_events)) == 1
+    # Archiving keeps the original event and records the cancellation.
+    assert {event.event_type for event in remaining_events} == {"driver_offer_created", "order_cancelled"}
 
 
 @pytest.mark.asyncio

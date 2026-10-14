@@ -78,6 +78,7 @@ from app.security.auth import (
 )
 from app.utils.phones import normalize_phone
 from app.services.dispatch_service import delete_order_by_id, list_recent_orders, update_order_by_logist
+from app.services.order_deletion import hard_delete_order_by_id
 from app.services.google_play_reviewer import GOOGLE_PLAY_REVIEWER_PHONE_VALUES
 from app.services.vehicle_moderation import (
     REQUIRED_VEHICLE_MEDIA_SLOTS,
@@ -633,26 +634,7 @@ async def hard_delete_admin_order(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
 ) -> OrderDeleteOut:
-    del current_user
-
-    order = await db.get(Order, order_id)
-    if order is None:
-        raise HTTPException(status_code=404, detail="Order not found")
-
-    order.current_offer_id = None
-    order.source_dialogue_id = None
-    await db.flush()
-
-    await db.execute(
-        update(Dialogue)
-        .where(Dialogue.order_id == order_id)
-        .values(order_id=None)
-    )
-    await db.execute(delete(EventLog).where(EventLog.order_id == order_id))
-    await db.execute(delete(OrderOffer).where(OrderOffer.order_id == order_id))
-
-    await db.delete(order)
-    await db.commit()
+    await hard_delete_order_by_id(db, order_id, actor_id=current_user.id)
     return OrderDeleteOut(ok=True, message="\u0417\u0430\u043a\u0430\u0437 \u0443\u0434\u0430\u043b\u0435\u043d \u043d\u0430\u0432\u0441\u0435\u0433\u0434\u0430")
 
 

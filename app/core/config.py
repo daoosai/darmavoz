@@ -94,7 +94,7 @@ class Settings(BaseSettings):
     PAYMENTS_ENABLED: bool = False
     YOOKASSA_SHOP_ID: str | None = None
     YOOKASSA_SECRET_KEY: str | None = None
-    YOOKASSA_API_BASE_URL: str | None = None
+    YOOKASSA_API_BASE_URL: str = "https://api.yookassa.ru/v3"
     PAYMENT_RETURN_URL: str | None = None
     PAYMENT_TEST_MODE: bool = True
     PAYMENT_REPORT_TIMEZONE: str = "Asia/Irkutsk"

@@ -15,6 +15,7 @@ for (const role of ['admin', 'logist']) {
         refund_status: 'partial', client_name: 'QA возврат', created_at: '2026-10-14T10:00:00Z',
         events: [], refunds: [], reconciliation_status: 'matched' };
       const submissions: any[] = [];
+      let detailRequests = 0;
       await page.route('**/api/v1/**', route => {
         const path = new URL(route.request().url()).pathname;
         let body: unknown = [];
@@ -27,13 +28,14 @@ for (const role of ['admin', 'logist']) {
         if (path.endsWith('/cities/')) body = [{ id: orderId, code: 'tyumen', name: 'Тюмень', is_active: true, is_default: true }];
         else if (path.endsWith('/finance/payments')) body = { items: [payment], total: 1 };
         else if (path.endsWith('/finance/summary')) body = { paid: '100', refunded: '20', net: '80', successful_count: 1, failed_count: 0 };
-        else if (path.endsWith(`/payments/${paymentId}`)) body = payment;
+        else if (path.endsWith(`/payments/${paymentId}`)) { detailRequests += 1; body = payment; }
         return route.fulfill({ json: body });
       });
       await page.goto(`/${role}/profile`);
       if (role === 'logist') await page.getByRole('button', { name: 'Профиль', exact: true }).filter({ visible: true }).click();
       await page.getByRole('button', { name: /Финансы Платежи/ }).click();
-      await page.getByText('QA возврат', { exact: true }).filter({ visible: true }).click();
+      await page.getByText('#000003', { exact: true }).filter({ visible: true }).click();
+      expect(detailRequests).toBe(1);
       await expect(page.getByText('Доступно к возврату', { exact: true })).toBeVisible();
       await page.getByRole('button', { name: 'Оформить возврат', exact: true }).click();
       await page.getByLabel('Сумма возврата', { exact: true }).fill('30.00');

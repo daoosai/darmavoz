@@ -1,0 +1,28 @@
+[
+  {
+    "contour": "test",
+    "http_status": 200,
+    "versions": {
+      "android_version": "3.1.7",
+      "ios_version": "3.1.7",
+      "web_version": "3.1.7",
+      "download_url": "https://test.darmavoz.ru/static/darmavoz-test.apk",
+      "force_update": false
+    },
+    "version_in_bundle": true,
+    "console_errors": 0
+  },
+  {
+    "contour": "production",
+    "http_status": 200,
+    "versions": {
+      "android_version": "3.1.7",
+      "ios_version": "3.1.7",
+      "web_version": "3.1.7",
+      "download_url": "https://play.google.com/store/apps/details?id=ru.darmavoz.app",
+      "force_update": false
+    },
+    "version_in_bundle": true,
+    "console_errors": 0
+  }
+]

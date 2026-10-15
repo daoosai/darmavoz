@@ -1,0 +1,18 @@
+[
+  {
+    "width": 390,
+    "amount": "15.00",
+    "console_errors": 0,
+    "detail_requests": 1,
+    "form_stays_open": true,
+    "submitted_refund": false
+  },
+  {
+    "width": 1440,
+    "amount": "15.00",
+    "console_errors": 0,
+    "detail_requests": 1,
+    "form_stays_open": true,
+    "submitted_refund": false
+  }
+]

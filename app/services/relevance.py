@@ -239,7 +239,7 @@ async def confirm_relevance(
     if not can_confirm_relevance(entity):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={"code": "PLACEMENT_CONFIRMATION_NOT_ALLOWED", "message": "???????????? ????? ?????????? ?????? ??????????? ??????"},
+            detail={"code": "PLACEMENT_CONFIRMATION_NOT_ALLOWED", "message": "Подтверждение доступно только для действующего размещения"},
         )
     entity.last_confirmed_at = current_time
     entity.next_confirmation_at = current_time + timedelta(

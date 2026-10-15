@@ -1,0 +1,40 @@
+{
+  "root_city_id": "0bad7c79-9d2a-4920-a051-71fc22576f16",
+  "suburb_resolved_to": "Тюмень",
+  "material": "Песок кладочный",
+  "point": "Диво",
+  "delivery_lat": 57.091586,
+  "delivery_lon": 65.533642,
+  "root_quote": {
+    "quarry_id": "32588e1b-9bd3-43eb-ab3e-22b12994609f",
+    "quarry_name": "Диво",
+    "point_type": "quarry",
+    "rating": 5,
+    "is_vip": true,
+    "manual_priority": 1,
+    "distance": 26.61,
+    "material_cost": 600,
+    "delivery_cost": 3991.5,
+    "delivery_cost_per_trip": 3991.5,
+    "trip_count": 1,
+    "trip_capacity_m3": 3,
+    "total_amount": 4591.5
+  },
+  "suburb_quote": {
+    "quarry_id": "32588e1b-9bd3-43eb-ab3e-22b12994609f",
+    "quarry_name": "Диво",
+    "point_type": "quarry",
+    "rating": 5,
+    "is_vip": true,
+    "manual_priority": 1,
+    "distance": 26.61,
+    "material_cost": 600,
+    "delivery_cost": 3991.5,
+    "delivery_cost_per_trip": 3991.5,
+    "trip_count": 1,
+    "trip_capacity_m3": 3,
+    "total_amount": 4591.5
+  },
+  "temporary_city_removed": true,
+  "order_created": false
+}

@@ -100,7 +100,8 @@ async def test_driver_current_order_endpoints_include_route_fields(client, sessi
             phone="+79990044001",
             user_id=driver_user.id,
             vehicle_id=vehicle.id,
-            status="busy",
+            status="offline",
+            is_on_shift=False,
             is_active=True,
             moderation_status=ModerationStatus.approved.value,
         )
@@ -209,3 +210,24 @@ async def test_driver_current_order_endpoints_include_route_fields(client, sessi
     assert assigned_payload["order"]["delivery_lon"] == 65.527202
     assert assigned_payload["order"]["trip_count"] == 5
     assert assigned_payload["order"]["trip_capacity_m3"] == 20.0
+
+    listed = await client.get("/api/v1/driver/orders", headers=auth_headers("route_driver"))
+    assert listed.status_code == 200
+    assert any(row["id"] == assigned_payload["order_id"] for row in listed.json())
+
+    # Toggling the shift changes dispatch availability, never assignment ownership.
+    for is_on_shift in (True, False):
+        shifted = await client.patch(
+            "/api/v1/driver/profile/shift",
+            headers=auth_headers("route_driver"), json={"is_on_shift": is_on_shift},
+        )
+        assert shifted.status_code == 200
+        assert shifted.json()["is_on_shift"] is is_on_shift
+        current = await client.get(
+            "/api/v1/driver/orders/assigned/current", headers=auth_headers("route_driver"),
+        )
+        assert current.status_code == 200
+        assert current.json()["order_id"] == assigned_payload["order_id"]
+        listed = await client.get("/api/v1/driver/orders", headers=auth_headers("route_driver"))
+        assert listed.status_code == 200
+        assert any(row["id"] == assigned_payload["order_id"] for row in listed.json())

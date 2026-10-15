@@ -1,0 +1,212 @@
+[
+  {
+    "host": "test.darmavoz.ru",
+    "device": "desktop",
+    "catalogLoaded": true,
+    "errors": [],
+    "api": [
+      {
+        "url": "https://mapgl.2gis.com/api/js/v1",
+        "status": 200
+      },
+      {
+        "url": "https://test.darmavoz.ru/api/v1/cities/",
+        "status": 200
+      },
+      {
+        "url": "https://test.darmavoz.ru/api/v1/catalog/categories/?city_id=0bad7c79-9d2a-4920-a051-71fc22576f16",
+        "status": 200
+      },
+      {
+        "url": "https://test.darmavoz.ru/api/v1/catalog/materials/?city_id=0bad7c79-9d2a-4920-a051-71fc22576f16",
+        "status": 200
+      },
+      {
+        "url": "https://test.darmavoz.ru/api/v1/system/version",
+        "status": 200
+      },
+      {
+        "url": "https://test.darmavoz.ru/api/v1/catalog/calculator/",
+        "status": 200
+      }
+    ],
+    "result": "\n\nОбъём\n\n5 м³\n\nПримерный вес\n\nУкажите плотность\n\nПотребуется машин (по 20 м³)\n\n1 шт.\n\nРейсы: 5 м³. Итог не учитывает запас, уплотнение и влажность.\n\n",
+    "hasFetchError": false,
+    "overflow": false
+  },
+  {
+    "host": "test.darmavoz.ru",
+    "device": "tablet",
+    "catalogLoaded": true,
+    "errors": [],
+    "api": [
+      {
+        "url": "https://mapgl.2gis.com/api/js/v1",
+        "status": 200
+      },
+      {
+        "url": "https://test.darmavoz.ru/api/v1/cities/",
+        "status": 200
+      },
+      {
+        "url": "https://test.darmavoz.ru/api/v1/catalog/categories/?city_id=0bad7c79-9d2a-4920-a051-71fc22576f16",
+        "status": 200
+      },
+      {
+        "url": "https://test.darmavoz.ru/api/v1/catalog/materials/?city_id=0bad7c79-9d2a-4920-a051-71fc22576f16",
+        "status": 200
+      },
+      {
+        "url": "https://test.darmavoz.ru/api/v1/system/version",
+        "status": 200
+      },
+      {
+        "url": "https://test.darmavoz.ru/api/v1/catalog/calculator/",
+        "status": 200
+      }
+    ],
+    "result": "\n\nОбъём\n\n5 м³\n\nПримерный вес\n\nУкажите плотность\n\nПотребуется машин (по 20 м³)\n\n1 шт.\n\nРейсы: 5 м³. Итог не учитывает запас, уплотнение и влажность.\n\n",
+    "hasFetchError": false,
+    "overflow": false
+  },
+  {
+    "host": "test.darmavoz.ru",
+    "device": "mobile",
+    "catalogLoaded": true,
+    "errors": [],
+    "api": [
+      {
+        "url": "https://mapgl.2gis.com/api/js/v1",
+        "status": 200
+      },
+      {
+        "url": "https://test.darmavoz.ru/api/v1/cities/",
+        "status": 200
+      },
+      {
+        "url": "https://test.darmavoz.ru/api/v1/catalog/categories/?city_id=0bad7c79-9d2a-4920-a051-71fc22576f16",
+        "status": 200
+      },
+      {
+        "url": "https://test.darmavoz.ru/api/v1/catalog/materials/?city_id=0bad7c79-9d2a-4920-a051-71fc22576f16",
+        "status": 200
+      },
+      {
+        "url": "https://test.darmavoz.ru/api/v1/system/version",
+        "status": 200
+      },
+      {
+        "url": "https://test.darmavoz.ru/api/v1/catalog/calculator/",
+        "status": 200
+      }
+    ],
+    "result": "\n\nОбъём\n\n5 м³\n\nПримерный вес\n\nУкажите плотность\n\nПотребуется машин (по 20 м³)\n\n1 шт.\n\nРейсы: 5 м³. Итог не учитывает запас, уплотнение и влажность.\n\n",
+    "hasFetchError": false,
+    "overflow": false
+  },
+  {
+    "host": "darmavoz.ru",
+    "device": "desktop",
+    "catalogLoaded": true,
+    "errors": [],
+    "api": [
+      {
+        "url": "https://mapgl.2gis.com/api/js/v1",
+        "status": 200
+      },
+      {
+        "url": "https://darmavoz.ru/api/v1/cities/",
+        "status": 200
+      },
+      {
+        "url": "https://darmavoz.ru/api/v1/catalog/categories/?city_id=18fda643-c2ff-4ed6-ba65-0afd3b5f570c",
+        "status": 200
+      },
+      {
+        "url": "https://darmavoz.ru/api/v1/catalog/materials/?city_id=18fda643-c2ff-4ed6-ba65-0afd3b5f570c",
+        "status": 200
+      },
+      {
+        "url": "https://darmavoz.ru/api/v1/system/version",
+        "status": 200
+      },
+      {
+        "url": "https://darmavoz.ru/api/v1/catalog/calculator/",
+        "status": 200
+      }
+    ],
+    "result": "\n\nОбъём\n\n5 м³\n\nПримерный вес\n\n6,25 тонн\n\nПотребуется машин (по 20 м³)\n\n1 шт.\n\nРейсы: 5 м³. Итог не учитывает запас, уплотнение и влажность.\n\n",
+    "hasFetchError": false,
+    "overflow": false
+  },
+  {
+    "host": "darmavoz.ru",
+    "device": "tablet",
+    "catalogLoaded": true,
+    "errors": [],
+    "api": [
+      {
+        "url": "https://mapgl.2gis.com/api/js/v1",
+        "status": 200
+      },
+      {
+        "url": "https://darmavoz.ru/api/v1/cities/",
+        "status": 200
+      },
+      {
+        "url": "https://darmavoz.ru/api/v1/catalog/categories/?city_id=18fda643-c2ff-4ed6-ba65-0afd3b5f570c",
+        "status": 200
+      },
+      {
+        "url": "https://darmavoz.ru/api/v1/catalog/materials/?city_id=18fda643-c2ff-4ed6-ba65-0afd3b5f570c",
+        "status": 200
+      },
+      {
+        "url": "https://darmavoz.ru/api/v1/system/version",
+        "status": 200
+      },
+      {
+        "url": "https://darmavoz.ru/api/v1/catalog/calculator/",
+        "status": 200
+      }
+    ],
+    "result": "\n\nОбъём\n\n5 м³\n\nПримерный вес\n\n6,25 тонн\n\nПотребуется машин (по 20 м³)\n\n1 шт.\n\nРейсы: 5 м³. Итог не учитывает запас, уплотнение и влажность.\n\n",
+    "hasFetchError": false,
+    "overflow": false
+  },
+  {
+    "host": "darmavoz.ru",
+    "device": "mobile",
+    "catalogLoaded": true,
+    "errors": [],
+    "api": [
+      {
+        "url": "https://mapgl.2gis.com/api/js/v1",
+        "status": 200
+      },
+      {
+        "url": "https://darmavoz.ru/api/v1/cities/",
+        "status": 200
+      },
+      {
+        "url": "https://darmavoz.ru/api/v1/catalog/categories/?city_id=18fda643-c2ff-4ed6-ba65-0afd3b5f570c",
+        "status": 200
+      },
+      {
+        "url": "https://darmavoz.ru/api/v1/catalog/materials/?city_id=18fda643-c2ff-4ed6-ba65-0afd3b5f570c",
+        "status": 200
+      },
+      {
+        "url": "https://darmavoz.ru/api/v1/system/version",
+        "status": 200
+      },
+      {
+        "url": "https://darmavoz.ru/api/v1/catalog/calculator/",
+        "status": 200
+      }
+    ],
+    "result": "\n\nОбъём\n\n5 м³\n\nПримерный вес\n\n6,25 тонн\n\nПотребуется машин (по 20 м³)\n\n1 шт.\n\nРейсы: 5 м³. Итог не учитывает запас, уплотнение и влажность.\n\n",
+    "hasFetchError": false,
+    "overflow": false
+  }
+]

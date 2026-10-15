@@ -1,0 +1,172 @@
+[
+  {
+    "device": "desktop",
+    "saveStatus": 201,
+    "toastColor": "rgb(220, 38, 38)",
+    "preserved": "Патрушева, Садовая улица, 3а",
+    "overflow": false,
+    "errors": [],
+    "api": [
+      {
+        "path": "/api/v1/cities/",
+        "status": 200
+      },
+      {
+        "path": "/api/v1/catalog/categories/",
+        "status": 200
+      },
+      {
+        "path": "/api/v1/catalog/materials/",
+        "status": 200
+      },
+      {
+        "path": "/api/v1/system/version",
+        "status": 200
+      },
+      {
+        "path": "/api/v1/clients/me/orders",
+        "status": 200
+      },
+      {
+        "path": "/api/v1/client/addresses",
+        "status": 200
+      },
+      {
+        "path": "/api/v1/clients/me/orders",
+        "status": 200
+      },
+      {
+        "path": "/api/v1/client/addresses",
+        "status": 409
+      },
+      {
+        "path": "/api/v1/clients/me/orders",
+        "status": 200
+      },
+      {
+        "path": "/api/v1/client/addresses",
+        "status": 201
+      },
+      {
+        "path": "/api/v1/client/addresses",
+        "status": 200
+      },
+      {
+        "path": "/api/v1/client/addresses",
+        "status": 200
+      }
+    ]
+  },
+  {
+    "device": "tablet",
+    "saveStatus": 201,
+    "toastColor": "rgb(220, 38, 38)",
+    "preserved": "Патрушева, Садовая улица, 3а",
+    "overflow": false,
+    "errors": [],
+    "api": [
+      {
+        "path": "/api/v1/cities/",
+        "status": 200
+      },
+      {
+        "path": "/api/v1/catalog/categories/",
+        "status": 200
+      },
+      {
+        "path": "/api/v1/catalog/materials/",
+        "status": 200
+      },
+      {
+        "path": "/api/v1/system/version",
+        "status": 200
+      },
+      {
+        "path": "/api/v1/clients/me/orders",
+        "status": 200
+      },
+      {
+        "path": "/api/v1/client/addresses",
+        "status": 200
+      },
+      {
+        "path": "/api/v1/client/addresses",
+        "status": 409
+      },
+      {
+        "path": "/api/v1/clients/me/orders",
+        "status": 200
+      },
+      {
+        "path": "/api/v1/client/addresses",
+        "status": 201
+      },
+      {
+        "path": "/api/v1/client/addresses",
+        "status": 200
+      },
+      {
+        "path": "/api/v1/client/addresses",
+        "status": 200
+      }
+    ]
+  },
+  {
+    "device": "mobile",
+    "saveStatus": 201,
+    "toastColor": "rgb(220, 38, 38)",
+    "preserved": "Патрушева, Садовая улица, 3а",
+    "overflow": false,
+    "errors": [],
+    "api": [
+      {
+        "path": "/api/v1/cities/",
+        "status": 200
+      },
+      {
+        "path": "/api/v1/catalog/categories/",
+        "status": 200
+      },
+      {
+        "path": "/api/v1/catalog/materials/",
+        "status": 200
+      },
+      {
+        "path": "/api/v1/system/version",
+        "status": 200
+      },
+      {
+        "path": "/api/v1/clients/me/orders",
+        "status": 200
+      },
+      {
+        "path": "/api/v1/client/addresses",
+        "status": 200
+      },
+      {
+        "path": "/api/v1/client/addresses",
+        "status": 409
+      },
+      {
+        "path": "/api/v1/clients/me/orders",
+        "status": 200
+      },
+      {
+        "path": "/api/v1/client/addresses",
+        "status": 201
+      },
+      {
+        "path": "/api/v1/client/addresses",
+        "status": 200
+      },
+      {
+        "path": "/api/v1/client/addresses",
+        "status": 200
+      },
+      {
+        "path": "/api/v1/clients/me/orders",
+        "status": 200
+      }
+    ]
+  }
+]

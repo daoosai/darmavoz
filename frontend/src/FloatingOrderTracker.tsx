@@ -6,7 +6,7 @@ import {
   useAuthStore,
   useClientOrdersStore,
 } from "./store";
-import { getOrderTrackerProgress } from "./utils/statusMapper";
+import { getClientOrderTrackerProgress, getOrderTrackerProgress, toClientOrderPaymentState } from "./utils/statusMapper";
 import { baseURL } from "./utils";
 
 interface Props {
@@ -23,7 +23,7 @@ const sortOrdersByCreatedAt = (orders: ClientOrderSummary[]) =>
 
 export default function FloatingOrderTracker({ onOpenOrder }: Props) {
   const { role, token } = useAuthStore();
-  const { orders, setOrders, setIsLoading, clearOrders } = useClientOrdersStore();
+  const { orders, paymentStates, setOrderPaymentState, setOrders, setIsLoading, clearOrders } = useClientOrdersStore();
   const [displayedOrder, setDisplayedOrder] = useState<ClientOrderSummary | null>(null);
   const [isVisible, setIsVisible] = useState(false);
   const hideTimeoutRef = useRef<number | null>(null);
@@ -43,7 +43,20 @@ export default function FloatingOrderTracker({ onOpenOrder }: Props) {
         if (!isMounted) return;
         if (response.ok) {
           const payload = await response.json();
-          setOrders(Array.isArray(payload) ? payload.map(normalizeClientOrderSummary) : []);
+          const nextOrders: ClientOrderSummary[] = Array.isArray(payload) ? payload.map(normalizeClientOrderSummary) : [];
+          setOrders(nextOrders);
+          const tracked = sortOrdersByCreatedAt(nextOrders).find(order => {
+            const progress = getOrderTrackerProgress(order.status);
+            return progress && progress.percentage < 100;
+          });
+          if (tracked) {
+            const payments = await fetch(`${baseURL}/orders/${tracked.id}/payments`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (payments.ok && isMounted) {
+              setOrderPaymentState(tracked.id, toClientOrderPaymentState(await payments.json()));
+            }
+          }
         } else if (response.status === 401 || response.status === 403) {
           clearOrders();
         }
@@ -61,7 +74,7 @@ export default function FloatingOrderTracker({ onOpenOrder }: Props) {
       isMounted = false;
       window.clearInterval(intervalId);
     };
-  }, [clearOrders, role, setIsLoading, setOrders, token]);
+  }, [clearOrders, role, setIsLoading, setOrderPaymentState, setOrders, token]);
 
   const activeOrder = useMemo(
     () =>
@@ -126,7 +139,7 @@ export default function FloatingOrderTracker({ onOpenOrder }: Props) {
 
   if (!displayedOrder) return null;
 
-  const progress = getOrderTrackerProgress(displayedOrder.status);
+  const progress = getClientOrderTrackerProgress(displayedOrder, paymentStates[displayedOrder.id]);
   if (!progress) return null;
 
   const materialName = displayedOrder.items?.[0]?.material?.name || "Активный заказ";
@@ -147,6 +160,7 @@ export default function FloatingOrderTracker({ onOpenOrder }: Props) {
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-slate-500">{materialName}</p>
           <p className="truncate font-bold text-slate-900">{progress.text}</p>
+          {progress.description ? <p className="text-xs text-slate-500">{progress.description}</p> : null}
         </div>
         <span className="text-sm font-black text-sky-600">{progress.percentage}%</span>
       </div>

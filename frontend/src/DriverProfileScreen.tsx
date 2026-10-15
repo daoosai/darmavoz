@@ -29,8 +29,11 @@ import UpdateBanner from "./UpdateBanner";
 import toast from "react-hot-toast";
 import { DriverOrder, DriverOrderCard } from "./DriverOrdersScreen";
 import DeleteAccountButton from "./components/shared/DeleteAccountButton";
+import CommerceMenu from './CommerceMenu';
 
 interface DriverProfile {
+  city_ids?: string[];
+  city_names?: string[];
   id: string;
   name: string;
   phone: string;
@@ -74,6 +77,7 @@ export default function DriverProfileScreen({
   onProfileUpdate,
   hasActiveOrder,
   onOpenSupport,
+  onOpenWholesale,
   isOnShift = false,
   isUpdatingShift = false,
   trackingState = "idle",
@@ -84,6 +88,7 @@ export default function DriverProfileScreen({
   onProfileUpdate?: () => void;
   hasActiveOrder?: boolean;
   onOpenSupport?: () => void;
+  onOpenWholesale?: () => void;
   isOnShift?: boolean;
   isUpdatingShift?: boolean;
   trackingState?: "idle" | "tracking" | "permission_denied" | "error";
@@ -536,6 +541,7 @@ export default function DriverProfileScreen({
   return (
     <div className="flex flex-col flex-1 bg-slate-50 w-full relative">
       <div className="flex-1 flex flex-col gap-4 p-5 pb-6">
+        <CommerceMenu onOpenWholesale={onOpenWholesale} />
         <UpdateBanner />
 
         {moderationStatus === "approved" && !isDriverInactive && (
@@ -808,6 +814,10 @@ export default function DriverProfileScreen({
             <span className="text-sky-600 text-sm">Открыть</span>
           </button>
         ) : null}
+        <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+          <h2 className="font-bold text-slate-800">Города обслуживания</h2>
+          <p className="mt-2 text-sm text-slate-600">{profile?.city_names?.join(", ") || "Город не назначен. Обратитесь к логисту"}</p>
+        </section>
         <NotificationToggle role="driver" />
         <button
           onClick={async () => {

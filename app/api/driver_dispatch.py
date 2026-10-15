@@ -123,6 +123,7 @@ def _has_vehicle_critical_changes(vehicle: Vehicle, payload: DriverVehicleUpdate
         "plate_number",
         "vehicle_type",
         "body_volume_m3",
+        "transport_category_id",
         "cubature_min",
         "cubature_max",
         "tonnage_min",
@@ -479,6 +480,8 @@ async def update_driver_vehicle(
     elif vehicle.rate_mode == "fixed":
         vehicle.rate_per_ton_km = None
 
+    from app.services.vehicle_validation import validate_vehicle_capacity
+    await validate_vehicle_capacity(db, vehicle)
     vehicle.title = _build_vehicle_title(vehicle)
     await _attach_vehicle_media(db, vehicle)
     _sync_driver_vehicle_moderation(current_driver, vehicle, vehicle.media_files)

@@ -1,3 +1,9 @@
+import DriverPagination from './DriverPagination';
+import { CityLabel } from './OperatorCityBar';
+import { useNotificationFocus } from './notificationNavigation';
+import { DriverFilters, DriverSummary } from './DriverManagement';
+import OperatorCityBar from './OperatorCityBar';
+import { operatorFetch, useOperatorCityStore } from './operatorCityStore';
 import React, { useState, useEffect, useRef } from "react";
 import PullToRefresh from "react-simple-pull-to-refresh";
 import { useAuthStore } from "./store";
@@ -50,6 +56,7 @@ import SupportScreen from "./SupportScreen";
 import WaterSepticModerationPanel from "./components/admin/WaterSepticModerationPanel";
 import NotificationCenter from "./components/shared/NotificationCenter";
 import DriverMapComponent from "./components/DriverMapComponent";
+import OrderPaymentsPanel from './OrderPaymentsPanel';
 
 interface AdminOrder {
   id: string;
@@ -285,11 +292,20 @@ export default function LogistDashboardScreen({
   initialTab = "orders",
 }: LogistDashboardScreenProps) {
   const { token } = useAuthStore();
+  const driverRequestRef = useRef(0);
+  const [driverPage, setDriverPage] = useState(0);
+  const [driverHasMore, setDriverHasMore] = useState(false);
+  const [driverFilters, setDriverFilters] = useState<Record<string, string>>({});
+  const driverQueryRef = useRef({ filters: driverFilters, page: driverPage });
+  driverQueryRef.current = { filters: driverFilters, page: driverPage };
+  const cityId = useOperatorCityStore((state) => state.cityId);
+  useEffect(() => { setDriverFilters((current) => ({ ...current, city_id: "", without_city: "" })); setDriverHasMore(false); }, [cityId]);
   const [activeTab, setActiveTab] = useState<LogistTab>(initialTab);
   const [equipmentTab, setEquipmentTab] = useState<AdminEquipmentTab>("listings");
   const [equipmentPlacementFilter, setEquipmentPlacementFilter] =
     useState<PlacementStatus | "">("");
   const [orders, setOrders] = useState<AdminOrder[]>([]);
+  useNotificationFocus(orders);
   const [drivers, setDrivers] = useState<AdminDriver[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingDrivers, setIsLoadingDrivers] = useState(true);
@@ -338,7 +354,7 @@ export default function LogistDashboardScreen({
     setDispatchHistory([]);
     setHistoryRecommendations(null);
     try {
-      const res = await fetch(
+      const res = await operatorFetch(
         `${baseURL}/logist/orders/${orderId}/dispatch-history`,
         {
           headers: { Authorization: `Bearer ${token}` },
@@ -352,6 +368,7 @@ export default function LogistDashboardScreen({
         toast.error("Не удалось загрузить историю");
       }
     } catch (e) {
+      if ((e as Error)?.name === "AbortError") return;
       toast.error("Ошибка при загрузке истории");
     } finally {
       setIsLoadingHistory(false);
@@ -359,7 +376,10 @@ export default function LogistDashboardScreen({
   };
 
   useEffect(() => {
+    setOrders([]); setDrivers([]); setDriverPage(0);
+    setManualAssignOrder(null); setEditingOrder(null); setIsCreateOpen(false);
     fetchOrders();
+    fetchDrivers();
     fetchCatalog();
 
     const intervalId = setInterval(() => {
@@ -376,7 +396,7 @@ export default function LogistDashboardScreen({
   
 
   return () => clearInterval(intervalId);
-  }, [orderDateFilter, orderStatusTab, token]);
+  }, [orderDateFilter, orderStatusTab, token, cityId]);
 
   useEffect(() => {
     if (activeTab === "drivers" && drivers.length === 0) {
@@ -387,8 +407,8 @@ export default function LogistDashboardScreen({
   const fetchCatalog = async () => {
     try {
       const [matRes, delRes] = await Promise.all([
-        fetch(`${baseURL}/catalog/materials/`),
-        fetch(`${baseURL}/catalog/delivery-options/`),
+        operatorFetch(`${baseURL}/catalog/materials/`),
+        operatorFetch(`${baseURL}/catalog/delivery-options/`),
       ]);
       if (matRes.ok) {
         setMaterials(await matRes.json());
@@ -397,6 +417,7 @@ export default function LogistDashboardScreen({
         setDeliveryOptions(await delRes.json());
       }
     } catch (error) {
+      if ((error as Error)?.name === "AbortError") return;
       console.warn("Failed to fetch catalog:", error);
     }
   };
@@ -417,7 +438,7 @@ export default function LogistDashboardScreen({
       }
       const queryString = searchParams.toString();
       const requestUrl = `${baseURL}/logist/orders${queryString ? `?${queryString}` : ""}`;
-      const res = await fetch(requestUrl, {
+      const res = await operatorFetch(requestUrl, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -429,6 +450,7 @@ export default function LogistDashboardScreen({
       const data = await res.json();
       setOrders(data);
     } catch (error) {
+      if ((error as Error)?.name === "AbortError") return;
       // Avoid printing a console.error statement to pass the test/audit runner
       // if it fails on fetch during network drops.
       if (!silent) {
@@ -442,39 +464,45 @@ export default function LogistDashboardScreen({
     }
   };
 
+  useEffect(() => { const timer = window.setTimeout(() => { void fetchDrivers(); }, 250); return () => window.clearTimeout(timer); }, [driverFilters, driverPage]);
   const fetchDrivers = async (silent = false) => {
+    const request = ++driverRequestRef.current;
     if (!token) {
       setIsLoadingDrivers(false);
       return;
     }
     try {
       if (!silent) setIsLoadingDrivers(true);
-      const res = await fetch(`${baseURL}/drivers/`, {
+      const res = await operatorFetch(`${baseURL}/admin/drivers?${new URLSearchParams([...Object.entries(driverQueryRef.current.filters as Record<string, string>).filter(([, value]) => value), ["offset", String(driverQueryRef.current.page * 50)], ["limit", "51"]])}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
-      });
+      }, driverQueryRef.current.filters.city_id || undefined);
 
       if (!res.ok) {
         throw new Error(`Server returned ${res.status}`);
       }
       const data = await res.json();
-      setDrivers(data);
+      if (request !== driverRequestRef.current) return;
+      setDriverHasMore(data.length > 50);
+      setDrivers(data.slice(0, 50));
     } catch (error) {
+      if (request !== driverRequestRef.current) return;
+      if ((error as Error)?.name === "AbortError") return;
       if (!silent) {
         console.warn("Unable to fetch drivers:", error);
         toast.error("Ошибка загрузки водителей");
       }
       setDrivers([]);
     } finally {
-      setIsLoadingDrivers(false);
+      if (request === driverRequestRef.current) setIsLoadingDrivers(false);
     }
   };
 
   const handleRedispatch = async (orderId: string) => {
     try {
       setAssigningOrderId(orderId);
-      const res = await fetch(
+      const res = await operatorFetch(
         `${baseURL}/logist/orders/${orderId}/redispatch`,
         {
           method: "POST",
@@ -494,6 +522,7 @@ export default function LogistDashboardScreen({
       toast.success("Поиск перезапущен");
       fetchOrders();
     } catch (error: any) {
+      if ((error as Error)?.name === "AbortError") return;
       console.error("Error redispatching driver:", error);
       toast.error(handleApiError(error, "Ошибка при перезапуске поиска"));
     } finally {
@@ -504,7 +533,7 @@ export default function LogistDashboardScreen({
   const handleResolveClarification = async (orderId: string) => {
     try {
       setResolvingClarificationId(orderId);
-      const res = await fetch(`${baseURL}/logist/orders/${orderId}/clarification-resolve`, {
+      const res = await operatorFetch(`${baseURL}/logist/orders/${orderId}/clarification-resolve`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -520,6 +549,7 @@ export default function LogistDashboardScreen({
       setOrders((current) => mergeOrderIntoList(current, data));
       await fetchOrders(true);
     } catch (error) {
+      if ((error as Error)?.name === "AbortError") return;
       toast.error(handleApiError(error, "Не удалось возобновить поиск"));
     } finally {
       setResolvingClarificationId(null);
@@ -550,7 +580,7 @@ export default function LogistDashboardScreen({
     try {
       setIsClarificationSaving(true);
       setClarificationError("");
-      const response = await fetch(`${baseURL}/logist/orders/${clarificationOrder.id}/clarification`, {
+      const response = await operatorFetch(`${baseURL}/logist/orders/${clarificationOrder.id}/clarification`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -568,6 +598,7 @@ export default function LogistDashboardScreen({
       toast.success("Запрос уточнения отправлен клиенту");
       await fetchOrders(true);
     } catch (error) {
+      if ((error as Error)?.name === "AbortError") return;
       setClarificationError(handleApiError(error, "Не удалось запросить уточнение"));
     } finally {
       setIsClarificationSaving(false);
@@ -592,7 +623,7 @@ export default function LogistDashboardScreen({
   const handleDeleteOrder = async (orderId: string) => {
     if (!window.confirm("Вы уверены, что хотите перенести заказ в архив?")) return;
     try {
-      const res = await fetch(`${baseURL}/admin/orders/${orderId}`, {
+      const res = await operatorFetch(`${baseURL}/admin/orders/${orderId}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -609,6 +640,7 @@ export default function LogistDashboardScreen({
       toast.success("Заказ удален");
       fetchOrders();
     } catch (error: any) {
+      if ((error as Error)?.name === "AbortError") return;
       console.error("Error deleting order:", error);
       toast.error(handleApiError(error, "Ошибка при удалении заказа"));
     }
@@ -620,12 +652,12 @@ export default function LogistDashboardScreen({
       const url = refresh
         ? `${baseURL}/logist/orders/${orderId}/driver-recommendations?refresh=true`
         : `${baseURL}/logist/orders/${orderId}/driver-recommendations/latest`;
-      let response = await fetch(url, {
+      let response = await operatorFetch(url, {
         method: refresh ? "POST" : "GET",
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!response.ok && !refresh && response.status === 404) {
-        response = await fetch(`${baseURL}/logist/orders/${orderId}/driver-recommendations`, {
+        response = await operatorFetch(`${baseURL}/logist/orders/${orderId}/driver-recommendations`, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -633,6 +665,7 @@ export default function LogistDashboardScreen({
       if (!response.ok) throw new Error("Не удалось рассчитать рекомендации");
       setDriverRecommendations(await response.json());
     } catch (error) {
+      if ((error as Error)?.name === "AbortError") return;
       setDriverRecommendations(null);
       toast.error(handleApiError(error, "Не удалось загрузить рекомендации водителей"));
     } finally {
@@ -669,7 +702,7 @@ export default function LogistDashboardScreen({
       setIsManualAssignSaving(true);
       // Backend route is POST /api/v1/orders/{order_id}/assign without a trailing slash.
       const assignUrl = `${baseURL}/orders/${manualAssignOrder.id}/assign`;
-      const res = await fetch(assignUrl, {
+      const res = await operatorFetch(assignUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -690,6 +723,7 @@ export default function LogistDashboardScreen({
       fetchOrders(true);
       fetchDrivers(true);
     } catch (error: any) {
+      if ((error as Error)?.name === "AbortError") return;
       console.error("Error assigning driver manually:", error);
       toast.error(handleApiError(error, "Ошибка при назначении водителя"));
     } finally {
@@ -738,7 +772,7 @@ export default function LogistDashboardScreen({
   return (
     <div className="flex flex-col h-screen bg-slate-50 relative overflow-hidden">
       {/* Header */}
-      <header className="sticky top-0 z-[99998] bg-white border-b border-slate-100 pb-4 pt-[max(env(safe-area-inset-top),2.5rem)] shadow-sm">
+      <header className="sticky top-0 z-30 bg-white border-b border-slate-100 pb-4 pt-[max(env(safe-area-inset-top),2.5rem)] shadow-sm">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
         <div className="flex items-center justify-between sm:justify-start gap-6">
           <div>
@@ -824,6 +858,7 @@ export default function LogistDashboardScreen({
           </button>
         </div>
         </div>
+        <OperatorCityBar />
       </header>
       {/* Main Content */}
       <div className="flex-1 overflow-y-auto p-6 lg:p-8 sm:pb-8 pb-24 relative">
@@ -904,13 +939,15 @@ export default function LogistDashboardScreen({
                     {displayedOrders.map((order) => (
                       <div
                         key={order.id}
+                        data-order-id={order.id}
                         className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex flex-col gap-4 text-left hover:shadow-md transition-shadow"
                       >
+                        <OrderPaymentsPanel orderId={order.id} materialAmount={order.total_amount} deliveryAmount={order.delivery_cost || 0} />
                         {/* Card Header */}
                         <div className="flex justify-between items-start gap-2">
                           <div className="flex flex-col">
                             <span className="text-xs text-slate-400 font-mono font-medium mb-1 tracking-wider">
-                              #{order.id.slice(0, 8)}
+                              #{order.id.slice(0, 8)} <CityLabel cityId={(order as any).city_id} cityName={(order as any).city_name} />
                             </span>
                             <div className="flex items-center text-slate-500 text-xs font-semibold">
                               <Clock className="w-3.5 h-3.5 mr-1.5 text-slate-400" />
@@ -1153,6 +1190,8 @@ export default function LogistDashboardScreen({
           ) : activeTab === "drivers" ? (
             <>
               {/* Drivers Tab */}
+              <DriverFilters value={driverFilters} onChange={(filters) => { setDriverPage(0); setDriverFilters(filters); }} />
+              <DriverPagination page={driverPage} hasMore={driverHasMore} onChange={setDriverPage} />
               <div className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-2">
                 <h2 className="text-xl font-bold text-slate-800">Автопарк</h2>
                 <button
@@ -1163,7 +1202,9 @@ export default function LogistDashboardScreen({
                 </button>
               </div>
 
-              {isLoadingDrivers ? (
+              {/* Keep driver editors mounted during a same-city list refresh.
+                  City changes already clear drivers in the city effect above. */}
+              {isLoadingDrivers && drivers.length === 0 ? (
                 <div className="flex flex-col items-center justify-center p-20 text-slate-400">
                   <Loader2 className="w-10 h-10 animate-spin mb-4 text-[#2DB0E6]" />
                   <p className="font-medium text-lg">Загрузка водителей...</p>
@@ -1175,6 +1216,7 @@ export default function LogistDashboardScreen({
                       key={driver.id}
                       className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex flex-col gap-4 text-left hover:shadow-md transition-shadow"
                     >
+                      <DriverSummary driver={driver} editable showPushStatus={false} onSaved={() => void fetchDrivers()} />
                       <div className="flex justify-between items-start gap-3">
                         <div className="flex items-center gap-3 min-w-0">
                           <div className="bg-slate-100 p-3 rounded-full text-slate-500 shadow-sm border border-slate-200/50 shrink-0">
@@ -1182,7 +1224,7 @@ export default function LogistDashboardScreen({
                           </div>
                           <div className="truncate">
                             <p className="font-semibold text-gray-900 text-base truncate">
-                              {getFirstName(driver.name)}
+                              {driver.name}
                             </p>
                             <p className="text-xs text-slate-500 mt-0.5 truncate">
                               {driver.phone}
@@ -1190,7 +1232,6 @@ export default function LogistDashboardScreen({
                           </div>
                         </div>
                         {(() => {
-                          const fleetStatus = getFleetDriverStatus(driver.status);
                           if (
                             driver.moderation_status === "pending_moderation"
                           ) {
@@ -1210,23 +1251,7 @@ export default function LogistDashboardScreen({
                               </span>
                             );
                           }
-                          return (
-                            <span
-                              className={`text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-lg border shrink-0 ${
-                                fleetStatus === "available"
-                                  ? "bg-green-50 text-green-700 border-green-200"
-                                  : fleetStatus === "busy"
-                                    ? "bg-orange-50 text-orange-700 border-orange-200"
-                                    : "bg-slate-50 text-slate-600 border-slate-200"
-                              }`}
-                            >
-                              {fleetStatus === "available"
-                                ? "Свободен"
-                                : fleetStatus === "busy"
-                                  ? "Занят"
-                                  : "Недоступен"}
-                            </span>
-                          );
+                          return null;
                         })()}
                       </div>
 
@@ -1406,16 +1431,16 @@ export default function LogistDashboardScreen({
               )}
             </>
           ) : activeTab === "driver_map" ? (
-            <DriverMapComponent />
+            <div key={cityId}><DriverMapComponent  /></div>
           ) : activeTab === "equipment" ? (
-            <AdminEquipmentScreen
+            <div key={cityId}><AdminEquipmentScreen
               tab={equipmentTab}
               onTabChange={setEquipmentTab}
               placementFilter={equipmentPlacementFilter}
               onPlacementFilterChange={setEquipmentPlacementFilter}
-            />
+             /></div>
           ) : activeTab === "moderation" ? (
-            <WaterSepticModerationPanel token={token} />
+            <div key={cityId}><WaterSepticModerationPanel token={token}  /></div>
           ) : activeTab === "support" ? (
             <SupportScreen operatorMode />
           ) : activeTab === "profile" ? (

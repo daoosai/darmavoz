@@ -1,3 +1,4 @@
+import { operatorFetch } from "./operatorCityStore";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { MaterialProps, DeliveryOption } from "./MaterialDetailScreen";
@@ -26,6 +27,7 @@ export interface CartItem {
 }
 
 export interface ClientOrderSummary {
+  payment_status?: string | null;
   city_id?: string | null;
   city_name?: string | null;
   id: string;
@@ -64,6 +66,9 @@ export interface ClientOrderSummary {
   delivery_option?: {
     capacity_m3: number;
     title: string;
+    primary_image_url?: string | null;
+    image_url?: string | null;
+    media_files?: { public_url?: string | null; is_primary?: boolean }[];
   };
 }
 
@@ -87,7 +92,15 @@ export const normalizeClientOrderSummary = <T extends ClientOrderSummary>(order:
   };
 };
 
+export interface ClientOrderPaymentState {
+  quoteConfirmed?: boolean;
+  status: string | null;
+  canPay: boolean;
+}
+
 interface ClientOrdersState {
+  paymentStates: Record<string, ClientOrderPaymentState>;
+  setOrderPaymentState: (orderId: string, state: ClientOrderPaymentState) => void;
   orders: ClientOrderSummary[];
   isLoading: boolean;
   setOrders: (orders: ClientOrderSummary[]) => void;
@@ -237,11 +250,15 @@ export const useAddressStore = create<AddressState>()(
 );
 
 export const useClientOrdersStore = create<ClientOrdersState>((set) => ({
+  paymentStates: {},
+  setOrderPaymentState: (orderId, state) => set((current) => ({
+    paymentStates: { ...current.paymentStates, [orderId]: state },
+  })),
   orders: [],
   isLoading: true,
   setOrders: (orders) => set({ orders, isLoading: false }),
   setIsLoading: (isLoading) => set({ isLoading }),
-  clearOrders: () => set({ orders: [], isLoading: false }),
+  clearOrders: () => set({ orders: [], paymentStates: {}, isLoading: false }),
 }));
 
 interface PlacementState {
@@ -262,9 +279,9 @@ export const usePlacementStore = create<PlacementState>((set) => ({
     set({ policy: await response.json() });
   },
   loadSummary: async (token) => {
-    set({ isLoading: true });
+    set({ isLoading: true, summary: null });
     try {
-      const response = await fetch(`${baseURL}/admin/placements/summary`, {
+      const response = await operatorFetch(`${baseURL}/admin/placements/summary`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!response.ok) throw new Error("Не удалось загрузить сводку размещений");

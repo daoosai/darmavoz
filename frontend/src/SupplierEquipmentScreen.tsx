@@ -1,3 +1,4 @@
+import { useNotificationFocus } from "./notificationNavigation";
 import { type FormEvent, useEffect, useState } from "react";
 import { AlertCircle, Edit2, ImageIcon, Loader2, Plus, Trash2, UploadCloud, X } from "lucide-react";
 import toast from "react-hot-toast";
@@ -122,7 +123,14 @@ export default function SupplierEquipmentScreen({
   const { currentUser } = useAuthStore();
   const [types, setTypes] = useState<EquipmentTypeItem[]>([]);
   const [listings, setListings] = useState<EquipmentListing[]>([]);
+  useNotificationFocus(listings);
   const [tab, setTab] = useState<ListingsTab>("active");
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("notification_entity");
+    const listing = listings.find((item) => item.id === id);
+    if (listing) setTab(matchesListingTab(listing, "active") ? "active" : matchesListingTab(listing, "moderation") ? "moderation" : "archived");
+  }, [listings]);
+  useNotificationFocus(tab);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -669,7 +677,7 @@ export default function SupplierEquipmentScreen({
         filteredListings.map((listing) => {
           const status = STATUS_META[listing.moderation_status || "pending_moderation"];
           return (
-            <article key={listing.id} className="overflow-hidden rounded-3xl bg-white shadow-sm">
+            <article data-entity-id={listing.id} key={listing.id} className="overflow-hidden rounded-3xl bg-white shadow-sm">
               <div className="relative bg-slate-100">
                 {listing.primary_image_url ? (
                   <img

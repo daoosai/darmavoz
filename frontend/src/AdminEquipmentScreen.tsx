@@ -1,3 +1,5 @@
+import { CityLabel } from "./OperatorCityBar";
+import { operatorFetch, useOperatorCityStore } from './operatorCityStore';
 import ServiceCitiesPanel from './ServiceCitiesPanel';
 import ServiceCityField from './ServiceCityField';
 import React, { useEffect, useState } from "react";
@@ -141,11 +143,11 @@ export default function AdminEquipmentScreen({
     setLoading(true);
     try {
       const [typesResponse, listingsResponse] = await Promise.all([
-        fetch(
+        operatorFetch(
           canManageTypes ? `${baseURL}/admin/equipment-types` : `${baseURL}/equipment/types`,
           { headers },
         ),
-        fetch(
+        operatorFetch(
           `${baseURL}/admin/equipment?${new URLSearchParams({ ...(placementFilter ? { placement_status: placementFilter } : {}) })}`,
           { headers },
         ),
@@ -178,7 +180,7 @@ export default function AdminEquipmentScreen({
   }, [loadPolicy, policy]);
 
   const placementAction = async (item: EquipmentListing, action: "extend" | "hide" | "restore" | "archive") => {
-    const response = await fetch(`${baseURL}/admin/equipment/${item.id}/placement/${action}`, { method: "POST", headers });
+    const response = await operatorFetch(`${baseURL}/admin/equipment/${item.id}/placement/${action}`, { method: "POST", headers });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       toast.error(extractApiErrorMessage(data, "Не удалось изменить размещение"));
@@ -195,7 +197,7 @@ export default function AdminEquipmentScreen({
 
   const saveType = async () => {
     if (!newTypeName.trim()) return;
-    const response = await fetch(`${baseURL}/admin/equipment-types`, {
+    const response = await operatorFetch(`${baseURL}/admin/equipment-types`, {
       method: "POST",
       headers: { ...headers, "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -213,7 +215,7 @@ export default function AdminEquipmentScreen({
   };
 
   const updateType = async (item: EquipmentTypeItem, patch: Partial<EquipmentTypeItem>) => {
-    const response = await fetch(`${baseURL}/admin/equipment-types/${item.id}`, {
+    const response = await operatorFetch(`${baseURL}/admin/equipment-types/${item.id}`, {
       method: "PATCH",
       headers: { ...headers, "Content-Type": "application/json" },
       body: JSON.stringify(patch),
@@ -237,7 +239,7 @@ export default function AdminEquipmentScreen({
     setIsReorderingTypes(true);
 
     try {
-      const response = await fetch(`${baseURL}/admin/catalog/reorder`, {
+      const response = await operatorFetch(`${baseURL}/admin/catalog/reorder`, {
         method: "PATCH",
         headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -258,7 +260,7 @@ export default function AdminEquipmentScreen({
 
   const deleteType = async (id: string) => {
     if (!window.confirm("Удалить тип спецтехники?")) return;
-    const response = await fetch(`${baseURL}/admin/equipment-types/${id}`, {
+    const response = await operatorFetch(`${baseURL}/admin/equipment-types/${id}`, {
       method: "DELETE",
       headers,
     });
@@ -305,7 +307,7 @@ export default function AdminEquipmentScreen({
     decision: "approve" | "reject",
     reason?: string,
   ) => {
-    const response = await fetch(`${baseURL}/admin/equipment/${item.id}/${decision}`, {
+    const response = await operatorFetch(`${baseURL}/admin/equipment/${item.id}/${decision}`, {
       method: "POST",
       headers: { ...headers, "Content-Type": "application/json" },
       body: JSON.stringify(decision === "reject" ? { reason: reason?.trim() || "" } : {}),
@@ -354,7 +356,7 @@ export default function AdminEquipmentScreen({
     );
     const manualPriority = normalizeManualPriority(listingForm.manual_priority);
 
-    const response = await fetch(
+    const response = await operatorFetch(
       `${baseURL}/admin/equipment${listingForm.id ? `/${listingForm.id}` : ""}`,
       {
         method: listingForm.id ? "PATCH" : "POST",
@@ -397,7 +399,7 @@ export default function AdminEquipmentScreen({
 
   const deleteListing = async (id: string) => {
     if (!window.confirm("Удалить объявление спецтехники?")) return;
-    const response = await fetch(`${baseURL}/admin/equipment/${id}`, {
+    const response = await operatorFetch(`${baseURL}/admin/equipment/${id}`, {
       method: "DELETE",
       headers,
     });
@@ -414,7 +416,7 @@ export default function AdminEquipmentScreen({
       const listing = listings.find((item) => item.id === listingId);
       const isPrimary = !listing?.media_files?.length;
 
-      const presignResponse = await fetch(`${baseURL}/media/presign-upload`, {
+      const presignResponse = await operatorFetch(`${baseURL}/media/presign-upload`, {
         method: "POST",
         headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -431,7 +433,7 @@ export default function AdminEquipmentScreen({
         throw new Error(extractApiErrorMessage(presign, "Не удалось подготовить загрузку"));
       }
 
-      const uploadResponse = await fetch(presign.upload_url, {
+      const uploadResponse = await operatorFetch(presign.upload_url, {
         method: "PUT",
         headers: { "Content-Type": file.type },
         body: file,
@@ -440,7 +442,7 @@ export default function AdminEquipmentScreen({
         throw new Error("Не удалось загрузить фотографию");
       }
 
-      const confirmResponse = await fetch(`${baseURL}/media/confirm`, {
+      const confirmResponse = await operatorFetch(`${baseURL}/media/confirm`, {
         method: "POST",
         headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -464,7 +466,7 @@ export default function AdminEquipmentScreen({
   };
 
   const mediaAction = async (mediaId: string, action: "primary" | "delete") => {
-    const response = await fetch(
+    const response = await operatorFetch(
       `${baseURL}/media/${mediaId}${action === "primary" ? "/make-primary" : ""}`,
       {
         method: action === "primary" ? "POST" : "DELETE",
@@ -631,7 +633,7 @@ export default function AdminEquipmentScreen({
                       <p className="text-xs font-bold uppercase tracking-wide text-amber-600">
                         На модерации
                       </p>
-                      <h3 className="text-xl font-black text-slate-900">{item.title}</h3>
+                      <h3 className="text-xl font-black text-slate-900">{item.title}</h3><p className="mt-1 text-xs text-sky-700"><CityLabel cityId={(item as any).city_id} /></p>
                       <p className="font-bold text-sky-600">{item.equipment_type_name}</p>
                       <div className="mt-2 flex flex-wrap gap-2">
                         {item.is_vip ? (
@@ -792,7 +794,7 @@ export default function AdminEquipmentScreen({
                   </span>
                   <div className="mt-3 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                     <div className="min-w-0">
-                      <h3 className="text-lg font-black">{item.title}</h3>
+                      <h3 className="text-lg font-black">{item.title}</h3><p className="mt-1 text-xs text-sky-700"><CityLabel cityId={(item as any).city_id} /></p>
                       <p className="font-bold">{formatEquipmentPrice(item)}</p>
                       {item.contact_phone ? (
                         <p className="mt-1 text-sm text-slate-500">{item.contact_phone}</p>

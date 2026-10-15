@@ -1,0 +1,126 @@
+{
+  "base": "https://test.darmavoz.ru",
+  "apiMocked": true,
+  "results": [
+    {
+      "width": 390,
+      "state": "succeeded",
+      "clientText": "Едет к вам",
+      "refreshVisible": false
+    },
+    {
+      "width": 390,
+      "state": "paid",
+      "clientText": "Едет к вам",
+      "refreshVisible": false
+    },
+    {
+      "width": 390,
+      "state": "pending",
+      "clientText": "Едет к вам",
+      "refreshVisible": true
+    },
+    {
+      "width": 390,
+      "state": "waiting_for_capture",
+      "clientText": "Едет к вам",
+      "refreshVisible": true
+    },
+    {
+      "width": 390,
+      "state": "waiting_for_payment",
+      "clientText": "Едет к вам",
+      "refreshVisible": true
+    },
+    {
+      "width": 390,
+      "state": "creating",
+      "clientText": "Едет к вам",
+      "refreshVisible": true
+    },
+    {
+      "width": 390,
+      "state": "unknown",
+      "clientText": "Едет к вам",
+      "refreshVisible": true
+    },
+    {
+      "width": 390,
+      "state": "unconfirmed",
+      "clientText": "Едет к вам",
+      "refreshVisible": false
+    },
+    {
+      "width": 390,
+      "state": "quote",
+      "clientText": "Едет к вам",
+      "refreshVisible": true
+    },
+    {
+      "width": 390,
+      "state": "canceled",
+      "clientText": "Едет к вам",
+      "refreshVisible": false
+    },
+    {
+      "width": 1440,
+      "state": "succeeded",
+      "clientText": "Едет к вам",
+      "refreshVisible": false
+    },
+    {
+      "width": 1440,
+      "state": "paid",
+      "clientText": "Едет к вам",
+      "refreshVisible": false
+    },
+    {
+      "width": 1440,
+      "state": "pending",
+      "clientText": "Едет к вам",
+      "refreshVisible": true
+    },
+    {
+      "width": 1440,
+      "state": "waiting_for_capture",
+      "clientText": "Едет к вам",
+      "refreshVisible": true
+    },
+    {
+      "width": 1440,
+      "state": "waiting_for_payment",
+      "clientText": "Едет к вам",
+      "refreshVisible": true
+    },
+    {
+      "width": 1440,
+      "state": "creating",
+      "clientText": "Едет к вам",
+      "refreshVisible": true
+    },
+    {
+      "width": 1440,
+      "state": "unknown",
+      "clientText": "Едет к вам",
+      "refreshVisible": true
+    },
+    {
+      "width": 1440,
+      "state": "unconfirmed",
+      "clientText": "Едет к вам",
+      "refreshVisible": false
+    },
+    {
+      "width": 1440,
+      "state": "quote",
+      "clientText": "Едет к вам",
+      "refreshVisible": true
+    },
+    {
+      "width": 1440,
+      "state": "canceled",
+      "clientText": "Едет к вам",
+      "refreshVisible": false
+    }
+  ]
+}

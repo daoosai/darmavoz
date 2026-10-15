@@ -1,3 +1,5 @@
+import { CityLabel } from './OperatorCityBar';
+import { operatorFetch, useOperatorCityStore } from './operatorCityStore';
 import { currentCity } from './cityStore';
 import type { City } from './AdminCitiesScreen';
 import ServiceCityField from './ServiceCityField';
@@ -309,7 +311,7 @@ export default function AdminQuarriesScreen({
       const requestUrl = query
         ? `${baseURL}/admin/pickup-points?${query}`
         : `${baseURL}/admin/pickup-points`;
-      const res = await fetch(requestUrl, {
+      const res = await operatorFetch(requestUrl, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) {
@@ -351,7 +353,7 @@ export default function AdminQuarriesScreen({
 
   const placementAction = async (point: Quarry, action: "extend" | "hide" | "restore" | "archive") => {
     if (!point.id) return;
-    const response = await fetch(`${baseURL}/admin/pickup-points/${point.id}/placement/${action}`, {
+    const response = await operatorFetch(`${baseURL}/admin/pickup-points/${point.id}/placement/${action}`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -377,7 +379,7 @@ export default function AdminQuarriesScreen({
     }
     setIsModerating(true);
     try {
-      const response = await fetch(`${baseURL}/admin/pickup-points/${pointId}/${action}`, {
+      const response = await operatorFetch(`${baseURL}/admin/pickup-points/${pointId}/${action}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(action === "reject" ? { reason } : { comment: null }),
@@ -423,7 +425,7 @@ export default function AdminQuarriesScreen({
     if (!window.confirm("Удалить эту точку забора?")) return;
     setDeletingPointId(point.id);
     try {
-      const response = await fetch(`${baseURL}/admin/pickup-points/${point.id}`, {
+      const response = await operatorFetch(`${baseURL}/admin/pickup-points/${point.id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -457,7 +459,7 @@ export default function AdminQuarriesScreen({
     if (!token || pointIds.length === 0 || !window.confirm(`Вы уверены, что хотите удалить ${pointIds.length} точек?`)) return;
     setDeletingPointId("bulk");
     try {
-      const response = await fetch(`${baseURL}/admin/pickup-points/bulk-delete`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ point_ids: pointIds }) });
+      const response = await operatorFetch(`${baseURL}/admin/pickup-points/bulk-delete`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ point_ids: pointIds }) });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(extractApiErrorMessage(data, "Не удалось удалить выбранные точки"));
       setSelectedIds(new Set());
@@ -477,7 +479,7 @@ export default function AdminQuarriesScreen({
     try {
       await Promise.all(
         pointIds.map(async (pointId) => {
-          const response = await fetch(`${baseURL}/admin/pickup-points/${pointId}/placement/${action}`, {
+          const response = await operatorFetch(`${baseURL}/admin/pickup-points/${pointId}/placement/${action}`, {
             method: "POST",
             headers: { Authorization: `Bearer ${token}` },
           });
@@ -663,7 +665,7 @@ export default function AdminQuarriesScreen({
                       </span>
                     </td>
                     <td className="p-4 text-slate-800">
-                      <div className="font-bold">{quarry.name}</div>
+                      <div className="font-bold">{quarry.name}<span className="block"><CityLabel cityId={(quarry as any).city_id} cityName={(quarry as any).city_name} /></span></div>
                       {(quarry.owner_name || quarry.owner_phone) && (
                         <div className="mt-1 text-xs font-medium text-slate-500">
                           Владелец: {quarry.owner_name || "Имя не указано"}
@@ -748,7 +750,7 @@ export default function AdminQuarriesScreen({
             >
               <div className="flex justify-between items-start gap-2">
                 <h3 className="font-semibold text-gray-900 text-lg">
-                  {quarry.name}
+                  {quarry.name}<div><CityLabel cityId={(quarry as any).city_id} cityName={(quarry as any).city_name} /></div>
                 </h3>
                 <div className="flex shrink-0 items-center gap-1">
                   <span className="text-xs text-gray-400 font-mono">
@@ -1072,7 +1074,7 @@ function EditQuarryModal({
     }
 
     try {
-      const res = await fetch(
+      const res = await operatorFetch(
         `${baseURL}/geo/geocode?city_id=${serviceCityId}&address=${encodeURIComponent(withCityBias(address, mapCity || currentCity()))}`,
         {
           headers: { Authorization: `Bearer ${token}` },
@@ -1279,7 +1281,7 @@ function EditQuarryModal({
         ...(usesOwnerPhone ? {} : { contact_phone: normalizeOptionalText(formData.contact_phone) }),
       };
 
-      const res = await fetch(url, {
+      const res = await operatorFetch(url, {
         method: formData.id ? "PATCH" : "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1316,7 +1318,7 @@ function EditQuarryModal({
       }
 
       if (shouldDelayActivation && savedPoint.id) {
-        const activationResponse = await fetch(`${baseURL}/admin/quarries/${savedPoint.id}`, {
+        const activationResponse = await operatorFetch(`${baseURL}/admin/quarries/${savedPoint.id}`, {
           method: "PATCH",
           headers: {
             "Content-Type": "application/json",
@@ -1350,16 +1352,16 @@ function EditQuarryModal({
       const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
       for (const file of files) {
         const isPrimary = nextMedia.length === 0;
-        const presignResponse = await fetch(`${baseURL}/media/presign-upload`, {
+        const presignResponse = await operatorFetch(`${baseURL}/media/presign-upload`, {
           method: "POST",
           headers,
           body: JSON.stringify({ file_name: file.name, content_type: file.type, file_size: file.size, entity_type: "quarry", entity_id: formData.id, is_primary: isPrimary }),
         });
         const presign = await presignResponse.json();
         if (!presignResponse.ok) throw new Error("presign failed");
-        const uploadResponse = await fetch(presign.upload_url, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
+        const uploadResponse = await operatorFetch(presign.upload_url, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
         if (!uploadResponse.ok) throw new Error("upload failed");
-        const confirmResponse = await fetch(`${baseURL}/media/confirm`, {
+        const confirmResponse = await operatorFetch(`${baseURL}/media/confirm`, {
           method: "POST",
           headers,
           body: JSON.stringify({ entity_type: "quarry", entity_id: formData.id, object_key: presign.object_key, file_name: file.name, content_type: file.type, file_size: file.size, is_primary: isPrimary }),
@@ -1391,7 +1393,7 @@ function EditQuarryModal({
 
     for (const file of files) {
       const isPrimary = nextMedia.length === 0;
-      const presignResponse = await fetch(`${baseURL}/media/presign-upload`, {
+      const presignResponse = await operatorFetch(`${baseURL}/media/presign-upload`, {
         method: "POST",
         headers,
         body: JSON.stringify({
@@ -1408,7 +1410,7 @@ function EditQuarryModal({
         throw new Error("Не удалось подготовить загрузку фотографии");
       }
 
-      const uploadResponse = await fetch(presign.upload_url, {
+      const uploadResponse = await operatorFetch(presign.upload_url, {
         method: "PUT",
         headers: { "Content-Type": file.type },
         body: file,
@@ -1417,7 +1419,7 @@ function EditQuarryModal({
         throw new Error("Не удалось загрузить фотографию");
       }
 
-      const confirmResponse = await fetch(`${baseURL}/media/confirm`, {
+      const confirmResponse = await operatorFetch(`${baseURL}/media/confirm`, {
         method: "POST",
         headers,
         body: JSON.stringify({
@@ -1460,7 +1462,7 @@ function EditQuarryModal({
     if (!window.confirm("Удалить эту фотографию?")) return;
     setIsSaving(true);
     try {
-      const response = await fetch(`${baseURL}/media/${mediaId}`, {
+      const response = await operatorFetch(`${baseURL}/media/${mediaId}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -1484,7 +1486,7 @@ function EditQuarryModal({
   const makePointPhotoPrimary = async (mediaId: string) => {
     setIsSaving(true);
     try {
-      const response = await fetch(`${baseURL}/media/${mediaId}/make-primary`, {
+      const response = await operatorFetch(`${baseURL}/media/${mediaId}/make-primary`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -2021,7 +2023,7 @@ function EnhancedEditQuarryModal({
   const geocodeAddress = async (address: string) => {
     setIsGeocoding(true);
     try {
-      const response = await fetch(
+      const response = await operatorFetch(
         `${baseURL}/geo/geocode?city_id=${serviceCityId}&address=${encodeURIComponent(withCityBias(address, mapCity || currentCity()))}`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
@@ -2177,7 +2179,7 @@ function EnhancedEditQuarryModal({
 
     for (const file of files) {
       const isPrimary = nextMedia.length === 0;
-      const presignResponse = await fetch(`${baseURL}/media/presign-upload`, {
+      const presignResponse = await operatorFetch(`${baseURL}/media/presign-upload`, {
         method: "POST",
         headers,
         body: JSON.stringify({
@@ -2194,7 +2196,7 @@ function EnhancedEditQuarryModal({
         throw new Error("Не удалось подготовить загрузку фотографии");
       }
 
-      const uploadResponse = await fetch(presign.upload_url, {
+      const uploadResponse = await operatorFetch(presign.upload_url, {
         method: "PUT",
         headers: { "Content-Type": file.type },
         body: file,
@@ -2203,7 +2205,7 @@ function EnhancedEditQuarryModal({
         throw new Error("Не удалось загрузить фотографию");
       }
 
-      const confirmResponse = await fetch(`${baseURL}/media/confirm`, {
+      const confirmResponse = await operatorFetch(`${baseURL}/media/confirm`, {
         method: "POST",
         headers,
         body: JSON.stringify({
@@ -2261,7 +2263,7 @@ function EnhancedEditQuarryModal({
     if (!window.confirm("Удалить эту фотографию?")) return;
     setIsSaving(true);
     try {
-      const response = await fetch(`${baseURL}/media/${mediaId}`, {
+      const response = await operatorFetch(`${baseURL}/media/${mediaId}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -2288,7 +2290,7 @@ function EnhancedEditQuarryModal({
   const makePointPhotoPrimary = async (mediaId: string) => {
     setIsSaving(true);
     try {
-      const response = await fetch(`${baseURL}/media/${mediaId}/make-primary`, {
+      const response = await operatorFetch(`${baseURL}/media/${mediaId}/make-primary`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -2373,7 +2375,7 @@ function EnhancedEditQuarryModal({
         ...(usesOwnerPhone ? {} : { contact_phone: normalizeOptionalText(formData.contact_phone) }),
       };
 
-      const response = await fetch(
+      const response = await operatorFetch(
         formData.id ? `${baseURL}/admin/quarries/${formData.id}` : `${baseURL}/admin/quarries`,
         {
           method: formData.id ? "PATCH" : "POST",
@@ -2404,7 +2406,7 @@ function EnhancedEditQuarryModal({
       }
 
       if (shouldDelayActivation && savedPoint.id) {
-        const activationResponse = await fetch(`${baseURL}/admin/quarries/${savedPoint.id}`, {
+        const activationResponse = await operatorFetch(`${baseURL}/admin/quarries/${savedPoint.id}`, {
           method: "PATCH",
           headers: {
             "Content-Type": "application/json",

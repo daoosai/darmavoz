@@ -1,0 +1,30 @@
+{
+  "base": "https://test.darmavoz.ru",
+  "stages": [
+    "client_authenticated",
+    "order_created",
+    "sandbox_config_enabled",
+    "price_confirmed",
+    "payment_link_created",
+    "provider_test_flag_verified",
+    "forged_success_did_not_mark_paid",
+    "provider_ui_ready",
+    "sandbox_payment_succeeded",
+    "webhook_paid_and_idempotent",
+    "client_and_logist_paid_ui_verified"
+  ],
+  "errors": [],
+  "orderId": "bfcc1ca3-7700-40bf-8b75-cb303901fef9",
+  "materialAmount": 600,
+  "deliveryAmount": 3000,
+  "paymentAmount": "15.00",
+  "paymentId": "2590b385-1cb9-450d-8c20-ff088bdddc11",
+  "providerHost": "yoomoney.ru",
+  "providerId": "3260fbd1-000f-5001-9000-1931784bd934",
+  "providerStatus": "succeeded",
+  "providerTest": true,
+  "localStatus": "succeeded",
+  "orderPaymentStatus": "succeeded",
+  "paymentCount": 1,
+  "successEventCount": 1
+}

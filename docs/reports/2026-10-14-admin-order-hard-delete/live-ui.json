@@ -1,0 +1,9 @@
+{
+  "orderId": "6bf3d69e-dc4c-4673-a4e2-d4af7531fd1a",
+  "method": "DELETE",
+  "endpoint": "/admin/orders/6bf3d69e-dc4c-4673-a4e2-d4af7531fd1a/hard",
+  "status": 200,
+  "removedFromRegistry": true,
+  "otherOrderPreserved": true,
+  "onlyQaFixtureDeleted": true
+}

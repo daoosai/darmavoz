@@ -5,7 +5,6 @@ import json
 import logging
 import math
 from datetime import UTC, datetime, timedelta
-from typing import Iterable
 from uuid import UUID
 
 import httpx
@@ -15,13 +14,14 @@ from sqlalchemy.orm import selectinload
 
 from app.services.cities import driver_city_clause
 from app.core.config import settings
+from app.services.driver_accounts import active_driver_account_clause
 from app.services.google_play_reviewer import GOOGLE_PLAY_REVIEWER_PHONE_VALUES
 from app.models.models import Driver, Order, OrderDistributionHistory, OrderOffer, OrderOfferStatus, Vehicle
 from app.services.redis_client import get_redis
 
 logger = logging.getLogger(__name__)
 
-ALGORITHM_VERSION = "sprint-21-v1"
+ALGORITHM_VERSION = "sprint-25-v1"
 LOCATION_KEY_PREFIX = "driver:location:"
 ROUTE_CACHE_PREFIX = "smart-matching:truck-route:"
 
@@ -78,8 +78,11 @@ def _trip_capacity_m3(order: Order) -> float | None:
 
 
 def _vehicle_matches_volume(vehicle: Vehicle | None, requested_volume: float | None) -> bool:
-    if vehicle is None or requested_volume is None:
-        return vehicle is not None
+    if vehicle is None or requested_volume is None or requested_volume <= 0:
+        return False
+    upper = vehicle.body_volume_m3 or vehicle.cubature_max or getattr(getattr(vehicle, "delivery_option", None), "capacity_m3", None)
+    if upper is None or requested_volume > upper:
+        return False
     if vehicle.cubature_min is not None and requested_volume < vehicle.cubature_min:
         return False
     if vehicle.cubature_max is not None and requested_volume > vehicle.cubature_max:
@@ -207,7 +210,7 @@ class SmartMatchingService:
     ) -> dict:
         excluded_driver_ids = excluded_driver_ids or set()
         query = (
-            select(Driver).where(driver_city_clause(getattr(order, "city_id", None)))
+            select(Driver).where(active_driver_account_clause(), driver_city_clause(getattr(order, "city_id", None)))
             .options(selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option))
             .where(Driver.vehicle_id.is_not(None))
             .where(Driver.phone.notin_(GOOGLE_PLAY_REVIEWER_PHONE_VALUES))
@@ -224,6 +227,8 @@ class SmartMatchingService:
         coords = (order.pickup_lat, order.pickup_lon, order.delivery_lat, order.delivery_lon)
         has_order_coordinates = all(value is not None for value in coords)
 
+        from app.services.driver_eligibility import driver_constraints, effective_category, order_category
+        allowed_ids = set((await session.scalars(select(Driver.id).join(Driver.vehicle).where(driver_constraints(order)))).all())
         for driver in all_drivers:
             exclusion_reasons = self._hard_exclusion_reasons(
                 driver,
@@ -235,6 +240,10 @@ class SmartMatchingService:
                 allow_penalty_fallback=allow_penalty_fallback,
                 now=now,
             )
+            if effective_category(driver.vehicle) != order_category(order) or order_category(order) is None:
+                exclusion_reasons.append("category_mismatch")
+            if driver.id not in allowed_ids:
+                exclusion_reasons.append("dispatch_constraint")
             location = locations.get(driver.id)
             if location is None and driver.last_lat is not None and driver.last_lon is not None:
                 updated_at = _normalise_datetime(driver.last_location_updated_at)
@@ -344,18 +353,34 @@ class SmartMatchingService:
         if record is None:
             return None
         candidate_data = record.candidates_snapshot or {}
+        # This endpoint is a current selection view; the stored audit is untouched.
+        visible_ids = {
+            str(driver_id)
+            for driver_id in await session.scalars(
+                select(Driver.id).where(active_driver_account_clause())
+            )
+        }
+        candidates = [
+            row for row in candidate_data.get("candidates", [])
+            if str(row.get("driver_id")) in visible_ids
+        ]
+        not_recommended = [
+            row for row in candidate_data.get("not_recommended", [])
+            if str(row.get("driver_id")) in visible_ids
+        ]
+        recommended_id = str(record.recommended_driver_id) if record.recommended_driver_id else None
         return {
             "order_id": str(record.order_id),
             "calculated_at": record.calculated_at.isoformat(),
             "trigger_source": record.trigger_source,
             "algorithm_version": record.algorithm_version,
-            "recommended_driver_id": str(record.recommended_driver_id) if record.recommended_driver_id else None,
+            "recommended_driver_id": recommended_id if recommended_id in visible_ids else None,
             "selected_driver_id": str(record.selected_driver_id) if record.selected_driver_id else None,
             "distance_source": record.distance_source,
             "twogis_status": record.twogis_status,
             "message": candidate_data.get("message"),
-            "candidates": candidate_data.get("candidates", []),
-            "not_recommended": candidate_data.get("not_recommended", []),
+            "candidates": candidates,
+            "not_recommended": not_recommended,
         }
 
     async def _cycle_offer_ids(self, session: AsyncSession, order: Order) -> tuple[set[UUID], set[UUID]]:

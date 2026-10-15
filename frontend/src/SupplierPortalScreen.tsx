@@ -1,4 +1,5 @@
 import { useState } from "react";
+import WholesaleScreen from "./WholesaleScreen";
 
 import { logoutCurrentSession } from "./pushAuth";
 import SupportScreen from "./SupportScreen";
@@ -10,7 +11,7 @@ import SupplierRegisterScreen from "./SupplierRegisterScreen";
 
 export default function SupplierPortalScreen({ onBack }: { onBack: () => void }) {
   const { token, role } = useAuthStore();
-  const [activeView, setActiveView] = useState<SupplierTab>("points");
+  const [activeView, setActiveView] = useState<SupplierTab>(new URLSearchParams(window.location.search).has("notification_wholesale") ? "wholesale" : "points");
 
   if (token && role === "supplier") {
     const handleLogout = async () => {
@@ -20,7 +21,9 @@ export default function SupplierPortalScreen({ onBack }: { onBack: () => void })
 
     return (
       <div className="min-h-screen bg-gray-50 pb-24 sm:mx-auto sm:max-w-md">
-        {activeView === "support" ? (
+        {activeView === "wholesale" ? (
+          <WholesaleScreen onClose={() => setActiveView("points")} />
+        ) : activeView === "support" ? (
           <SupportScreen onBack={() => setActiveView("profile")} />
         ) : activeView === "points" ? (
           <SupplierDashboardScreen
@@ -31,6 +34,7 @@ export default function SupplierPortalScreen({ onBack }: { onBack: () => void })
           <SupplierProfileScreen
             token={token}
             onLogout={handleLogout}
+            onOpenWholesale={() => setActiveView("wholesale")}
             onOpenSupport={() => setActiveView("support")}
           />
         )}

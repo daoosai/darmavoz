@@ -1,0 +1,65 @@
+{
+  "base": "https://test.darmavoz.ru",
+  "media": [
+    {
+      "id": "bfcc1ca3-7700-40bf-8b75-cb303901fef9",
+      "materialMedia": 3,
+      "truckMedia": 1
+    },
+    {
+      "id": "46308824-51e4-4dc5-a1d0-0400b64a9a28",
+      "materialMedia": 3,
+      "truckMedia": 1
+    },
+    {
+      "id": "143dff21-974c-4405-aa91-6728821b79f5",
+      "materialMedia": 0,
+      "truckMedia": 1
+    },
+    {
+      "id": "ac147605-a6fd-4277-9284-8dbdca4709ac",
+      "materialMedia": 3,
+      "truckMedia": 1
+    }
+  ],
+  "viewports": [
+    {
+      "width": 390,
+      "mainScrollbar": "none",
+      "documentScrollbar": "none",
+      "images": [
+        {
+          "src": "https://test.darmavoz.ru/s3/darmavoz-media-test/prod/materials/photo-1782737750363-293d66ba8686467a8cd288a464b7855d.png",
+          "loaded": true
+        },
+        {
+          "src": "https://test.darmavoz.ru/s3/darmavoz-media-test/prod/delivery_options/photo-1781661813944-0642a2701ef249d18c3b82b083ade87a.png",
+          "loaded": true
+        }
+      ],
+      "cardHeights": [
+        616,
+        575
+      ]
+    },
+    {
+      "width": 1440,
+      "mainScrollbar": "none",
+      "documentScrollbar": "none",
+      "images": [
+        {
+          "src": "https://test.darmavoz.ru/s3/darmavoz-media-test/prod/materials/photo-1782737750363-293d66ba8686467a8cd288a464b7855d.png",
+          "loaded": true
+        },
+        {
+          "src": "https://test.darmavoz.ru/s3/darmavoz-media-test/prod/delivery_options/photo-1781661813944-0642a2701ef249d18c3b82b083ade87a.png",
+          "loaded": true
+        }
+      ],
+      "cardHeights": [
+        656,
+        615
+      ]
+    }
+  ]
+}

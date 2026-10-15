@@ -1,20 +1,25 @@
+import NotificationCenter from "./components/shared/NotificationCenter";
+import { NotificationToggle } from "./components/shared/NotificationToggle";
 import { useEffect, useState, type FormEvent } from "react";
 import { Building2, Headphones, Loader2, LogOut, Mail, Phone } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { baseURL, extractApiErrorMessage, formatPhoneNumber } from "./utils";
 import DeleteAccountButton from "./components/shared/DeleteAccountButton";
+import CommerceMenu from './CommerceMenu';
 
 interface Props {
   token: string;
   onLogout: () => Promise<void>;
   onOpenSupport?: () => void;
+  onOpenWholesale?: () => void;
 }
 
 export default function SupplierProfileScreen({
   token,
   onLogout,
   onOpenSupport,
+  onOpenWholesale,
 }: Props) {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -74,9 +79,24 @@ export default function SupplierProfileScreen({
   }
 
   return (
-    <div className="px-5 pb-8 pt-[max(env(safe-area-inset-top),1rem)] text-gray-900">
-      <p className="text-xs font-bold uppercase tracking-[0.2em] text-sky-500">Кабинет поставщика</p>
-      <h1 className="mt-1 text-3xl font-black">Профиль</h1>
+    <div className="px-5 pb-8 pt-[max(env(safe-area-inset-top),2.5rem)] text-gray-900">
+      <header className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-sky-500">Кабинет поставщика</p>
+          <h1 className="mt-1 text-3xl font-black">Профиль</h1>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <NotificationCenter token={token} />
+          <button type="button" aria-label="Выйти из аккаунта" title="Выйти из аккаунта" disabled={isLoggingOut} onClick={async () => {
+            setIsLoggingOut(true);
+            await onLogout();
+          }} className="flex h-12 w-12 items-center justify-center rounded-xl bg-red-50 text-red-600 hover:bg-red-100 disabled:opacity-50">
+            {isLoggingOut ? <Loader2 className="h-5 w-5 animate-spin" /> : <LogOut className="h-5 w-5" />}
+          </button>
+        </div>
+      </header>
+      <div className="mt-5"><CommerceMenu onOpenWholesale={onOpenWholesale} /></div>
+      <div className="mt-5 rounded-2xl bg-white p-4"><NotificationToggle role="supplier" /></div>
 
       <form onSubmit={saveProfile} className="mt-8 space-y-5 rounded-2xl bg-white p-5 shadow-sm">
         <label className="block text-sm font-bold text-gray-900">

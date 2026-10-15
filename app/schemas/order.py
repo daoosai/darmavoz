@@ -517,6 +517,10 @@ class OrderHistoryOut(BaseModel):
 
 
 class OrderOut(BaseModel):
+    has_financial_transactions: bool = False
+    payment_status: str | None = None
+    confirmed_payment_amount: float | None = None
+    refund_status: str | None = None
     city_name: str | None = None
     city_id: UUID | None = None
     id: UUID

@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Loader2, LocateFixed, MapPin, Mountain, Phone, Route, Warehouse, X } from "lucide-react";
 import toast from "react-hot-toast";
 
-import MapWebGLFallback, { load2GisMapSdk, tryCreate2GisMap } from "./components/MapWebGLFallback";
+import MapWebGLFallback, { load2GisMapSdk, tryCreate2GisMap, MapUnavailableError, type MapFailureReason } from "./components/MapWebGLFallback";
 import { handleOpenNavigator } from "./openNavigator";
 import { useAddressStore } from "./store";
 import { baseURL, formatPhoneNumber, resolveMediaUrl } from "./utils";
@@ -86,6 +86,8 @@ export default function GlobalMapScreen({
   const [error, setError] = useState<string | null>(null);
   const [isMapReady, setIsMapReady] = useState(false);
   const [isMapUnavailable, setIsMapUnavailable] = useState(false);
+  const [mapFailureReason, setMapFailureReason] = useState<MapFailureReason>("initialization");
+  const [mapAttempt, setMapAttempt] = useState(0);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const pointMarkerRefs = useRef<any[]>([]);
@@ -302,9 +304,13 @@ export default function GlobalMapScreen({
     let disposed = false;
     const key = import.meta.env.VITE_2GIS_KEY;
 
-    if (!mapContainerRef.current || !key || mapRef.current) {
+    if (!mapContainerRef.current || mapRef.current) return;
+    if (!key) {
+      setMapFailureReason("configuration");
+      setIsMapUnavailable(true);
       return;
     }
+    setIsMapUnavailable(false);
 
     void load2GisMapSdk()
       .then((mapgl) => {
@@ -315,7 +321,10 @@ export default function GlobalMapScreen({
             zoom: activeMapZoom,
             key,
           }),
-          () => setIsMapUnavailable(true),
+          (error) => {
+            setMapFailureReason(error.reason);
+            setIsMapUnavailable(true);
+          },
         );
         if (!mapInstance) return;
         if (disposed) {
@@ -325,7 +334,11 @@ export default function GlobalMapScreen({
         mapRef.current = mapInstance;
         setIsMapReady(true);
       })
-      .catch(() => !disposed && setIsMapUnavailable(true));
+      .catch((error) => {
+        if (disposed) return;
+        setMapFailureReason(error instanceof MapUnavailableError ? error.reason : "initialization");
+        setIsMapUnavailable(true);
+      });
 
     return () => {
       disposed = true;
@@ -338,7 +351,7 @@ export default function GlobalMapScreen({
       mapRef.current?.destroy();
       mapRef.current = null;
     };
-  }, [cityId]);
+  }, [cityId, mapAttempt]);
 
   useEffect(() => {
     if (!isMapReady || !mapRef.current) return;
@@ -496,11 +509,14 @@ export default function GlobalMapScreen({
       `}</style>
 
       <div className="relative min-h-[480px] flex-1 w-full overflow-hidden rounded-t-[28px] bg-slate-100 sm:rounded-[28px]">
+        <div ref={mapContainerRef} className="absolute inset-0 h-full w-full flex-1" />
         {isMapUnavailable ? (
-          <MapWebGLFallback className="absolute inset-0 h-full w-full" />
-        ) : (
-          <div ref={mapContainerRef} className="absolute inset-0 h-full w-full flex-1" />
-        )}
+          <MapWebGLFallback
+            className="absolute inset-0 h-full w-full"
+            reason={mapFailureReason}
+            onRetry={() => setMapAttempt((attempt) => attempt + 1)}
+          />
+        ) : null}
 
         {selectedPoint === null && (
           <div className="pointer-events-none absolute inset-x-0 top-0 z-10 p-4">

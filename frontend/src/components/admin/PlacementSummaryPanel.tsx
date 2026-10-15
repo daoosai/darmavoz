@@ -1,3 +1,4 @@
+import { operatorFetch, useOperatorCityStore } from '../../operatorCityStore';
 import { useEffect } from "react";
 
 import { type PlacementStatus } from "../../placement";
@@ -35,7 +36,7 @@ export default function PlacementSummaryPanel({
   const { summary, isLoading, loadSummary } = usePlacementStore();
 
   useEffect(() => {
-    void loadSummary(token);
+    void loadSummary(token).catch(() => {});
   }, [loadSummary, token]);
 
   if (isLoading && !summary) {

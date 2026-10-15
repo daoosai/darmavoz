@@ -1,5 +1,5 @@
 import pytest
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app.models.models import Driver, ModerationStatus, Role, User
 from app.security.auth import get_password_hash
@@ -12,6 +12,20 @@ class FakeRedis:
 
     async def setex(self, key: str, ttl: int, value: str) -> None:
         self.storage[key] = value
+        self.ttl_by_key[key] = ttl
+
+    async def set(self, key: str, value: str, *, ex: int, nx: bool = False):
+        if nx and key in self.storage:
+            return False
+        await self.setex(key, ex, value)
+        return True
+
+    async def incr(self, key: str) -> int:
+        value = int(self.storage.get(key, "0")) + 1
+        self.storage[key] = str(value)
+        return value
+
+    async def expire(self, key: str, ttl: int) -> None:
         self.ttl_by_key[key] = ttl
 
     async def get(self, key: str) -> str | None:
@@ -53,8 +67,8 @@ async def test_driver_register_requires_otp_before_creating_driver(client, sessi
 
     assert challenge_response.status_code == 202
     assert challenge_response.json() == {"status": "sms_sent", "phone": "+79991234567"}
-    assert fake_redis.storage["otp:driver_register:+79991234567"] == "0000"
-    assert fake_redis.storage["otp:driver_register_pending:+79991234567"]
+    assert fake_redis.storage["otp:driver_register:79991234567"] == "0000"
+    assert fake_redis.storage["otp:driver_register_pending:79991234567"]
 
     async with session_factory() as session:
         driver = await session.scalar(select(Driver).where(Driver.phone == "+79991234567"))
@@ -72,12 +86,18 @@ async def test_driver_register_requires_otp_before_creating_driver(client, sessi
     assert verify_payload["driver"]["phone"] == "+79991234567"
     assert verify_payload["driver"]["moderation_status"] == ModerationStatus.incomplete.value
     assert verify_payload["access_token"]
-    assert "otp:driver_register:+79991234567" not in fake_redis.storage
-    assert "otp:driver_register_pending:+79991234567" not in fake_redis.storage
+    assert "otp:driver_register:79991234567" not in fake_redis.storage
+    assert "otp:driver_register_pending:79991234567" not in fake_redis.storage
 
 
 @pytest.mark.asyncio
 async def test_google_play_reviewer_registration_creates_driver_account(client, session_factory, monkeypatch):
+    # The migration now seeds this account; registration needs an unused phone.
+    # session_factory points only to the disposable pytest database.
+    async with session_factory() as session:
+        await session.execute(delete(Driver).where(Driver.phone == "+70000000000"))
+        await session.execute(delete(User).where(User.username == "+70000000000"))
+        await session.commit()
     fake_redis = FakeRedis()
     monkeypatch.setattr("app.api.auth.get_redis", lambda: fake_redis)
 
@@ -98,7 +118,7 @@ async def test_google_play_reviewer_registration_creates_driver_account(client, 
 
     assert challenge_response.status_code == 202
     assert challenge_response.json() == {"status": "sms_sent", "phone": "+70000000000"}
-    assert fake_redis.storage["otp:driver_register:+70000000000"] == "7777"
+    assert fake_redis.storage["otp:driver_register:70000000000"] == "7777"
 
     verify_response = await client.post(
         "/api/v1/driver/auth/verify-register",
@@ -149,8 +169,8 @@ async def test_driver_login_returns_sms_challenge_and_verify_issues_token(client
 
     assert login_response.status_code == 200
     assert login_response.json() == {"status": "sms_sent", "phone": "+79990000011"}
-    assert fake_redis.storage["otp:driver_login:+79990000011"] == "0000"
-    assert fake_redis.storage["otp:driver_login_pending:+79990000011"]
+    assert fake_redis.storage["otp:driver_login:79990000011"] == "0000"
+    assert fake_redis.storage["otp:driver_login_pending:79990000011"]
 
     verify_response = await client.post(
         "/api/v1/driver/auth/verify-login",
@@ -162,8 +182,8 @@ async def test_driver_login_returns_sms_challenge_and_verify_issues_token(client
     assert verify_payload["role"] == "driver"
     assert verify_payload["driver_id"] == str(driver.id)
     assert verify_payload["access_token"]
-    assert "otp:driver_login:+79990000011" not in fake_redis.storage
-    assert "otp:driver_login_pending:+79990000011" not in fake_redis.storage
+    assert "otp:driver_login:79990000011" not in fake_redis.storage
+    assert "otp:driver_login_pending:79990000011" not in fake_redis.storage
 
 
 @pytest.mark.asyncio

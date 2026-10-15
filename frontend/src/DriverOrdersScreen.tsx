@@ -1,3 +1,4 @@
+import { useNotificationFocus } from "./notificationNavigation";
 import React, { useState, useEffect, useRef } from "react";
 import PullToRefresh from "react-simple-pull-to-refresh";
 import { Capacitor } from "@capacitor/core";
@@ -12,8 +13,11 @@ import {
   orderStatusColors,
   handleApiError,
 } from "./utils";
+import WholesaleScreen from "./WholesaleScreen";
 import DriverProfileScreen from "./DriverProfileScreen";
+import NotificationCenter from "./components/shared/NotificationCenter";
 import {
+  Briefcase,
   LogOut,
   MapPin,
   Clock,
@@ -107,7 +111,7 @@ export default function DriverOrdersScreen({
   onLogout,
 }: DriverOrdersScreenProps) {
   const { token } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<"orders" | "profile" | "support">("orders");
+  const [activeTab, setActiveTab] = useState<"orders" | "profile" | "support" | "wholesale">(new URLSearchParams(window.location.search).has("notification_wholesale") ? "wholesale" : "orders");
   const [isOnShift, setIsOnShift] = useState(false);
   const [isUpdatingShift, setIsUpdatingShift] = useState(false);
   const [isPreparingShiftStart, setIsPreparingShiftStart] = useState(false);
@@ -116,6 +120,7 @@ export default function DriverOrdersScreen({
   const [isLocationTrackingPermitted, setIsLocationTrackingPermitted] = useState(false);
 
   const [orders, setOrders] = useState<DriverOrder[]>([]);
+  useNotificationFocus(orders);
 
   const [currentOffer, setCurrentOffer] = useState<any>(null);
   const [timeLeft, setTimeLeft] = useState(0);
@@ -218,7 +223,11 @@ export default function DriverOrdersScreen({
     }
   };
 
-  const handleShiftChange = async (nextValue: boolean, shouldTrack = false) => {
+  const handleShiftChange = async (
+    nextValue: boolean,
+    shouldTrack = false,
+    successMessage?: string,
+  ) => {
     const currentToken = useAuthStore.getState().token;
     if (!currentToken) return;
 
@@ -247,7 +256,8 @@ export default function DriverOrdersScreen({
       if (isDriverAvailabilityStatus(data?.status)) {
         setDriverStatus(data.status);
       }
-      toast.success(nextValue ? "Смена начата" : "Смена завершена");
+      if (successMessage) toast(successMessage);
+      else toast.success(nextValue ? "Смена начата" : "Смена завершена");
     } catch (error) {
       console.warn("Не удалось изменить статус смены", error);
       toast.error("Не удалось изменить статус смены");
@@ -287,37 +297,37 @@ export default function DriverOrdersScreen({
     const shouldStartShift = shouldStartShiftAfterDisclosure;
     setIsPreparingShiftStart(true);
 
+    let hasLocationPermission = false;
     try {
-      let hasLocationPermission = false;
-      if (Capacitor.isNativePlatform()) {
-        const perm = await Geolocation.requestPermissions();
-        hasLocationPermission = perm.location === "granted";
-      } else {
-        // Browsers show their permission prompt only when location is actually requested.
-        await Geolocation.getCurrentPosition({
-          enableHighAccuracy: false,
-          timeout: 10_000,
-          maximumAge: 0,
-        });
-        hasLocationPermission = true;
-      }
-
-      if (!hasLocationPermission) {
-        setIsLocationTrackingPermitted(false);
-        toast.error("Разрешение на фоновую геолокацию не выдано");
-        return;
+      try {
+        if (Capacitor.isNativePlatform()) {
+          const perm = await Geolocation.requestPermissions();
+          hasLocationPermission = perm.location === "granted";
+        } else {
+          // Browser location is optional; an unavailable GPS must not block work.
+          await Geolocation.getCurrentPosition({
+            enableHighAccuracy: false,
+            timeout: 10_000,
+            maximumAge: 0,
+          });
+          hasLocationPermission = true;
+        }
+      } catch (error) {
+        console.warn("Геопозиция недоступна при начале смены", error);
       }
 
       setIsLocationDisclosureOpen(false);
+      setIsLocationTrackingPermitted(hasLocationPermission);
       if (shouldStartShift) {
-        await handleShiftChange(true, true);
-      } else {
-        setIsLocationTrackingPermitted(true);
+        const message = !hasLocationPermission
+          ? Capacitor.getPlatform() === "web"
+            ? "Фоновая геопозиция недоступна в браузере, но смена начата"
+            : "Геопозиция недоступна, но смена начата"
+          : undefined;
+        await handleShiftChange(true, hasLocationPermission, message);
+      } else if (!hasLocationPermission) {
+        toast("Геопозиция недоступна. Смена остаётся активной");
       }
-    } catch (error) {
-      console.error(error);
-      setIsLocationTrackingPermitted(false);
-      toast.error("Не удалось запросить разрешение на геолокацию");
     } finally {
       setIsPreparingShiftStart(false);
       setShouldStartShiftAfterDisclosure(false);
@@ -371,6 +381,7 @@ export default function DriverOrdersScreen({
     }
   }, [onLogout]);
 
+  // Assigned orders are loaded independently of shift/location availability.
   const fetchOrders = React.useCallback(
     async (silent = false) => {
       try {
@@ -666,7 +677,7 @@ export default function DriverOrdersScreen({
   return (
     <div className="flex flex-col min-h-screen bg-slate-50 sm:max-w-md sm:mx-auto shadow-2xl relative overflow-y-auto overflow-x-hidden pb-28">
       {/* Header */}
-      <div className="bg-white px-5 pt-3 pb-3 shadow-sm z-10 sticky top-0 border-b border-slate-100">
+      <div className="bg-white px-5 pt-[max(env(safe-area-inset-top),2.5rem)] pb-3 shadow-sm z-10 sticky top-0 border-b border-slate-100">
         <div className="flex justify-between items-center mb-3">
           <div>
             <h1 className="text-2xl font-black text-[#2DB0E6] tracking-tight">
@@ -676,12 +687,16 @@ export default function DriverOrdersScreen({
               Панель водителя
             </p>
           </div>
-          <button
-            onClick={handleLogout}
-            className="p-2.5 bg-slate-50 rounded-full hover:bg-slate-100 text-slate-600 transition-colors"
-          >
-            <LogOut className="w-5 h-5" />
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <NotificationCenter token={token} />
+            <button
+              aria-label="Выйти из аккаунта"
+              onClick={handleLogout}
+              className="p-2.5 bg-slate-50 rounded-full hover:bg-slate-100 text-slate-600 transition-colors"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
       </div>
@@ -811,11 +826,14 @@ export default function DriverOrdersScreen({
             </PullToRefresh>
           )}
         </div>
+      ) : activeTab === "wholesale" ? (
+        <WholesaleScreen onClose={() => setActiveTab("orders")} />
       ) : activeTab === "profile" ? (
         <DriverProfileScreen
           onLogout={handleLogout}
           onProfileUpdate={fetchProfile}
           hasActiveOrder={orders.length > 0}
+          onOpenWholesale={() => setActiveTab("wholesale")}
           onOpenSupport={() => setActiveTab("support")}
           isOnShift={isOnShift}
           isUpdatingShift={isShiftActionPending}
@@ -851,6 +869,7 @@ export default function DriverOrdersScreen({
               </button>
               <button
                 type="button"
+                disabled={isShiftActionPending}
                 onClick={() => void handleLocationDisclosureContinue()}
                 className="flex-1 rounded-xl bg-[#2DB0E6] px-4 py-3 font-bold text-white transition hover:bg-[#209dd0]"
               >
@@ -878,6 +897,18 @@ export default function DriverOrdersScreen({
               <ClipboardList className="w-6 h-6" />
             </div>
             <span className="text-[10px] font-bold">Заказы</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("wholesale")}
+            aria-current={activeTab === "wholesale" ? "page" : undefined}
+            className={`flex-1 flex flex-col items-center justify-center py-2 gap-1 rounded-xl transition-all ${activeTab === "wholesale" ? "text-[#2DB0E6]" : "text-slate-400 hover:text-slate-600"}`}
+          >
+            <div className={`p-1.5 rounded-xl transition-colors ${activeTab === "wholesale" ? "bg-[#2DB0E6]/10" : ""}`}>
+              <Briefcase className="w-6 h-6" />
+            </div>
+            <span className="text-[10px] font-bold">Опт</span>
           </button>
 
           <button
@@ -1220,7 +1251,7 @@ export const DriverOrderCard: React.FC<{
 
   return (
     <>
-      <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex flex-col h-auto overflow-visible mb-6">
+      <div data-order-id={order.id} className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex flex-col h-auto overflow-visible mb-6">
         {/* Header: Status and Date */}
         <div className="flex justify-between items-start mb-4">
           <span

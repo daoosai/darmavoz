@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Home,
   List,
@@ -67,6 +67,8 @@ import PickupPointMapScreen, { PickupPointSelection } from "./PickupPointMapScre
 import EquipmentOwnerPortalScreen from "./EquipmentOwnerPortalScreen";
 import WaterSepticPartnerPortalScreen from "./WaterSepticPartnerPortalScreen";
 import AdminNotificationToastListener from "./components/shared/AdminNotificationToastListener";
+import { openNotificationTarget } from "./notificationNavigation";
+import PaymentReturn from './PaymentReturn';
 
 const WATER_PARTNER_BOARD_PATH = "/water-partner-board";
 const ADMIN_DASHBOARD_PATHS = {
@@ -75,6 +77,7 @@ const ADMIN_DASHBOARD_PATHS = {
   "/admin/fleet": "delivery",
   "/admin/drivers": "drivers",
   "/admin/moderation": "moderation",
+  "/admin/wholesale": "wholesale",
   "/admin/water-septic": "water_septic",
   "/admin/suppliers": "suppliers",
   "/admin/equipment": "equipment",
@@ -95,6 +98,11 @@ export default function App() {
     typeof window !== "undefined" ? window.location.pathname : "/",
   );
   const { role, token } = useAuthStore();
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const orderId = params.get("notification_order");
+    if (orderId && window.location.pathname === "/" && ["admin", "logist", "client"].includes(role || "")) openNotificationTarget({ order_id: orderId, city_id: params.get("notification_city") });
+  }, [role]);
   const resolveRouteForRole = (nextRole: string | null | undefined) => {
     if (nextRole === "driver") return "driver" as const;
     if (nextRole === "logist") return "logist" as const;
@@ -120,6 +128,8 @@ export default function App() {
     | "driver_register"
   >(
     role === "client" && (
+      new URLSearchParams(window.location.search).has('payment_order')
+      ||
       currentPath === "/"
       || currentPath === "/calculator"
       || currentPath === "/map"
@@ -144,7 +154,7 @@ export default function App() {
           : "welcome",
   );
 
-  const [activeTab, setActiveTab] = useState("home");
+  const [activeTab, setActiveTab] = useState(new URLSearchParams(window.location.search).has('payment_order') ? 'orders' : 'home');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
     null,
   );
@@ -254,12 +264,12 @@ export default function App() {
     }
   }, [focusedClientOrderId, role]);
 
-  const openClientOrder = (orderId: string) => {
+  const openClientOrder = useCallback((orderId: string) => {
     const nextPath = `/client/orders/${orderId}`;
     window.history.pushState({}, "", nextPath);
     setCurrentPath(nextPath);
     setActiveTab("orders");
-  };
+  }, []);
 
   const clearFocusedClientOrder = () => {
     if (!focusedClientOrderId) return;
@@ -453,15 +463,20 @@ export default function App() {
         toastOptions={{
           duration: 2000,
           style: {
-            background: "#10B981",
-            color: "#fff",
             zIndex: 999,
+          },
+          success: {
+            style: { background: "#10B981", color: "#fff" },
+          },
+          error: {
+            style: { background: "#DC2626", color: "#fff" },
           },
         }}
       />
       <InstallPWA />
       <AdminNotificationToastListener />
       {renderContent()}
+      <PaymentReturn onOpenOrder={openClientOrder} />
     </>
   );
 }
@@ -694,7 +709,7 @@ function MainContent({
       {/* Mobile container aligned and constrained on large screens */}
       <div className="w-full max-w-md bg-white min-h-screen sm:min-h-0 sm:h-[85vh] relative shadow-2xl flex flex-col overflow-hidden sm:rounded-[32px] sm:border-8 border-slate-900">
         {/* Main Content Area */}
-        <main className="flex h-full flex-1 flex-col overflow-y-auto pb-[calc(90px+env(safe-area-inset-bottom))] pt-4">
+        <main className="hide-scrollbar flex h-full flex-1 flex-col overflow-y-auto pb-[calc(90px+env(safe-area-inset-bottom))] pt-4">
           {activeTab === "home" && (
             <>
               <div className="px-4">

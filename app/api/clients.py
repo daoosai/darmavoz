@@ -192,6 +192,9 @@ async def cancel_my_order(
         if order is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заказ не найден")
 
+        if order.status == "cancelled" and order.cancelled_by_type == "client":
+            await db.commit()
+            return await get_order_by_id(db, order.id)
         if order.status not in client_cancellable_statuses:
             if order.status in driver_accepted_or_in_progress_statuses:
                 raise HTTPException(
@@ -222,6 +225,8 @@ async def cancel_my_order(
             if assigned_driver is not None and assigned_driver.status == DriverStatus.busy.value:
                 assigned_driver.status = DriverStatus.available.value
 
+        from app.services.refunds import mark_cancellation
+        await mark_cancellation(db, order)
         order.status = OrderStatus.cancelled.value
         order.cancelled_at = datetime.now(UTC)
         order.cancelled_by_type = "client"

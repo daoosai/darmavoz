@@ -1,6 +1,6 @@
-import { Headphones, MapPinned, UserRound } from "lucide-react";
+import { Briefcase, Headphones, MapPinned, UserRound } from "lucide-react";
 
-export type SupplierTab = "points" | "support" | "profile";
+export type SupplierTab = "points" | "support" | "profile" | "wholesale";
 
 interface Props {
   activeTab: SupplierTab;
@@ -9,13 +9,14 @@ interface Props {
 
 const ITEMS = [
   { id: "points" as const, label: "Точки", icon: MapPinned },
+  { id: "wholesale" as const, label: "Опт", icon: Briefcase },
   { id: "support" as const, label: "Поддержка", icon: Headphones },
   { id: "profile" as const, label: "Профиль", icon: UserRound },
 ];
 
 export default function SupplierBottomNav({ activeTab, onChange }: Props) {
   return (
-    <nav className="fixed bottom-0 left-1/2 z-40 flex w-full max-w-md -translate-x-1/2 border-t border-gray-200 bg-white/95 px-5 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur">
+    <nav className="fixed bottom-0 left-1/2 z-40 flex w-full max-w-md -translate-x-1/2 border-t border-gray-200 bg-white/95 px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur">
       {ITEMS.map(({ id, label, icon: Icon }) => {
         const active = activeTab === id;
         return (
@@ -23,6 +24,7 @@ export default function SupplierBottomNav({ activeTab, onChange }: Props) {
             key={id}
             type="button"
             onClick={() => onChange(id)}
+            aria-current={active ? "page" : undefined}
             className={`flex flex-1 flex-col items-center gap-1 rounded-xl py-2 text-xs font-bold transition-colors ${active ? "text-sky-600" : "text-gray-400 hover:text-gray-600"}`}
           >
             <Icon className="h-6 w-6" strokeWidth={active ? 2.5 : 2} />

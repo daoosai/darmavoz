@@ -99,3 +99,5 @@
 - [Реестр заказов администратора](blocks/admin-orders.md) — [полное удаление 14.10.2026](2026-10-14-admin-order-hard-delete.md).
 
 - [Возвраты ЮKassa: очередь, частичные суммы, webhook](blocks/refunds.md); [отчёт реализации](2026-10-14-yookassa-refunds.md).
+
+- [Экстренный релиз 3.1.7 (387), develop → main](2026-10-15-emergency-release-3.1.7.md).

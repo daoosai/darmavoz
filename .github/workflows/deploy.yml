@@ -73,6 +73,11 @@ jobs:
             echo "Server source commit is not an ancestor of the deployment commit" >&2
             exit 1
           fi
+          # The release can already be merged/pushed from the server source tree.
+          # Bundle its last commit instead of asking Git to create an empty bundle.
+          if [ "${DEPLOY_BASE}" = "$(git rev-parse HEAD)" ]; then
+            DEPLOY_BASE="$(git rev-parse HEAD^)"
+          fi
           git bundle create darmavoz-prod.bundle HEAD "^${DEPLOY_BASE}"
           git bundle verify darmavoz-prod.bundle
 
@@ -108,9 +113,11 @@ jobs:
           echo "Deploying commit ${DEPLOY_REF}"
 
           # Обновляем Worktree
-          git worktree prune || true
           if git worktree list | grep -q "${DEPLOY_DIR}"; then
-            git -C "${DEPLOY_DIR}" reset --hard "${DEPLOY_REF}"
+            if [ -n "$(git -C "${DEPLOY_DIR}" status --porcelain)" ]; then
+              echo "Runtime has local changes; refusing to overwrite them" >&2
+              exit 1
+            fi
             git -C "${DEPLOY_DIR}" checkout --detach "${DEPLOY_REF}"
           else
             git worktree add --detach "${DEPLOY_DIR}" "${DEPLOY_REF}"
@@ -135,9 +142,10 @@ jobs:
           find "${DEPLOY_DIR}/static" -mindepth 1 -maxdepth 1 ! -name 'darmavoz.apk' -exec cp -a {} /opt/daoos-kit/sites/darmavoz/static/ \;
 
           # Обновление Backend и Миграции
-          docker compose -f "${COMPOSE_FILE}" build backend
+          docker compose -f "${COMPOSE_FILE}" build --build-arg APP_BUILD_COMMIT="${DEPLOY_REF}" backend
 
           # Сначала прогоняем Alembic отдельным контейнером, затем пересоздаём runtime backend
+          docker compose -f "${COMPOSE_FILE}" stop backend
           docker compose -f "${COMPOSE_FILE}" run --rm -T --no-deps --entrypoint alembic backend upgrade head </dev/null
           docker compose -f "${COMPOSE_FILE}" up -d --no-deps --force-recreate backend
 

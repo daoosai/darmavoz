@@ -1,0 +1,15 @@
+{
+  "health": 200,
+  "request_id_required": true,
+  "amount_input": true,
+  "payment_status": "succeeded",
+  "refunded_amount": "0.00",
+  "reserved_refund_amount": "0.00",
+  "refundable_amount": "15.00",
+  "hard_delete": 409,
+  "historical_cancellation_auto_refund_requested": false,
+  "refund_count": 0,
+  "payment_id": "2590b385-1cb9-450d-8c20-ff088bdddc11",
+  "order_id": "bfcc1ca3-7700-40bf-8b75-cb303901fef9",
+  "financial_mutations": false
+}

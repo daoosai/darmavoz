@@ -13,12 +13,42 @@ from sqlalchemy.dialects.postgresql import UUID
 
 
 revision = "s23_transport_tariffs"
-down_revision = "s22_publish_parser_cities"
+down_revision = "de1cd3718448"
 branch_labels = None
 depends_on = None
 
 
 def upgrade() -> None:
+    # Staging applied this schema before the production reviewer revisions.
+    # If those revisions are later merged into staging, retain its data and
+    # only record this revision after checking the schema is complete.
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    tables = {"transport_categories", "delivery_tariffs"}
+    existing_tables = tables.intersection(inspector.get_table_names())
+    if existing_tables:
+        expected_columns = {
+            "transport_categories": {"id", "slug", "title", "capacity_min_m3", "capacity_max_m3"},
+            "delivery_tariffs": {"id", "city_id", "transport_category_id", "distance_from_km", "rate_per_km"},
+            "delivery_options": {"transport_category_id"},
+            "vehicles": {"transport_category_id"},
+            "orders": {
+                "transport_category_id", "delivery_tariff_id", "trip_count",
+                "trip_capacity_m3_snapshot", "tariff_distance_from_km_snapshot",
+                "tariff_distance_to_km_snapshot", "min_delivery_price_snapshot",
+                "delivery_cost_per_trip",
+            },
+        }
+        if existing_tables != tables or any(
+            not columns.issubset({column["name"] for column in inspector.get_columns(table)})
+            for table, columns in expected_columns.items()
+        ):
+            raise RuntimeError("Sprint 23 transport schema is only partially present")
+        present_slugs = set(bind.execute(sa.text("SELECT slug FROM transport_categories")).scalars())
+        if not {"small", "medium", "large"}.issubset(present_slugs):
+            raise RuntimeError("Sprint 23 transport categories are missing")
+        return
+
     categories = op.create_table(
         "transport_categories",
         sa.Column("id", UUID(as_uuid=True), primary_key=True),

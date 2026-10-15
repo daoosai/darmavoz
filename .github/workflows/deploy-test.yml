@@ -37,7 +37,7 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       - name: Verify migration and city isolation in disposable CI database
-        run: python -m pytest -q tests/test_sprint22_unit.py tests/test_sprint22_api.py tests/test_sprint24.py tests/test_sprint24_api.py tests/test_sprint25_api.py tests/test_sprint25_unit.py tests/test_dispatch_volume_matching.py tests/test_smart_matching_unit.py tests/test_client_order_media.py tests/test_admin_point_contacts.py tests/test_driver_account_visibility.py tests/test_driver_order_route_fields.py tests/test_admin_order_hard_delete.py tests/test_refunds.py tests/test_system_and_order_delete.py::test_logist_can_delete_order_with_items_offers_and_events tests/test_system_and_order_delete.py::test_logist_order_list_supports_is_deleted_filter
+        run: python -m pytest -q tests/test_sprint22_unit.py tests/test_sprint22_api.py tests/test_sprint24.py tests/test_sprint24_api.py tests/test_sprint25_api.py tests/test_sprint25_unit.py tests/test_dispatch_volume_matching.py tests/test_smart_matching_unit.py tests/test_client_order_media.py tests/test_admin_point_contacts.py tests/test_driver_account_visibility.py tests/test_driver_order_route_fields.py tests/test_admin_order_hard_delete.py tests/test_refunds.py tests/test_release_migration_heads.py tests/test_system_and_order_delete.py::test_logist_can_delete_order_with_items_offers_and_events tests/test_system_and_order_delete.py::test_logist_order_list_supports_is_deleted_filter
 
   deploy-test:
     needs: sprint22-checks

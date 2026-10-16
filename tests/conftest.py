@@ -123,3 +123,9 @@ async def admin_token(session_factory):
         session.add(User(username=username, hashed_password="test-only", role_id=role.id, is_active=True))
         await session.commit()
     return create_access_token(data={"sub": username})
+
+
+@pytest.fixture(autouse=True)
+def isolated_password_limit_namespace(monkeypatch):
+    monkeypatch.setattr(settings, "AUTH_LOGIN_NAMESPACE", f"test:password:{uuid.uuid4().hex}")
+    monkeypatch.setattr(settings, "AUTH_LOGIN_TRUSTED_PROXY_HOSTS", "")

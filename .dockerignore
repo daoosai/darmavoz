@@ -39,3 +39,11 @@ keystore_base64.txt
 .env.*
 **/.env
 **/.env.*
+
+# Downloadable releases, reports and native projects are not backend inputs.
+backend/
+**/*.apk
+**/*.aab
+docs/reports/
+frontend/android/
+frontend/ios/

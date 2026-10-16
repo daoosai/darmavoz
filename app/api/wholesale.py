@@ -44,6 +44,19 @@ async def board_user(actor: OrderAccessActor = Depends(get_current_order_actor))
     return user
 
 
+async def publishing_user(user: User = Depends(board_user)):
+    """Viewing the board never grants publishing rights."""
+    if user.role.name != "supplier":
+        raise HTTPException(403, "Создавать и изменять заявки могут только поставщики")
+    return user
+
+
+async def closing_user(user: User = Depends(board_user)):
+    if user.role.name not in {"supplier", "admin"}:
+        raise HTTPException(403, "Закрывать заявки могут только поставщики и администратор")
+    return user
+
+
 def is_staff(user):
     return user.role.name in {"admin", "logist"}
 
@@ -153,7 +166,7 @@ async def validate_input(db, payload):
 
 
 @router.post("", response_model=WholesaleOut, status_code=201)
-async def create(payload: WholesaleInput, draft: bool = False, user: User = Depends(board_user), db: AsyncSession = Depends(get_db)):
+async def create(payload: WholesaleInput, draft: bool = False, user: User = Depends(publishing_user), db: AsyncSession = Depends(get_db)):
     await validate_input(db, payload)
     request = WholesaleRequest(**payload.model_dump(), author_id=user.id)
     db.add(request)
@@ -175,7 +188,7 @@ async def detail(request_id: UUID, user: User = Depends(board_user), db: AsyncSe
 
 
 @router.put("/{request_id}", response_model=WholesaleOut)
-async def edit(request_id: UUID, payload: WholesaleInput, draft: bool = False, user: User = Depends(board_user), db: AsyncSession = Depends(get_db)):
+async def edit(request_id: UUID, payload: WholesaleInput, draft: bool = False, user: User = Depends(publishing_user), db: AsyncSession = Depends(get_db)):
     request = await get_request(db, request_id, lock=True)
     if request.author_id != user.id:
         raise HTTPException(403, "Можно изменять только свои заявки")
@@ -193,7 +206,7 @@ async def edit(request_id: UUID, payload: WholesaleInput, draft: bool = False, u
 
 
 @router.post("/{request_id}/submit", response_model=WholesaleOut)
-async def submit(request_id: UUID, user: User = Depends(board_user), db: AsyncSession = Depends(get_db)):
+async def submit(request_id: UUID, user: User = Depends(publishing_user), db: AsyncSession = Depends(get_db)):
     request = await get_request(db, request_id, lock=True)
     if request.author_id != user.id:
         raise HTTPException(403, "Можно отправить только свою заявку")
@@ -209,7 +222,7 @@ async def submit(request_id: UUID, user: User = Depends(board_user), db: AsyncSe
 
 
 @router.post("/{request_id}/close", response_model=WholesaleOut)
-async def close(request_id: UUID, user: User = Depends(board_user), db: AsyncSession = Depends(get_db)):
+async def close(request_id: UUID, user: User = Depends(closing_user), db: AsyncSession = Depends(get_db)):
     request = await get_request(db, request_id, lock=True)
     if request.author_id != user.id and user.role.name != "admin":
         raise HTTPException(403, "Нет доступа")

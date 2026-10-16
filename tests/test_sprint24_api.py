@@ -29,7 +29,7 @@ async def create_actor(session, name, *, admitted=False):
     return user, headers
 
 
-@pytest.mark.parametrize("partner_role", ["supplier", "driver"])
+@pytest.mark.parametrize("partner_role", ["supplier"])
 @pytest.mark.asyncio
 async def test_wholesale_role_access_moderation_and_ownership(client, session_factory, admin_token, partner_role):
     async with session_factory() as db:
@@ -211,7 +211,7 @@ async def test_wholesale_rejects_blocked_accounts(client, session_factory, role,
         assert (await client.get(path, headers=headers)).status_code == 401
     assert (await client.post("/api/v1/wholesale-requests", headers=headers, json={})).status_code == 401
 
-@pytest.mark.parametrize("author_role", ["supplier", "driver"])
+@pytest.mark.parametrize("author_role", ["supplier"])
 @pytest.mark.asyncio
 async def test_wholesale_full_moderation_and_push(client, session_factory, admin_token, monkeypatch, author_role):
     from app.models.models import Driver, PushDelivery, UserNotification

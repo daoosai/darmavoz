@@ -245,7 +245,7 @@ function OrderCard({
           {order.city_name && <p className="mt-2 text-xs text-slate-500">Город: {order.city_name}</p>}
         </section>
       ) : null}
-      <OrderPaymentsPanel orderId={order.id} />
+      <OrderPaymentsPanel orderId={order.id} orderStatus={order.status} totalAmount={order.total_amount ?? 0} />
       {onCancel && cancellableClientOrderStatuses.has(status) ? <button type="button" onClick={() => onCancel(order)} className="mt-3 w-full rounded-xl border border-red-200 py-3 text-sm font-bold text-red-600">Отменить заказ</button> : null}
     </motion.article>
   );

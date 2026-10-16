@@ -84,7 +84,7 @@ jobs:
           node --import tsx --test src/bulkCalculator.test.ts
           npm run build
           npx playwright install --with-deps chromium
-          npm run test:e2e -- tests/e2e/security-audit.spec.ts tests/e2e/sprint22.spec.ts tests/e2e/sprint24.spec.ts tests/e2e/sprint25.spec.ts tests/e2e/sprint24_25.spec.ts tests/e2e/client-order-card.spec.ts tests/e2e/payment-return.spec.ts tests/e2e/driver-shift-orders.spec.ts tests/e2e/global-map-location.spec.ts tests/e2e/map-recovery.spec.ts tests/e2e/admin-order-hard-delete.spec.ts tests/e2e/refunds.spec.ts --workers=1
+          npm run test:e2e -- tests/e2e/cart-pickup-fallback.spec.ts tests/e2e/security-audit.spec.ts tests/e2e/sprint22.spec.ts tests/e2e/sprint24.spec.ts tests/e2e/sprint25.spec.ts tests/e2e/sprint24_25.spec.ts tests/e2e/client-order-card.spec.ts tests/e2e/payment-return.spec.ts tests/e2e/driver-shift-orders.spec.ts tests/e2e/global-map-location.spec.ts tests/e2e/map-recovery.spec.ts tests/e2e/admin-order-hard-delete.spec.ts tests/e2e/refunds.spec.ts --workers=1
           tar -C dist -cf ../frontend-dist.tar .
 
       - name: Setup SSH agent

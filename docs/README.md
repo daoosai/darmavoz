@@ -111,3 +111,5 @@
 - [16.10.2026 — реализация Security & Bugfix](2026-10-16-security-bugfix.md)
 
 - [Блок: безопасные зависимости](blocks/security-dependencies.md)
+
+- [Корзина: ручной выбор точки после ошибки — 16.10.2026](2026-10-16-cart-pickup-fallback.md).

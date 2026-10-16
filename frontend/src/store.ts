@@ -20,6 +20,7 @@ export interface CartItem {
   material: MaterialProps;
   deliveryOption: DeliveryOption;
   pickupPoint?: PickupPointSelection;
+  preferredPointId?: string;
   comment?: string;
   quantity: number;
   volume: number;
@@ -125,6 +126,7 @@ interface CartState {
     deliveryOption: DeliveryOption,
     availableDeliveryOptions?: DeliveryOption[],
   ) => boolean;
+  setItemPickupPoint: (id: string, pointId: string) => void;
   updateItemVolume: (id: string, volume: number) => boolean;
   setItemIdempotencyKey: (id: string, idempotencyKey: string) => void;
   removeFromCart: (id: string) => void;
@@ -442,11 +444,19 @@ export const useCartStore = create<CartState>()(
               },
               deliveryOption,
               pickupPoint: undefined,
+              preferredPointId: undefined,
             }
           : cartItem,
       ),
     }));
     return true;
+  },
+  setItemPickupPoint: (id, pointId) => {
+    set((state) => ({
+      cartItems: state.cartItems.map((item) =>
+        item.id === id ? { ...item, preferredPointId: pointId } : item,
+      ),
+    }));
   },
   updateItemVolume: (id, volume) => {
     const item = get().cartItems.find((cartItem) => cartItem.id === id);

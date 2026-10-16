@@ -311,3 +311,23 @@ async def test_ip_limit_and_forwarded_header_is_not_trusted(client, monkeypatch)
         }
     )
     assert await client_ip(request) == "192.0.2.1"
+
+
+@pytest.mark.asyncio
+async def test_limits_still_block_during_last_fraction_of_window():
+    from redis.asyncio import Redis
+    from app.services.login_throttle import guard_ip, _key
+
+    attempt = LoginAttempt("last-fraction", "192.0.2.88")
+    request = Request({"type": "http", "client": ("192.0.2.88", 1234), "headers": []})
+    async with Redis.from_url(settings.REDIS_URL) as redis:
+        # Redis TTL rounds down to zero while the key still exists.
+        await redis.set(attempt.pair, settings.AUTH_LOGIN_FAILURE_LIMIT, px=400)
+        await redis.set(_key("ip", "192.0.2.88"), settings.AUTH_LOGIN_IP_LIMIT, px=400)
+        assert await redis.ttl(attempt.pair) == 0
+        for action in [attempt.reserve, lambda: guard_ip(request)]:
+            with pytest.raises(HTTPException) as error:
+                await action()
+            assert error.value.status_code == 429
+            assert error.value.headers["Retry-After"] == "1"
+        await redis.delete(attempt.pair, _key("ip", "192.0.2.88"))

@@ -15,7 +15,7 @@ from app.core.config import settings
 IP_SCRIPT = """
 local count = redis.call('INCR', KEYS[1])
 if count == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end
-if count > tonumber(ARGV[2]) then return redis.call('TTL', KEYS[1]) end
+if count > tonumber(ARGV[2]) then return math.max(1, redis.call('TTL', KEYS[1])) end
 return 0
 """
 ATTEMPT_SCRIPT = """
@@ -23,7 +23,7 @@ local now = tonumber(redis.call('TIME')[1])
 local wait = tonumber(redis.call('GET', KEYS[2]) or '0') - now
 if wait > 0 then return wait end
 local count = tonumber(redis.call('GET', KEYS[1]) or '0')
-if count >= tonumber(ARGV[2]) then return redis.call('TTL', KEYS[1]) end
+if count >= tonumber(ARGV[2]) then return math.max(1, redis.call('TTL', KEYS[1])) end
 redis.call('INCR', KEYS[1])
 if count == 0 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end
 return 0

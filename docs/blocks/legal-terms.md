@@ -9,3 +9,10 @@
 Production, .env и версии не меняются.
 Проверка /terms включена в frontend/tests/e2e/client-refund-info.spec.ts.
 Отчёт: ../2026-10-16-refund-client-terms.md.
+
+
+Доставка 16.10.2026 подтверждена: 6d2d66ac в test runtime/image,
+Deploy Test 38897175048 и Test APK 38897175114 success.
+Внешняя проверка 390/1440 px: реальный полный возврат 10 ₽ — срок виден,
+удержания нет; /terms — пункт 5.3 виден. Частичные/ожидающие возвраты покрыты
+UI-фикстурами. Подробности и доказательства в отчёте refund-client-terms.

@@ -6,7 +6,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const capacitorRoot = resolve(root, 'node_modules/@capacitor/ios');
 const packageJson = JSON.parse(readFileSync(resolve(capacitorRoot, 'package.json'), 'utf8'));
 
-if (packageJson.version !== '8.4.2') {
+if (packageJson.version !== '8.4.3') {
   throw new Error(`Unsupported @capacitor/ios version: ${packageJson.version}`);
 }
 

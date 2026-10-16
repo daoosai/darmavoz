@@ -5,12 +5,12 @@ from uuid import UUID
 
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
-from jose import JWTError, jwt
+from jwt import InvalidTokenError as JWTError
+from app.security.jwt import decode_access_token
 from sqlalchemy import delete, inspect as sa_inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.config import settings
 from app.db.database import get_db
 from app.models.models import (
     Client,
@@ -76,7 +76,7 @@ async def get_support_actor(
     db: AsyncSession = Depends(get_db),
 ) -> SupportActor:
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = decode_access_token(token)
     except JWTError as exc:
         raise HTTPException(status_code=401, detail="Could not validate credentials") from exc
     role = payload.get("role")
@@ -97,7 +97,7 @@ async def get_support_session_actor(
     db: AsyncSession = Depends(get_db),
 ) -> SupportActor:
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = decode_access_token(token)
     except JWTError as exc:
         raise HTTPException(status_code=401, detail="Could not validate credentials") from exc
     role = payload.get("role")

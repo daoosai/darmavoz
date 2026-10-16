@@ -355,63 +355,6 @@ async def _normalize_listing_update_data(
         payload_data[field] = value
     return payload_data
 
-    payload_data = await _normalize_listing_update_data(db, payload)
-    use_pending_changes = listing.moderation_status in OWNER_PENDING_EDIT_STATUSES
-    pending_changes = {}
-    if use_pending_changes:
-        if "is_active" in payload_data:
-            listing.is_active = payload_data["is_active"]
-        pending_changes = {
-            field: value
-            for field, value in payload_data.items()
-            if field != "is_active"
-        }
-        if pending_changes:
-            mark_entity_pending_changes(listing, pending_changes)
-    else:
-        _apply_listing_update_data(listing, payload_data)
-        _reset_supplier_listing_moderation(listing)
-    await create_moderation_audit_log(
-        db,
-        entity_type=EQUIPMENT_ENTITY_TYPE,
-        entity_id=listing.id,
-        user_id=current_owner.id,
-        action="edited",
-        comment=summarize_pending_changes(pending_changes) or listing.title,
-    )
-    await db.commit()
-    _schedule_supplier_listing_moderation_email(
-        background_tasks,
-        listing,
-        action="Р С‘Р В·Р СР ВµР Р…Р С‘Р В»",
-        fields_summary=summarize_pending_changes(pending_changes),
-    )
-    return await _listing_payload(
-        db,
-        await _get_listing(db, listing.id),
-        include_pending_changes=True,
-    )
-    changed = payload.model_fields_set
-    payload_data: dict = {}
-    if changed.intersection({"equipment_type", "equipment_type_id"}):
-        equipment_type, equipment_type_id = await _resolve_equipment_type(
-            db,
-            equipment_type=payload.equipment_type,
-            equipment_type_id=payload.equipment_type_id,
-        )
-        payload_data["equipment_type"] = equipment_type
-        payload_data["equipment_type_id"] = equipment_type_id
-    for field in ("title", "description", "contact_phone", "tariffs", "city", "district", "is_active"):
-        if field not in changed:
-            continue
-        value = getattr(payload, field)
-        if field == "contact_phone":
-            value = _normalize_listing_contact_phone(value)
-        if field == "tariffs" and value is not None:
-            value = [tariff.model_dump() for tariff in value]
-        payload_data[field] = value
-    return payload_data
-
 
 def _apply_listing_update_data(
     listing: SpecialEquipmentListing,

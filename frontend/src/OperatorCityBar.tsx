@@ -13,7 +13,7 @@ export default function OperatorCityBar() {
       .then(async (response) => { if (response.ok) setCities(await response.json()); }).catch(() => {});
     return () => controller.abort();
   }, [token, setCities]);
-  return <div className="mx-auto mt-3 flex max-w-7xl items-center gap-2 px-4 text-slate-600 sm:px-6 lg:px-8">
+  return <div className="mx-auto mt-3 flex w-full min-w-0 max-w-7xl items-center gap-2 px-4 text-slate-600 sm:px-6 lg:px-8">
     <MapPin className="h-4 w-4 shrink-0 text-sky-500" /><OperatorCityField value={cityId} onChange={choose} />
   </div>;
 }

@@ -631,9 +631,10 @@ export default function SupplierEquipmentScreen({
             onClick={() => openForm()}
             disabled={isEquipmentOwnerCreationBlocked}
             className="rounded-2xl bg-white p-3 text-sky-600 shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
-            aria-label="Добавить объявление"
+            aria-label="Добавить объявление спецтехники"
+            title="Добавить объявление спецтехники"
           >
-            <Plus className="h-6 w-6" />
+            <Plus className="h-6 w-6" aria-hidden="true" />
           </button>
         </div>
       </div>

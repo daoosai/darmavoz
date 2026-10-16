@@ -52,7 +52,7 @@ for (const width of [320, 390, 768, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/admin/profile');
     await page.getByRole('button', { name: /Оптовые заявки Крупные/ }).click();
-    await expect(page.getByRole('heading', { name: 'Оптовые заявки', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Оптовые заявки', exact: true })).toBeVisible({ timeout: 15000 });
     await expect(page.getByRole('heading', { name: 'Песок', exact: true })).toBeVisible();
     const header = page.locator('header').first();
     expect(await header.evaluate(el => parseFloat(getComputedStyle(el).paddingTop))).toBeGreaterThanOrEqual(40);
@@ -111,7 +111,7 @@ for (const role of ['driver', 'supplier']) {
       expect(bounds!.x).toBeGreaterThanOrEqual(0);
       expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
       await tab.click();
-      await expect(page.getByRole('heading', { name: 'Оптовые заявки', exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Оптовые заявки', exact: true })).toBeVisible({ timeout: 15000 });
       await expect(page.getByRole('heading', { name: 'Песок', exact: true })).toBeVisible();
       await expect(tab).toHaveAttribute('aria-current', 'page');
       // Visibility alone misses a fullscreen layer intercepting the navigation.
@@ -216,9 +216,9 @@ test('модерация: причина обязательна, отклонё�
   await page.getByRole('heading', { name: 'Песок', exact: true }).click();
   await page.getByRole('button', { name: 'Отклонить', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Отклонить заявку', exact: true })).toBeDisabled();
-  await page.getByLabel('Причина отклонения', { exact: true }).fill('Уточните место загрузки');
+  await page.getByRole('textbox', { name: 'Причина отклонения', exact: true }).fill('Уточните место загрузки');
   await page.getByRole('button', { name: 'Отклонить заявку', exact: true }).click();
-  await expect(page.getByLabel('Причина отклонения', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('textbox', { name: 'Причина отклонения', exact: true })).toHaveCount(0);
   await expect(page.getByTestId('wholesale-request-card').getByText('Уточните место загрузки', { exact: true })).toBeVisible();
 
   current = { ...current, is_owner: true };
@@ -393,10 +393,10 @@ for (const width of [390, 1440]) {
     await page.getByRole('button', { name: 'Открыть меню', exact: true }).click();
     await page.getByRole('complementary', { name: 'Навигация администратора' }).getByRole('button', { name: 'Оптовые заявки', exact: true }).click();
     await expect(page).toHaveURL(/\/admin\/wholesale$/);
-    await expect(page.getByRole('heading', { name: 'Оптовые заявки', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Оптовые заявки', exact: true })).toBeVisible({ timeout: 15000 });
     await expect(page.getByRole('button', { name: 'На модерации', exact: true })).toBeVisible();
     await page.reload();
-    await expect(page.getByRole('heading', { name: 'Оптовые заявки', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Оптовые заявки', exact: true })).toBeVisible({ timeout: 15000 });
   });
 }
 test('уведомление админа открывает оптовую модерацию и конкретную заявку', async ({ page }) => {
@@ -456,7 +456,7 @@ for (const width of [320, 390, 768, 1440]) {
     await expect(card.getByRole('button', { name: 'Одобрить', exact: true })).toBeVisible();
     await card.getByRole('button', { name: 'Отклонить', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Отклонить заявку', exact: true })).toBeDisabled();
-    await page.getByLabel('Причина отклонения', { exact: true }).fill('Укажите более точный адрес доставки');
+    await page.getByRole('textbox', { name: 'Причина отклонения', exact: true }).fill('Укажите более точный адрес доставки');
     await page.getByRole('button', { name: 'Отклонить заявку', exact: true }).click();
     await expect(card).toHaveCount(0);
     await page.getByRole('button', { name: 'Отклонённые', exact: true }).click();

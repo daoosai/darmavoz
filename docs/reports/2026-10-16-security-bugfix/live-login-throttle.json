@@ -1,0 +1,44 @@
+[
+  {
+    "attempt": 0,
+    "status": 200,
+    "expected": 200,
+    "retryAfter": null
+  },
+  {
+    "attempt": 1,
+    "status": 401,
+    "expected": 401,
+    "retryAfter": null
+  },
+  {
+    "attempt": 2,
+    "status": 401,
+    "expected": 401,
+    "retryAfter": null
+  },
+  {
+    "attempt": 3,
+    "status": 401,
+    "expected": 401,
+    "retryAfter": null
+  },
+  {
+    "attempt": 4,
+    "status": 401,
+    "expected": 401,
+    "retryAfter": null
+  },
+  {
+    "attempt": 5,
+    "status": 401,
+    "expected": 401,
+    "retryAfter": null
+  },
+  {
+    "attempt": 6,
+    "status": 429,
+    "expected": 429,
+    "retryAfter": "898"
+  }
+]

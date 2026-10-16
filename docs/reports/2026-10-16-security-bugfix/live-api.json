@@ -1,0 +1,177 @@
+{
+  "checks": [
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/me",
+      "role": "admin",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/orders/",
+      "role": "logist",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/supplier/me",
+      "role": "supplier",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/equipment-owner/me",
+      "role": "equipment_owner",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/water-septic-partner/me",
+      "role": "water_septic_partner",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/driver/profile/full",
+      "role": "driver",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/clients/me",
+      "role": "client",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/payments/config",
+      "role": "client",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/supplier/points",
+      "role": "supplier",
+      "status": 201,
+      "expected": 201
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/supplier/points/b0f5ce5a-c88f-426c-802c-03c05781d5a2",
+      "role": "supplier",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/supplier/points",
+      "role": "supplier",
+      "status": 201,
+      "expected": 201
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/supplier/points/ae2c0b1f-e178-4269-a1df-47475e233499",
+      "role": "supplier",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/supplier/points",
+      "role": "supplier",
+      "status": 201,
+      "expected": 201
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/supplier/points/8feaddc7-9d45-4224-86d5-44762c064231",
+      "role": "supplier",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/supplier/points",
+      "role": "supplier",
+      "status": 422,
+      "expected": 422
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/supplier/points",
+      "role": "supplier",
+      "status": 422,
+      "expected": 422
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/supplier/points",
+      "role": "supplier",
+      "status": 422,
+      "expected": 422
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/wholesale-requests",
+      "role": "driver",
+      "status": 403,
+      "expected": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/wholesale-requests",
+      "role": "equipment_owner",
+      "status": 403,
+      "expected": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/wholesale-requests",
+      "role": "water_septic_partner",
+      "status": 403,
+      "expected": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/wholesale-requests",
+      "role": "driver",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/wholesale-requests",
+      "role": "supplier",
+      "status": 201,
+      "expected": 201
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/wholesale-requests/90dcb081-6045-474c-9de2-6be5e9aa9d7e/submit",
+      "role": "supplier",
+      "status": 200,
+      "expected": 200
+    }
+  ],
+  "pointIds": [
+    "b0f5ce5a-c88f-426c-802c-03c05781d5a2",
+    "ae2c0b1f-e178-4269-a1df-47475e233499",
+    "8feaddc7-9d45-4224-86d5-44762c064231"
+  ],
+  "paymentConfig": {
+    "enabled": true,
+    "test_mode": false,
+    "receipts_enabled": true
+  },
+  "wholesaleId": "90dcb081-6045-474c-9de2-6be5e9aa9d7e",
+  "materialName": "QA Security a3c2d5f7"
+}

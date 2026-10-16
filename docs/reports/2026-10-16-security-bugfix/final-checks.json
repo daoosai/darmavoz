@@ -1,0 +1,14 @@
+{
+  "npmRunLint": 0,
+  "flake8FatalAppTests": 0,
+  "flake8FullNewSecurityModules": 0,
+  "targetedUI": "15 passed (47.7s)",
+  "externalHealthHTTP": 200,
+  "externalPortsClosed": [
+    5433,
+    6380,
+    8001,
+    9002,
+    9003
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "users": 6,
+  "clients": 2,
+  "drivers": 1,
+  "vehicles": 1,
+  "points": 3,
+  "wholesale": 1,
+  "notifications": 16,
+  "disabledSessionHTTP": 401
+}

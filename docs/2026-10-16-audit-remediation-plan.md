@@ -3,7 +3,7 @@
 Статус: утверждён Tech Lead и PO; реализация описана в 2026-10-16-security-bugfix.md.
 Контур: develop, /opt/darmavoz_test, test.darmavoz.ru.
 Источник: 2026-10-16-general-e2e-security-audit.md.
-Код, зависимости и конфигурация не менялись; commit/push/deploy не выполнялись.
+На момент составления этого плана код, зависимости и конфигурация не менялись. Фактическое выполнение, commit/push/deploy и проверки записаны в отчёте реализации.
 
 ## Critical
 

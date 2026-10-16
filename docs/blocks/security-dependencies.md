@@ -13,3 +13,6 @@ npm audit resolved lockfile: 0 advisories. Изменения dependency version
 не меняют app version/versionCode (3.1.7/387).
 Серверные .env исключены из build context и inject-ятся только runtime.
 Подробности доставки и проверок: ../2026-10-16-security-bugfix.md.
+
+Финальная native-проверка 02b662c5: Android debug APK/signed AAB и macOS
+Xcode 26.2 iOS Simulator sync/build прошли. Публикация в магазины не выполнялась.

@@ -14,7 +14,7 @@ async function session(page: import('@playwright/test').Page, role: string) {
     const path = new URL(route.request().url()).pathname;
     let body: unknown = [];
     if (path.endsWith('/cities/')) body = [city];
-    if (path.endsWith('/statistics')) body = { total_orders: 0, completed_orders: 0, total_revenue: 0, total_drivers: 0, active_drivers: 0 };
+    if (path.endsWith('/statistics')) body = { total_orders: 0, completed_orders: 0, total_revenue: 1234567890.25, total_drivers: 0, active_drivers: 0 };
     if (path.endsWith('/me')) body = { display_name: 'QA', phone: '+79990000000' };
     if (path.endsWith('/placements/summary')) {
       const counts = { trial: 0, active: 0, confirmation_required: 0, hidden: 0, expired: 0, archived: 0 };

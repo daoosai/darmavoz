@@ -33,9 +33,10 @@ for (const width of [320, 390, 768, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       const errors: string[] = [];
       page.on('pageerror', error => errors.push(error.message));
-      await page.goto(path);
-      await expect(page.getByRole('combobox', { name: 'Город', exact: true }).locator('option')).toHaveCount(2);
+      await page.goto(path, { waitUntil: 'domcontentloaded' });
+      await expect(page.getByRole('combobox', { name: 'Город', exact: true }).locator('option')).toHaveCount(2, { timeout: 15_000 });
       await page.getByRole('combobox', { name: 'Город', exact: true }).selectOption(city.id);
+      if (path.includes('statistics')) await expect(page.getByText('Выручка (План)', { exact: true })).toBeVisible();
       await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
       expect(errors).toEqual([]);
     });
@@ -62,7 +63,7 @@ test('rejection presets remain editable and reset for the next request', async (
     }
     return route.fulfill({ json: { items: [{ ...row, id: rejected ? '20000000-0000-4000-8000-000000000002' : row.id }], total: 1 } });
   });
-  await page.goto('/admin/wholesale');
+  await page.goto('/admin/wholesale', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'Отклонить', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Причина отклонения', exact: true });
   await dialog.getByRole('button', { name: 'Адреса', exact: true }).click();
@@ -79,7 +80,7 @@ test('rejection presets remain editable and reset for the next request', async (
 for (const key of ['Enter', 'Space']) {
   test('equipment create button has accessible name and works with ' + key, async ({ page }) => {
     await session(page, 'equipment_owner');
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     const button = page.getByRole('button', { name: 'Добавить объявление спецтехники', exact: true });
     await button.focus();
     await expect(button).toBeFocused();

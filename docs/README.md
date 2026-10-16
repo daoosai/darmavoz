@@ -101,3 +101,13 @@
 - [Возвраты ЮKassa: очередь, частичные суммы, webhook](blocks/refunds.md); [отчёт реализации](2026-10-14-yookassa-refunds.md).
 
 - [Экстренный релиз 3.1.7 (387), develop → main](2026-10-15-emergency-release-3.1.7.md).
+
+- [16.10.2026 — общий E2E-аудит и безопасность](2026-10-16-general-e2e-security-audit.md)
+
+- [Блок: диагностический E2E-аудит и безопасность](blocks/security-e2e-audit.md)
+
+- [16.10.2026 — утверждённый план устранения аудита](2026-10-16-audit-remediation-plan.md)
+
+- [16.10.2026 — реализация Security & Bugfix](2026-10-16-security-bugfix.md)
+
+- [Блок: безопасные зависимости](blocks/security-dependencies.md)

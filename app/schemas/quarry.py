@@ -1,11 +1,15 @@
 from datetime import datetime, timezone
-from typing import Literal, Optional
+from typing import Annotated, Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.schemas.catalog import DeliveryOptionOut, MediaFileOut
 from app.schemas.placement import PlacementStatusValue
+
+
+Latitude = Annotated[float, Field(strict=True, ge=-90, le=90, allow_inf_nan=False)]
+Longitude = Annotated[float, Field(strict=True, ge=-180, le=180, allow_inf_nan=False)]
 
 
 PickupPointTypeValue = Literal["quarry", "accumulator", "warehouse", "supplier"]
@@ -27,12 +31,6 @@ def _normalize_optional_text(value: object) -> object:
         return normalized or None
     return value
 
-
-def _normalize_optional_coordinate_value(value: object) -> object:
-    normalized = _normalize_optional_text(value)
-    if normalized is None:
-        return None
-    return normalized
 
 
 def _normalize_subscription_end_date_value(value: object) -> object:
@@ -97,8 +95,8 @@ class QuarryBase(BaseModel):
     description: Optional[str] = Field(default=None, max_length=5000)
     contact_phone: Optional[str] = Field(default=None, max_length=20)
     subscription_end_date: Optional[datetime] = None
-    lat: Optional[float] = None
-    lon: Optional[float] = None
+    lat: Latitude | None = None
+    lon: Longitude | None = None
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
@@ -121,27 +119,6 @@ class QuarryBase(BaseModel):
     @classmethod
     def normalize_subscription_end_date(cls, value: object) -> object:
         return _normalize_subscription_end_date_value(value)
-
-    @field_validator("lat", mode="before")
-    @classmethod
-    def validate_lat(cls, value: object) -> Optional[float]:
-        value = _normalize_optional_coordinate_value(value)
-        if value is None:
-            return None
-        if value is not None and (value < -90 or value > 90):
-            raise ValueError("Latitude must be between -90 and 90")
-        return value
-
-    @field_validator("lon", mode="before")
-    @classmethod
-    def validate_lon(cls, value: object) -> Optional[float]:
-        value = _normalize_optional_coordinate_value(value)
-        if value is None:
-            return None
-        if value is not None and (value < -180 or value > 180):
-            raise ValueError("Longitude must be between -180 and 180")
-        return value
-
 
 class QuarryCreate(QuarryBase):
     is_active: bool = True
@@ -176,8 +153,8 @@ class QuarryUpdate(BaseModel):
     description: Optional[str] = Field(default=None, max_length=5000)
     contact_phone: Optional[str] = Field(default=None, max_length=20)
     subscription_end_date: Optional[datetime] = None
-    lat: Optional[float] = None
-    lon: Optional[float] = None
+    lat: Latitude | None = None
+    lon: Longitude | None = None
     is_vip: Optional[bool] = None
     manual_priority: Optional[int] = None
     min_delivery_price: Optional[float] = Field(default=None, ge=0)
@@ -209,26 +186,6 @@ class QuarryUpdate(BaseModel):
     @classmethod
     def normalize_subscription_end_date(cls, value: object) -> object:
         return _normalize_subscription_end_date_value(value)
-
-    @field_validator("lat", mode="before")
-    @classmethod
-    def validate_lat(cls, value: object) -> Optional[float]:
-        value = _normalize_optional_coordinate_value(value)
-        if value is None:
-            return None
-        if value is not None and not -90 <= value <= 90:
-            raise ValueError("Latitude must be between -90 and 90")
-        return value
-
-    @field_validator("lon", mode="before")
-    @classmethod
-    def validate_lon(cls, value: object) -> Optional[float]:
-        value = _normalize_optional_coordinate_value(value)
-        if value is None:
-            return None
-        if value is not None and not -180 <= value <= 180:
-            raise ValueError("Longitude must be between -180 and 180")
-        return value
 
     @model_validator(mode="after")
     def normalize_references(self):

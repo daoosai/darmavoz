@@ -11,3 +11,14 @@
 
 ## Medium / Minor
 В работе. Результаты тестов, коммиты и доставка будут записаны после проверок.
+
+### Промежуточные проверки
+- Порты 5433/6380/8001/9002/9003 после пересоздания test-сервисов недоступны
+  с внешнего хоста; Caddy -> backend_test:8000 /health отвечает online.
+- lint/build/sync Android после Capacitor 8.4.3 прошли; iOS patch version guard
+  обновлён; test APK workflow больше не переустанавливает unpinned Android.
+- 94 backend tests security/auth/driver OTP/wholesale/refunds passed в отдельных
+  Postgres/Redis. Legacy JOSE JWT и auth_version проверены.
+- pip check: pass. pip-audit resolved Python 3.11 constraints: 0 advisories.
+- .dockerignore дополнен исключением серверных .env из image build context.
+Финальная регрессия и доставка ещё не завершены.

@@ -97,9 +97,9 @@ async def _apply_point_changes(
             normalized = payload_data[nullable_field].strip()
             payload_data[nullable_field] = normalized or None
     if "name" in payload_data and "short_name" not in payload_data:
-        payload_data["short_name"] = payload_data["name"]
+        payload_data["short_name"] = (payload_data["name"] or "")[:100]
     elif "short_name" in payload_data and not payload_data["short_name"]:
-        payload_data["short_name"] = payload_data.get("name") or point.name
+        payload_data["short_name"] = (payload_data.get("name") or point.name)[:100]
     if "city_id" in payload_data:
         city = await resolve_city(db, payload_data["city_id"], require_active=False)
         await ensure_owner_city(
@@ -236,7 +236,7 @@ async def create_pickup_point(
     min_price = payload.min_delivery_price
     if min_price is None:
         min_price = default_min_delivery_price(payload.point_type)
-    short_name = payload.short_name or payload.name
+    short_name = payload.short_name or payload.name[:100]
     point = Quarry(
         city_id=city.id,
         name=payload.name,

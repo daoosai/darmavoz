@@ -94,9 +94,9 @@ async def _apply_supplier_point_patch(
     use_pending_changes: bool,
 ) -> dict:
     if "name" in payload_data and "short_name" not in payload_data:
-        payload_data["short_name"] = payload_data["name"]
+        payload_data["short_name"] = (payload_data["name"] or "")[:100]
     elif "short_name" in payload_data and not payload_data["short_name"]:
-        payload_data["short_name"] = payload_data.get("name") or point.name
+        payload_data["short_name"] = (payload_data.get("name") or point.name)[:100]
 
     if payload_data.get("point_type") and "min_delivery_price" not in payload_data:
         payload_data["min_delivery_price"] = default_min_delivery_price(payload_data["point_type"])
@@ -272,7 +272,7 @@ async def create_supplier_point(
     _validate_supplier_display_name(current_user)
     if payload.point_type not in SUPPLIER_POINT_TYPES:
         raise HTTPException(status_code=422, detail="Suppliers may create only quarry or accumulator points")
-    short_name = payload.short_name or payload.name
+    short_name = payload.short_name or payload.name[:100]
     point = Quarry(
         city_id=payload.city_id,
         name=payload.name,

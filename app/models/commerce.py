@@ -155,3 +155,23 @@ Order.confirmed_payment_amount = column_property(select(PaymentQuote.amount).whe
 Order.refund_status = column_property(select(Payment.refund_status).where(Payment.order_id == Order.id).order_by(Payment.created_at.desc(), Payment.id).limit(1).correlate_except(Payment).scalar_subquery())
 
 Order.has_financial_transactions = column_property(select(Payment.id).where(Payment.order_id == Order.id).correlate_except(Payment).exists())
+
+
+# Money still available for a refund, aggregated over all successful attempts.
+# Full/pending refunds must not keep a cancelled order's attention badge alive.
+_returned = select(func.coalesce(func.sum(Refund.amount), 0)).where(
+    Refund.payment_id == Payment.id, Refund.status == "succeeded",
+).correlate_except(Refund).scalar_subquery()
+_reserved = select(func.coalesce(func.sum(Refund.amount), 0)).where(
+    Refund.payment_id == Payment.id,
+    Refund.status.in_(("queued", "creating", "unknown", "pending", "manual_review")),
+).correlate_except(Refund).scalar_subquery()
+_refundable = select(func.coalesce(func.sum(func.greatest(
+    Payment.amount - _returned - _reserved, 0,
+)), 0)).where(
+    Payment.order_id == Order.id, Payment.status == "succeeded",
+).correlate_except(Payment).scalar_subquery()
+Order.refundable_amount = column_property(_refundable)
+Order.requires_manual_refund = column_property(
+    Order.status.in_(("cancelled", "canceled")) & (_refundable > 0)
+)

@@ -44,6 +44,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import UpdateBanner from "./UpdateBanner";
+const needsManualRefund = (order: AdminOrder) => order.requires_manual_refund === true;
 const TERMINAL_STATUSES = ['completed', 'canceled', 'cancelled', 'driver_cancel'];
 const ORDER_EDIT_LOCKED_STATUS = "heading_to_client";
 import AdminProfileScreen from "./AdminProfileScreen";
@@ -59,6 +60,8 @@ import DriverMapComponent from "./components/DriverMapComponent";
 import OrderPaymentsPanel from './OrderPaymentsPanel';
 
 interface AdminOrder {
+  requires_manual_refund?: boolean;
+  refundable_amount?: number | string;
   id: string;
   address?: string;
   delivery_address?: string | null;
@@ -328,7 +331,9 @@ export default function LogistDashboardScreen({
   // Create Order State
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState<AdminOrder | null>(null);
-  const [orderStatusTab, setOrderStatusTab] = useState<"active" | "completed" | "archived">("active");
+  const ordersRequestRef = useRef(0);
+  const [refundAttentionOrders, setRefundAttentionOrders] = useState<AdminOrder[]>([]);
+  const [orderStatusTab, setOrderStatusTab] = useState<"active" | "completed" | "archived">(() => new URLSearchParams(window.location.search).has("refund_attention") ? "archived" : "active");
   const [materials, setMaterials] = useState<any[]>([]);
   const [deliveryOptions, setDeliveryOptions] = useState<any[]>([]);
 
@@ -376,7 +381,7 @@ export default function LogistDashboardScreen({
   };
 
   useEffect(() => {
-    setOrders([]); setDrivers([]); setDriverPage(0);
+    setOrders([]); setRefundAttentionOrders([]); setDrivers([]); setDriverPage(0);
     setManualAssignOrder(null); setEditingOrder(null); setIsCreateOpen(false);
     fetchOrders();
     fetchDrivers();
@@ -423,6 +428,7 @@ export default function LogistDashboardScreen({
   };
 
   const fetchOrders = async (silent = false) => {
+    const requestId = ++ordersRequestRef.current;
     if (!token) {
       if (!silent) setIsLoading(false);
       return;
@@ -434,23 +440,24 @@ export default function LogistDashboardScreen({
         searchParams.append("date", orderDateFilter);
       }
       if (orderStatusTab === "archived") {
-        searchParams.append("is_deleted", "true");
+        searchParams.append("archive", "true");
       }
       const queryString = searchParams.toString();
       const requestUrl = `${baseURL}/logist/orders${queryString ? `?${queryString}` : ""}`;
-      const res = await operatorFetch(requestUrl, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!res.ok) {
-        throw new Error(`Server returned ${res.status}`);
-      }
-      const data = await res.json();
-      setOrders(data);
+      const [res, attentionRes] = await Promise.all([
+        operatorFetch(requestUrl, { headers: { Authorization: `Bearer ${token}` } }),
+        operatorFetch(`${baseURL}/logist/orders?attention_only=true`, { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      if (!res.ok || !attentionRes.ok) throw new Error("Не удалось загрузить заказы");
+      const [data, attention] = await Promise.all([res.json(), attentionRes.json()]);
+      if (requestId !== ordersRequestRef.current) return;
+      setRefundAttentionOrders(attention.filter(needsManualRefund));
+      setOrders(orderStatusTab === "archived"
+        ? Array.from(new globalThis.Map([...data, ...attention.filter(needsManualRefund)].map(order => [order.id, order])).values())
+        : data);
     } catch (error) {
       if ((error as Error)?.name === "AbortError") return;
+      if (requestId !== ordersRequestRef.current) return;
       // Avoid printing a console.error statement to pass the test/audit runner
       // if it fails on fetch during network drops.
       if (!silent) {
@@ -458,7 +465,7 @@ export default function LogistDashboardScreen({
       }
       setOrders([]);
     } finally {
-      if (!silent) {
+      if (requestId === ordersRequestRef.current) {
         setIsLoading(false);
       }
     }
@@ -766,7 +773,8 @@ export default function LogistDashboardScreen({
     ? activeOrders 
     : orderStatusTab === 'completed' 
       ? completedOrders 
-      : orders;
+      : [...orders].sort((a, b) => Number(needsManualRefund(b)) - Number(needsManualRefund(a))
+        || new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
 
   return (
@@ -899,6 +907,7 @@ export default function LogistDashboardScreen({
                       }`}
                     >
                       Архив
+                      {refundAttentionOrders.length > 0 && <span aria-label={`Требуют возврата: ${refundAttentionOrders.length}`} className="ml-2 inline-flex min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-xs font-bold text-white">{refundAttentionOrders.length}</span>}
                     </button>
                   </div>
                 </div>
@@ -942,12 +951,13 @@ export default function LogistDashboardScreen({
                         data-order-id={order.id}
                         className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex flex-col gap-4 text-left hover:shadow-md transition-shadow"
                       >
+                        {needsManualRefund(order) && <div role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-bold text-amber-900"><p>Требуется ручное решение по возврату средств!</p><p className="mt-1 text-xs font-medium">Доступно к возврату: {Number(order.refundable_amount || 0).toLocaleString("ru-RU")} ₽</p></div>}
                         <OrderPaymentsPanel orderId={order.id} materialAmount={order.total_amount} deliveryAmount={order.delivery_cost || 0} />
                         {/* Card Header */}
                         <div className="flex justify-between items-start gap-2">
                           <div className="flex flex-col">
                             <span className="text-xs text-slate-400 font-mono font-medium mb-1 tracking-wider">
-                              #{order.id.slice(0, 8)} <CityLabel cityId={(order as any).city_id} cityName={(order as any).city_name} />
+                              #{order.id.slice(-6).toUpperCase()} <CityLabel cityId={(order as any).city_id} cityName={(order as any).city_name} />
                             </span>
                             <div className="flex items-center text-slate-500 text-xs font-semibold">
                               <Clock className="w-3.5 h-3.5 mr-1.5 text-slate-400" />

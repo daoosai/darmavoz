@@ -1,3 +1,4 @@
+from decimal import Decimal
 from datetime import datetime
 from typing import Literal
 from uuid import UUID
@@ -517,6 +518,8 @@ class OrderHistoryOut(BaseModel):
 
 
 class OrderOut(BaseModel):
+    refundable_amount: Decimal = Decimal("0")
+    requires_manual_refund: bool = False
     has_financial_transactions: bool = False
     payment_status: str | None = None
     confirmed_payment_amount: float | None = None

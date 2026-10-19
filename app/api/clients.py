@@ -237,25 +237,8 @@ async def cancel_my_order(
             )
         )
         if manual_refund:
-            # Order notices use the durable outbox; the legacy operator helper
-            # intentionally ignores payloads containing order_id.
-            from app.models.models import Role, User
-            from app.services.notification_outbox import enqueue
-            operators = await db.scalars(select(User.id).join(Role).where(
-                Role.name.in_(("admin", "logist")),
-                User.is_active.is_(True), User.is_deleted.is_(False),
-            ))
-            for operator_id in operators:
-                await enqueue(
-                    db, key=f"client-cancel:{order.id}:manual-refund:{operator_id}",
-                    recipient_type="user", recipient_id=operator_id,
-                    event_type="order_cancelled_by_client", title="Клиент отменил заказ",
-                    body=(f"{get_order_material_name(order)}. Причина: {cancel_reason}. "
-                          "Логисту необходимо вручную определить сумму возврата с учётом подачи транспорта."),
-                    payload={"order_id": str(order.id), "status": order.status,
-                             "previous_status": previous_status, "refund_mode": "manual"},
-                    inbox=True,
-                )
+            from app.services.refunds import notify_manual_refund_required
+            await notify_manual_refund_required(db, order, previous_status=previous_status)
         else:
             await create_operator_notifications(
                 db, event_type="order_cancelled_by_client", title="Клиент отменил заказ",

@@ -21,6 +21,7 @@ export function openNotificationTarget(data?: Record<string, unknown> | null) {
     if (role === 'admin') path = '/admin/wholesale';
   } else if (validId(data.order_id)) {
     params.set('notification_order', data.order_id);
+    if (data.refund_mode === 'manual') params.set('refund_attention', '1');
     if (role === 'admin' || role === 'logist') {
       path = role === 'admin' ? '/admin/orders' : '/logist/orders';
       if (validId(data.city_id)) useOperatorCityStore.getState().choose(data.city_id);

@@ -510,11 +510,18 @@ async def test_late_client_cancel_releases_driver_and_keeps_manual_refund(
         assert await db.scalar(select(Refund.id).where(Refund.payment_id == payment.id)) is None
         notices = (await db.scalars(select(UserNotification).where(
             UserNotification.payload["order_id"].astext == str(order.id)))).all()
-        assert any(n.payload.get("refund_mode") == "manual" for n in notices)
+        assert any(n.payload.get("refund_mode") == "manual" for n in notices) == (payment_status == "succeeded")
         # A captured/late-success payment must not trigger an automatic refund.
         await payments.sync_payment(db, payment.id)
         assert await db.scalar(select(Refund.id).where(Refund.payment_id == payment.id)) is None
         assert not payment.auto_refund_requested
+        notices = (await db.scalars(select(UserNotification).where(
+            UserNotification.payload["order_id"].astext == str(order.id),
+            UserNotification.user_id == case.actor.id,
+        ))).all()
+        assert len(notices) == 1
+        assert notices[0].body == (f"Заказ #{str(order.id)[-6:].upper()} отменен клиентом после выезда машины. "
+                                   "Требуется ручное решение по возврату средств!")
 
     manual = await enqueue_manual(client, case, amount="30.00", reason="Возврат с удержанием подачи")
     assert manual.status_code == 202, manual.text
@@ -557,3 +564,56 @@ async def test_legacy_early_client_cancel_still_enqueues_full_refund(client, ses
         assert payment.auto_refund_requested
         row = await db.scalar(select(Refund).where(Refund.payment_id == payment.id))
         assert row.status == "queued" and row.amount == payment.amount
+
+
+@pytest.mark.asyncio
+async def test_logist_refund_attention_includes_unarchived_old_order_and_exact_balance(client, session_factory, case):
+    from app.models.models import City
+    async with session_factory() as db:
+        order = await db.get(Order, case.order.id)
+        order.status = "cancelled"
+        order.cancelled_by_type = "client"
+        order.created_at = payments.now() - timedelta(days=100)
+        order.city_id = (await db.scalar(select(City).where(City.code == "tyumen"))).id
+        city_id = order.city_id
+        # More than a regular page of newer archive rows must not hide this one.
+        db.add_all([Order(client_id=order.client_id, city_id=city_id, status="cancelled",
+                          total_amount=1, is_deleted=True) for _ in range(25)])
+        other_city = City(name=uuid4().hex, code=uuid4().hex, region="QA",
+                          center_lat=50, center_lon=50, map_zoom=10,
+                          min_lat=49, max_lat=51, min_lon=49, max_lon=51, is_active=True)
+        db.add(other_city); await db.commit()
+        other_city_id = other_city.id
+
+    async def fetch(**params):
+        return await client.get("/api/v1/logist/orders", headers=case.headers,
+                                params={**params, "city_id": str(city_id)})
+    response = await fetch(attention_only="true")
+    assert response.status_code == 200, response.text
+    row = next(r for r in response.json() if r["id"] == str(case.order.id))
+    assert row["requires_manual_refund"] and Decimal(row["refundable_amount"]) == Decimal("123.45")
+    archive = await fetch(archive="true", date=payments.now().date().isoformat())
+    assert archive.status_code == 200, archive.text
+    assert archive.json()[0]["id"] == str(case.order.id)
+    assert not archive.json()[0]["is_deleted"]
+    scoped = await client.get("/api/v1/logist/orders", headers=case.headers,
+                              params={"attention_only": "true", "city_id": str(other_city_id)})
+    assert scoped.json() == []
+    forbidden = await client.get("/api/v1/logist/orders?attention_only=true", headers=case.buyer)
+    assert forbidden.status_code in (401, 403)
+
+    refund = await enqueue_manual(client, case, amount="30")
+    assert refund.status_code == 202
+    response = await fetch(attention_only="true")
+    assert Decimal(response.json()[0]["refundable_amount"]) == Decimal("93.45")
+    await run_job(session_factory, refund.json()["id"])
+    response = await fetch(attention_only="true")
+    assert Decimal(response.json()[0]["refundable_amount"]) == Decimal("93.45")
+    rest = await enqueue_manual(client, case, amount="93.45")
+    assert rest.status_code == 202
+    assert (await fetch(attention_only="true")).json() == []
+    await run_job(session_factory, rest.json()["id"])
+    assert (await fetch(attention_only="true")).json() == []
+    # Payment remains succeeded after a full refund, but must not leave a badge.
+    async with session_factory() as db:
+        assert (await db.get(Payment, case.payment.id)).status == "succeeded"

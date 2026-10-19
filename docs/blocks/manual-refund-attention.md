@@ -35,3 +35,5 @@ payments.py, dispatch_service.py, api/clients.py, logist_orders.py;
 frontend/src/LogistDashboardScreen.tsx, notificationNavigation.ts.
 Проверки: tests/test_refunds.py, frontend/tests/e2e/logist-refund-attention.spec.ts.
 Отчёт: ../2026-10-19-manual-refund-attention.md.
+
+Подтверждено на test.darmavoz.ru 19.10.2026, runtime/image 9cc2e8f5: реальный #B6A576 виден logist в архиве с остатком 10 ₽, жёлтой плашкой и красным счётчиком; 390/1440 px. Проверка только GET/SELECT, реальные платежи/отмены/возвраты не запускались. CI backend/frontend и сборка Android — success.

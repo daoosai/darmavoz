@@ -300,7 +300,7 @@ async def test_permissions_reason_and_request_payload(client, case):
 @pytest.mark.asyncio
 async def test_cancel_boundary_and_atomic_rollback(client, session_factory, case, monkeypatch):
     async with session_factory() as db:
-        order = await db.get(Order, case.order.id); order.status = "heading_to_pickup"; await db.commit()
+        order = await db.get(Order, case.order.id); order.status = "loading"; await db.commit()
     response = await client.patch(f"/api/v1/clients/me/orders/{case.order.id}/cancel", headers=case.buyer, json={})
     assert response.status_code == 409
     async with session_factory() as db:
@@ -463,3 +463,97 @@ async def test_uncertain_settlement_blocks_refund_until_reconciled(client, sessi
     response = await enqueue_manual(client, case)
     assert response.status_code == 409 and "чека зачёта" in response.json()["detail"]
     assert not case.calls
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("order_status", ["driver_accepted", "heading_to_pickup", "arrived_at_pickup"])
+@pytest.mark.parametrize("payment_status", ["succeeded", "pending", "waiting_for_capture"])
+async def test_late_client_cancel_releases_driver_and_keeps_manual_refund(
+    client, session_factory, case, monkeypatch, order_status, payment_status,
+):
+    from app.models.models import Driver, OrderOffer, UserNotification
+    import app.api.clients as clients_api
+    monkeypatch.setattr(clients_api, "schedule_driver_order_cancelled_notification", lambda *_: None)
+    async with session_factory() as db:
+        driver = Driver(name="Late cancellation QA", phone="+" + str(uuid4().int)[:12], status="busy")
+        db.add(driver); await db.flush()
+        order = await db.get(Order, case.order.id)
+        order.status = order_status
+        order.driver_id = driver.id
+        offer = OrderOffer(order_id=order.id, driver_id=driver.id, status="accepted", offered_at=payments.now())
+        db.add(offer); await db.flush()
+        order.current_offer_id = offer.id
+        payment = await db.get(Payment, case.payment.id)
+        payment.status = payment_status
+        payment.provider_status = payment_status
+        await db.commit()
+        snapshot = {column.name: getattr(payment, column.name) for column in Payment.__table__.columns}
+        driver_id, offer_id = driver.id, offer.id
+
+    response = await client.patch(f"/api/v1/clients/me/orders/{case.order.id}/cancel",
+                                  headers=case.buyer, json={"reason": "Изменились планы"})
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "cancelled"
+    assert not case.calls
+    repeat = await client.patch(f"/api/v1/clients/me/orders/{case.order.id}/cancel",
+                                headers=case.buyer, json={})
+    assert repeat.status_code == 200, repeat.text
+    async with session_factory() as db:
+        order = await db.get(Order, case.order.id)
+        assert order.driver_id is None and order.current_offer_id is None
+        assert order.cancelled_by_type == "client" and order.cancelled_at is not None
+        assert (await db.get(Driver, driver_id)).status == "available"
+        assert (await db.get(OrderOffer, offer_id)).status == "cancelled"
+        payment = await db.get(Payment, case.payment.id)
+        assert {column.name: getattr(payment, column.name) for column in Payment.__table__.columns} == snapshot
+        assert not payment.auto_refund_requested
+        assert await db.scalar(select(Refund.id).where(Refund.payment_id == payment.id)) is None
+        notices = (await db.scalars(select(UserNotification).where(
+            UserNotification.payload["order_id"].astext == str(order.id)))).all()
+        assert any(n.payload.get("refund_mode") == "manual" for n in notices)
+        # A captured/late-success payment must not trigger an automatic refund.
+        await payments.sync_payment(db, payment.id)
+        assert await db.scalar(select(Refund.id).where(Refund.payment_id == payment.id)) is None
+        assert not payment.auto_refund_requested
+
+    manual = await enqueue_manual(client, case, amount="30.00", reason="Возврат с удержанием подачи")
+    assert manual.status_code == 202, manual.text
+    await run_job(session_factory, manual.json()["id"])
+    async with session_factory() as db:
+        payment = await db.get(Payment, case.payment.id)
+        ledger = await refunds.balances(db, payment)
+        assert ledger["refunded_amount"] == "30.00"
+        assert ledger["refundable_amount"] == "93.45"
+        assert ledger["reserved_refund_amount"] == "0.00"
+        rows = (await db.scalars(select(Refund).where(Refund.payment_id == payment.id))).all()
+        assert len(rows) == 1 and rows[0].origin == "manual"
+        assert not payment.auto_refund_requested
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("order_status", ["loading", "heading_to_client", "delivered", "completed"])
+async def test_client_cancel_refused_from_loading(client, session_factory, case, order_status):
+    async with session_factory() as db:
+        order = await db.get(Order, case.order.id); order.status = order_status; await db.commit()
+    response = await client.patch(f"/api/v1/clients/me/orders/{case.order.id}/cancel",
+                                  headers=case.buyer, json={})
+    assert response.status_code == 409
+    async with session_factory() as db:
+        assert (await db.get(Order, case.order.id)).status == order_status
+        assert not (await db.get(Payment, case.payment.id)).auto_refund_requested
+        assert await db.scalar(select(Refund.id).where(Refund.payment_id == case.payment.id)) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("order_status", ["new", "pending"])
+async def test_legacy_early_client_cancel_still_enqueues_full_refund(client, session_factory, case, order_status):
+    async with session_factory() as db:
+        order = await db.get(Order, case.order.id); order.status = order_status; await db.commit()
+    response = await client.patch(f"/api/v1/clients/me/orders/{case.order.id}/cancel",
+                                  headers=case.buyer, json={})
+    assert response.status_code == 200, response.text
+    async with session_factory() as db:
+        payment = await db.get(Payment, case.payment.id)
+        assert payment.auto_refund_requested
+        row = await db.scalar(select(Refund).where(Refund.payment_id == payment.id))
+        assert row.status == "queued" and row.amount == payment.amount

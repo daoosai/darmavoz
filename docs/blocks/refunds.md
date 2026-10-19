@@ -156,3 +156,24 @@ Deploy Test 38897175048 и Test APK 38897175114 success.
 Внешняя проверка 390/1440 px: реальный полный возврат 10 ₽ — срок виден,
 удержания нет; /terms — пункт 5.3 виден. Частичные/ожидающие возвраты покрыты
 UI-фикстурами. Подробности и доказательства в отчёте refund-client-terms.
+
+
+## Клиентская отмена до загрузки — 19.10.2026
+Единые серверные наборы в refunds.py: CANCELLABLE — ранняя отмена с полным
+автовозвратом, MANUAL_CANCELLATION_STATUSES — driver_accepted,
+heading_to_pickup, arrived_at_pickup. CLIENT_CANCELLABLE_STATUSES объединяет их;
+loading и далее остаются запрещены. Поддержаны ранние legacy new/pending.
+PATCH /clients/me/orders/{id}/cancel проверяет статус под Order FOR UPDATE.
+Поздняя отмена освобождает busy-водителя, отменяет pending/accepted offers,
+сбрасывает driver_id/current_offer_id, фиксирует cancelled и уведомляет логиста
+с refund_mode=manual и previous_status. Payment при этом вообще не изменяется:
+нет auto_refund_requested, cancel_idempotence_key, Refund или запроса провайдеру.
+Повтор идемпотентен. Полный ранний возврат сохраняет прежнюю транзакционность.
+
+Сверка поздней оплаты не ставит автоматический возврат без соответствующего intent.
+После ручного частичного возврата остаток остаётся для решения логиста.
+Регрессии tests/test_refunds.py проверяют все три поздних статуса ×
+succeeded/pending/waiting_for_capture, неизменность всех колонок Payment при отмене,
+освобождение водителя, повтор, сверку, ручной возврат 30 из 123.45 без
+автоматического возврата 93.45; отказ от loading и далее и ранний полный возврат.
+Отчёт: ../2026-10-19-client-late-cancellation.md.

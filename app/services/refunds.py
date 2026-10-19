@@ -16,8 +16,13 @@ from app.services import payments
 
 RESERVED = {"queued", "creating", "unknown", "pending", "manual_review"}
 RUNNABLE = {"queued", "creating", "unknown", "pending"}
-CANCELLABLE = {"draft", "created", "searching_driver", "requires_clarification",
+CANCELLABLE = {"new", "pending", "draft", "created", "searching_driver", "requires_clarification",
                "offered_to_driver", "no_driver_found", "timeout", "driver_assigned"}
+
+# A client can still stop the job before loading, but the operator decides the
+# refund amount after the driver has accepted/started travelling.
+MANUAL_CANCELLATION_STATUSES = {"driver_accepted", "heading_to_pickup", "arrived_at_pickup"}
+CLIENT_CANCELLABLE_STATUSES = CANCELLABLE | MANUAL_CANCELLATION_STATUSES
 
 
 async def lock_payment(db, payment_id):

@@ -18,6 +18,7 @@ type ClientOrder = ClientOrderSummary;
 
 const activeStatuses = new Set([
   "new",
+  "pending",
   "created",
   "requires_clarification",
   "searching_driver",
@@ -33,7 +34,16 @@ const activeStatuses = new Set([
   "delivered",
 ]);
 
+const manualRefundCancellationStatuses = new Set([
+  "driver_accepted",
+  "heading_to_pickup",
+  "arrived_at_pickup",
+]);
+
 const cancellableClientOrderStatuses = new Set([
+  "new",
+  "pending",
+  ...manualRefundCancellationStatuses,
   "draft",
   "created",
   "searching_driver",
@@ -589,7 +599,11 @@ export default function OrdersScreen({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 id="cancel-order-title" className="text-lg font-black text-slate-900">Отменить заказ?</h3>
-                <p className="mt-1 text-sm text-slate-500">Поиск водителя будет остановлен.</p>
+                {manualRefundCancellationStatuses.has(cancelling.status) ? (
+                  <p role="alert" className="mt-2 rounded-xl bg-amber-50 p-3 text-sm font-medium text-amber-800">Водитель уже в пути. При отмене заказа может быть удержана стоимость подачи транспорта. Вы уверены, что хотите отменить заказ?</p>
+                ) : (
+                  <p className="mt-1 text-sm text-slate-500">Поиск водителя будет остановлен.</p>
+                )}
               </div>
               <button type="button" onClick={closeCancelModal} disabled={isCancelling} className="rounded-full bg-slate-100 p-2 text-slate-500 hover:bg-slate-200 disabled:opacity-50" aria-label="Закрыть">
                 <X className="h-4 w-4" />

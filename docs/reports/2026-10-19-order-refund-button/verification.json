@@ -1,0 +1,50 @@
+[
+  {
+    "role": "logist",
+    "width": 390,
+    "orderId": "e94e7324-3853-41c9-b2c9-eca244b6a576",
+    "buttonVisible": true,
+    "modalOpened": true,
+    "initialAmount": 10,
+    "enteredPartialAmount": 5,
+    "reasonRequired": true,
+    "refundPosts": 0,
+    "passed": true
+  },
+  {
+    "role": "logist",
+    "width": 1440,
+    "orderId": "e94e7324-3853-41c9-b2c9-eca244b6a576",
+    "buttonVisible": true,
+    "modalOpened": true,
+    "initialAmount": 10,
+    "enteredPartialAmount": 5,
+    "reasonRequired": true,
+    "refundPosts": 0,
+    "passed": true
+  },
+  {
+    "role": "admin",
+    "width": 390,
+    "orderId": "e94e7324-3853-41c9-b2c9-eca244b6a576",
+    "buttonVisible": true,
+    "modalOpened": true,
+    "initialAmount": 10,
+    "enteredPartialAmount": 5,
+    "reasonRequired": true,
+    "refundPosts": 0,
+    "passed": true
+  },
+  {
+    "role": "admin",
+    "width": 1440,
+    "orderId": "e94e7324-3853-41c9-b2c9-eca244b6a576",
+    "buttonVisible": true,
+    "modalOpened": true,
+    "initialAmount": 10,
+    "enteredPartialAmount": 5,
+    "reasonRequired": true,
+    "refundPosts": 0,
+    "passed": true
+  }
+]

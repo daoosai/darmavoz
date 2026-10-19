@@ -38,6 +38,8 @@ for (const width of [390, 1440]) {
       const badge = page.getByLabel('Требуют возврата: 1', { exact: true });
       await expect(badge).toBeVisible();
       await expect(badge).toHaveClass(/bg-red-600/);
+      const badgeBox = await badge.boundingBox();
+      expect(badgeBox!.x + badgeBox!.width).toBeLessThanOrEqual(width);
       if (!fromNotification) await page.getByRole('button', { name: /Архив/ }).click();
       const card = page.locator('[data-order-id="' + oldId + '"]');
       await expect(card.getByText('Требуется ручное решение по возврату средств!', { exact: true })).toBeVisible();

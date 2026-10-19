@@ -875,12 +875,12 @@ export default function LogistDashboardScreen({
           {activeTab === "orders" ? (
             <>
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-2 gap-4">
-                <div className="flex flex-col gap-2">
+                <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto">
                   <h2 className="text-xl font-bold text-slate-800">Все заказы</h2>
-                  <div className="flex w-full max-w-md flex-nowrap gap-2 overflow-x-auto whitespace-nowrap hide-scrollbar rounded-lg bg-slate-100 p-1 pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                  <div className="flex w-full max-w-md flex-wrap gap-1 sm:gap-2 overflow-x-auto whitespace-nowrap hide-scrollbar rounded-lg bg-slate-100 p-1 pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                     <button
                       onClick={() => setOrderStatusTab("active")}
-                      className={`min-h-[44px] shrink-0 whitespace-nowrap px-4 py-1.5 text-center text-sm font-bold rounded-md transition-colors flex items-center justify-center leading-tight ${
+                      className={`min-h-[44px] shrink-0 whitespace-nowrap px-2 sm:px-4 py-1.5 text-center text-sm font-bold rounded-md transition-colors flex items-center justify-center leading-tight ${
                         orderStatusTab === "active"
                           ? "bg-white text-slate-800 shadow-sm"
                           : "text-slate-500 hover:text-slate-700"
@@ -890,7 +890,7 @@ export default function LogistDashboardScreen({
                     </button>
                     <button
                       onClick={() => setOrderStatusTab("completed")}
-                      className={`min-h-[44px] shrink-0 whitespace-nowrap px-4 py-1.5 text-center text-sm font-bold rounded-md transition-colors flex items-center justify-center leading-tight ${
+                      className={`min-h-[44px] shrink-0 whitespace-nowrap px-2 sm:px-4 py-1.5 text-center text-sm font-bold rounded-md transition-colors flex items-center justify-center leading-tight ${
                         orderStatusTab === "completed"
                           ? "bg-white text-slate-800 shadow-sm"
                           : "text-slate-500 hover:text-slate-700"
@@ -900,7 +900,7 @@ export default function LogistDashboardScreen({
                     </button>
                     <button
                       onClick={() => setOrderStatusTab("archived")}
-                      className={`min-h-[44px] shrink-0 whitespace-nowrap px-4 py-1.5 text-center text-sm font-bold rounded-md transition-colors flex items-center justify-center leading-tight ${
+                      className={`min-h-[44px] shrink-0 whitespace-nowrap px-2 sm:px-4 py-1.5 text-center text-sm font-bold rounded-md transition-colors flex items-center justify-center leading-tight ${
                         orderStatusTab === "archived"
                           ? "bg-white text-slate-800 shadow-sm"
                           : "text-slate-500 hover:text-slate-700"

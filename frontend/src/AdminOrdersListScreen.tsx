@@ -23,6 +23,8 @@ interface AdminOrdersListScreenProps {
 }
 
 interface AdminListOrder {
+  requires_manual_refund?: boolean;
+  refundable_amount?: number | string;
   id: string;
   client_name?: string | null;
   delivery_address?: string | null;
@@ -244,7 +246,7 @@ export default function AdminOrdersListScreen({
                       </p>
                     </div>
 
-                    <OrderPaymentsPanel orderId={order.id} materialAmount={order.total_amount} deliveryAmount={order.delivery_cost || 0} />
+                    <OrderPaymentsPanel orderId={order.id} materialAmount={order.total_amount} deliveryAmount={order.delivery_cost || 0} requiresManualRefund={order.requires_manual_refund} refundableAmount={order.refundable_amount} onRefundQueued={() => { void fetchOrders(); }} />
                     <div className="flex items-center justify-between rounded-2xl bg-sky-50 border border-sky-100 p-4 mt-auto">
                       <div>
                         <p className="text-xs font-bold uppercase tracking-[0.16em] text-sky-500">

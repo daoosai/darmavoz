@@ -617,3 +617,24 @@ async def test_logist_refund_attention_includes_unarchived_old_order_and_exact_b
     # Payment remains succeeded after a full refund, but must not leave a badge.
     async with session_factory() as db:
         assert (await db.get(Payment, case.payment.id)).status == "succeeded"
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role, expected", [("admin", 202), ("logist", 202), ("manager", 403), ("driver", 403)])
+async def test_refund_creation_staff_roles(client, session_factory, case, role, expected):
+    async with session_factory() as db:
+        actor, headers = await create_actor(db, role)
+        order = await db.get(Order, case.order.id)
+        order.status = "cancelled"
+        order.cancelled_by_type = "client"
+        await db.commit()
+    response = await client.post(f"/api/v1/payments/{case.payment.id}/refund", headers=headers,
+        json={"amount": "30.00", "reason": "Возврат с удержанием подачи", "request_id": str(uuid4())})
+    assert response.status_code == expected, response.text
+    async with session_factory() as db:
+        row = await db.scalar(select(Refund).where(Refund.payment_id == case.payment.id))
+        if expected == 202:
+            assert row.status == "queued" and row.origin == "manual" and row.initiated_by == actor.id
+            assert row.amount == Decimal("30.00") and row.reason == "Возврат с удержанием подачи"
+            assert not (await db.get(Payment, case.payment.id)).auto_refund_requested
+        else:
+            assert row is None

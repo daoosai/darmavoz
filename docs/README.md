@@ -119,3 +119,5 @@
 - [Клиентская отмена до загрузки и ручной возврат — 19.10.2026](2026-10-19-client-late-cancellation.md).
 
 - [Внимание логиста: ручные возвраты — 19.10.2026](2026-10-19-manual-refund-attention.md); [блок](blocks/manual-refund-attention.md).
+
+- [Возврат из карточки логиста/admin — 19.10.2026](2026-10-19-order-refund-button.md).

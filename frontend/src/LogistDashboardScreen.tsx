@@ -951,8 +951,7 @@ export default function LogistDashboardScreen({
                         data-order-id={order.id}
                         className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex flex-col gap-4 text-left hover:shadow-md transition-shadow"
                       >
-                        {needsManualRefund(order) && <div role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-bold text-amber-900"><p>Требуется ручное решение по возврату средств!</p><p className="mt-1 text-xs font-medium">Доступно к возврату: {Number(order.refundable_amount || 0).toLocaleString("ru-RU")} ₽</p></div>}
-                        <OrderPaymentsPanel orderId={order.id} materialAmount={order.total_amount} deliveryAmount={order.delivery_cost || 0} />
+                        <OrderPaymentsPanel orderId={order.id} materialAmount={order.total_amount} deliveryAmount={order.delivery_cost || 0} requiresManualRefund={needsManualRefund(order)} refundableAmount={order.refundable_amount} onRefundQueued={() => { void fetchOrders(true); }} />
                         {/* Card Header */}
                         <div className="flex justify-between items-start gap-2">
                           <div className="flex flex-col">

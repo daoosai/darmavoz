@@ -53,7 +53,7 @@ def provider_data(p, status="succeeded"):
 
 
 def order(p, status="created"):
-    return SimpleNamespace(id=p.order_id, client_id=p.client_id, status=status, is_deleted=False)
+    return SimpleNamespace(id=p.order_id, client_id=p.client_id, status=status, is_deleted=False, cancelled_by_type=None)
 
 
 def test_models_are_registered():

@@ -70,7 +70,7 @@ class Settings(BaseSettings):
     ANDROID_VERSION: str = "3.1.2"
     IOS_VERSION: str = "3.1.2"
     WEB_VERSION: str = "3.1.2"
-    APK_DOWNLOAD_URL: str = "/static/darmavoz-test.apk"
+    APK_DOWNLOAD_URL: str = "https://play.google.com/store/apps/details?id=ru.darmavoz.app"
     APK_FORCE_UPDATE: bool = False
     SMTP_HOST: str | None = None
     SMTP_PORT: int = 465

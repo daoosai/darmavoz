@@ -121,3 +121,5 @@
 - [Внимание логиста: ручные возвраты — 19.10.2026](2026-10-19-manual-refund-attention.md); [блок](blocks/manual-refund-attention.md).
 
 - [Возврат из карточки логиста/admin — 19.10.2026](2026-10-19-order-refund-button.md).
+
+- [Полный production-релиз 3.3.2 (320) — 20.10.2026](2026-10-20-release-3.3.2.md).

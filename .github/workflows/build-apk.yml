@@ -46,7 +46,6 @@ jobs:
         run: |
           set -euo pipefail
           npm ci
-          npm install -D @capacitor/android
           npm run version:sync
 
       - name: Prepare production environment

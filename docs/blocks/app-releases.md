@@ -19,3 +19,5 @@ Main публикует подписанные release APK и AAB через bui
 
 ## Исправление Google Play versionCode 390 — 20.10.2026
 По явному поручению versionCode 320 заменён на 390 (>387 в Google Play), внешняя версия сохранена 3.3.2. Источник package.json, штатный sync Android/iOS metadata, .env без изменений. Предыдущая проблема downgrade 320 устранена этим выпуском. Отчёт: ../2026-10-20-versioncode-390.md.
+
+VersionCode 390 доставлен в оба контура: test image 4a726e86, production 08c6f69d. CI/APK/AAB/deploy success; versionName 3.3.2 сохранён, код 390 проверен в реальном AAB protobuf manifest и публичных APK. Новый production AAB: https://github.com/daoosai/darmavoz/actions/runs/39434495575/artifacts/12269243535. .env без изменений.

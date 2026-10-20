@@ -1,0 +1,13 @@
+{
+  "run_id": 39434495575,
+  "artifact_id": 12269243535,
+  "artifact_url": "https://github.com/daoosai/darmavoz/actions/runs/39434495575/artifacts/12269243535",
+  "file": "app-release.aab",
+  "manifest": {
+    "versionCode": 390,
+    "versionName": "3.3.2",
+    "package": "ru.darmavoz.app"
+  },
+  "passed": true,
+  "sha256": "33b0ab256b05d9e164af3501f86512b0040f484d6427e866420bc9887930ccb4"
+}

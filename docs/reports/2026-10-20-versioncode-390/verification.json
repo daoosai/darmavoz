@@ -1,0 +1,78 @@
+{
+  "env_unchanged": {
+    "/opt/darmavoz/.env": true,
+    "/opt/darmavoz_test/.env": true,
+    "/opt/darmavoz_deploy/.env": true,
+    "/opt/darmavoz_test_deploy/.env": true
+  },
+  "containers": {
+    "backend_test": {
+      "revision": "4a726e86d7743f08208b24eff48fe4b398058f93",
+      "image_id": "sha256:3a03ff3b92d83a837404a9923f3bd4f4262b576da2d0d2f48fb6e1119d7f1525",
+      "started_at": "2026-10-20T14:04:17.422973806Z",
+      "running": true
+    },
+    "darmavoz_backend": {
+      "revision": "08c6f69da65f83936c872370e8853e9000c4652b",
+      "image_id": "sha256:f02ca3d375f341d78f3cdad35c1464ec01d9a8550679339cca0928c73e702e0c",
+      "started_at": "2026-10-20T13:59:18.977013163Z",
+      "running": true
+    }
+  },
+  "apk_manifests": {
+    "test": {
+      "versionCode": 390,
+      "versionName": "3.3.2",
+      "package": "ru.darmavoz.app.test"
+    },
+    "production": {
+      "versionCode": 390,
+      "versionName": "3.3.2",
+      "package": "ru.darmavoz.app"
+    }
+  },
+  "health": {
+    "https://test.darmavoz.ru": {
+      "health": {
+        "status": "online",
+        "project": "Darmavoz Core API",
+        "version": "3.3.2",
+        "message": "Server is running",
+        "llm_configured": true
+      },
+      "version": {
+        "android_version": "3.3.2",
+        "ios_version": "3.3.2",
+        "web_version": "3.3.2",
+        "download_url": "https://test.darmavoz.ru/static/darmavoz-test.apk",
+        "force_update": false
+      }
+    },
+    "https://darmavoz.ru": {
+      "health": {
+        "status": "online",
+        "project": "Darmavoz Core API",
+        "version": "3.3.2",
+        "message": "Server is running",
+        "llm_configured": true
+      },
+      "version": {
+        "android_version": "3.3.2",
+        "ios_version": "3.3.2",
+        "web_version": "3.3.2",
+        "download_url": "https://play.google.com/store/apps/details?id=ru.darmavoz.app",
+        "force_update": false
+      }
+    }
+  },
+  "source_versions": {
+    "/opt/darmavoz_test": {
+      "version": "3.3.2",
+      "build": 390
+    },
+    "/opt/darmavoz": {
+      "version": "3.3.2",
+      "build": 390
+    }
+  }
+}

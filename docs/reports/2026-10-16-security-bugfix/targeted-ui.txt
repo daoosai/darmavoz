@@ -1,0 +1,24 @@
+
+> react-example@3.1.7 test:e2e
+> playwright test tests/e2e/security-audit.spec.ts --workers=1
+
+
+Running 15 tests using 1 worker
+
+  ✓   1 [chromium] › tests/e2e/security-audit.spec.ts:31:5 › /admin/orders: city selector fits 320px (7.3s)
+  ✓   2 [chromium] › tests/e2e/security-audit.spec.ts:31:5 › /admin/statistics: city selector fits 320px (2.6s)
+  ✓   3 [chromium] › tests/e2e/security-audit.spec.ts:31:5 › /logist/statistics: city selector fits 320px (2.4s)
+  ✓   4 [chromium] › tests/e2e/security-audit.spec.ts:31:5 › /admin/orders: city selector fits 390px (2.7s)
+  ✓   5 [chromium] › tests/e2e/security-audit.spec.ts:31:5 › /admin/statistics: city selector fits 390px (2.6s)
+  ✓   6 [chromium] › tests/e2e/security-audit.spec.ts:31:5 › /logist/statistics: city selector fits 390px (2.5s)
+  ✓   7 [chromium] › tests/e2e/security-audit.spec.ts:31:5 › /admin/orders: city selector fits 768px (1.5s)
+  ✓   8 [chromium] › tests/e2e/security-audit.spec.ts:31:5 › /admin/statistics: city selector fits 768px (2.2s)
+  ✓   9 [chromium] › tests/e2e/security-audit.spec.ts:31:5 › /logist/statistics: city selector fits 768px (2.3s)
+  ✓  10 [chromium] › tests/e2e/security-audit.spec.ts:31:5 › /admin/orders: city selector fits 1440px (2.4s)
+  ✓  11 [chromium] › tests/e2e/security-audit.spec.ts:31:5 › /admin/statistics: city selector fits 1440px (2.3s)
+  ✓  12 [chromium] › tests/e2e/security-audit.spec.ts:31:5 › /logist/statistics: city selector fits 1440px (2.5s)
+  ✓  13 [chromium] › tests/e2e/security-audit.spec.ts:46:1 › rejection presets remain editable and reset for the next request (4.2s)
+  ✓  14 [chromium] › tests/e2e/security-audit.spec.ts:81:3 › equipment create button has accessible name and works with Enter (2.5s)
+  ✓  15 [chromium] › tests/e2e/security-audit.spec.ts:81:3 › equipment create button has accessible name and works with Space (1.7s)
+
+  15 passed (47.7s)

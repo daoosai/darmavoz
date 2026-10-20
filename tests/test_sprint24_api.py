@@ -29,7 +29,7 @@ async def create_actor(session, name, *, admitted=False):
     return user, headers
 
 
-@pytest.mark.parametrize("partner_role", ["supplier", "driver"])
+@pytest.mark.parametrize("partner_role", ["supplier"])
 @pytest.mark.asyncio
 async def test_wholesale_role_access_moderation_and_ownership(client, session_factory, admin_token, partner_role):
     async with session_factory() as db:
@@ -211,7 +211,7 @@ async def test_wholesale_rejects_blocked_accounts(client, session_factory, role,
         assert (await client.get(path, headers=headers)).status_code == 401
     assert (await client.post("/api/v1/wholesale-requests", headers=headers, json={})).status_code == 401
 
-@pytest.mark.parametrize("author_role", ["supplier", "driver"])
+@pytest.mark.parametrize("author_role", ["supplier"])
 @pytest.mark.asyncio
 async def test_wholesale_full_moderation_and_push(client, session_factory, admin_token, monkeypatch, author_role):
     from app.models.models import Driver, PushDelivery, UserNotification
@@ -248,7 +248,11 @@ async def test_wholesale_full_moderation_and_push(client, session_factory, admin
     assert any(r["id"] == request_id and r["status"] == "rejected" and r["reject_reason"] == reason for r in mine)
     sent = []
     monkeypatch.setattr("app.services.push_service._send_push", lambda token, title, body, data: sent.append((title, body, data)) or "test-fcm-id")
-    await run_delivery_tick(session_factory)
+    # The shared disposable DB can contain more than one 30-item worker batch.
+    for _ in range(20):
+        await run_delivery_tick(session_factory)
+        if any(reason in body and data.get("wholesale_request_id") == request_id for _, body, data in sent):
+            break
     assert any(reason in body and data.get("wholesale_request_id") == request_id for _, body, data in sent)
     edited = await client.put(f"/api/v1/wholesale-requests/{request_id}", headers=headers,
                               json={**payload, "pickup_address": "Тюмень, карьер"})
@@ -258,7 +262,10 @@ async def test_wholesale_full_moderation_and_push(client, session_factory, admin
     approved = await client.post(path, headers=admin, json={"action": "approve"})
     assert approved.status_code == 200 and approved.json()["status"] == "approved"
     assert (await client.post(path, headers=admin, json={"action": "approve"})).status_code == 200
-    await run_delivery_tick(session_factory)
+    for _ in range(20):
+        await run_delivery_tick(session_factory)
+        if any(data.get("wholesale_request_id") == request_id and data.get("status") == "approved" for _, _, data in sent):
+            break
     assert any(data.get("wholesale_request_id") == request_id and data.get("status") == "approved" for _, _, data in sent)
     async with session_factory() as db:
         deliveries = list((await db.scalars(select(PushDelivery).where(PushDelivery.payload["wholesale_request_id"].astext == request_id,

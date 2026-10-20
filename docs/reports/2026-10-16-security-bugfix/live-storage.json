@@ -1,0 +1,7 @@
+{
+  "presign": 200,
+  "httpsUpload": 200,
+  "publicRead": 200,
+  "confirm": 201,
+  "deleteOwnMedia": 200
+}

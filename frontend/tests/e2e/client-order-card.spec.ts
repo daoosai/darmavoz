@@ -164,3 +164,41 @@ test('confirmed quote proves review even when online payment is disabled', async
   await setup(page, { orderStatus: 'searching_driver', state: 'confirmed', canPay: false });
   await expect(page.getByRole('button', { name: 'Открыть активный заказ: Песок лесной', exact: true })).toContainText('Ищем водителя...');
 });
+
+const lateCancellationWarning = 'Водитель уже в пути. При отмене заказа может быть удержана стоимость подачи транспорта. Вы уверены, что хотите отменить заказ?';
+for (const width of [390, 1440]) {
+  for (const status of ['new', 'pending', 'driver_assigned', 'driver_accepted', 'heading_to_pickup', 'arrived_at_pickup', 'loading', 'heading_to_client']) {
+    test('client cancellation boundary: ' + status + ' at ' + width + 'px', async ({ page }) => {
+      await page.setViewportSize({ width, height: 1000 });
+      const card = await setup(page, { orderStatus: status, state: 'paid' });
+      const cancel = card.getByRole('button', { name: 'Отменить заказ', exact: true });
+      if (['loading', 'heading_to_client'].includes(status)) {
+        await expect(cancel).toHaveCount(0);
+        return;
+      }
+      await expect(cancel).toBeVisible();
+      const requests: unknown[] = [];
+      await page.route('**/clients/me/orders/' + orderId + '/cancel', route => {
+        requests.push(route.request().postDataJSON());
+        return route.fulfill({ json: { id: orderId, status: 'cancelled' } });
+      });
+      await cancel.click();
+      const dialog = page.getByRole('dialog', { name: 'Отменить заказ?', exact: true });
+      await expect(dialog).toBeVisible();
+      if (['driver_accepted', 'heading_to_pickup', 'arrived_at_pickup'].includes(status)) {
+        await expect(dialog.getByText(lateCancellationWarning, { exact: true })).toBeVisible();
+        await dialog.getByRole('button', { name: 'Назад', exact: true }).click();
+        expect(requests).toHaveLength(0);
+        await cancel.click();
+      } else {
+        await expect(dialog.getByText(lateCancellationWarning, { exact: true })).toHaveCount(0);
+      }
+      await dialog.getByRole('radio', { name: 'Изменились планы', exact: true }).check();
+      expect(requests).toHaveLength(0);
+      await page.screenshot({ path: 'test-results/client-cancel-' + status + '-' + width + '.png', fullPage: true });
+      await dialog.getByRole('button', { name: 'Отменить', exact: true }).click();
+      await expect(dialog).toHaveCount(0);
+      expect(requests).toEqual([{ reason: 'Изменились планы' }]);
+    });
+  }
+}

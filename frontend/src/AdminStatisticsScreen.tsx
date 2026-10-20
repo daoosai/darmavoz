@@ -127,12 +127,12 @@ export default function AdminStatisticsScreen({
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-4 lg:gap-5">
               <div className="md:col-span-2 xl:col-span-6 rounded-3xl bg-gradient-to-br from-sky-600 via-cyan-500 to-emerald-500 p-6 lg:p-7 text-white shadow-lg shadow-sky-200">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
+                <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+                  <div className="min-w-0">
                     <p className="text-sm font-bold uppercase tracking-[0.2em] text-white/80">
                       {"Выручка (План)"}
                     </p>
-                    <p className="mt-4 text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight">
+                    <p className="mt-4 text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight [overflow-wrap:anywhere]">
                       {stats.total_revenue.toLocaleString("ru-RU")} {"₽"}
                     </p>
                     <p className="mt-3 text-sm text-white/85 max-w-xl">

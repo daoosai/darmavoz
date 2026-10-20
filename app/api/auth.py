@@ -2,8 +2,9 @@ import json
 import logging
 import secrets
 from uuid import UUID
+from functools import lru_cache
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,6 +41,7 @@ from app.security.auth import get_password_hash, verify_password
 from app.security.jwt import create_access_token
 from app.services.auth_email_service import send_auth_email_code
 from app.services.redis_client import get_redis
+from app.services.login_throttle import LoginAttempt, guard_ip
 from app.services.sms_service import (
     enforce_email_rate_limit,
     enforce_sms_rate_limit,
@@ -623,14 +625,26 @@ async def driver_register(
     return DriverSmsChallengeResponse(status="sms_sent", phone=normalized_phone)
 
 
+@lru_cache(maxsize=1)
+def _dummy_login_hash() -> str:
+    return get_password_hash("non-account-password-timing-padding")
+
+
 @router.post("/login", response_model=Token | DriverSmsChallengeResponse)
 async def login(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db),
 ):
+    address = await guard_ip(request)
     user = await _get_login_user(db, form_data.username)
-
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    # Resolve the actual user first: phone aliases share the same account budget.
+    identity = str(user.id) if user else normalize_phone_like_username(form_data.username.strip())
+    attempt = LoginAttempt(identity, address)
+    await attempt.reserve()
+    password_ok = verify_password(form_data.password, user.hashed_password if user else _dummy_login_hash())
+    if not user or not password_ok:
+        await attempt.failed()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=_error_detail("INVALID_CREDENTIALS", "Неверный логин или пароль"),
@@ -642,6 +656,7 @@ async def login(
     if user.driver_profile is not None and user.driver_profile.moderation_status == ModerationStatus.suspended.value:
         raise _blocked_profile_exception()
 
+    await attempt.succeeded()
     role_name = user.role.name if user.role else None
     if role_name == "driver":
         normalized_phone = normalize_phone(

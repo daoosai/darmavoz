@@ -6,8 +6,9 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y netcat-openbsd dos2unix && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install them
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt requirements.lock ./
+RUN pip install --no-cache-dir --upgrade pip==26.2.1 setuptools==84.0.0 \
+    && pip install --no-cache-dir -r requirements.txt -c requirements.lock
 
 # Copy the rest of the code
 ARG APP_BUILD_COMMIT=unknown

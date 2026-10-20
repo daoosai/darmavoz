@@ -1,0 +1,87 @@
+{
+  "checks": [
+    {
+      "role": "admin",
+      "path": "/admin/orders",
+      "width": 320,
+      "scrollWidth": 320
+    },
+    {
+      "role": "admin",
+      "path": "/admin/statistics",
+      "width": 320,
+      "scrollWidth": 320
+    },
+    {
+      "role": "logist",
+      "path": "/logist/statistics",
+      "width": 320,
+      "scrollWidth": 320
+    },
+    {
+      "role": "admin",
+      "path": "/admin/orders",
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "role": "admin",
+      "path": "/admin/statistics",
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "role": "logist",
+      "path": "/logist/statistics",
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "role": "admin",
+      "path": "/admin/orders",
+      "width": 768,
+      "scrollWidth": 768
+    },
+    {
+      "role": "admin",
+      "path": "/admin/statistics",
+      "width": 768,
+      "scrollWidth": 768
+    },
+    {
+      "role": "logist",
+      "path": "/logist/statistics",
+      "width": 768,
+      "scrollWidth": 768
+    },
+    {
+      "role": "admin",
+      "path": "/admin/orders",
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "role": "admin",
+      "path": "/admin/statistics",
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "role": "logist",
+      "path": "/logist/statistics",
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "name": "live editable rejection preset",
+      "passed": true
+    },
+    {
+      "name": "live equipment accessible button keyboard",
+      "passed": true
+    }
+  ],
+  "pageErrors": [],
+  "consoleErrors": [],
+  "networkErrors": []
+}

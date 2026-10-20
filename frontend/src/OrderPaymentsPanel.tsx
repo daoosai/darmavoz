@@ -6,9 +6,10 @@ import { CreditCard, History, Loader2, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { buttonClass, commerceApi, dateTime, inputClass, paymentLabels, refundLabels, rubles } from './commerceApi';
 import { useAuthStore, useClientOrdersStore } from './store';
+import OrderRefundModal from './OrderRefundModal';
 import { toClientOrderPaymentState } from './utils/statusMapper';
 
-export default function OrderPaymentsPanel({ orderId, materialAmount = 0, deliveryAmount = 0 }: { orderId: string; materialAmount?: number; deliveryAmount?: number }) {
+export default function OrderPaymentsPanel({ orderId, materialAmount = 0, deliveryAmount = 0, orderStatus, totalAmount = 0, requiresManualRefund = false, refundableAmount = 0, onRefundQueued }: { orderId: string; materialAmount?: number; deliveryAmount?: number; orderStatus?: string; totalAmount?: number; requiresManualRefund?: boolean; refundableAmount?: number | string; onRefundQueued?: () => void }) {
   const { role, token } = useAuthStore();
   const setOrderPaymentState = useClientOrdersStore(state => state.setOrderPaymentState);
   const staff = role === 'admin' || role === 'logist';
@@ -20,6 +21,7 @@ export default function OrderPaymentsPanel({ orderId, materialAmount = 0, delive
   const [history, setHistory] = useState<any>(null);
   const [email, setEmail] = useState('');
   const [quoteOpen, setQuoteOpen] = useState(false);
+  const [refundOpen, setRefundOpen] = useState(false);
   const [material, setMaterial] = useState(String(materialAmount));
   const [delivery, setDelivery] = useState(String(deliveryAmount));
   const load = useCallback(async () => {
@@ -73,11 +75,35 @@ export default function OrderPaymentsPanel({ orderId, materialAmount = 0, delive
   const awaitingPayment = ['creating', 'unknown', 'pending', 'waiting_for_capture', 'waiting_for_payment'].includes(latest?.status)
     || (!latest && !!data?.quote);
   const showRefresh = staff || (!paid && awaitingPayment);
-  return <section aria-label="Оплата заказа" className="mt-3 rounded-2xl border border-sky-100 bg-sky-50/60 p-3">
+  // Compare rounded kopecks across all payment attempts, not a floating-point remainder.
+  const refundTotals = (data?.items || []).reduce((totals: { refunded: number; reserved: number }, payment: any) => ({
+    refunded: totals.refunded + Math.round(Number(payment.refunded_amount || 0) * 100),
+    reserved: totals.reserved + Math.round(Number(payment.reserved_refund_amount || 0) * 100),
+  }), { refunded: 0, reserved: 0 });
+  const refundInProgress = refundTotals.reserved > 0 || data?.items?.some((payment: any) =>
+    ['queued', 'creating', 'unknown', 'pending', 'manual_review'].includes(payment.refund_status));
+  const refundCompleted = data?.items?.some((payment: any) =>
+    ['partial', 'succeeded'].includes(payment.refund_status) && Number(payment.refunded_amount) > 0);
+  const retainedCents = Math.round(Number(totalAmount) * 100) - refundTotals.refunded;
+  const showRetainedAmount = !staff && ['cancelled', 'canceled'].includes(orderStatus || '')
+    && refundCompleted && !refundInProgress && retainedCents > 0;
+
+  return <>
+    {staff && requiresManualRefund && <div role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-bold text-amber-900">
+      <p>Требуется ручное решение по возврату средств!</p>
+      <p className="mt-1 text-xs font-medium">Доступно к возврату: {Number(refundableAmount).toLocaleString('ru-RU')} ₽</p>
+      <button type="button" className="mt-3 min-h-11 rounded-xl border border-amber-700 bg-white px-4 py-2 text-sm font-bold text-amber-900 hover:bg-amber-100" onClick={() => setRefundOpen(true)}>Оформить возврат</button>
+    </div>}
+    {refundOpen && <OrderRefundModal orderId={orderId} onClose={() => setRefundOpen(false)} onQueued={() => { void load(); onRefundQueued?.(); }} />}
+    <section aria-label="Оплата заказа" className="mt-3 rounded-2xl border border-sky-100 bg-sky-50/60 p-3">
     <div className="flex items-center justify-between gap-3"><h3 className="flex items-center gap-2 text-sm font-bold text-slate-800"><CreditCard className="h-5 w-5 text-sky-500" />{awaitingConfirmation ? 'Ожидает подтверждения' : 'Оплата заказа'}</h3>{showRefresh && <button disabled={busy} aria-label="Обновить оплату" className="rounded-lg p-2 text-sky-600" onClick={() => run(refresh)}><RefreshCw className={`h-4 w-4 ${busy ? 'animate-spin' : ''}`} /></button>}</div>
     {error ? <p className="mt-2 text-sm text-red-600">{error}</p> : !data ? <p className="mt-2 text-xs text-slate-400">Загрузка…</p> : <>
       {awaitingConfirmation ? <p className="mt-2 text-xs leading-relaxed text-slate-500">Оплата станет доступна после проверки заказа логистом</p> : <p className="mt-2 text-sm font-bold text-slate-700">{latest ? (latest.refund_status ? refundLabels[latest.refund_status] : paymentLabels[latest.status]) : data.quote ? 'Ожидает оплаты' : 'Стоимость уточняется'}</p>}
-      {latest?.refund_status && <p className="mt-2 text-xs text-slate-600">Возвращено: {rubles(latest.refunded_amount || 0)} · В обработке: {rubles(latest.reserved_refund_amount || 0)}</p>}
+      {latest?.refund_status && <>
+        <p className="mt-2 text-xs text-slate-600">Возвращено: {rubles(refundTotals.refunded / 100)} · В обработке: {rubles(refundTotals.reserved / 100)}</p>
+        {!staff && <p className="mt-1 text-xs leading-relaxed text-gray-500">Обычно деньги поступают на карту в течение 10–60 минут. Точный срок зависит от вашего банка (до 3 рабочих дней).</p>}
+      </>}
+      {showRetainedAmount && <p className="mt-2 text-xs font-medium text-orange-700">Удержана сумма за подачу транспорта: {rubles(retainedCents / 100)}</p>}
       {data.quote && <p className="mt-1 text-lg font-extrabold text-sky-600">{rubles(data.quote.amount)} <span className="text-xs font-normal text-slate-500">включая доставку</span></p>}
       {!config?.enabled && <p className="mt-2 text-xs text-slate-500">Онлайн-оплата готовится к подключению.</p>}
       {(latest?.needs_review || data.requires_refund_review) && <p className="mt-2 rounded-xl bg-amber-50 p-3 text-xs text-amber-800">{staff ? 'Требуется проверка платежа или решение по возврату.' : 'Сотрудник проверяет оплату и состояние заказа.'}</p>}
@@ -91,5 +117,5 @@ export default function OrderPaymentsPanel({ orderId, materialAmount = 0, delive
       {!!data.items.length && <button className="mt-3 flex items-center gap-2 text-xs font-bold text-slate-500" onClick={() => setExpanded(!expanded)}><History className="h-4 w-4" />История платежей</button>}
       {expanded && <div className="mt-3 space-y-2">{data.items.map((p: any) => <button key={p.id} className="w-full rounded-xl bg-white p-3 text-left text-xs text-slate-500" onClick={() => run(async () => setHistory(await commerceApi(`/payments/${p.id}`)))}>{dateTime(p.created_at)} · {rubles(p.amount)}<span className="mt-1 block font-bold">{paymentLabels[p.status]}{p.refund_status && ` · ${refundLabels[p.refund_status]}`}</span></button>)}{history && <div className="rounded-xl bg-white p-3 text-xs text-slate-500">{history.events.map((e: any, i: number) => <p key={i} className="mb-2">{dateTime(e.created_at)} · {e.description}</p>)}<p>Чек: {history.receipt_status || '—'}</p>{history.settlement_receipt_status && <p>Чек зачёта: {history.settlement_receipt_status}</p>}</div>}</div>}
     </>}
-  </section>;
+  </section></>;
 }

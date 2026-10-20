@@ -1,3 +1,4 @@
+import { wholesaleRejectReasons } from './wholesaleRejectReasons';
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { ClipboardList, Heart, Loader2, Lock, Plus, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -116,7 +117,7 @@ export default function WholesaleScreen({ onClose, initialView = 'all' }: { onCl
           </>}
           {detail.status !== 'archived' && <button disabled={busy} className="rounded-xl bg-slate-100 px-4 py-3 text-sm font-bold" onClick={() => action(`${detail.id}/moderate`, { action: 'archive' })}>В архив</button>}
         </div>
-        <ReasonModal isOpen={reasonAction === 'reject'} title="Причина отклонения" subject={detail.material_name}
+        <ReasonModal presets={wholesaleRejectReasons} isOpen={reasonAction === 'reject'} title="Причина отклонения" subject={detail.material_name}
           label="Причина отклонения" value={reason} maxLength={2000} submitLabel="Отклонить заявку"
           isSubmitting={busy} submitDisabled={!reason.trim()} onChange={setReason}
           onClose={() => { if (!busy) setReasonAction(null); }}

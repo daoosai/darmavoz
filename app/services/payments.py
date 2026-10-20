@@ -153,6 +153,10 @@ async def apply_payment(db, payment, data, order):
             payment.failure_reason = reason[:255]
             record(db, payment, "payment_canceled", "Платёж отменён или отклонён", order)
 
+    if local == "succeeded":
+        from app.services.refunds import notify_manual_refund_required
+        await notify_manual_refund_required(db, order)
+
 
 async def resolve_payment(db, payment, order):
     try:

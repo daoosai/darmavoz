@@ -101,3 +101,25 @@
 - [Возвраты ЮKassa: очередь, частичные суммы, webhook](blocks/refunds.md); [отчёт реализации](2026-10-14-yookassa-refunds.md).
 
 - [Экстренный релиз 3.1.7 (387), develop → main](2026-10-15-emergency-release-3.1.7.md).
+
+- [16.10.2026 — общий E2E-аудит и безопасность](2026-10-16-general-e2e-security-audit.md)
+
+- [Блок: диагностический E2E-аудит и безопасность](blocks/security-e2e-audit.md)
+
+- [16.10.2026 — утверждённый план устранения аудита](2026-10-16-audit-remediation-plan.md)
+
+- [16.10.2026 — реализация Security & Bugfix](2026-10-16-security-bugfix.md)
+
+- [Блок: безопасные зависимости](blocks/security-dependencies.md)
+
+- [Корзина: ручной выбор точки после ошибки — 16.10.2026](2026-10-16-cart-pickup-fallback.md).
+
+- [Клиентские возвраты и соглашение — 16.10.2026](2026-10-16-refund-client-terms.md); [правила отмены](blocks/legal-terms.md).
+
+- [Клиентская отмена до загрузки и ручной возврат — 19.10.2026](2026-10-19-client-late-cancellation.md).
+
+- [Внимание логиста: ручные возвраты — 19.10.2026](2026-10-19-manual-refund-attention.md); [блок](blocks/manual-refund-attention.md).
+
+- [Возврат из карточки логиста/admin — 19.10.2026](2026-10-19-order-refund-button.md).
+
+- [Полный production-релиз 3.3.2 (320) — 20.10.2026](2026-10-20-release-3.3.2.md).

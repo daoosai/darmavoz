@@ -3,13 +3,13 @@ from dataclasses import dataclass
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
+from jwt import InvalidTokenError as JWTError
+from app.security.jwt import decode_access_token
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from passlib.context import CryptContext
 
-from app.core.config import settings
 from app.db.database import get_db
 from app.models.models import Client, Driver, ModerationStatus, User
 from app.schemas.token import TokenData
@@ -48,7 +48,7 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = decode_access_token(token)
         username: str = payload.get("sub")
         if username is None:
             raise credentials_exception
@@ -91,7 +91,7 @@ async def get_current_client(
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = decode_access_token(token)
         token_data = TokenData(
             username=payload.get("sub"),
             role=payload.get("role"),
@@ -130,7 +130,7 @@ async def get_current_order_actor(
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = decode_access_token(token)
     except JWTError:
         raise credentials_exception
 

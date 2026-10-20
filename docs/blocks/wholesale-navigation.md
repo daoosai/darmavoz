@@ -116,3 +116,9 @@ GET /wholesale-requests?view=all для supplier возвращает опубл
 и показывает Lock/Доступ закрыт при 403 без toast. Supplier/staff не меняются.
 Legacy whitelist по-прежнему не применяется.
 Отчёт: ../2026-10-02-wholesale-driver-access.md.
+
+## Серверный запрет публикации водителем — 16.10.2026
+POST create (включая draft), PUT edit и POST submit допускают только supplier;
+close допускает supplier/admin с прежней проверкой владельца. Лента/избранное
+водителя сохранены. Даже legacy driver draft нельзя изменить/submit/close.
+Отдельные зависимости publishing_user/closing_user в app/api/wholesale.py.

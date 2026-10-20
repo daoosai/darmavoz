@@ -1,0 +1,60 @@
+{
+  "healthHTTP": 200,
+  "health": {
+    "status": "online",
+    "project": "Darmavoz Core API",
+    "version": "3.1.7",
+    "message": "Server is running",
+    "llm_configured": true
+  },
+  "running": true,
+  "restartCount": 0,
+  "startedAt": "2026-10-16T08:50:19.564547839Z",
+  "revision": "02b662c5b4259cb833efb5c6496e705d3854ce9f",
+  "paymentConfig": {
+    "enabled": true,
+    "test_mode": false,
+    "receipts_enabled": true
+  },
+  "bindings": {
+    "backend_test": {
+      "8000/tcp": [
+        {
+          "HostIp": "127.0.0.1",
+          "HostPort": "8001"
+        }
+      ]
+    },
+    "db_test": {
+      "5432/tcp": [
+        {
+          "HostIp": "127.0.0.1",
+          "HostPort": "5433"
+        }
+      ]
+    },
+    "redis_test": {
+      "6379/tcp": [
+        {
+          "HostIp": "127.0.0.1",
+          "HostPort": "6380"
+        }
+      ]
+    },
+    "minio_test": {
+      "9000/tcp": [
+        {
+          "HostIp": "127.0.0.1",
+          "HostPort": "9002"
+        }
+      ],
+      "9001/tcp": [
+        {
+          "HostIp": "127.0.0.1",
+          "HostPort": "9003"
+        }
+      ]
+    }
+  },
+  "startupTraceback": false
+}

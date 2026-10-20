@@ -1,0 +1,244 @@
+[
+  {
+    "width": 390,
+    "calculations": [
+      {
+        "status": 404,
+        "request": {
+          "material_id": "4988eb87-0925-4239-a7f0-a4141fde93c5",
+          "delivery_option_id": "0e8c0be3-6ec3-4731-b1c7-f3544c8d8b63",
+          "delivery_lat": 57.128508,
+          "delivery_lon": 65.595645,
+          "quantity": 1,
+          "volume": 10,
+          "city_id": "0bad7c79-9d2a-4920-a051-71fc22576f16"
+        },
+        "body": {
+          "error_code": "877NTC",
+          "detail": "Подходящие точки не найдены."
+        }
+      },
+      {
+        "status": 200,
+        "request": {
+          "material_id": "4988eb87-0925-4239-a7f0-a4141fde93c5",
+          "delivery_option_id": "0e8c0be3-6ec3-4731-b1c7-f3544c8d8b63",
+          "delivery_lat": 57.128508,
+          "delivery_lon": 65.595645,
+          "quantity": 1,
+          "volume": 10,
+          "quarry_id": "581cd64d-adf8-4a6e-a922-55f45aa12483",
+          "city_id": "0bad7c79-9d2a-4920-a051-71fc22576f16"
+        },
+        "body": {
+          "best_option": {
+            "quarry_id": "581cd64d-adf8-4a6e-a922-55f45aa12483",
+            "quarry_name": "Новый накопитель",
+            "point_type": "accumulator",
+            "rating": 5,
+            "is_vip": false,
+            "manual_priority": 0,
+            "distance": 7,
+            "material_cost": 10,
+            "delivery_cost": 0,
+            "delivery_cost_per_trip": 0,
+            "trip_count": 1,
+            "trip_capacity_m3": 20,
+            "total_amount": 10,
+            "primary_image_url": "https://test.darmavoz.ru/s3/darmavoz-media-test/staging/quarrys/4-752ec34d73074ea7bc0d6129d2d3163e.jpg",
+            "media_files": [
+              {
+                "id": "c2dd1b18-e3e9-4477-80b3-2bc4077de7d9",
+                "entity_type": "quarry",
+                "entity_id": "581cd64d-adf8-4a6e-a922-55f45aa12483",
+                "bucket": "darmavoz-media-test",
+                "object_key": "staging/quarrys/4-752ec34d73074ea7bc0d6129d2d3163e.jpg",
+                "public_url": "https://test.darmavoz.ru/s3/darmavoz-media-test/staging/quarrys/4-752ec34d73074ea7bc0d6129d2d3163e.jpg",
+                "content_type": "image/jpeg",
+                "file_name": "4.jpg",
+                "file_size": 191416,
+                "sort_order": 0,
+                "slot_key": null,
+                "is_primary": true,
+                "created_at": "2026-07-17T03:59:15.850832Z"
+              }
+            ]
+          },
+          "alternatives": []
+        }
+      },
+      {
+        "status": 200,
+        "request": {
+          "material_id": "4988eb87-0925-4239-a7f0-a4141fde93c5",
+          "delivery_option_id": "0e8c0be3-6ec3-4731-b1c7-f3544c8d8b63",
+          "delivery_lat": 57.128508,
+          "delivery_lon": 65.595645,
+          "quantity": 1,
+          "volume": 10,
+          "quarry_id": "581cd64d-adf8-4a6e-a922-55f45aa12483",
+          "city_id": "0bad7c79-9d2a-4920-a051-71fc22576f16"
+        },
+        "body": {
+          "best_option": {
+            "quarry_id": "581cd64d-adf8-4a6e-a922-55f45aa12483",
+            "quarry_name": "Новый накопитель",
+            "point_type": "accumulator",
+            "rating": 5,
+            "is_vip": false,
+            "manual_priority": 0,
+            "distance": 7,
+            "material_cost": 10,
+            "delivery_cost": 0,
+            "delivery_cost_per_trip": 0,
+            "trip_count": 1,
+            "trip_capacity_m3": 20,
+            "total_amount": 10,
+            "primary_image_url": "https://test.darmavoz.ru/s3/darmavoz-media-test/staging/quarrys/4-752ec34d73074ea7bc0d6129d2d3163e.jpg",
+            "media_files": [
+              {
+                "id": "c2dd1b18-e3e9-4477-80b3-2bc4077de7d9",
+                "entity_type": "quarry",
+                "entity_id": "581cd64d-adf8-4a6e-a922-55f45aa12483",
+                "bucket": "darmavoz-media-test",
+                "object_key": "staging/quarrys/4-752ec34d73074ea7bc0d6129d2d3163e.jpg",
+                "public_url": "https://test.darmavoz.ru/s3/darmavoz-media-test/staging/quarrys/4-752ec34d73074ea7bc0d6129d2d3163e.jpg",
+                "content_type": "image/jpeg",
+                "file_name": "4.jpg",
+                "file_size": 191416,
+                "sort_order": 0,
+                "slot_key": null,
+                "is_primary": true,
+                "created_at": "2026-07-17T03:59:15.850832Z"
+              }
+            ]
+          },
+          "alternatives": []
+        }
+      }
+    ],
+    "storedPointId": "581cd64d-adf8-4a6e-a922-55f45aa12483",
+    "passed": true
+  },
+  {
+    "width": 1440,
+    "calculations": [
+      {
+        "status": 404,
+        "request": {
+          "material_id": "4988eb87-0925-4239-a7f0-a4141fde93c5",
+          "delivery_option_id": "0e8c0be3-6ec3-4731-b1c7-f3544c8d8b63",
+          "delivery_lat": 57.128508,
+          "delivery_lon": 65.595645,
+          "quantity": 1,
+          "volume": 10,
+          "city_id": "0bad7c79-9d2a-4920-a051-71fc22576f16"
+        },
+        "body": {
+          "error_code": "BGR6SJ",
+          "detail": "Подходящие точки не найдены."
+        }
+      },
+      {
+        "status": 200,
+        "request": {
+          "material_id": "4988eb87-0925-4239-a7f0-a4141fde93c5",
+          "delivery_option_id": "0e8c0be3-6ec3-4731-b1c7-f3544c8d8b63",
+          "delivery_lat": 57.128508,
+          "delivery_lon": 65.595645,
+          "quantity": 1,
+          "volume": 10,
+          "quarry_id": "581cd64d-adf8-4a6e-a922-55f45aa12483",
+          "city_id": "0bad7c79-9d2a-4920-a051-71fc22576f16"
+        },
+        "body": {
+          "best_option": {
+            "quarry_id": "581cd64d-adf8-4a6e-a922-55f45aa12483",
+            "quarry_name": "Новый накопитель",
+            "point_type": "accumulator",
+            "rating": 5,
+            "is_vip": false,
+            "manual_priority": 0,
+            "distance": 7,
+            "material_cost": 10,
+            "delivery_cost": 0,
+            "delivery_cost_per_trip": 0,
+            "trip_count": 1,
+            "trip_capacity_m3": 20,
+            "total_amount": 10,
+            "primary_image_url": "https://test.darmavoz.ru/s3/darmavoz-media-test/staging/quarrys/4-752ec34d73074ea7bc0d6129d2d3163e.jpg",
+            "media_files": [
+              {
+                "id": "c2dd1b18-e3e9-4477-80b3-2bc4077de7d9",
+                "entity_type": "quarry",
+                "entity_id": "581cd64d-adf8-4a6e-a922-55f45aa12483",
+                "bucket": "darmavoz-media-test",
+                "object_key": "staging/quarrys/4-752ec34d73074ea7bc0d6129d2d3163e.jpg",
+                "public_url": "https://test.darmavoz.ru/s3/darmavoz-media-test/staging/quarrys/4-752ec34d73074ea7bc0d6129d2d3163e.jpg",
+                "content_type": "image/jpeg",
+                "file_name": "4.jpg",
+                "file_size": 191416,
+                "sort_order": 0,
+                "slot_key": null,
+                "is_primary": true,
+                "created_at": "2026-07-17T03:59:15.850832Z"
+              }
+            ]
+          },
+          "alternatives": []
+        }
+      },
+      {
+        "status": 200,
+        "request": {
+          "material_id": "4988eb87-0925-4239-a7f0-a4141fde93c5",
+          "delivery_option_id": "0e8c0be3-6ec3-4731-b1c7-f3544c8d8b63",
+          "delivery_lat": 57.128508,
+          "delivery_lon": 65.595645,
+          "quantity": 1,
+          "volume": 10,
+          "quarry_id": "581cd64d-adf8-4a6e-a922-55f45aa12483",
+          "city_id": "0bad7c79-9d2a-4920-a051-71fc22576f16"
+        },
+        "body": {
+          "best_option": {
+            "quarry_id": "581cd64d-adf8-4a6e-a922-55f45aa12483",
+            "quarry_name": "Новый накопитель",
+            "point_type": "accumulator",
+            "rating": 5,
+            "is_vip": false,
+            "manual_priority": 0,
+            "distance": 7,
+            "material_cost": 10,
+            "delivery_cost": 0,
+            "delivery_cost_per_trip": 0,
+            "trip_count": 1,
+            "trip_capacity_m3": 20,
+            "total_amount": 10,
+            "primary_image_url": "https://test.darmavoz.ru/s3/darmavoz-media-test/staging/quarrys/4-752ec34d73074ea7bc0d6129d2d3163e.jpg",
+            "media_files": [
+              {
+                "id": "c2dd1b18-e3e9-4477-80b3-2bc4077de7d9",
+                "entity_type": "quarry",
+                "entity_id": "581cd64d-adf8-4a6e-a922-55f45aa12483",
+                "bucket": "darmavoz-media-test",
+                "object_key": "staging/quarrys/4-752ec34d73074ea7bc0d6129d2d3163e.jpg",
+                "public_url": "https://test.darmavoz.ru/s3/darmavoz-media-test/staging/quarrys/4-752ec34d73074ea7bc0d6129d2d3163e.jpg",
+                "content_type": "image/jpeg",
+                "file_name": "4.jpg",
+                "file_size": 191416,
+                "sort_order": 0,
+                "slot_key": null,
+                "is_primary": true,
+                "created_at": "2026-07-17T03:59:15.850832Z"
+              }
+            ]
+          },
+          "alternatives": []
+        }
+      }
+    ],
+    "storedPointId": "581cd64d-adf8-4a6e-a922-55f45aa12483",
+    "passed": true
+  }
+]

@@ -6,6 +6,14 @@ class Settings(BaseSettings):
     REDIS_URL: str
     SECRET_KEY: str
     ALGORITHM: str
+    AUTH_LOGIN_NAMESPACE: str = "auth:password:v1"
+    AUTH_LOGIN_IP_LIMIT: int = Field(default=30, ge=1)
+    AUTH_LOGIN_IP_WINDOW_SECONDS: int = Field(default=60, ge=1)
+    AUTH_LOGIN_FAILURE_LIMIT: int = Field(default=5, ge=1)
+    AUTH_LOGIN_WINDOW_SECONDS: int = Field(default=900, ge=1)
+    AUTH_LOGIN_ACCOUNT_DELAY_AFTER: int = Field(default=10, ge=1)
+    AUTH_LOGIN_MAX_DELAY_SECONDS: int = Field(default=30, ge=1, le=30)
+    AUTH_LOGIN_TRUSTED_PROXY_HOSTS: str = "daoos_kit-caddy-1"
     ADMIN_USERNAME: str
     ADMIN_PASSWORD: str
     LOGIST_USERNAME: str | None = None

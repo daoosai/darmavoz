@@ -9,6 +9,7 @@ interface ReasonModalProps {
   label?: string;
   value: string;
   placeholder?: string;
+  presets?: readonly { label: string; value: string }[];
   maxLength?: number;
   submitLabel?: string;
   submittingLabel?: string;
@@ -27,6 +28,7 @@ export default function ReasonModal({
   label = "Причина",
   value,
   placeholder,
+  presets = [],
   maxLength = 5000,
   submitLabel = "Сохранить",
   submittingLabel = "Сохраняем...",
@@ -39,7 +41,7 @@ export default function ReasonModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-900/50 p-4">
+    <div role="dialog" aria-modal="true" aria-label={title} className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-900/50 p-4">
       <form
         onSubmit={onSubmit}
         className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl"
@@ -59,12 +61,24 @@ export default function ReasonModal({
           <button
             type="button"
             onClick={onClose}
+            aria-label="Закрыть"
             className="rounded-full bg-slate-100 p-2 text-slate-500 transition hover:bg-slate-200"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
+        {presets.length > 0 && (
+          <div role="group" aria-label="Шаблоны причины отклонения" className="mb-4 flex flex-wrap gap-2">
+            {presets.map(preset => (
+              <button key={preset.label} type="button" disabled={isSubmitting}
+                aria-pressed={value === preset.value} onClick={() => onChange(preset.value)}
+                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-sky-50 disabled:opacity-50">
+                {preset.label}
+              </button>
+            ))}
+          </div>
+        )}
         <label className="block text-sm font-bold text-slate-900">
           {label}
           <textarea
@@ -83,6 +97,7 @@ export default function ReasonModal({
           <button
             type="button"
             onClick={onClose}
+            aria-label="Закрыть"
             className="flex-1 rounded-xl bg-slate-100 p-3 font-bold text-slate-600 transition hover:bg-slate-200"
           >
             Отмена

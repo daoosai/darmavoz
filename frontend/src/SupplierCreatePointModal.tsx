@@ -730,6 +730,7 @@ export default function SupplierCreatePointModal({
               <input
                 required
                 placeholder="Например, Карьер Северный"
+                maxLength={255}
                 value={form.name}
                 onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
                 className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-slate-900 outline-none focus:border-sky-500"

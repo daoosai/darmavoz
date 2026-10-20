@@ -1,0 +1,30 @@
+{
+  "code_commit": "c45ec74a1573f55dceaa7c98679d73188dcae490",
+  "environment": "https://test.darmavoz.ru",
+  "deploy_run": 39189328489,
+  "apk_run": 39189328503,
+  "local": {
+    "lint": "passed",
+    "refund_tests": 43,
+    "ui_tests": 56
+  },
+  "deployed_image": {
+    "targeted_refund_tests": 13,
+    "database": "disposable",
+    "provider": "mocked"
+  },
+  "published_ui": {
+    "tests": 6,
+    "widths": [
+      390,
+      1440
+    ],
+    "api": "fixtures",
+    "statuses": [
+      "driver_accepted",
+      "heading_to_pickup",
+      "loading"
+    ]
+  },
+  "real_payments_or_refunds_initiated": false
+}

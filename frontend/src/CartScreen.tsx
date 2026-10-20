@@ -140,6 +140,7 @@ export default function CartScreen({
     getTotalPrice,
     updateItemVolume,
     setItemIdempotencyKey,
+    setItemPickupPoint,
   } = useCartStore();
   const { role, token } = useAuthStore();
   const setOrders = useClientOrdersStore((state) => state.setOrders);
@@ -155,7 +156,6 @@ export default function CartScreen({
     selectedAddressCoordinates,
   );
   const [isCalculating, setIsCalculating] = useState(false);
-  const [preferredPointIds, setPreferredPointIds] = useState<Record<string, string>>({});
   const [manualCalculationRevision, setManualCalculationRevision] = useState(0);
   const [mapContext, setMapContext] = useState<MapContext | null>(null);
   const [deliveryOptionContext, setDeliveryOptionContext] =
@@ -305,7 +305,7 @@ export default function CartScreen({
         // Fetch calculation for each item
         const newResults: Record<string, CalculationResult> = {};
         for (const item of cartItems) {
-          const selectedQuarryId = preferredPointIds[item.id] || item.pickupPoint?.id;
+          const selectedQuarryId = item.preferredPointId || item.pickupPoint?.id;
           const res = await cityFetch(`${baseURL}/client/orders/calculate`, {
             method: "POST",
             headers: {
@@ -372,7 +372,6 @@ export default function CartScreen({
     cartItems,
     token,
     role,
-    preferredPointIds,
     manualCalculationRevision,
   ]);
 
@@ -386,10 +385,7 @@ export default function CartScreen({
     // Invalidate a previous automatic calculation before rendering the manual choice.
     // This prevents a delayed 40 km response from replacing the selected point's result.
     calculationVersionRef.current += 1;
-    setPreferredPointIds((current) => ({
-      ...current,
-      [itemId]: quarryId,
-    }));
+    setItemPickupPoint(itemId, quarryId);
     setCalcResults((currentResults) => {
       const nextResults = { ...currentResults };
       delete nextResults[itemId];
@@ -412,12 +408,6 @@ export default function CartScreen({
   const handleDeliveryOptionChanged = () => {
     if (!deliveryOptionContext) return;
     const { itemId } = deliveryOptionContext;
-    setPreferredPointIds((current) => {
-      if (!current[itemId]) return current;
-      const next = { ...current };
-      delete next[itemId];
-      return next;
-    });
     setCalcResults((current) => {
       if (!current[itemId]) return current;
       const next = { ...current };
@@ -475,7 +465,7 @@ export default function CartScreen({
               source: "web",
               quantity: item.quantity,
               volume: orderedVolume,
-              quarry_id: selectedOption?.quarry_id || item.pickupPoint?.id,
+              quarry_id: selectedOption?.quarry_id || item.preferredPointId || item.pickupPoint?.id,
               mileage_km: selectedOption?.distance,
               delivery_lat: deliveryCoords?.lat,
               delivery_lon: deliveryCoords?.lon,
@@ -779,8 +769,7 @@ export default function CartScreen({
         {/* Marketplace calculation result */}
         {!globalAddress.trim() ? (
           <div className="p-4 bg-blue-50 text-blue-700 rounded-xl text-sm mt-4">
-            {Object.values(preferredPointIds).some(Boolean) ||
-            cartItems.some((item) => Boolean(item.pickupPoint?.id))
+            {cartItems.some((item) => Boolean(item.preferredPointId || item.pickupPoint?.id))
               ? "Укажите адрес доставки."
               : "💡 Укажите адрес доставки, чтобы мы сравнили цены всех доступных точек."}
           </div>
@@ -799,11 +788,15 @@ export default function CartScreen({
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => openDeliveryOptionPicker(item)}
+                  onClick={() => setMapContext({
+                    itemId: item.id,
+                    material: item.material,
+                    deliveryOptionId: item.deliveryOption.id,
+                  })}
                   className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-orange-300 bg-white px-4 py-2.5 font-bold text-orange-700 transition-colors hover:bg-orange-100"
                 >
-                  <Truck className="h-4 w-4" />
-                  Выбрать другой вариант для «{item.material.name}»
+                  <MapPin className="h-4 w-4" />
+                  Выбрать карьер/накопитель на карте
                 </button>
               ))}
             </div>
@@ -844,7 +837,7 @@ export default function CartScreen({
                 calculation.alternatives.map((option) => ({ item, option })),
               );
               const lockedPointId =
-                preferredPointIds[representativeItem.id] || representativeItem.pickupPoint?.id;
+                representativeItem.preferredPointId || representativeItem.pickupPoint?.id;
               const isUserSelectedPoint =
                 pointIds.size === 1 &&
                 Boolean(lockedPointId) &&

@@ -156,20 +156,10 @@ async def cancel_my_order(
     current_client: Client = Depends(get_current_client),
     db: AsyncSession = Depends(get_db),
 ):
-    client_cancellable_statuses = {
-        OrderStatus.draft.value,
-        OrderStatus.created.value,
-        OrderStatus.searching_driver.value,
-        OrderStatus.requires_clarification.value,
-        OrderStatus.offered_to_driver.value,
-        OrderStatus.no_driver_found.value,
-        OrderStatus.timeout.value,
-        OrderStatus.driver_assigned.value,
-    }
-    driver_accepted_or_in_progress_statuses = {
-        OrderStatus.driver_accepted.value,
-        OrderStatus.heading_to_pickup.value,
-        OrderStatus.arrived_at_pickup.value,
+    from app.services.refunds import (
+        CLIENT_CANCELLABLE_STATUSES, MANUAL_CANCELLATION_STATUSES, mark_cancellation,
+    )
+    loading_or_later_statuses = {
         OrderStatus.loading.value,
         OrderStatus.heading_to_client.value,
         OrderStatus.delivered.value,
@@ -195,8 +185,8 @@ async def cancel_my_order(
         if order.status == "cancelled" and order.cancelled_by_type == "client":
             await db.commit()
             return await get_order_by_id(db, order.id)
-        if order.status not in client_cancellable_statuses:
-            if order.status in driver_accepted_or_in_progress_statuses:
+        if order.status not in CLIENT_CANCELLABLE_STATUSES:
+            if order.status in loading_or_later_statuses:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail={"code": "ORDER_ALREADY_ACCEPTED", "message": "Заказ уже принят водителем"},
@@ -206,6 +196,8 @@ async def cancel_my_order(
                 detail={"code": "ORDER_CANNOT_BE_CANCELLED", "message": "Этот заказ нельзя отменить в текущем статусе"},
             )
 
+        manual_refund = order.status in MANUAL_CANCELLATION_STATUSES
+        previous_status = order.status
         cancelled_driver_id = order.driver_id
         cancel_reason = (payload.reason or "").strip() or "Отменено клиентом"
 
@@ -225,8 +217,11 @@ async def cancel_my_order(
             if assigned_driver is not None and assigned_driver.status == DriverStatus.busy.value:
                 assigned_driver.status = DriverStatus.available.value
 
-        from app.services.refunds import mark_cancellation
-        await mark_cancellation(db, order)
+        # Do not mark Payment intent or enqueue a Refund for late cancellations.
+        # Keeping auto_refund_requested false also prevents a full refund during
+        # later payment reconciliation or after a manual partial refund.
+        if not manual_refund:
+            await mark_cancellation(db, order)
         order.status = OrderStatus.cancelled.value
         order.cancelled_at = datetime.now(UTC)
         order.cancelled_by_type = "client"
@@ -241,13 +236,15 @@ async def cancel_my_order(
                 description=cancel_reason,
             )
         )
-        await create_operator_notifications(
-            db,
-            event_type="order_cancelled_by_client",
-            title="Клиент отменил заказ",
-            body=f"{get_order_material_name(order)}. Причина: {cancel_reason}",
-            payload={"order_id": str(order.id), "event": "order_cancelled_by_client"},
-        )
+        if manual_refund:
+            from app.services.refunds import notify_manual_refund_required
+            await notify_manual_refund_required(db, order, previous_status=previous_status)
+        else:
+            await create_operator_notifications(
+                db, event_type="order_cancelled_by_client", title="Клиент отменил заказ",
+                body=f"{get_order_material_name(order)}. Причина: {cancel_reason}",
+                payload={"order_id": str(order.id), "event": "order_cancelled_by_client"},
+            )
         await db.commit()
 
         cancelled_order = await get_order_by_id(db, order.id)

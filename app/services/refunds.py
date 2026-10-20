@@ -16,8 +16,13 @@ from app.services import payments
 
 RESERVED = {"queued", "creating", "unknown", "pending", "manual_review"}
 RUNNABLE = {"queued", "creating", "unknown", "pending"}
-CANCELLABLE = {"draft", "created", "searching_driver", "requires_clarification",
+CANCELLABLE = {"new", "pending", "draft", "created", "searching_driver", "requires_clarification",
                "offered_to_driver", "no_driver_found", "timeout", "driver_assigned"}
+
+# A client can still stop the job before loading, but the operator decides the
+# refund amount after the driver has accepted/started travelling.
+MANUAL_CANCELLATION_STATUSES = {"driver_accepted", "heading_to_pickup", "arrived_at_pickup"}
+CLIENT_CANCELLABLE_STATUSES = CANCELLABLE | MANUAL_CANCELLATION_STATUSES
 
 
 async def lock_payment(db, payment_id):
@@ -178,6 +183,40 @@ async def mark_cancellation(db, order):
         payment.auto_refund_requested = True
         payment.cancel_idempotence_key = payment.cancel_idempotence_key or str(uuid4())
         await ensure_automatic(db, payment, order)
+
+
+async def notify_manual_refund_required(db, order, *, previous_status=None):
+    """Transactional, deduplicated operator inbox/PUSH; never changes payment intent."""
+    if order.status not in {"cancelled", "canceled"} or order.cancelled_by_type != "client":
+        return
+    rows = (await db.scalars(select(Payment).where(
+        Payment.order_id == order.id, Payment.status == "succeeded",
+        Payment.auto_refund_requested.is_(False),
+    ))).all()
+    outstanding = False
+    for payment in rows:
+        if Decimal((await balances(db, payment))["refundable_amount"]) > 0:
+            outstanding = True
+            break
+    if not outstanding:
+        return
+    from app.models.models import Role, User
+    from app.services.notification_outbox import enqueue
+    operators = await db.scalars(select(User.id).join(Role).where(
+        Role.name.in_(("admin", "logist")), User.is_active.is_(True), User.is_deleted.is_(False),
+    ))
+    for operator_id in operators:
+        await enqueue(
+            db, key=f"client-cancel:{order.id}:manual-refund:{operator_id}",
+            recipient_type="user", recipient_id=operator_id,
+            event_type="order_cancelled_by_client", title="Требуется решение по возврату",
+            body=(f"Заказ #{str(order.id)[-6:].upper()} отменен клиентом после выезда машины. "
+                  "Требуется ручное решение по возврату средств!"),
+            payload={"order_id": str(order.id), "city_id": str(order.city_id or ""),
+                     "status": order.status, "previous_status": previous_status or "",
+                     "refund_mode": "manual"},
+            inbox=True,
+        )
 
 
 async def apply_result(db, row, payment, order, data):

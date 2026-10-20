@@ -1073,9 +1073,16 @@ async def list_recent_orders(
     city_id: UUID | None = None,
     created_on: date | None = None,
     is_deleted: bool = False,
+    archive: bool = False,
+    attention_only: bool = False,
 ) -> list[Order]:
     stmt = select(Order).options(*order_load_options())
-    stmt = stmt.where(Order.is_deleted.is_(is_deleted))
+    if attention_only:
+        stmt = stmt.where(Order.requires_manual_refund)
+    elif archive:
+        stmt = stmt.where(or_(Order.is_deleted.is_(True), Order.status.in_(("cancelled", "canceled", "driver_cancel"))))
+    else:
+        stmt = stmt.where(Order.is_deleted.is_(is_deleted))
     if city_id is not None:
         await resolve_city(session, city_id, require_active=False)
         stmt = stmt.where(Order.city_id == city_id)
@@ -1086,9 +1093,11 @@ async def list_recent_orders(
     if created_on is not None:
         day_start = datetime.combine(created_on, time.min, tzinfo=UTC)
         next_day_start = day_start + timedelta(days=1)
-        stmt = stmt.where(Order.created_at >= day_start).where(Order.created_at < next_day_start)
+        date_clause = and_(Order.created_at >= day_start, Order.created_at < next_day_start)
+        stmt = stmt.where(or_(date_clause, Order.requires_manual_refund) if archive else date_clause)
 
-    result = await session.execute(stmt.order_by(Order.created_at.desc()).limit(limit))
+    stmt = stmt.order_by(Order.requires_manual_refund.desc(), Order.created_at.desc()) if archive or attention_only else stmt.order_by(Order.created_at.desc())
+    result = await session.execute(stmt if attention_only else stmt.limit(limit))
     return hydrate_orders_route_fields(list(result.scalars().unique().all()))
 
 

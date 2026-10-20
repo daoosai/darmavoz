@@ -107,12 +107,14 @@ async def list_logist_orders(
     date: date_type | None = None,
     is_deleted: bool = False,
     show_deleted: bool | None = None,
+    archive: bool = False,
+    attention_only: bool = False,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_logist_user),
 ) -> list[Order]:
     del current_user
     deleted_filter = show_deleted if show_deleted is not None else is_deleted
-    return await list_recent_orders(db, city_id=city_id, driver_id=driver_id, created_on=date, is_deleted=deleted_filter)
+    return await list_recent_orders(db, city_id=city_id, driver_id=driver_id, created_on=date, is_deleted=deleted_filter, archive=archive, attention_only=attention_only)
 
 
 @router.get("/orders/{order_id}", response_model=OrderOut)

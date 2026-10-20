@@ -1,3 +1,4 @@
+import { wholesaleRejectReasons } from './wholesaleRejectReasons';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, Loader2, RefreshCw, X } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -99,6 +100,6 @@ export default function AdminWholesaleScreen() {
         : <div className="rounded-2xl border bg-white p-8 text-center text-slate-500">В этом статусе заявок пока нет</div>}
       {total > 20 && <div className="flex items-center justify-between gap-3"><button disabled={page === 1 || busy} onClick={() => setPage(page - 1)}>Назад</button><span>{page} / {Math.ceil(total / 20)}</span><button disabled={page * 20 >= total || busy} onClick={() => setPage(page + 1)}>Далее</button></div>}
     </>}
-    <ReasonModal isOpen={!!rejecting} title="Причина отклонения" subject={rejecting?.material_name} label="Причина отклонения" value={reason} maxLength={2000} submitLabel="Отклонить заявку" isSubmitting={busy} submitDisabled={!reason.trim()} onChange={setReason} onClose={() => { if (!busy) setRejecting(null); }} onSubmit={e => { e.preventDefault(); if (rejecting && reason.trim()) void moderate(rejecting, 'reject'); }} />
+    <ReasonModal presets={wholesaleRejectReasons} isOpen={!!rejecting} title="Причина отклонения" subject={rejecting?.material_name} label="Причина отклонения" value={reason} maxLength={2000} submitLabel="Отклонить заявку" isSubmitting={busy} submitDisabled={!reason.trim()} onChange={setReason} onClose={() => { if (!busy) setRejecting(null); }} onSubmit={e => { e.preventDefault(); if (rejecting && reason.trim()) void moderate(rejecting, 'reject'); }} />
   </section>;
 }

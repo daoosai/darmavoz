@@ -33,3 +33,17 @@ mobile/build
 *firebase*.json
 *.keystore
 keystore_base64.txt
+
+# Server credentials are injected at runtime, never baked into images.
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Downloadable releases, reports and native projects are not backend inputs.
+backend/
+**/*.apk
+**/*.aab
+docs/reports/
+frontend/android/
+frontend/ios/

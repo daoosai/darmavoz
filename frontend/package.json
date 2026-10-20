@@ -2,7 +2,7 @@
   "name": "react-example",
   "private": true,
   "version": "3.3.2",
-  "versionCode": 320,
+  "versionCode": 390,
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",

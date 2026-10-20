@@ -1,0 +1,22 @@
+{
+  "base": "https://test.darmavoz.ru",
+  "health": {
+    "status": "online",
+    "project": "Darmavoz Core API",
+    "version": "3.3.2",
+    "message": "Server is running",
+    "llm_configured": true
+  },
+  "version": {
+    "android_version": "3.3.2",
+    "ios_version": "3.3.2",
+    "web_version": "3.3.2",
+    "download_url": "https://test.darmavoz.ru/static/darmavoz-test.apk",
+    "force_update": false
+  },
+  "termsClause53": true,
+  "frontendVersion": "3.3.2",
+  "refundModalInServedBundle": true,
+  "script": "/assets/index-AnBjSp0C.js",
+  "passed": true
+}

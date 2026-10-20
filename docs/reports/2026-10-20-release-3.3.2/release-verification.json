@@ -1,0 +1,50 @@
+{
+  "env_unchanged": {
+    "/opt/darmavoz/.env": true,
+    "/opt/darmavoz_test/.env": true,
+    "/opt/darmavoz_deploy/.env": true,
+    "/opt/darmavoz_test_deploy/.env": true
+  },
+  "containers": {
+    "backend_test": {
+      "revision": "48379f44f371571efab30bfcbbd534d3675af9c5",
+      "image_id": "sha256:6c9adfe901eb0d3d72ec9c4757f6ec95b97af10d09a45f0a77edc92b4f9f8ffd",
+      "started_at": "2026-10-20T13:41:11.989060952Z",
+      "running": true
+    },
+    "darmavoz_backend": {
+      "revision": "2f8ab666e07b937c344aa0f629ed4afe22863858",
+      "image_id": "sha256:cebc825e77971d39ccda4bb481ffd46f2572406c796ea86fac425c0ea0c2d1da",
+      "started_at": "2026-10-20T13:36:47.131618928Z",
+      "running": true
+    }
+  },
+  "apks": {
+    "test": {
+      "versionCode": 320,
+      "versionName": "3.3.2",
+      "package": "ru.darmavoz.app.test",
+      "api_origin_verified": "https://test.darmavoz.ru/api/v1",
+      "sha256": "b465c2f7419c911a4a373882f0e63f5460257a76dc368776fa287cb1f5dfb994"
+    },
+    "production": {
+      "versionCode": 320,
+      "versionName": "3.3.2",
+      "package": "ru.darmavoz.app",
+      "api_origin_verified": "https://darmavoz.ru/api/v1",
+      "sha256": "4f32dc17bb1201437f07282bdc30d9609397d42d479e850c90bfc69a52472f68"
+    }
+  },
+  "native_versions": {
+    "/opt/darmavoz_test": {
+      "version": "3.3.2",
+      "android_versionCode": 320,
+      "ios_CFBundleVersion": "320"
+    },
+    "/opt/darmavoz": {
+      "version": "3.3.2",
+      "android_versionCode": 320,
+      "ios_CFBundleVersion": "320"
+    }
+  }
+}

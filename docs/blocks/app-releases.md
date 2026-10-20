@@ -14,3 +14,5 @@ Main публикует подписанные release APK и AAB через bui
 
 ## Релиз 3.3.2 (320), 20.10.2026
 По прямому поручению владельца — полный merge develop в main с конфликтами в пользу нового develop, без cherry-pick. Исходные версии package/lock, Android, iOS — 3.3.2 и build 320. Серверные .env не меняются. Main ведётся в /opt/darmavoz, runtime /opt/darmavoz_deploy обновляется через deploy.yml. Подробнее: ../2026-10-20-release-3.3.2.md.
+
+20.10.2026 релиз 3.3.2 (320) полностью слит develop→main. Test image/runtime 48379f44, production 2f8ab666; оба backend пересобраны и контейнеры пересозданы. CI Test/Production и APK/AAB success, реальные APK manifest/API origin и public health/version/frontend проверены. .env неизменны по SHA-256, режимы оплаты test/live корректно подхвачены. Production workflow использует только npm ci без установки незакреплённого Capacitor Android. Подробности и ограничение downgrade versionCode 387→320 в отчёте релиза.

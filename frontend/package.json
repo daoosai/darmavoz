@@ -1,8 +1,8 @@
 {
   "name": "react-example",
   "private": true,
-  "version": "3.3.2",
-  "versionCode": 390,
+  "version": "3.3.3",
+  "versionCode": 391,
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",

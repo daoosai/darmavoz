@@ -24,3 +24,5 @@ VersionCode 390 доставлен в оба контура: test image 4a726e86
 
 ## Релиз 3.3.3 (391) и 2GIS — 22.10.2026
 По прямому поручению: 3.3.3 / build 391, штатный version sync, полный merge develop→main. Новые 2GIS ключи задаются Tech Lead через GitHub Secrets и server .env; код ключей не хранит. Сборки inject VITE_2GIS_KEY, backend получает эффективный TWOGIS_API_KEY/VITE_2GIS_KEY при force-recreate. Отчёт: ../2026-10-22-release-3.3.3-2gis.md.
+
+3.3.3 (391) доставлен: test image/runtime 1fc821c2, production 0930f925. CI всех четырёх workflow success, явный --force-recreate обоих backend выполнен на 159.194.236.11. Новый 2GIS ключ подтверждён в web/APK обоих контуров и production AAB; settings backend совпадают с server env. Guest карты получили 2GIS auth/style/tile HTTP 200. Серверные .env неизменны. Итоговые подтверждения — в отчёте релиза.

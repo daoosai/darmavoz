@@ -1,0 +1,39 @@
+{
+  "env_unchanged": {
+    "/opt/darmavoz_test/.env": true,
+    "/opt/darmavoz/.env": true,
+    "/opt/darmavoz_test_deploy/.env": true,
+    "/opt/darmavoz_deploy/.env": true
+  },
+  "contours": {
+    "test": {
+      "revision": "1fc821c28c8ad4ac7d5e446bd4f00fce76716981",
+      "image_id": "sha256:ea015813686f39c3188af4a1569ac1f97de4748abdb94426ba61662556552d83",
+      "started_at": "2026-10-22T01:17:26.993106151Z",
+      "backend_settings_match_compose_key": true,
+      "current_key_in_built_web": true,
+      "current_key_in_apk": true,
+      "old_web_had_current_key": false,
+      "apk_manifest": {
+        "versionCode": 391,
+        "versionName": "3.3.3",
+        "package": "ru.darmavoz.app.test"
+      },
+      "health": {
+        "status": "online",
+        "project": "Darmavoz Core API",
+        "version": "3.3.3",
+        "message": "Server is running",
+        "llm_configured": true
+      },
+      "version": {
+        "android_version": "3.3.3",
+        "ios_version": "3.3.3",
+        "web_version": "3.3.3",
+        "download_url": "https://test.darmavoz.ru/static/darmavoz-test.apk",
+        "force_update": false
+      },
+      "passed": true
+    }
+  }
+}

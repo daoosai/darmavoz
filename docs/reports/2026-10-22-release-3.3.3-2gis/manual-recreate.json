@@ -1,0 +1,32 @@
+{
+  "backend_test": {
+    "manual_force_recreate": true,
+    "started_at": "2026-10-22T01:07:44.760168897Z",
+    "compose_key_matches_container": true,
+    "key_configured": true,
+    "effective_key_matches_container_env": true,
+    "web_version": "3.3.3",
+    "health": {
+      "status": "online",
+      "project": "Darmavoz Core API",
+      "version": "3.3.3",
+      "message": "Server is running",
+      "llm_configured": true
+    }
+  },
+  "darmavoz_backend": {
+    "manual_force_recreate": true,
+    "started_at": "2026-10-22T01:07:51.359072044Z",
+    "compose_key_matches_container": true,
+    "key_configured": true,
+    "effective_key_matches_container_env": true,
+    "web_version": "3.3.3",
+    "health": {
+      "status": "online",
+      "project": "Darmavoz Core API",
+      "version": "3.3.3",
+      "message": "Server is running",
+      "llm_configured": true
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "test": {
+    "current_server_2gis_key_in_android_artifact": true,
+    "artifact": "test APK",
+    "version": "3.3.3",
+    "build": 391
+  },
+  "production": {
+    "current_server_2gis_key_in_android_artifact": true,
+    "artifact": "production AAB",
+    "version": "3.3.3",
+    "build": 391
+  }
+}

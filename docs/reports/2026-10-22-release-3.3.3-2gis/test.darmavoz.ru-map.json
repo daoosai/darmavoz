@@ -1,0 +1,142 @@
+{
+  "base": "https://test.darmavoz.ru",
+  "canvasVisible": true,
+  "responses": [
+    {
+      "host": "mapgl.2gis.com",
+      "kind": "other",
+      "status": 200
+    },
+    {
+      "host": "styles.api.2gis.com",
+      "kind": "style",
+      "status": 200
+    },
+    {
+      "host": "keys.api.2gis.com",
+      "kind": "auth",
+      "status": 200
+    },
+    {
+      "host": "keys.api.2gis.com",
+      "kind": "auth",
+      "status": 200
+    },
+    {
+      "host": "styles.api.2gis.com",
+      "kind": "style",
+      "status": 200
+    },
+    {
+      "host": "tile3-sdk.maps.2gis.com",
+      "kind": "tile",
+      "status": 200
+    },
+    {
+      "host": "tile3-sdk.maps.2gis.com",
+      "kind": "tile",
+      "status": 200
+    },
+    {
+      "host": "tile0-sdk.maps.2gis.com",
+      "kind": "tile",
+      "status": 204
+    },
+    {
+      "host": "tile0-sdk.maps.2gis.com",
+      "kind": "tile",
+      "status": 200
+    },
+    {
+      "host": "tile0-sdk.maps.2gis.com",
+      "kind": "tile",
+      "status": 200
+    },
+    {
+      "host": "tile1-sdk.maps.2gis.com",
+      "kind": "tile",
+      "status": 200
+    },
+    {
+      "host": "tile3-sdk.maps.2gis.com",
+      "kind": "tile",
+      "status": 204
+    },
+    {
+      "host": "tile0-sdk.maps.2gis.com",
+      "kind": "tile",
+      "status": 200
+    },
+    {
+      "host": "tile0-sdk.maps.2gis.com",
+      "kind": "tile",
+      "status": 200
+    },
+    {
+      "host": "tile0-sdk.maps.2gis.com",
+      "kind": "tile",
+      "status": 200
+    },
+    {
+      "host": "tile1-sdk.maps.2gis.com",
+      "kind": "tile",
+      "status": 200
+    },
+    {
+      "host": "tile0-sdk.maps.2gis.com",
+      "kind": "tile",
+      "status": 200
+    },
+    {
+      "host": "tile0-sdk.maps.2gis.com",
+      "kind": "tile",
+      "status": 200
+    },
+    {
+      "host": "tile0-sdk.maps.2gis.com",
+      "kind": "tile",
+      "status": 200
+    },
+    {
+      "host": "tile0-sdk.maps.2gis.com",
+      "kind": "tile",
+      "status": 200
+    },
+    {
+      "host": "tile1-sdk.maps.2gis.com",
+      "kind": "tile",
+      "status": 200
+    },
+    {
+      "host": "disk.2gis.com",
+      "kind": "style",
+      "status": 200
+    },
+    {
+      "host": "disk.2gis.com",
+      "kind": "style",
+      "status": 200
+    },
+    {
+      "host": "mapgl.2gis.com",
+      "kind": "other",
+      "status": 200
+    },
+    {
+      "host": "mapgl.2gis.com",
+      "kind": "other",
+      "status": 200
+    },
+    {
+      "host": "disk.2gis.com",
+      "kind": "style",
+      "status": 200
+    },
+    {
+      "host": "disk.2gis.com",
+      "kind": "style",
+      "status": 200
+    }
+  ],
+  "passed": true
+}

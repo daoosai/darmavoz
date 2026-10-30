@@ -159,7 +159,7 @@ QA: `s26_qa_postgres`, `s26_qa_redis`, `s26_qa_backend` на 127.0.0.1:18026; so
 
 ## 8. Продолжить отсюда
 
-**Следующая конкретная задача:** завершить live sandbox покупку (helper `frontend/tests/manual/sprint26-sandbox.cjs prepare` запущен), сохранить pending через фактический restart test backend, затем оплатить test wallet/card и проверить refund. Параллельно подготовлен analytics follow-up: известный город + reconciliation всех retry attempts + renewal events. До commit/push проверить его тесты и обновить SHA исходников, runtime пока c07. Не запускать параллельные миграции/деплой.
+**Следующая конкретная задача:** дождаться test CI после визуального follow-up (карта/outline кнопка), выполнить `scripts/sprint26_live_api_smoke.py resources|sandbox`, затем QA-only checkout→assignment→completion. Покупка, partial refund/keep, restart pending, live anonymous linkage/city/chat и owner in-app уже проверены; не повторять их без причины. Source HEAD3adda8ba + visual follow-up, runtime3adda8ba deploy завершается. CLI запуск во время Docker image prune CI дал No such image — повторить после завершения deploy, данные не менялись. Не запускать параллельные миграции/деплой.
 
 После подтверждённой migration:
 
@@ -196,3 +196,17 @@ Live diagnostic: HTTP400 invalid_request, parameter amount.value; provider descr
 Sandbox: новый QA test-only тариф 10 ₽/3мес, покупка succeeded, частичный refund **3 ₽ succeeded**, остаток7 ₽. Техническое решение keep ещё не завершено (доступ не изменён, требуется review). Helper исправлен для точного поиска select. Новый server-side provider-limit набор: **34 passed (19.50s)**; lint/TypeScript/build pass.
 
 Live partial refund и отдельный keep выполнены через опубликованный AdminSubscriptionsScreen: 3.00 ₽ succeeded, доступный остаток7.00 ₽, access_review_required=false. Report `reports/sprint26/sandbox-refund.json`. CI28a counts: 272 backend /172 browser passed. Подготовлен следующий commit технических лимитов partial refund (без новой миграции/версии).
+
+
+### Визуальный follow-up после live screenshot review
+
+Live notice/maps/chat/verified anonymous history прошли геометрические проверки всех ширин; скриншоты просмотрены вручную. Найдены и исправлены в source: конфликт text-white/text-sky на белой кнопке «Карта материалов» и перекрытие toolbar вложенной карты zoom controls SDK. Кнопке назначен обычный существующий outline стиль без конфликтующих классов. Только для нового embedded экрана maps SDK controls перенесены bottomLeft (официальный MapGL option), enableTrackResize включён; отдельные прежние карты сохраняют расположение controls. Требуются TS/build и визуальная перепроверка после следующего test deploy. Не путать скрытую map clipping геометрию с фактическим горизонтальным переполнением.
+
+
+### Закрытые live UI/owner проверки
+
+`frontend/tests/manual/sprint26-live-ui.cjs profiles chat journey`: pass, реальные API/SDK тестового сайта, 36 контрольных снимков. Anonymous→verified admin linkage, masked contact/audited reveal, selected-city filter, offline queue и дедупликация проверены. Chat send/pin/delete/offline draft и warn направлены только QA.
+
+Owner test дождался реальных настроенных **5 минут** группировки: **3 неуспешных QA входа → 1 in-app уведомление только QA admin**. Ссылка уведомления открыла нужную хронологию; [report](reports/sprint26/live-ui-owner.json). `no_device` не доказательство PUSH; физического телефона нет.
+
+Визуальный follow-up: новый browser case **1 passed (13.6s)** проверил контраст outline кнопки и три карты во всех6 размерах; скриншот driver-notice-fixed-360.png просмотрен. TS/build pass. Следующий test commit публикует эти исправления; после deploy повторить real SDK screenshots.

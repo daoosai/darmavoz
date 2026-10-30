@@ -64,9 +64,11 @@ const getCrmMarkerStatus = (point: GlobalPickupPoint) =>
 export default function GlobalMapScreen({
   isAuthenticated,
   onOpenAuth,
+  embedded = false,
 }: {
   isAuthenticated: boolean;
   onOpenAuth: () => void;
+  embedded?: boolean;
 }) {
   const cityId = useCityStore((state) => state.cityId);
   const activeCity = useCityStore((state) =>
@@ -321,6 +323,8 @@ export default function GlobalMapScreen({
           () => new mapgl.Map(mapContainerRef.current, {
             center: [addressLon ?? activeCenterLon, addressLat ?? activeCenterLat],
             zoom: activeMapZoom,
+            zoomControl: embedded ? "bottomLeft" : undefined,
+            enableTrackResize: true,
             key,
           }),
           (error) => {
@@ -353,7 +357,7 @@ export default function GlobalMapScreen({
       mapRef.current?.destroy();
       mapRef.current = null;
     };
-  }, [cityId, mapAttempt]);
+  }, [cityId, embedded, mapAttempt]);
 
   useEffect(() => {
     if (!isMapReady || !mapRef.current) return;
@@ -523,9 +527,9 @@ export default function GlobalMapScreen({
         {selectedPoint === null && (
           <div className="pointer-events-none absolute inset-x-0 top-0 z-10 p-4">
             <div className="pointer-events-auto rounded-[28px] bg-white/95 p-4 shadow-xl backdrop-blur">
-              <h2 className="text-2xl font-black text-slate-900">Активные точки</h2>
+              <h2 className="text-2xl font-black text-slate-900">{embedded ? "Карьеры и накопители" : "Активные точки"}</h2>
               <p className="mt-1 text-sm text-slate-500">
-                Все активные карьеры и накопители на одной карте
+                {embedded ? "Серые точки временно не принимают новые заказы" : "Все активные карьеры и накопители на одной карте"}
               </p>
               <div className="mt-4 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                 <button

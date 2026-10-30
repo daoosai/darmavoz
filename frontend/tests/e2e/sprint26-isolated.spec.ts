@@ -205,6 +205,21 @@ asyncio.run(run())`, fixtures().supplier.id]);
     await page.getByLabel(/^Цена/).scrollIntoViewIfNeeded(); await capture(page, 'paid-water-price-fields', 390);
   });
 
+  test('driver without access sees a legible map button and can open all public maps', async ({ page }) => {
+    test.setTimeout(120000); await login(page, fixtures().driver); await page.goto('/');
+    await expect(page.getByRole('heading', { name: 'Новые заявки доступны по подписке', exact: true })).toBeVisible();
+    const button = page.getByRole('button', { name: 'Карта материалов', exact: true });
+    const colors = await button.evaluate(el => ({ foreground: getComputedStyle(el).color, background: getComputedStyle(el).backgroundColor }));
+    expect(colors.foreground).not.toBe(colors.background); expect(colors.foreground).not.toBe('rgb(255, 255, 255)');
+    for (const size of viewports) { await page.setViewportSize(size); await capture(page, 'driver-notice-fixed', size.width); }
+    await button.click(); await expect(page.getByRole('heading', { name: 'Общая карта', exact: true })).toBeVisible();
+    const tabs = page.getByRole('tablist', { name: 'Раздел карты', exact: true });
+    for (const name of ['Материалы', 'Вода', 'Септики']) {
+      await tabs.getByRole('tab', { name, exact: true }).click();
+      for (const size of viewports) { await page.setViewportSize(size); await capture(page, 'driver-public-map-' + name, size.width); }
+    }
+  });
+
   test('subscription UI reuses uncertain purchase and permits renewal after success', async ({ page }) => {
     const requests: string[] = []; let history: Record<string, unknown>[] = [];
     await login(page, fixtures().supplier);

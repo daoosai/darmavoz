@@ -1,0 +1,19 @@
+{
+  "environment": "test",
+  "checks": [
+    "three QA login failures grouped into one in-app owner notification; configured deep link opens chronology"
+  ],
+  "screenshots": [
+    "live-owner-notification-target-390.png",
+    "live-owner-notification-target-1440.png"
+  ],
+  "physical_device": false,
+  "owner": {
+    "session_id": "a65394ab-0fe4-46c5-9855-4963e1160d51",
+    "notification_count": 1,
+    "grouped_failures": 3,
+    "recipient": "QA admin only",
+    "physical_push": "not verified"
+  },
+  "ok": true
+}

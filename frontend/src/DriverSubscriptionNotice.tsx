@@ -16,6 +16,6 @@ export default function DriverSubscriptionNotice() {
     <p>Активируйте бесплатные 14 дней или выберите подписку. Если пробный период этой машины уже использован, потребуется платный тариф.</p>
     <p className="text-xs">Уже принятый рейс можно завершить. Карта и общедоступные возможности остаются доступны.</p>
     {error && <p role="status" className="text-xs">Не удалось обновить срок доступа. Проверим после восстановления связи.</p>}
-    <div className="flex flex-wrap gap-2"><button className={buttonClass} onClick={() => setView('subscription')}>Выбрать подписку</button><button className={`${buttonClass} bg-white text-sky-700`} onClick={() => setView('map')}>Карта материалов</button></div>
+    <div className="flex flex-wrap gap-2"><button className={buttonClass} onClick={() => setView('subscription')}>Выбрать подписку</button><button className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-sky-200 bg-white px-4 py-3 text-sm font-bold text-sky-700 transition hover:bg-sky-50" onClick={() => setView('map')}>Карта материалов</button></div>
   </section>{view === 'subscription' && <SubscriptionsScreen onClose={() => { setView(null); void load(); }} />}{view === 'map' && <PublicCatalogMap onClose={() => setView(null)} />}</>;
 }

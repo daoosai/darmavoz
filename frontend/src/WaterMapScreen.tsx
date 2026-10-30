@@ -62,7 +62,7 @@ const hasMapCoordinates = ({ lat, lon }: { lat: number | string; lon: number | s
 const mapCoordinates = ({ lat, lon }: { lat: number | string; lon: number | string }): [number, number] =>
   [Number(lon), Number(lat)];
 
-export default function WaterMapScreen({ initialTab = "water" }: { initialTab?: ServiceTab }) {
+export default function WaterMapScreen({ initialTab = "water", embedded = false }: { initialTab?: ServiceTab; embedded?: boolean }) {
   const cityId = useCityStore((state) => state.cityId);
   const activeCity = useCityStore((state) =>
     state.cities.find((city) => city.id === state.cityId && city.is_active) ?? null,
@@ -158,7 +158,7 @@ export default function WaterMapScreen({ initialTab = "water" }: { initialTab?: 
       .then((mapgl) => {
         if (disposed || !mapContainerRef.current || mapRef.current) return;
         const map = tryCreate2GisMap(
-          () => new mapgl.Map(mapContainerRef.current, { center: [activeCenterLon, activeCenterLat], zoom: activeMapZoom, key }),
+          () => new mapgl.Map(mapContainerRef.current, { center: [activeCenterLon, activeCenterLat], zoom: activeMapZoom, key, zoomControl: embedded ? "bottomLeft" : undefined, enableTrackResize: true }),
           () => setMapUnavailable(true),
         );
         if (!map || disposed) {
@@ -178,7 +178,7 @@ export default function WaterMapScreen({ initialTab = "water" }: { initialTab?: 
       mapRef.current = null;
       setMapReady(false);
     };
-  }, [cityId]);
+  }, [cityId, embedded]);
 
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;

@@ -116,7 +116,13 @@ async def refund(db,user,payment_id,amount,reason,request_id,adjustment=None):
     if payment.status!="succeeded" or not payment.provider_id:policy.error("PAYMENT_NOT_SUCCEEDED","Возврат доступен для успешного платежа",409)
     if await db.scalar(select(SubscriptionRefund.id).where(SubscriptionRefund.payment_id==payment.id,SubscriptionRefund.status.in_(RESERVED))):
         policy.error("REFUND_PENDING","Предыдущий возврат требует завершения или сверки",409)
-    if amount<=0 or amount>Decimal((await balances(db,payment))["refundable_amount"]):policy.error("REFUND_BALANCE","Сумма превышает доступный остаток",422)
+    available=Decimal((await balances(db,payment))["refundable_amount"])
+    if amount<=0 or amount>available:policy.error("REFUND_BALANCE","Сумма превышает доступный остаток",422)
+    # YooKassa technical limits, not a commercial refund policy: a partial
+    # refund and the unreturned remainder must each be at least 1 RUB.
+    # Returning the entire available balance is still permitted.
+    if amount!=available and (amount<Decimal("1") or available-amount<Decimal("1")):
+        policy.error("REFUND_PROVIDER_LIMITS","ЮKassa: частичный возврат — от 1 ₽, остаток — 0 ₽ или не меньше 1 ₽",422)
     await validate_adjustment(db,payment,adjustment)
     row=SubscriptionRefund(payment_id=payment.id,actor_id=user.id,amount=amount,reason=reason,
         request_id=request_id,idempotence_key=uuid4().hex,status="queued",access_adjustment=adjustment)

@@ -17,7 +17,7 @@ async function go(page, url) { for (let attempt = 0; ; attempt++) { try { await 
 async function main() {
   if ((await api('/payments/config')).test_mode !== true) throw new Error('TEST_SHOP_REQUIRED');
   const browser = await chromium.launch({ headless: true, args: ['--disable-dev-shm-usage'] });
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block', storageState: { cookies: [], origins: [{ origin: base, localStorage: [{ name: 'auth-storage', value: JSON.stringify({ state: { token: fixture.supplier.token, role: 'supplier' }, version: 0 }) }, { name: 'selected-city', value: JSON.stringify({ state: { cityId: fixture.city_id }, version: 1 }) }] }] } });
   const page = await context.newPage(); fs.mkdirSync(screenshots, { recursive: true });
   try {
     if (process.argv[2] === 'prepare') {
@@ -25,12 +25,18 @@ async function main() {
         localStorage.setItem('auth-storage', JSON.stringify({ state: { token: actor.token, role: actor.role }, version: 0 }));
         localStorage.setItem('selected-city', JSON.stringify({ state: { cityId: city }, version: 1 }));
       }, { actor: fixture.supplier, city: fixture.city_id });
+      const partial = process.argv[3] === 'partial';
+      if (partial) {
+        const plans = await api('/subscriptions/admin/plans', undefined, fixture.admin);
+        if (!plans.some(p => p.name === 'QA sandbox partial refund 10 RUB' && p.test_only && p.published))
+          await api('/subscriptions/admin/plans', { category: 'quarry', name: 'QA sandbox partial refund 10 RUB', months: 3, amount: '10.00', published: true, test_only: true }, fixture.admin);
+      }
       await go(page, base + '/app'); await page.getByRole('button', { name: 'Профиль', exact: true }).click();
       await page.getByText('Подписки', { exact: true }).click();
       await page.getByLabel('Почта для чека', { exact: true }).fill('s26-qa-receipt@example.invalid');
       const section = page.getByRole('heading', { name: 'Карьеры', exact: true }).locator('xpath=ancestor::section[1]');
       const created = page.waitForResponse(r => r.request().method() === 'POST' && new URL(r.url()).pathname === '/api/v1/subscriptions/payments');
-      await section.getByRole('button', { name: /^1 мес\./ }).click();
+      await section.getByRole('button', { name: partial ? /^3 мес\..*10/ : /^1 мес\./ }).click();
       const response = await created;
       if (response.status() !== 202) throw new Error('Subscription create status ' + response.status());
       const initial = await response.json(); let payment;
@@ -54,10 +60,10 @@ async function main() {
       if (payment.status === 'succeeded') { console.log(JSON.stringify({ stage: 'succeeded', payment_id: payment.id })); return; }
       await go(page, fixture.sandbox.confirmation_url); await page.waitForTimeout(2000);
       if (process.argv[2] === 'pay') {
-        const wallet = page.getByText(/Кошел[её]к ЮMoney|ЮMoney/, { exact: false }).first();
-        if (await wallet.isVisible()) { await wallet.click(); await page.waitForTimeout(1000); }
+        const wallet = page.getByText('Ваш кошелёк', { exact: true });
+        await wallet.waitFor({ state: 'visible', timeout: 25000 }); await wallet.click(); await page.waitForTimeout(1000);
         const pay = page.getByRole('button', { name: /Заплатить|Оплатить/ }).last();
-        if (await pay.isVisible()) { await pay.click(); await page.waitForTimeout(4000); }
+        await pay.waitFor({ state: 'visible', timeout: 15000 }); await pay.click(); await page.waitForTimeout(4000);
       }
       await page.screenshot({ path: path.join(screenshots, 'live-yookassa-' + process.argv[2] + '-390.png') });
       const buttons = await page.getByRole('button').allTextContents();

@@ -86,3 +86,33 @@ async def test_transition_preserves_dates_and_ownerless_scope_idempotently(platf
         from app.models.subscriptions import CategoryAccess
         access=await db.scalar(select(CategoryAccess).where(CategoryAccess.account_id==owner.id,CategoryAccess.category=='quarry'))
         assert access.trial_started_at==start and access.trial_ends_at==end
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('amount,allowed', [('0.40',False),('9.50',False),('1.00',True),('9.00',True),('10.00',True)])
+async def test_partial_refund_respects_provider_minimum_and_remainder(platform,session_factory,amount,allowed):
+    async with session_factory() as db:
+        _,_,payment,_=await paid_case(db);admin,_=await create_actor(db,'admin');await db.commit()
+        if not allowed:
+            with pytest.raises(HTTPException) as exc:
+                await b.refund(db,admin,payment.id,Decimal(amount),'QA provider technical limits',uuid4())
+            assert exc.value.status_code==422 and exc.value.detail['code']=='REFUND_PROVIDER_LIMITS'
+            assert not (await db.scalars(select(SubscriptionRefund).where(SubscriptionRefund.payment_id==payment.id))).all()
+        else:
+            row=await b.refund(db,admin,payment.id,Decimal(amount),'QA provider technical limits',uuid4())
+            await db.flush()
+            assert row.body['amount']=={'value':amount,'currency':'RUB'}
+            assert row.body['receipt']['items'][0]['amount']['value']==amount
+
+@pytest.mark.asyncio
+async def test_partial_refund_limits_use_remaining_balance(platform,session_factory):
+    async with session_factory() as db:
+        _,_,payment,_=await paid_case(db);admin,_=await create_actor(db,'admin');await db.commit()
+        first=await b.refund(db,admin,payment.id,Decimal('1'),'QA initial partial refund',uuid4())
+        await b.apply_refund(db,first,payment,{'id':uuid4().hex,'payment_id':payment.provider_id,'amount':{'value':'1.00','currency':'RUB'},'status':'succeeded'})
+        await db.commit()
+        with pytest.raises(HTTPException) as exc:
+            await b.refund(db,admin,payment.id,Decimal('8.50'),'QA invalid remainder',uuid4())
+        assert exc.value.detail['code']=='REFUND_PROVIDER_LIMITS'
+        final=await b.refund(db,admin,payment.id,Decimal('9'),'QA remaining full refund',uuid4())
+        await db.flush();assert final.amount==Decimal('9')

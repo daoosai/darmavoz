@@ -1,0 +1,15 @@
+{
+  "isolated_responsive_browser": {
+    "passed": 8,
+    "duration": "1.5m"
+  },
+  "refund_limit_backend": {
+    "passed": 34,
+    "warnings": 4,
+    "seconds": 19.5
+  },
+  "lint": "passed",
+  "typescript": "passed",
+  "frontend_build": "passed",
+  "physical_device": "unavailable"
+}

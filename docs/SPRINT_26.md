@@ -75,7 +75,7 @@
 - [проверено] Immutable payment snapshot, server/provider validation, durable worker, stable idempotence, webhook replay, late binding, transient recovery, restart/new DB session, 23h no-repeat POST window; баланс/резерв refund, external refund import/review, явное keep/revoke/shorten только source grant. Другие grants не меняются. Изолированные billing/recovery/observability tests прошли.
 - [проверено] Новый order direct settlement, запрет нового order payment в прежних endpoints (старые APK), сохранение исторических платежей/refunds и существующих regression tests. В клиентской карточке виден direct notice, кнопки онлайн-оплаты нового заказа нет. Terms дополнен фактическим правилом прямых расчётов; коммерческая refund-политика подписок не придумана.
 - [проверено] Test runtime settings проверены без вывода секретов: test shop/test key, receipts включены. `.env` не менялись.
-- [не начато] Реальная sandbox покупка/продление/отказ, успешный webhook/повтор, persisted pending после фактического restart backend_test, частичный sandbox refund и UI/source-grant decision. Только тестовый магазин и QA акторы, без реальных списаний.
+- [проверено] Реальная покупка в тестовом магазине ЮKassa через web: pending пережил force-recreate backend_test с прежними provider/idempotence IDs, grants=0; после тестовой оплаты backend подтвердил succeeded и создал ровно 1 source grant. Только QA, без реальных денег. Частичный refund/UI/source-access decision и renewal/decline ещё в работе.
 
 ### 26.4 — ограничения точек/контактов/новых заказов/диспетчеризации — в работе
 
@@ -110,12 +110,13 @@
 
 ## 5. Исходники, коммиты, рабочее дерево
 
-Рабочий каталог **`/opt/darmavoz_test`**, branch **develop**, HEAD и origin/develop **`c07d678e2fcfbd997a1dc71283db9c9c53ccb7c4`**. Push с ноды выполнен.
+Рабочий каталог **`/opt/darmavoz_test`**, branch **develop**, HEAD и origin/develop **`28a7b5ae`** (analytics follow-up, pushed). Runtime и опубликованный первоначальный APK пока **c07d678e**, новая test CI запущена.
 
 - `6a7b95f1` — subscription platform/chat/journey foundation + frozen migration + UI/tests.
-- `c07d678e` — исправления shared transport trial/access/diagnostics, notices/maps, проверки, безопасная вода и подготовка test release.
+- `c07d678e` — исправления shared transport trial/access/diagnostics, notices/maps, проверки, безопасная вода и первый test release.
+- `28a7b5ae` — city context, reconciliation retry/renewal, test release setup/probes и актуальная передача, pushed только develop.
 
-**Собственные незакоммиченные изменения сейчас:** этот актуализированный handover/reports; `.github/workflows/build-apk-test.yml` (guard manual job только develop); `scripts/sprint26_test_release_setup.py` (test-only QA actors/plans/transition/feature setup, ещё не запускался). `water-import.json` изменён после checkpoint: фактический результат 52 created, в c07 мог попасть пустой промежуточный файл; обязательно включить итог и repeat report в следующий commit. Перед продолжением всегда сверить git status.
+**Собственные незакоммиченные изменения сейчас:** этот handover после push 28a; sandbox screenshots/reports могут добавляться во время live теста. Код и test setup/probes/helper уже включены в 28a. Сверять git status, не путать runtime c07 и source 28a.
 
 **Чужие исходные tracked dirty:** `docs/README.md`, `docs/blocks/logist-drivers.md`, `docs/blocks/refunds.md`. В README наши две S26 ссылки закоммичены частичным index, чужой diff сохранён. Многочисленные исходные untracked audit/screenshots/scripts не трогать/не stage целиком (особенно `scripts/debug_b6a576_refund.py`). [Baseline](reports/sprint26/baseline.json).
 
@@ -178,3 +179,20 @@ QA: `s26_qa_postgres`, `s26_qa_redis`, `s26_qa_backend` на 127.0.0.1:18026; so
 Тесты `observability + chat/journey + billing recovery`: **19 passed, 4 warnings, 22.51s**. Первый combined проход выявил Redis singleton между pytest loops; новая city fixture изолирует только rate store, runtime код Redis не менялся. TypeScript/build прошли. Требуется commit/push follow-up и повторный test deploy/APK, затем final live city/retry checks. Приватные QA credentials никогда не печатать; helper/script reports их не содержат.
 
 Sandbox pending payment сохранён после фактического force-recreate backend_test: прежние payment/provider/idempotence digest, grants=0, attempts 4 → 6. Пробуждён только QA job (next_attempt_at), результат платежа не менялся. Browser city smoke с новой JS instrumentation: **1 passed, 13.6s**. Следующее — sandbox pay/refund и follow-up CI.
+
+Последний push: `28a7b5ae` (develop); тестовые workflows для follow-up выполняются. Pending sandbox payment пережил restart с attempts 4→6, исходный provider/idempotence и grants=0 сохранены. Следующий шаг — test checkout pay/refund; helper inspect открыт.
+
+### Контрольная точка текущего продолжения
+
+Follow-up `28a7b5ae` pushed: backend CI и test APK успешны; web deploy ещё выполняется. Реальный sandbox payment после restart подтверждён succeeded, source_grants=1. Ошибка вспомогательного browser script (нажимал ссылку ЮMoney в footer вместо способа оплаты) исправлена, код продукта не менялся. Следующее: частичный sandbox refund через AdminSubscriptionsScreen и проверка source-only access; затем финальный live smoke и responsive notice/maps. Private QA данные/confirmation URLs в git не сохранять.
+
+
+### Live проверка частичного возврата: найдено техническое ограничение провайдера
+
+Из 1 ₽ нельзя вернуть 0,40 ₽: ЮKassa разрешает частичный refund от 1 ₽ и остаток 0 либо >=1 ₽ (официальная документация: https://yookassa.ru/developers/payment-acceptance/after-the-payment/refunds). Первый QA запрос сохранён failed/provider_validation, деньги и grants не менялись. Добавлены server-side `REFUND_PROVIDER_LIMITS` и понятная подсказка формы; unit tests границ в работе. Это техническое ограничение API, не утверждение коммерческой политики. Для live partial refund нужен отдельный test-only тариф >=2 ₽; прежние QA тарифы/история не редактируются. Последний единый isolated browser прогон: **8 passed (1.5m)**, включая chat expiry/offline/anonymous/review/все роли.
+
+Live diagnostic: HTTP400 invalid_request, parameter amount.value; provider description confirms remainder constraint. Exact sanitized report saved next. Runtime now28a7b5ae (public build-info), both test workflows success. Partial-limit backend/UI fix and six regression cases are uncommitted; do not lose them.
+
+Sandbox: новый QA test-only тариф 10 ₽/3мес, покупка succeeded, частичный refund **3 ₽ succeeded**, остаток7 ₽. Техническое решение keep ещё не завершено (доступ не изменён, требуется review). Helper исправлен для точного поиска select. Новый server-side provider-limit набор: **34 passed (19.50s)**; lint/TypeScript/build pass.
+
+Live partial refund и отдельный keep выполнены через опубликованный AdminSubscriptionsScreen: 3.00 ₽ succeeded, доступный остаток7.00 ₽, access_review_required=false. Report `reports/sprint26/sandbox-refund.json`. CI28a counts: 272 backend /172 browser passed. Подготовлен следующий commit технических лимитов partial refund (без новой миграции/версии).

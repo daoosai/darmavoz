@@ -1,0 +1,11 @@
+{
+  "status_code": 400,
+  "code": "invalid_request",
+  "parameter": "amount.value",
+  "description": "Refund unsuccessful: the remaining amount after a partial refund should be more than 1 ruble. You can make a full refund",
+  "test_mode": true,
+  "payment_amount": "1.00",
+  "attempted_refund": "0.40",
+  "official_rule": "https://yookassa.ru/developers/payment-acceptance/after-the-payment/refunds",
+  "financial_result": "rejected; no refund or grant adjustment"
+}

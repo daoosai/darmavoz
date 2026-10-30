@@ -21,7 +21,9 @@ async function setup(page: Page, { material = '/s3/qa/material.svg', truck = '/s
     await route.fulfill({ json: body });
   });
   await page.goto('/app');
-  await page.getByRole('button', { name: 'Я Клиент', exact: true }).click();
+  const chooseClient = page.getByRole('button', { name: 'Я Клиент', exact: true });
+  await chooseClient.or(page.getByRole('button', { name: 'Заказы', exact: true })).first().waitFor({ state: 'visible' });
+  if (await chooseClient.isVisible()) await chooseClient.click();
   if (!openOrders) return page.locator('article').first();
   await page.getByRole('button', { name: 'Заказы', exact: true }).click();
   const card = page.locator(`[data-order-id="${orderId}"]`);

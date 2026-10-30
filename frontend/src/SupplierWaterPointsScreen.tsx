@@ -755,7 +755,7 @@ export default function SupplierWaterPointsScreen({
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <span className="rounded-2xl bg-sky-100 p-3 text-sky-600"><Droplets /></span>
-          <div><h1 className="text-xl font-black">Точки воды</h1><p className="text-sm text-slate-500">Бесплатная и платная вода</p></div>
+          <div><h1 className="text-xl font-black">Точки воды</h1><p className="text-sm text-slate-500">Поставщики платной воды</p></div>
         </div>
         <button type="button" onClick={openCreateForm} className="rounded-xl bg-sky-500 p-3 text-white" aria-label="Добавить точку воды"><Plus /></button>
       </div>
@@ -840,7 +840,7 @@ export default function SupplierWaterPointsScreen({
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1.5">
                   <span className={`rounded-full px-2 py-1 text-xs font-bold ${getModerationStatusClass(moderationStatus)}`}>{statusText[moderationStatus] || point.moderation_status}</span>
-                  <span className={`rounded-full px-2 py-1 text-xs font-bold ${waterType === "free" ? "bg-blue-100 text-blue-800" : "bg-green-100 text-green-800"}`}>{waterType === "free" ? "Бесплатная вода" : "Платная вода"}</span>
+                  <span className={`rounded-full px-2 py-1 text-xs font-bold ${waterType === "free" ? "bg-blue-100 text-blue-800" : "bg-green-100 text-green-800"}`}>{waterType === "paid" ? "Платная вода" : "Не готова к публикации"}</span>
                 </div>
               </div>
               <p className="flex gap-2 text-sm text-slate-600"><MapPin className="h-4 w-4 shrink-0" />{point.address || "Адрес не указан — точка задана координатами"}</p>

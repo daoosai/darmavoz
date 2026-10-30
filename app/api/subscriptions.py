@@ -95,7 +95,7 @@ def refund_out(row):
 
 
 async def payment_out(db,row):
-    return {"id":row.id,"account_id":row.account_id,"category":row.category,"months":row.months,"amount":str(row.amount),
+    return {"id":row.id,"account_id":row.account_id,"plan_id":row.plan_id,"request_id":row.request_id,"category":row.category,"months":row.months,"amount":str(row.amount),
         "status":row.status,"confirmation_url":row.confirmation_url if row.status in billing.ACTIVE else None,
         "created_at":row.created_at,"paid_at":row.paid_at,"last_error":row.last_error,
         **await billing.balances(db,row),"refunds":[refund_out(x) for x in (await db.scalars(select(SubscriptionRefund).where(SubscriptionRefund.payment_id==row.id).order_by(SubscriptionRefund.created_at.desc()))).all()]}
@@ -131,7 +131,10 @@ async def me(actor=Depends(get_current_order_actor),db=Depends(get_db)):
     if driver and driver.vehicle_id and all(x.id!=driver.vehicle_id for x in vehicles):
         vehicle=await db.get(Vehicle,driver.vehicle_id)
         if vehicle:vehicles.append(vehicle)
+    current_vehicle=await db.get(Vehicle,driver.vehicle_id) if driver and driver.vehicle_id else None
+    transport_access=bool(current_vehicle and any([(await service.access(db,user.id,c,vehicle=current_vehicle))["active"] for c in service.TRANSPORT]))
     return {"enabled":await service.enabled(db),"categories":cats,"can_chat":await service.chat_access(db,user),
+        "transport_access":transport_access,"current_vehicle_id":current_vehicle.id if current_vehicle else None,
         "vehicles":[{"id":v.id,"plate_number":v.plate_number,"title":v.title,
                      "driver":await service.access(db,user.id,"driver",vehicle=v),"carrier":await service.access(db,user.id,"carrier",vehicle=v)} for v in vehicles]}
 

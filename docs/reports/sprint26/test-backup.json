@@ -1,0 +1,8 @@
+{
+  "backup": "/opt/darmavoz_test_backups/sprint26/20261030T044157Z-before-s26.dump",
+  "bytes": 7457967,
+  "sha256": "fa4f239f9dd0b097968139cf4fbb46e37bdb9704542ca2ca6b3faa81f819731e",
+  "archive_catalog_verified": true,
+  "permissions": "0700 directory / 0600 file",
+  "environment": "test"
+}

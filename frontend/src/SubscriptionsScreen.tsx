@@ -11,7 +11,7 @@ interface Category extends Access { category: string; label: string }
 interface Vehicle { id: string; plate_number: string; title: string; driver: Access; carrier: Access }
 interface Account { enabled: boolean; categories: Category[]; vehicles: Vehicle[]; can_chat: boolean }
 interface Plan { id: string; category: string; name: string; months: number; amount: string; test_only: boolean }
-interface Payment { id: string; category: string; months: number; amount: string; status: string; created_at: string; confirmation_url: string | null; refunded_amount: string; refunds: { id: string; status: string; amount: string; access_review_required: boolean }[] }
+interface Payment { id: string; request_id: string; category: string; months: number; amount: string; status: string; created_at: string; confirmation_url: string | null; refunded_amount: string; refunds: { id: string; status: string; amount: string; access_review_required: boolean }[] }
 const labels: Record<string, string> = { trial: 'Пробный период', granted: 'Доступ активен', not_started: 'Пробный период не использован', expired: 'Срок доступа истёк', restricted: 'Требуется подписка для машины' };
 export default function SubscriptionsScreen({ onClose }: { onClose: () => void }) {
   const [account, setAccount] = useState<Account | null>(null);
@@ -24,6 +24,8 @@ export default function SubscriptionsScreen({ onClose }: { onClose: () => void }
   const load = useCallback(async () => {
     const [a, p, history] = await Promise.all([commerceApi('/subscriptions/me'), commerceApi('/subscriptions/plans'), commerceApi('/subscriptions/payments')]);
     setAccount(a); setPlans(p); setPayments(history); setError('');
+    // Keep one request while its result is uncertain; a completed purchase can be renewed.
+    if (request.current && history.some((payment: Payment) => payment.request_id === request.current?.id && ['succeeded', 'canceled', 'failed'].includes(payment.status))) request.current = null;
   }, []);
   useEffect(() => {
     let active = true;

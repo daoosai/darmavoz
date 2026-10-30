@@ -122,7 +122,7 @@
 
 ## 5. Фактическое состояние исходников и артефактов
 
-На 2026-10-30: `/opt/darmavoz_test`, branch **develop**, HEAD **907182aebdace81c270d0757ad26381f5ccf941b**. Последнего commit спринта пока **нет**; всё ниже — незакоммиченный код. Push/deploy спринта **не было**. Перед commit заново проверить remote refs и рабочее дерево.
+На 2026-10-30: `/opt/darmavoz_test`, branch **develop**, HEAD **6a7b95f1b4b0110369591324b20912a8a28b330e** — первый кодовый checkpoint Спринта 26. Push/deploy спринта **не было**. После checkpoint работа продолжается; незакоммиченные изменения проверять по git status. Перед commit заново проверить remote refs и рабочее дерево.
 
 Основные новые файлы:
 
@@ -269,3 +269,41 @@ Remote fetch выполнен: origin/develop и source по-прежнему 90
 - TypeScript (`npm run lint`) и frontend build после последних UI/telemetry изменений прошли. Фактический test runtime ещё старый.
 - Новые backend tests включены в **тестовый** workflow deploy-test. В тестовом Android workflow удалён автоматический version:sync: версии остаются исходными. Добавлены immutable APK с commit в имени и JSON manifest с SHA256. Production workflows не изменялись.
 - Следующий шаг: checkpoint commit (без push), затем перезапуск disposable QA на текущем коде, расширенный браузерный проход и весь CI набор. Сохранённые чужие docs не включать.
+
+Кодовый checkpoint сохранён: `6a7b95f1b4b0110369591324b20912a8a28b330e` (develop, только на ноде; ещё не pushed).
+
+
+### Checkpoint после расширенного backend CI
+
+- Полный актуальный backend набор тестового workflow (включая все 6 новых S26 файлов): **264 passed, 14 warnings, 332.68s**. Лог `reports/sprint26/backend-ci.log` на диске (логи исключены gitignore; итог продублирован здесь).
+- Isolated browser после увеличения ожидания реального API с 5 до 15 секунд: первые **5 сценариев прошли** (admin matrix, 4 роли/trial, chat/offline/moderation, receipt/review, anonymous offline + masked/revealed audited contact). Шестой moderation/expiry ещё выполняется. Изменение таймаута относится к нагрузочному QA стенду, не скрывает провал бизнес-проверки.
+- Первый regression browser запуск остановлен после выявления отсутствующего Vite ключа карты на локальном QA сервере. На отдельном Vite 18261 с фиктивным ключом для мокированного SDK перезапущен весь набор 172 сценариев; результаты ещё собираются. Это не проверка реального 2GIS.
+- Test deploy workflow больше не меняет даже symlink `.env`; только проверяет наличие существующего runtime файла. Проверено: текущий test runtime `.env` уже ссылается на source `.env`, hash соответствует baseline, тестовый магазин/ключ активны. Секреты не выводились.
+- UI подписок исправлен для повторной покупки того же тарифа: idempotency key сохраняется при неопределённом результате, после terminal результата допускается новая покупка. Требуется адресная проверка.
+- Water cleanup дополняется isolated тестами stale preview/backup/dependencies; пока на runtime не запускался. Добавлен фактический раздел о прямых расчётах в TermsPage без выдуманных условий возвратов подписок; юридические коммерческие решения по подпискам остаются открытыми.
+
+Продолжить: получить результаты текущих water/browser runs, проверить повторную покупку, paid-water формы и remaining gates; затем безопасный test backup/commit/push/deploy, переход данных, test-shop E2E и APK. Production по-прежнему не менялся.
+
+
+### Тестовые данные воды и завершённые проверки перед выпуском
+
+- **На runtime test выполнено удаление 6 бесплатных water_points и 5 media metadata**. До удаления сделаны полный private pg_dump и отдельный проверенный JSON.gz snapshot, preview SHA совпал. S3 объекты сохранены для восстановления. Production не затрагивался. Безопасные отчёты: [water-preview.json](reports/sprint26/water-preview.json), [water-cleanup.json](reports/sprint26/water-cleanup.json), [test-backup.json](reports/sprint26/test-backup.json). Перепарсинг продавцов ещё нужен.
+- На приватном клоне `s26_migration_test` выполнен upgrade → перенос → downgrade → upgrade. Исходные hashes/counts orders/items/users/vehicles/water/media/payments/events/refunds совпали; 127 заказов, 9 платежей, 2 возврата сохранены. Перенос 34 ресурсов: 17 сохранённых grants, 17 без подтверждённого срока требуют review; повтор переносит 0 grants. 68 исторических тестовых машин имеют невалидные госномера — не придумывать им trial. Скрипт `scripts/sprint26_migration_smoke.py` жёстко ограничен disposable clone. Первый запуск скрипта обнаружил использование pool в разных asyncio loops; скрипт исправлен на один loop, итоговый проход успешен.
+- Mixed fleet/driver↔carrier исправлены: общая исходная граница CategoryAccess и каждой новой машины, истёкший trial не перезапускается через carrier. **23 access tests passed**. **6 water/admin/cleanup tests passed**.
+- Из browser matrix первые 5 isolated тестов прошли; moderation/expiry и paid-water form отдельно **2 passed (53.7s)**; повторная покупка/неопределённый запрос **1 passed (13.8s)**. Просмотрены screenshots chat moderation/expiry, paid water 360, admin anonymous timeline 390. В форме выявлен старый subtitle про бесплатную воду — заменён на платных поставщиков. Неизвестные imported точки в admin помечаются требующими проверки.
+- Полный browser regression: 168 passed / 4 failures. Один fixture использовал бесплатную воду, обновлён на платную согласно S26; client setup учитывает уже открытый клиентский кабинет. На стабильной build preview повтор всех этих случаев и desktop соседей: **6 passed (14.8s)**. Первые тесты выполнялись с Vite/HMR и параллельной нагрузкой; окончательный CI нужен на стабильной сборке.
+- Старый `test_dispatch_flow.py` вне CI выявил устаревшие city/coordinates fixtures и Redis loop: 7 failed / 8 passed; первый failure **воспроизведён на неизменённом HEAD 907182ae**. Не исправлять приложение под старые неверные ожидания. Для бизнес-правил S26 добавлен новый current-fixture тест передачи/120 секунд/manual/accept; его довести до green перед выпуском.
+- Улучшен доступ после expiry: водитель видит явное предложение подписки, ранее принятый рейс доступен; существующие публичные карты материалов/воды/септиков доступны из профессионального профиля независимо от доступа. Новые `DriverSubscriptionNotice.tsx`, `PublicCatalogMap.tsx`; требуется финальная visual/API проверка.
+- Диагностические business codes проходят через существующий error response совместимо с его human message/support reference; journey получает точную причину через фактически установленный handler. Изменения ещё проходят тесты.
+
+Следующее: targeted dispatch/errors/lint, checkpoint+push develop с проверкой только test workflows. Дождаться Actions, затем фактический test deploy/schema/flags/transition, reparse sellers/test-shop E2E/Android artifact. Все последние исходники пока dirty сверх `6a7b95f1`, новый release на сайте ещё не опубликован.
+
+
+### Готовность к первому push Спринта 26
+
+- Targeted dispatch/resource/observability: **13 passed, 4 warnings, 21.92s**. Проверены отказ/таймаут и передача второму доступному водителю с сохранением 120 секунд; водитель без подписки исключён из очереди, manual и direct accept возвращают запрет; ранее назначенная доставка завершается после expiry. Старые неактуальные fixtures не использованы как доказательство.
+- Финальный TypeScript и frontend build после notice/public-map изменений — успешно; YAML + bash syntax обоих тестовых workflows проверены. Версия 3.3.3 / build 391 не изменены.
+- Git fetch и push dry-run успешны. Проверены **и source develop, и origin/main** workflows: production auto deploy только от `Build Android APK` на main; test APK и test deploy на develop. По GitHub текущий default branch — develop (локальный origin/HEAD может быть устаревшим). Production workflow руками не запускать. Исторические production runs на develop существуют, но текущие триггеры от test APK его не запускают.
+- Тестовый 2GIS Places работает. Из двух коммерческих запросов получено 52 уникальных подтверждённых по рубрикам поставщика; бесплатные источники исключены; preview сохранён приватно. Применение импорта выполняется; результат проверить. Неизвестные цены остаются inactive/auto_added/pending_moderation, не публикуются и не превращаются в zero.
+
+Первый push подготовлен, ещё не выполнен. После push записать точный SHA и Action runs, дождаться их фактического успеха. Новые S26 flags пока выключены (runtime старый), несмотря на уже выполненную очистку free water test data.

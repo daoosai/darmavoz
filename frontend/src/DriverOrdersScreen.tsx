@@ -14,6 +14,7 @@ import {
   handleApiError,
 } from "./utils";
 import WholesaleScreen from "./WholesaleScreen";
+import DriverSubscriptionNotice from "./DriverSubscriptionNotice";
 import DriverProfileScreen from "./DriverProfileScreen";
 import NotificationCenter from "./components/shared/NotificationCenter";
 import {
@@ -701,6 +702,7 @@ export default function DriverOrdersScreen({
 
       </div>
 
+      <DriverSubscriptionNotice />
       {/* Navigation Tabs Content */}
       {activeTab === "orders" ? (
         <div className="flex-1 overflow-visible p-5 h-auto">

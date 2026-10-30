@@ -1,0 +1,50 @@
+{
+  "database": "s26_migration_test",
+  "round_trip": "passed",
+  "historical_rows_unchanged": true,
+  "tables": {
+    "orders": {
+      "count": 127,
+      "digest": "cada196fb7c025ed01f5e7343dc15b08"
+    },
+    "order_items": {
+      "count": 96,
+      "digest": "a5c08b24fd61fefa93d3fe25ccb74c60"
+    },
+    "users": {
+      "count": 99,
+      "digest": "8bde85b7a6703513e6791e8ee88de77f"
+    },
+    "vehicles": {
+      "count": 80,
+      "digest": "fd517b91952faa1644cfa64c7c7286c0"
+    },
+    "water_points": {
+      "count": 10,
+      "digest": "658f685b56b1964fbaf819ac6b7346f8"
+    },
+    "media_files": {
+      "count": 232,
+      "digest": "d70cc89cd05208fe5c36bc5f44d27b85"
+    },
+    "payments": {
+      "count": 9,
+      "digest": "89acb24d94add1b7b0a565d2c7ee2a7a"
+    },
+    "payment_events": {
+      "count": 21,
+      "digest": "8b5f0b2500b279547649bb31865c7480"
+    },
+    "payment_refunds": {
+      "count": 2,
+      "digest": "d3515ce041c45257ba0f89d19800d19a"
+    }
+  },
+  "transition": {
+    "resources": 34,
+    "copied_grants": 17,
+    "needs_review_count": 17,
+    "invalid_vehicle_count": 68,
+    "repeat_copied_grants": 0
+  }
+}

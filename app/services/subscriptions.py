@@ -165,6 +165,9 @@ async def activate_trial(db,user,category):
     if not await enabled(db):error("SUBSCRIPTIONS_NOT_ENABLED","Подписки пока не включены",409)
     if category not in CATEGORIES or user.role.name not in CATEGORIES[category][1]:
         error("CATEGORY_NOT_ALLOWED","Категория недоступна для этого кабинета")
+    if category in TRANSPORT:
+        # Driver/carrier share the original trial deadline, including subsequently added cars.
+        await db.execute(select(func.pg_advisory_xact_lock(func.hashtext("s26-transport-trial:"+str(user.id)))))
     row=await account_category(db,user.id,category,lock=True)
     if row.trial_started_at:
         return await access(db,user.id,category)
@@ -174,11 +177,17 @@ async def activate_trial(db,user,category):
     if previous:error("TRIAL_ALREADY_USED","Пробный период уже использован. Выберите подписку",409)
     if await grant_end(db,user.id,category):error("ACCESS_ALREADY_GRANTED","У вас уже есть действующий доступ",409)
     at=now();row.trial_started_at=at;row.trial_ends_at=at+timedelta(days=14)
+    if category in TRANSPORT:
+        original=await db.scalar(select(CategoryAccess).where(CategoryAccess.account_id==user.id,
+            CategoryAccess.category.in_(TRANSPORT),CategoryAccess.category!=category,
+            CategoryAccess.trial_started_at.is_not(None)).order_by(CategoryAccess.trial_started_at).limit(1))
+        if original:
+            row.trial_started_at=original.trial_started_at;row.trial_ends_at=original.trial_ends_at
     for key in identities:
         inserted=await db.scalar(insert(TrialIdentity).values(category=category,identity_key=key,account_id=user.id,started_at=at)
             .on_conflict_do_nothing().returning(TrialIdentity.identity_key))
         if inserted is None:error("TRIAL_ALREADY_USED","Пробный период уже использован",409)
-    if category in TRANSPORT:
+    if category in TRANSPORT and row.trial_ends_at>at:
         driver=await db.scalar(select(Driver).where(Driver.user_id==user.id))
         if not driver or not driver.vehicle_id:error("VEHICLE_REQUIRED","Сначала добавьте машину в профиль",422)
         await register_vehicle(db,user,driver.vehicle_id,category,at=at)

@@ -17,6 +17,10 @@ async def admit_driver(session, order, driver_id, *, automatic=True):
         point=await session.get(Quarry,order.quarry_id)
         if not await pickup_point_orderable(session,point):
             raise HTTPException(409,{"code":"PICKUP_SUBSCRIPTION_REQUIRED","message":"Точка погрузки недоступна для новой доставки. Выберите другую точку"})
+    if await policy.enabled(session) and driver.vehicle:
+        allowed=driver.user_id and any([(await policy.access(session,driver.user_id,c,vehicle=driver.vehicle))["active"] for c in policy.TRANSPORT])
+        if not allowed:
+            raise HTTPException(409,{"code":"DRIVER_SUBSCRIPTION_REQUIRED","message":"Для новых заявок водителю нужна действующая подписка или пробный доступ этой машины. Принятый рейс можно завершить"})
     await resolve_city(session, order.city_id)
     await ensure_driver_city(session, order, driver_id)
     if not await session.scalar(select(Driver.id).join(Driver.vehicle).where(Driver.id == driver_id, driver_constraints(order, automatic=automatic))):

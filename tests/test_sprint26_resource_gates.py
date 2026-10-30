@@ -56,11 +56,11 @@ async def test_public_water_and_septic_hide_contacts_only_for_public(platform,cl
     assert next(x for x in response.json() if x['id']==wid)['phone']=='+79990000003'
 
 @pytest.mark.asyncio
-async def test_new_admission_denied_but_assigned_trip_completes_after_expiry(platform,session_factory,monkeypatch):
+async def test_new_admission_denied_but_assigned_trip_completes_after_expiry(platform,client,session_factory,monkeypatch):
     for name in ['schedule_client_heading_to_pickup_status_notification','schedule_client_heading_to_client_status_notification','schedule_client_completed_status_notification']:
         monkeypatch.setattr(dispatch,name,lambda *a,**kw:None)
     async with session_factory() as db:
-        user,_=await create_actor(db,'driver');driver=user.driver_profile
+        user,headers=await create_actor(db,'driver');driver=user.driver_profile
         city=await db.scalar(select(City).where(City.code=='tyumen'));tc=await db.scalar(select(TransportCategory).where(TransportCategory.slug=='small'))
         option=DeliveryOption(title='QA 5 m3',capacity_m3=5,transport_category_id=tc.id,base_price=0,is_active=True);db.add(option);await db.flush()
         driver.vehicle.delivery_option_id=option.id;driver.vehicle.transport_category_id=tc.id;driver.vehicle.body_volume_m3=5
@@ -68,9 +68,12 @@ async def test_new_admission_denied_but_assigned_trip_completes_after_expiry(pla
         await db.execute(driver_cities.insert().values(driver_id=driver.id,city_id=city.id))
         customer=Client(name='QA receipt',email=uuid4().hex+'@example.invalid');db.add(customer);await db.flush()
         order=Order(client_id=customer.id,city_id=city.id,delivery_option_id=option.id,transport_category_id=tc.id,status='created',total_amount=10,settlement_mode='direct');db.add(order);await db.commit()
-        with pytest.raises(HTTPException):await admit_driver(db,order,driver.id,automatic=False)
+        with pytest.raises(HTTPException) as denied:await admit_driver(db,order,driver.id,automatic=False)
+        assert denied.value.detail['code']=='DRIVER_SUBSCRIPTION_REQUIRED'
+        assert not (await client.get('/api/v1/subscriptions/me',headers=headers)).json()['transport_access']
         await s.activate_trial(db,user,'driver');await db.commit()
         assert (await admit_driver(db,order,driver.id,automatic=False)).id==driver.id
+        assert (await client.get('/api/v1/subscriptions/me',headers=headers)).json()['transport_access']
         from app.models.subscriptions import CategoryAccess
         row=await db.scalar(select(CategoryAccess).where(CategoryAccess.account_id==user.id,CategoryAccess.category=='driver'))
         row.trial_ends_at=s.now()-timedelta(seconds=1);order.driver_id=driver.id;order.status='driver_assigned';await db.commit()

@@ -186,3 +186,31 @@ async def test_concurrent_purchase_returns_one_durable_attempt(platform,session_
         async with session_factory() as db:
             row=await b.create(db,user,plan_id,uuid4(),'qa@example.invalid');await db.commit();return row.id
     ids=await asyncio.gather(create(),create());assert ids[0]==ids[1]
+
+
+@pytest.mark.asyncio
+async def test_transport_switch_and_new_car_cannot_extend_account_trial(platform,session_factory):
+    async with session_factory() as db:
+        user,_=await create_actor(db,'driver');user.driver_profile.vehicle.plate_number='Х'+str(100+int(uuid4().hex[:3],16)%900)+'АВ196';await db.flush()
+        await s.activate_trial(db,user,'driver');await db.commit()
+        original=await db.scalar(select(CategoryAccess).where(CategoryAccess.account_id==user.id,CategoryAccess.category=='driver'))
+        original.trial_started_at-=timedelta(days=5);original.trial_ends_at-=timedelta(days=5);await db.commit();deadline=original.trial_ends_at
+        await s.activate_trial(db,user,'carrier');await db.commit()
+        carrier=await db.scalar(select(CategoryAccess).where(CategoryAccess.account_id==user.id,CategoryAccess.category=='carrier'))
+        assert carrier.trial_ends_at==deadline and carrier.trial_started_at==original.trial_started_at
+        car=Vehicle(title='QA added later',plate_number='К'+str(100+int(uuid4().hex[:3],16)%900)+'СМ193',is_active=True);db.add(car);await db.flush()
+        db.add(VehicleMembership(account_id=user.id,vehicle_id=car.id));await db.flush()
+        await s.register_vehicle(db,user,car.id,'carrier');await db.commit()
+        claim=await db.get(VehicleTrial,s.plate_key(car.plate_number));assert claim.ends_at==deadline
+        original.trial_ends_at=s.now()-timedelta(seconds=1);carrier.trial_ends_at=original.trial_ends_at;await db.commit()
+        assert not (await s.access(db,user.id,'carrier',vehicle=car))['active']
+
+@pytest.mark.asyncio
+async def test_expired_driver_trial_does_not_restart_as_carrier(platform,session_factory):
+    async with session_factory() as db:
+        user,_=await create_actor(db,'driver');user.driver_profile.vehicle.plate_number='Т'+str(100+int(uuid4().hex[:3],16)%900)+'НР197';await db.flush()
+        await s.activate_trial(db,user,'driver');await db.commit()
+        original=await db.scalar(select(CategoryAccess).where(CategoryAccess.account_id==user.id,CategoryAccess.category=='driver'))
+        original.trial_started_at=s.now()-timedelta(days=15);original.trial_ends_at=s.now()-timedelta(days=1);await db.commit()
+        result=await s.activate_trial(db,user,'carrier');await db.commit()
+        assert not result['active'] and result['kind']=='expired' and result['ends_at']==original.trial_ends_at

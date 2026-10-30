@@ -73,3 +73,49 @@ async def test_manual_hidden_point_stays_hidden_despite_valid_subscription(platf
     response=await client.get('/api/v1/pickup-points/global',params={'city_id':cid});assert response.status_code==200,response.text
     assert all(x['id']!=pid for x in response.json())
     assert (await client.get('/api/v1/pickup-points/'+pid,params={'city_id':cid})).status_code==404
+
+
+@pytest.mark.asyncio
+async def test_water_cleanup_backs_up_dependencies_and_rejects_stale_preview(platform,session_factory,monkeypatch,tmp_path,capsys):
+    import json,gzip,hashlib
+    from types import SimpleNamespace
+    from scripts import sprint26_water_cleanup as cleanup
+    from app.models.models import MediaFile,PointAuditLog
+    monkeypatch.setattr(cleanup,'AsyncSessionLocal',session_factory)
+    monkeypatch.setattr(cleanup,'BACKUP_ROOT',tmp_path/'private-backups')
+    async with session_factory() as db:
+        point=WaterPoint(water_type='free',source='QA cleanup',lat=57.1,lon=65.5,is_free=True);db.add(point);await db.flush();pid=point.id
+        media=MediaFile(entity_type='water_point',entity_id=pid,bucket='qa',object_key=uuid4().hex,public_url='https://example.invalid/qa',content_type='image/png',file_name='qa.png',file_size=10)
+        audit=PointAuditLog(point_id=pid,point_kind='water',new_status='auto_added');db.add_all([media,audit]);await db.commit();mid=media.id;logid=audit.id
+    await cleanup.run(SimpleNamespace(apply=False,expect_sha=None));preview=json.loads(capsys.readouterr().out)
+    assert str(pid) in preview['free_point_ids'] and not preview['applied']
+    async with session_factory() as db:
+        point=await db.get(WaterPoint,pid);point.name='QA changed after preview';await db.commit()
+    with pytest.raises(RuntimeError,match='PREVIEW_CHANGED'):
+        await cleanup.run(SimpleNamespace(apply=True,expect_sha=preview['preview_sha256']))
+    assert not (tmp_path/'private-backups').exists()
+    await cleanup.run(SimpleNamespace(apply=False,expect_sha=None));preview=json.loads(capsys.readouterr().out)
+    await cleanup.run(SimpleNamespace(apply=True,expect_sha=preview['preview_sha256']));applied=json.loads(capsys.readouterr().out)
+    from pathlib import Path
+    archive=Path(applied['backup_path']);assert archive.stat().st_mode & 0o777==0o600
+    with gzip.open(archive,'rb') as file:body=file.read()
+    assert hashlib.sha256(body).hexdigest()==preview['preview_sha256']
+    saved=json.loads(body);assert any(x['id']==str(pid) for x in saved['water_points'])
+    assert any(x['id']==str(mid) for x in saved['media_files'])
+    assert any(x['id']==str(logid) for x in saved['point_audit_log'])
+    async with session_factory() as db:
+        assert await db.get(WaterPoint,pid) is None and await db.get(MediaFile,mid) is None and await db.get(PointAuditLog,logid) is None
+
+@pytest.mark.asyncio
+async def test_water_cleanup_refuses_unreviewed_foreign_key(platform,session_factory,monkeypatch):
+    from scripts import sprint26_water_cleanup as cleanup
+    from types import SimpleNamespace
+    monkeypatch.setattr(cleanup,'AsyncSessionLocal',session_factory)
+    async with session_factory() as db:
+        await db.execute(text('CREATE TABLE s26_qa_water_dependency (id uuid PRIMARY KEY, point_id uuid REFERENCES water_points(id))'));await db.commit()
+    try:
+        with pytest.raises(RuntimeError,match='UNREVIEWED_FOREIGN_KEYS'):
+            await cleanup.run(SimpleNamespace(apply=False,expect_sha=None))
+    finally:
+        async with session_factory() as db:
+            await db.execute(text('DROP TABLE s26_qa_water_dependency'));await db.commit()

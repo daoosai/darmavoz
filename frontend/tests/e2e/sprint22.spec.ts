@@ -22,7 +22,7 @@ test.beforeEach(async ({ page }) => {
       body = [{
         id: cityId,
         city_id: cityId,
-        water_type: 'free',
+        water_type: 'paid', is_free: false, price: 1, price_unit: '1 м³',
         source: isSecondCity ? 'Источник второго города' : 'Источник Тюмени',
         address: 'Тестовый адрес',
         lat: isSecondCity ? 56.8 : 57,

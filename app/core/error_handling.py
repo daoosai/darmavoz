@@ -1,4 +1,5 @@
 import logging
+import re
 import secrets
 import string
 from collections.abc import Iterable
@@ -120,14 +121,11 @@ def _error_response(
     *,
     headers: dict[str, str] | None = None,
 ) -> JSONResponse:
-    return JSONResponse(
-        status_code=status_code,
-        content={
-            "error_code": generate_error_code(),
-            "detail": _translate_detail(detail, status_code),
-        },
-        headers=headers,
-    )
+    content={"error_code": generate_error_code(), "detail": _translate_detail(detail, status_code)}
+    # Keep the existing support reference/message and expose a controlled business code.
+    if isinstance(detail,dict) and isinstance(detail.get("code"),str) and re.fullmatch(r"[A-Z_]{2,64}",detail["code"]):
+        content["code"]=detail["code"]
+    return JSONResponse(status_code=status_code,content=content,headers=headers)
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -168,6 +166,8 @@ def register_exception_handlers(app: FastAPI) -> None:
         request: Request,
         exc: StarletteHTTPException,
     ) -> JSONResponse:
+        from app.services.journey import note_error
+        note_error(exc)
         del request
         if exc.status_code in CUSTOM_ERROR_STATUSES:
             return _error_response(exc.status_code, exc.detail, headers=exc.headers)

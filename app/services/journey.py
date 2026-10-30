@@ -63,7 +63,8 @@ def note_error(exc):
     if code and re.fullmatch(r"[A-Z_]{2,64}",str(code)):ctx["error_code"]=code
     elif isinstance(detail,str):
         low=detail.lower()
-        if "код" in low and ("истек" in low or "истёк" in low):ctx["error_code"]="OTP_EXPIRED"
+        if "код" in low and "неверный" in low and ("истек" in low or "истёк" in low):ctx["error_code"]="OTP_INVALID_OR_EXPIRED"
+        elif "код" in low and ("истек" in low or "истёк" in low):ctx["error_code"]="OTP_EXPIRED"
         elif "неверный код" in low:ctx["error_code"]="OTP_INVALID"
 
 

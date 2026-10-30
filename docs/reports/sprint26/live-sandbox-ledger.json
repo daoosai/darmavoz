@@ -1,0 +1,15 @@
+{
+  "environment": "test",
+  "checks": [
+    "real test-provider webhook GET verification and duplicate webhook replay",
+    "same payment request reuses the existing operation",
+    "source/independent/previous-payment grants unchanged by partial refund keep and replay",
+    "all linked attempts succeeded; renewal has audit and journey event"
+  ],
+  "successful_payments": 2,
+  "successful_refunds": 1,
+  "grants_unchanged_on_replay": true,
+  "payment_attempts": 2,
+  "renewals": 1,
+  "renewal_events": 1
+}

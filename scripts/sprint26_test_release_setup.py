@@ -29,8 +29,8 @@ async def run(args):
         await db.execute(select(__import__('sqlalchemy').func.pg_advisory_xact_lock(260031)))
         city=await db.scalar(select(City).where(City.code=='tyumen'))
         if not city:raise RuntimeError('TYUMEN_REQUIRED')
-        result={'city_id':str(city.id)};users={}
         previous=json.loads((ROOT/'qa-auth.json').read_text()) if (ROOT/'qa-auth.json').exists() else {}
+        result={**previous,'city_id':str(city.id)};users={}
         for role_name in ['admin','logist','driver','supplier','equipment_owner','water_septic_partner']:
             role=await db.scalar(select(Role).where(Role.name==role_name))
             if not role:raise RuntimeError('EXISTING_ROLE_REQUIRED: '+role_name)
@@ -125,6 +125,7 @@ async def run(args):
         result.update(water_id=str(water.id),septic_id=str(septic.id),equipment_id=str(equipment.id))
         customer=await db.scalar(select(Client).where(Client.email=='s26-qa-checkout@example.invalid'))
         if not customer:customer=Client(name='QA покупатель Спринт 26',email='s26-qa-checkout@example.invalid');db.add(customer);await db.flush()
+        if not customer.phone:customer.phone='+70000000027'
         review=await db.scalar(select(Order).where(Order.client_id==customer.id,Order.source=='s26-qa-review'))
         if not review:
             review=Order(client_id=customer.id,city_id=city.id,status='delivered',settlement_mode='direct',total_amount=10,delivery_cost=0,

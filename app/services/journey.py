@@ -199,7 +199,7 @@ async def maintenance(db):
     items=(await db.scalars(select(JourneyIncident).where(JourneyIncident.notified.is_(False),JourneyIncident.resolved.is_(False),JourneyIncident.next_notify_at<=at).limit(30).with_for_update(skip_locked=True))).all()
     from app.services.notification_outbox import enqueue
     for item in items:
-        event_kind="auth_failed" if item.event.startswith("auth") else "order_failed" if item.event.startswith("order") else "provider_rejected" if "payment" in item.event else "technical_error"
+        event_kind="user_cancelled" if item.reason=="PAYMENT_CANCELED" else "auth_failed" if item.event.startswith("auth") else "order_failed" if item.event.startswith("order") else "provider_rejected" if "payment" in item.event else "technical_error"
         if item.event=="abandoned":
             if not cfg["notify_abandoned"]:continue
         elif event_kind not in cfg["notify_events"]:continue
@@ -220,8 +220,9 @@ async def reconcile_payments(db):
     rows=(await db.scalars(select(SubscriptionPayment).join(JourneyAttempt,JourneyAttempt.payment_id==SubscriptionPayment.id)
         .where(SubscriptionPayment.status.in_(["succeeded","failed","canceled"]),JourneyAttempt.state.in_(["started","pending"]))
         .limit(100))).all()
+    from app.services.subscription_billing import terminal_observation
     for payment in rows:
-        await payment_event(db,payment,"subscription_payment_"+payment.status,payment.status)
+        await payment_event(db,payment,*terminal_observation(payment))
 
 
 async def order_event(db,order,event_id,*,event_status=None,at=None):

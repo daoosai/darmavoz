@@ -29,7 +29,7 @@ export interface EquipmentListing extends PlacementFields {
   equipment_type_id?: string | null;
   equipment_type_name: string;
   title: string;
-  description: string;
+  description: string | null;
   contact_phone?: string | null;
   tariffs?: EquipmentTariff[];
   price_amount?: number | null;
@@ -134,7 +134,7 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
     const matchesCity = !city || item.city === city;
     const query = search.trim().toLowerCase();
     const matchesSearch =
-      !query || `${item.title} ${item.description}`.toLowerCase().includes(query);
+      !query || `${item.title} ${item.description || ''}`.toLowerCase().includes(query);
     return matchesType && matchesCity && matchesSearch;
   });
 

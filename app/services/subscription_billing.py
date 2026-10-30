@@ -53,6 +53,26 @@ async def create(db,user,plan_id,request_id,email):
     return row
 
 
+# Persist only controlled provider reason codes, never raw descriptions/bodies.
+USER_CANCELLATIONS={"canceled_by_merchant","canceled_by_customer","expired_on_confirmation","confirmation_period_expired"}
+PROVIDER_REJECTIONS={"3d_secure_failed","call_issuer","card_expired","fraud_suspected","general_decline","insufficient_funds",
+    "invalid_card_number","invalid_csc","issuer_unavailable","payment_method_limit_exceeded","payment_method_restricted",
+    "country_forbidden","permission_revoked","internal_timeout","processing_timeout"}
+
+
+def cancellation_error(data):
+    details=data.get("cancellation_details") or {}
+    reason=details.get("reason") if isinstance(details,dict) else None
+    if reason in USER_CANCELLATIONS:return None
+    return "provider_"+(reason if reason in PROVIDER_REJECTIONS else "payment_rejected")
+
+
+def terminal_observation(payment):
+    if payment.status=="canceled" and (payment.last_error or "").startswith("provider_"):
+        return "subscription_payment_failed","failed"
+    return "subscription_payment_"+payment.status,payment.status
+
+
 async def apply_payment(db,row,data):
     previous_error=row.last_error
     try:
@@ -90,7 +110,8 @@ async def apply_payment(db,row,data):
         await payment_event(db,row,"subscription_payment_succeeded","succeeded")
     elif row.status=="canceled":
         from app.services.journey import payment_event
-        await payment_event(db,row,"subscription_payment_canceled","canceled")
+        row.last_error=cancellation_error(data)
+        await payment_event(db,row,*terminal_observation(row))
 
 
 async def balances(db,payment):

@@ -1,0 +1,23 @@
+{
+  "environment": "test",
+  "transport": "real ASGI handlers + actual test DB/Redis; QA-only notification delivery",
+  "checks": [
+    "manual accumulator checkout with direct settlement and idempotent retry",
+    "legacy order-payment API blocked",
+    "unsubscribed driver manual assignment denied; driver/carrier share trial deadline",
+    "assigned delivery completed after both transport categories expired; trial dates restored",
+    "driver released, client receipt and idempotent review",
+    "second complete order has separate journey chain",
+    "notification rows/deliveries scoped exclusively to QA recipients"
+  ],
+  "order_ids": [
+    "93c2ab20-3b44-440f-b58d-da6d310c9f30",
+    "44125cbc-2cc4-4f0b-9243-3ba796733821"
+  ],
+  "total_per_order": "10.00",
+  "delivery_per_order": "0.00",
+  "order_attempts": 2,
+  "suppressed_non_QA_deliveries": 108,
+  "qa_notification_jobs": 68,
+  "physical_push": "not verified"
+}

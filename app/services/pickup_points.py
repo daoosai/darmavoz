@@ -224,6 +224,7 @@ async def pickup_point_payload(
             )
             .join(Material, Material.id == quarry_materials.c.material_id)
             .where(quarry_materials.c.quarry_id == point.id)
+            .where(True if include_owner_contacts else Material.is_active.is_(True))
             .order_by(Material.name.asc())
         )
     ).all()

@@ -1,0 +1,15 @@
+{
+  "backend": {
+    "passed": 30,
+    "warnings": 4,
+    "seconds": 30.67
+  },
+  "lint": "passed",
+  "typescript": "passed",
+  "frontend_build": "passed",
+  "cases": [
+    "equipment output redaction/restore",
+    "archived material public map filtering",
+    "provider decline vs user cancellation, owner category, late binding and replay"
+  ]
+}

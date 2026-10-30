@@ -94,3 +94,40 @@ async def test_no_driver_retry_is_due_and_does_not_repeat_notification(platform,
         order.next_dispatch_at=s.now()-timedelta(seconds=1);await db.commit()
         assert order.id in await dispatch.get_orders_needing_dispatch(db)
         await dispatch.mark_no_driver_found(db,order);assert len(notices)==1
+
+
+@pytest.mark.asyncio
+async def test_equipment_redacted_description_is_serializable_and_restored_with_access(platform,client,session_factory):
+    from app.models.models import SpecialEquipmentListing
+    async with session_factory() as db:
+        user,_=await create_actor(db,'equipment_owner');city=await db.scalar(select(City).where(City.code=='tyumen'))
+        row=SpecialEquipmentListing(owner_user_id=user.id,created_by_user_id=user.id,city_id=city.id,equipment_type='QA excavator',title='QA equipment '+uuid4().hex,
+            description='QA contact +79990000003',contact_phone='+79990000003',tariffs=[{'type':'hour','price':1}],price_from=1,is_active=True,moderation_status='approved',placement_status='active')
+        db.add(row);await db.commit();eid,uid,cid=str(row.id),user.id,str(city.id)
+    for path in ['/equipment?city_id='+cid,'/equipment/'+eid+'?city_id='+cid]:
+        response=await client.get('/api/v1'+path);assert response.status_code==200,response.text
+        item=next(x for x in response.json() if x['id']==eid) if isinstance(response.json(),list) else response.json()
+        assert item['description'] is None and item['contact_phone'] is None and not item['can_order']
+        assert '+79990000003' not in str(item)
+    async with session_factory() as db:
+        db.add(AccessGrant(account_id=uid,category='equipment',source='admin',source_key='qa:'+uuid4().hex,starts_at=s.now()-timedelta(seconds=1),ends_at=s.now()+timedelta(hours=1)));await db.commit()
+    response=await client.get('/api/v1/equipment/'+eid+'?city_id='+cid);assert response.status_code==200,response.text
+    assert response.json()['can_order'] and response.json()['contact_phone']=='+79990000003' and response.json()['description']
+
+
+@pytest.mark.asyncio
+async def test_public_points_do_not_reintroduce_archived_materials(platform,client,session_factory):
+    async with session_factory() as db:
+        owner,_=await create_actor(db,'supplier');city=await db.scalar(select(City).where(City.code=='tyumen'))
+        cat=Category(name='QA legacy',slug=uuid4().hex);db.add(cat);await db.flush()
+        archived=Material(category_id=cat.id,name='QA archived free water',unit='м³',price=0,is_free=True,is_active=False)
+        active=Material(category_id=cat.id,name='QA active material',unit='м³',price=1,is_active=True)
+        point=Quarry(city_id=city.id,owner_user_id=owner.id,name='QA archived offer map',address='QA',lat=57.15,lon=65.53,point_type='quarry',is_active=True,moderation_status='approved',crm_status='activated',placement_status='active')
+        db.add_all([archived,active,point]);await db.flush()
+        for material,price in [(archived,0),(active,1)]:await db.execute(quarry_materials.insert().values(quarry_id=point.id,material_id=material.id,price=price,is_active=True))
+        await s.activate_trial(db,owner,'quarry');await db.commit();pid,cid,bad,good=str(point.id),str(city.id),str(archived.id),str(active.id)
+    for path in ['/pickup-points/global?city_id='+cid,'/pickup-points/'+pid+'?city_id='+cid]:
+        response=await client.get('/api/v1'+path);assert response.status_code==200,response.text
+        row=next(x for x in response.json() if x['id']==pid) if isinstance(response.json(),list) else response.json()
+        assert any(x['material_id']==good for x in row['material_offers'])
+        assert all(x['material_id']!=bad for x in row['material_offers'])

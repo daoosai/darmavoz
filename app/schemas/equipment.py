@@ -175,7 +175,7 @@ class EquipmentListingOut(BaseModel):
     equipment_type_id: UUID | None = None
     equipment_type_name: str
     title: str
-    description: str
+    description: str | None = None
     contact_phone: str | None = None
     tariffs: list[EquipmentTariff]
     city: str | None

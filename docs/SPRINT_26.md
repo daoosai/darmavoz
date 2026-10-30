@@ -210,3 +210,27 @@ Live notice/maps/chat/verified anonymous history прошли геометрич
 Owner test дождался реальных настроенных **5 минут** группировки: **3 неуспешных QA входа → 1 in-app уведомление только QA admin**. Ссылка уведомления открыла нужную хронологию; [report](reports/sprint26/live-ui-owner.json). `no_device` не доказательство PUSH; физического телефона нет.
 
 Визуальный follow-up: новый browser case **1 passed (13.6s)** проверил контраст outline кнопки и три карты во всех6 размерах; скриншот driver-notice-fixed-360.png просмотрен. TS/build pass. Следующий test commit публикует эти исправления; после deploy повторить real SDK screenshots.
+
+
+### Live resource follow-up (незакоммиченный)
+
+Сработала проверка скрытых контактов: equipment list вернул500, потому что public payload скрывает description=None, но response schema объявляла обязательную str. Исправлены только output schema и nullable frontend type; input/owner формы сохраняют требуемое описание. Добавлен тест list/detail без подписки и восстановление после grant. Проверки в работе. Live resource script успел активировать только QA water/septic trials, остальное не применял. Sandbox ledger/repeated webhook check прошёл:2 succeeded payments,1 partial refund, повторные webhook/requests не изменили3 grants, обе попытки succeeded, renewal audit/event есть.
+
+
+### Финальная классификация неуспешных оплат (в работе)
+
+Provider canceled не всегда означает отмену клиентом: например insufficient_funds — отказ банка. Добавлено сохранение только allowlisted provider reason, terminal observation для live и late binding; bank decline становится failed attempt/owner provider_rejected, сознательная отмена — canceled/user_cancelled. В UI добавлены понятные причины без raw provider body. Покупка/история самого провайдера остаётся canceled, доступ не выдаётся. Новые backend tests и TS/build в работе. Equipment output-description nullable:5 resource tests passed. Live checkout QA helper исправлен: UUID Idempotency-Key и explicit accumulator trial; предыдущие отказы400/404 не создали заказов/уведомлений реальным пользователям.
+
+
+### Проверки входных QA данных и старого каталога
+
+QA checkout корректно требовал уточнения из-за отсутствия телефона отдельного QA Client. В setup/helper добавлен заведомо тестовый контакт; реальные клиенты не менялись. Public map payload выбирал offers даже для неактивного Material и мог снова показывать старый «Бесплатная вода», хотя материал уже архивирован. Public payload теперь исключает inactive Material; operator owner-detail сохраняет историю. Добавлен тест public global/detail. Автоподбор quarry-only не менялся.
+
+
+### Реальный test DB/Redis order E2E прошёл
+
+`scripts/sprint26_live_orders.py`: два отдельных QA заказа с ручным накопителем,10м³×1₽ +0₽ delivery; одинаковый Idempotency-Key возвращает тот же заказ, прежний order-payment endpoint409. Manual assign без transport access409, driver/carrier trial с одинаковым deadline. Первый назначенный рейс прошёл все6статусов до completed после expiry обеих transport категорий, водитель available. Trial даты восстановлены, платёж/платежный реестр не изменены. Received/review ownership/idempotence и две отдельные journey chains проверены.
+
+Транспорт проверки: реальные FastAPI handlers ASGI + настоящая test DB/Redis, notification enqueue ограничен QA recipients в процессе CLI; external dispatcher исключён bounded per-order Redis locks до завершения. **108 non-QA deliveries подавлены**,68jobs толькоQA. Это не утверждение о кликах оформления в публичном web и не доказательство физическогоPUSH. Public UI/API показ/расчёт и чтение проверяются отдельно. [Отчёт](reports/sprint26/live-orders.json); не повторять helper без необходимости (driver trial теперь активен).
+
+Последний targeted acceptance набор: **30 passed,4warnings,30.67s** после equipment/decline/archived-offer fixes; lint/TS/build pass. Следующий commit содержит эти исправления; runtime перед ним0fd8dd19. Остаётся sandbox bank-decline browser, live resource smoke после нового deploy и финальная сверка APK/visual/production baseline.

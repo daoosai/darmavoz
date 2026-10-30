@@ -25,3 +25,11 @@ export const paymentLabels: Record<string, string> = {
 export const refundLabels: Record<string, string> = { queued: 'Возврат в очереди', partial: 'Частично возвращено', manual_review: 'Возврат требует сверки', creating: 'Подготовка возврата', unknown: 'Проверяем возврат', pending: 'Возврат обрабатывается', succeeded: 'Возвращено', canceled: 'Возврат отменён', failed: 'Ошибка возврата' };
 export const inputClass = 'w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100';
 export const buttonClass = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-sky-500 px-4 py-3 text-sm font-bold text-white transition hover:bg-sky-600 disabled:opacity-50';
+
+
+export const subscriptionPaymentLabel = (status: string, reason?: string | null) =>
+  status === 'canceled' && reason?.startsWith('provider_') ? 'Оплата отклонена банком или платёжным сервисом' : paymentLabels[status] || (status === 'queued' ? 'В очереди' : 'Требуется сверка');
+export const subscriptionFailureReason = (reason?: string | null) => {
+  const labels: Record<string, string> = { provider_insufficient_funds: 'Недостаточно средств', provider_card_expired: 'Истёк срок действия карты', provider_invalid_csc: 'Неверный защитный код карты', 'provider_3d_secure_failed': 'Не пройдена проверка банка', provider_payment_method_limit_exceeded: 'Превышен лимит оплаты', provider_issuer_unavailable: 'Банк временно недоступен' };
+  return reason?.startsWith('provider_') ? labels[reason] || 'Платёжный сервис отклонил оплату. Попробуйте другой способ.' : '';
+};

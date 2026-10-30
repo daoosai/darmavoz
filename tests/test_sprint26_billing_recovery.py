@@ -116,3 +116,36 @@ async def test_partial_refund_limits_use_remaining_balance(platform,session_fact
         assert exc.value.detail['code']=='REFUND_PROVIDER_LIMITS'
         final=await b.refund(db,admin,payment.id,Decimal('9'),'QA remaining full refund',uuid4())
         await db.flush();assert final.amount==Decimal('9')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('reason,events,state,notified',[
+    ('insufficient_funds',['provider_rejected'],'failed',True),
+    ('canceled_by_merchant',['provider_rejected'],'canceled',False),
+    ('canceled_by_merchant',['user_cancelled'],'canceled',True),
+    ('provider private text +79990000003',['provider_rejected'],'failed',True),
+])
+async def test_provider_decline_is_distinct_from_user_cancel_and_late_binding(platform,session_factory,reason,events,state,notified):
+    from app.models.subscriptions import JourneyIncident
+    from app.models.models import UserNotification
+    from sqlalchemy import func
+    async with session_factory() as db:
+        admin,_=await create_actor(db,'admin');user,_=await create_actor(db,'supplier')
+        cfg=await db.get(SprintSetting,'platform');cfg.value={**cfg.value,'journey_enabled':True,'owner_id':str(admin.id),'notify_inapp':True,'notify_push':False,'notify_events':events}
+        plan=SubscriptionPlan(category='quarry',name='QA cancellation classification',months=1,amount=10,published=True,test_only=True);db.add(plan);await db.flush()
+        payment=await b.create(db,user,plan.id,uuid4(),'qa@example.invalid');await db.commit()
+        sid,vid,aid=uuid4(),uuid4(),uuid4()
+        await j.record(db,event_id=uuid4(),session_id=sid,visitor_id=vid,attempt_id=aid,kind='subscription',event='subscription_payment_created',source='server',state='pending',payment_id=payment.id);await db.commit()
+        obj={'id':uuid4().hex,'status':'canceled','test':True,'recipient':{'account_id':settings.YOOKASSA_SHOP_ID},'metadata':payment.body['metadata'],'amount':{'value':'10.00','currency':'RUB'},'cancellation_details':{'party':'payment_network','reason':reason}}
+        for _ in range(2):await b.apply_payment(db,payment,obj);await db.commit()
+        assert payment.status=='canceled'
+        assert (await db.get(JourneyAttempt,aid)).state==state
+        incidents=(await db.scalars(select(JourneyIncident).where(JourneyIncident.attempt_id==aid))).all();assert len(incidents)==1 and incidents[0].count==1
+        assert '+79990000003' not in str(payment.last_error)+str(incidents[0].reason)
+        assert await db.scalar(select(func.count()).select_from(AccessGrant).where(AccessGrant.source_key=='payment:'+str(payment.id)))==0
+        await j.maintenance(db);await db.commit();await j.maintenance(db);await db.commit()
+        assert await db.scalar(select(func.count()).select_from(UserNotification).where(UserNotification.user_id==admin.id,UserNotification.payload['attempt_id'].astext==str(aid)))==int(notified)
+        late=uuid4()
+        await j.record(db,event_id=uuid4(),session_id=uuid4(),visitor_id=uuid4(),attempt_id=late,kind='subscription',event='subscription_payment_created',source='server',state='pending',payment_id=payment.id);await db.commit()
+        await j.maintenance(db);await db.commit()
+        assert (await db.get(JourneyAttempt,late)).state==state

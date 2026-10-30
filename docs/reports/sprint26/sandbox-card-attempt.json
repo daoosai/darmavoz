@@ -1,0 +1,10 @@
+{
+  "payment_id": "467b815f-662b-4c73-975c-2e4cd56a6cc7",
+  "parent_status": "pending",
+  "bank_ui_insufficient_funds": true,
+  "test_mode": true,
+  "bank_message": "Не хватает денег",
+  "auto_debits": false,
+  "instrument_values_logged": false,
+  "notes": "Real test checkout rejected the card attempt; parent payment remains pending for retry, not a confirmed terminal failure."
+}

@@ -54,11 +54,36 @@ async function main() {
       await page.getByText('История оплат подписок', { exact: true }).scrollIntoViewIfNeeded();
       await page.screenshot({ path: path.join(screenshots, 'live-subscription-pending-390.png') });
       console.log(JSON.stringify({ stage: 'pending', payment_id: payment.id, test_mode: true }));
-    } else if (process.argv[2] === 'inspect' || process.argv[2] === 'pay') {
+    } else if (['inspect', 'pay', 'inspect-card', 'decline'].includes(process.argv[2])) {
       if (!fixture.sandbox) throw new Error('PREPARE_FIRST');
       const payment = await api('/subscriptions/payments/' + fixture.sandbox.payment_id);
       if (payment.status === 'succeeded') { console.log(JSON.stringify({ stage: 'succeeded', payment_id: payment.id })); return; }
       await go(page, fixture.sandbox.confirmation_url); await page.waitForTimeout(2000);
+      if (['inspect-card', 'decline'].includes(process.argv[2])) {
+        const card = page.getByText('Банковская карта', { exact: true });
+        await card.waitFor({ state: 'visible', timeout: 25000 }); await card.click(); await page.waitForTimeout(2000);
+      }
+      if (process.argv[2] === 'decline') {
+        // Official YooKassa sandbox insufficient_funds instrument; never real card data.
+        await page.locator('input[name=card-number]').fill('5555555555554600');
+        await page.locator('input[name=expiry-month]').fill('12'); await page.locator('input[name=expiry-year]').fill('30');
+        await page.locator('input[name=security-code]').fill('111');
+        const recurring = page.locator('input[name=recurring]'); if (await recurring.isChecked()) await recurring.uncheck();
+        await page.getByRole('button', { name: /Заплатить|Оплатить/ }).last().click();
+        let outcome;
+        await page.waitForTimeout(6000);
+        outcome = await api('/subscriptions/payments/' + fixture.sandbox.payment_id);
+        const bankText = (await page.locator('body').innerText()).replace(/(?:\d[ -]?){13,19}/g, '[test instrument]');
+        const rejectedAttempt = /Не хватает денег/.test(bankText.replace(/\s+/g, ' '));
+        if (!rejectedAttempt && !['canceled', 'failed'].includes(outcome.status)) throw new Error('TEST_BANK_DECLINE_NOT_OBSERVED');
+        fixture.card_decline_attempt = { payment_id: outcome.id, parent_status: outcome.status, bank_ui_insufficient_funds: rejectedAttempt };
+        if (outcome.status === 'canceled') fixture.declined_payment_id = outcome.id; fs.writeFileSync(authPath, JSON.stringify(fixture), { mode: 0o600 });
+        // The screenshot is back in our app, never a filled payment-instrument form.
+        await go(page, base + '/app'); await page.getByRole('button', { name: 'Профиль', exact: true }).click(); await page.getByText('Подписки', { exact: true }).click();
+        await page.getByText('История оплат подписок', { exact: true }).scrollIntoViewIfNeeded();
+        await page.screenshot({ path: path.join(screenshots, 'live-subscription-bank-decline-390.png') });
+        console.log(JSON.stringify({ payment_id: outcome.id, stage: outcome.status, test_mode: true, expected_provider_reason: 'insufficient_funds', parent_remains_pending_for_retry: outcome.status === 'pending', auto_debits: false })); return;
+      }
       if (process.argv[2] === 'pay') {
         const wallet = page.getByText('Ваш кошелёк', { exact: true });
         await wallet.waitFor({ state: 'visible', timeout: 25000 }); await wallet.click(); await page.waitForTimeout(1000);

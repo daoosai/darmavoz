@@ -100,6 +100,26 @@ async function journey(browser) {
   result.journey = { session_id: session, event_count: after.events.length, actor_linked: true, city_filter: true, owner_inapp_count: linked.length };
   await admin.close(); await anon.close();
 }
+async function client(browser) {
+  const orders = JSON.parse(fs.readFileSync(root + '/live-orders.json'));
+  const oid = orders.order_ids[1]; if (!oid) throw new Error('QA_COMPLETED_ORDER_REQUIRED');
+  const c = await context(browser, qa.client), p = await c.newPage(); await p.goto(base + '/?notification_order=' + oid);
+  await expect(p.getByRole('heading', { name: 'Прямые расчёты', exact: true })).toBeVisible();
+  await expect(p.getByRole('button', { name: 'Оплатить заказ', exact: true })).toHaveCount(0);
+  const receive = p.getByRole('button', { name: 'Подтвердить получение', exact: true });
+  if (await receive.count()) await receive.click();
+  await expect(p.getByText('Получение подтверждено', { exact: false })).toBeVisible();
+  const stars = p.getByRole('button', { name: 'Оценка 5', exact: true });
+  if (await stars.count()) {
+    await stars.click(); await p.getByRole('textbox', { name: 'Текст отзыва', exact: true }).fill('QA Спринт 26: получение подтверждено в опубликованном web');
+    await capture(p, 'live-client-review-short-keyboard', { width: 390, height: 420 });
+    await p.getByRole('button', { name: 'Отправить отзыв', exact: true }).click();
+  }
+  await expect(p.getByText('Ваша оценка: 5 из 5', { exact: true })).toBeVisible();
+  for (const size of sizes) await capture(p, 'live-client-receipt-review', size);
+  result.checks.push('published client order card: direct settlement, receipt, review, no order-payment button, all target sizes'); result.client_order_id = oid;
+  await c.close();
+}
 async function owner(browser) {
   const c = await context(browser), p = await c.newPage(); await p.goto(base + '/app');
   const contact = 's26-qa-owner-' + Date.now() + '@example.invalid';
@@ -129,7 +149,7 @@ async function owner(browser) {
 (async () => {
   if ((await api('/payments/config')).test_mode !== true) throw new Error('TEST_SHOP_REQUIRED');
   const b = await chromium.launch({ headless: true, args: ['--disable-dev-shm-usage', '--enable-unsafe-swiftshader'] });
-  try { for (const task of process.argv.slice(2).length ? process.argv.slice(2) : ['profiles', 'chat', 'journey']) await ({ profiles, chat, journey, owner }[task])(b); result.ok = true; }
+  try { for (const task of process.argv.slice(2).length ? process.argv.slice(2) : ['profiles', 'chat', 'journey']) await ({ profiles, chat, journey, owner, client }[task])(b); result.ok = true; }
   finally { fs.writeFileSync(root + '/live-ui-' + (process.argv.slice(2).join('-') || 'all') + '.json', JSON.stringify(result, null, 2) + '\n'); await b.close(); }
   console.log(JSON.stringify(result));
 })().catch(e => { console.error(String(e.message).replace(/https?:\/\/\S+/g, '[URL]')); process.exit(1); });

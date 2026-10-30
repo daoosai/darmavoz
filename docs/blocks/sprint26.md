@@ -32,3 +32,5 @@
 - Public pickup-point offers не включают inactive Material, которые могли снова появляться в фильтре карты; operator owner detail сохраняет архивные связи. Quarry-only автоподбор не менялся.
 
 Backend targeted после этих исправлений: **30 passed (30.67s)**, TS/lint/build pass. Реальный test DB/Redis полный путь двухQAзаказов: manual storage→10₽/delivery0→manual admission gate→trial→assignment→завершение после expiry→received/review, separate chains и idempotency. Notification transport этого CLI ограничен только QA;108non-QA отправок подавлены. [Order E2E](../reports/sprint26/live-orders.json), [sandbox ledger/replay](../reports/sprint26/live-sandbox-ledger.json). Реальный web UI оформления целиком этим CLI не доказан; интерактивные формы/карточки проверены отдельно браузером. Физического телефона/PUSH нет.
+
+Public client UI live: received/review на второмQAзаказе, direct notice и отсутствие онлайн-оплаты,6размеров +короткийkeyboardviewport — pass. Pending provider recovery не называется отказом банка; отдельный browser regression —1pass14.1s. [Client report](../reports/sprint26/live-ui-client.json).

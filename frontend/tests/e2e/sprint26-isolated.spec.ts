@@ -220,6 +220,19 @@ asyncio.run(run())`, fixtures().supplier.id]);
     }
   });
 
+  test('pending subscription recovery stays distinct from a confirmed bank decline', async ({ page }) => {
+    await login(page, fixtures().supplier);
+    let declined = false;
+    const row = { id: crypto.randomUUID(), request_id: crypto.randomUUID(), category: 'quarry', months: 1, amount: '1.00', created_at: new Date().toISOString(), confirmation_url: null, refunded_amount: '0.00', refunds: [] };
+    await page.route('**/api/v1/subscriptions/payments', route => route.fulfill({ json: [{ ...row, status: declined ? 'canceled' : 'pending', last_error: declined ? 'provider_insufficient_funds' : 'provider_unavailable' }] }));
+    await page.goto('/'); await page.getByRole('button', { name: 'Профиль', exact: true }).click(); await page.getByText('Подписки', { exact: true }).click();
+    await expect(page.getByText('Связь с платёжным сервисом временно прервана. Статус платежа уточняется.', { exact: true })).toBeVisible();
+    await expect(page.getByText('Оплата отклонена банком или платёжным сервисом', { exact: true })).toHaveCount(0);
+    declined = true; await page.getByRole('button', { name: 'Обновить статус', exact: true }).click();
+    await expect(page.getByText('Оплата отклонена банком или платёжным сервисом', { exact: true })).toBeVisible();
+    await expect(page.getByText('Недостаточно средств', { exact: true })).toBeVisible();
+  });
+
   test('subscription UI reuses uncertain purchase and permits renewal after success', async ({ page }) => {
     const requests: string[] = []; let history: Record<string, unknown>[] = [];
     await login(page, fixtures().supplier);

@@ -30,6 +30,9 @@ export const buttonClass = 'inline-flex min-h-11 items-center justify-center gap
 export const subscriptionPaymentLabel = (status: string, reason?: string | null) =>
   status === 'canceled' && reason?.startsWith('provider_') ? 'Оплата отклонена банком или платёжным сервисом' : paymentLabels[status] || (status === 'queued' ? 'В очереди' : 'Требуется сверка');
 export const subscriptionFailureReason = (reason?: string | null) => {
+  if (reason === 'provider_unavailable') return 'Связь с платёжным сервисом временно прервана. Статус платежа уточняется.';
+  if (reason === 'provider_validation') return 'Платёжный сервис отклонил запрос. Обратитесь в поддержку.';
+  if (reason && ['provider_mismatch', 'provider_status_unknown', 'provider_status_regression'].includes(reason)) return 'Требуется сверка данных платежа. Обратитесь в поддержку.';
   const labels: Record<string, string> = { provider_insufficient_funds: 'Недостаточно средств', provider_card_expired: 'Истёк срок действия карты', provider_invalid_csc: 'Неверный защитный код карты', 'provider_3d_secure_failed': 'Не пройдена проверка банка', provider_payment_method_limit_exceeded: 'Превышен лимит оплаты', provider_issuer_unavailable: 'Банк временно недоступен' };
   return reason?.startsWith('provider_') ? labels[reason] || 'Платёжный сервис отклонил оплату. Попробуйте другой способ.' : '';
 };

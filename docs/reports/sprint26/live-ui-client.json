@@ -1,0 +1,18 @@
+{
+  "environment": "test",
+  "checks": [
+    "published client order card: direct settlement, receipt, review, no order-payment button, all target sizes"
+  ],
+  "screenshots": [
+    "live-client-review-short-keyboard-390.png",
+    "live-client-receipt-review-360.png",
+    "live-client-receipt-review-390.png",
+    "live-client-receipt-review-768.png",
+    "live-client-receipt-review-1024.png",
+    "live-client-receipt-review-1440.png",
+    "live-client-receipt-review-844.png"
+  ],
+  "physical_device": false,
+  "client_order_id": "44125cbc-2cc4-4f0b-9243-3ba796733821",
+  "ok": true
+}

@@ -234,3 +234,14 @@ QA checkout корректно требовал уточнения из-за о�
 Транспорт проверки: реальные FastAPI handlers ASGI + настоящая test DB/Redis, notification enqueue ограничен QA recipients в процессе CLI; external dispatcher исключён bounded per-order Redis locks до завершения. **108 non-QA deliveries подавлены**,68jobs толькоQA. Это не утверждение о кликах оформления в публичном web и не доказательство физическогоPUSH. Public UI/API показ/расчёт и чтение проверяются отдельно. [Отчёт](reports/sprint26/live-orders.json); не повторять helper без необходимости (driver trial теперь активен).
 
 Последний targeted acceptance набор: **30 passed,4warnings,30.67s** после equipment/decline/archived-offer fixes; lint/TS/build pass. Следующий commit содержит эти исправления; runtime перед ним0fd8dd19. Остаётся sandbox bank-decline browser, live resource smoke после нового deploy и финальная сверка APK/visual/production baseline.
+
+Следующий кодовый commit: public resource/decline fixes после30passed; основной test runtime0fd8dd19, обновлённый code пока не опубликован. Ветка develop, чужие3dirtydocs сохранены. Нужны live resources после CI, provider decline/owner notification и финальная visual/APK/baseline сверка. Helpers live-api/resources/catalog и sandbox/card могут быть незакоммичены; не терять.
+
+UI follow-up: временный provider_unavailable у pending показывается как ожидание уточнения статуса, без ложного сообщения об отказе банка. Добавлен browser regression pending→bank-decline; тест в работе. Bank decline source a378dc58 pushed, test CI выполняется.
+
+
+### Опубликованный клиентский UI после полного QA рейса
+
+`frontend/tests/manual/sprint26-live-ui.cjs client`: публичный test web открыл второй completed QA заказ, подтвердил получение, отправил5⭐отзыв, проверил отсутствие онлайн-оплаты заказа и адаптивность6размеров +390×420keyboard viewport. [Report](reports/sprint26/live-ui-client.json). Физический телефон не проверялся.
+
+Browser regression pending/transient → bank-decline: **1 passed (14.1s)**, lintpass. Только подтверждённый provider canceled с bank-rejection причиной помечается failed; пока providerAPIpending, попытка остаётся pending, деньги/сроки не меняются. SDK может разрешать повтор способа оплаты после неуспешной карточной попытки; это не повод объявлять весь parent payment failed.

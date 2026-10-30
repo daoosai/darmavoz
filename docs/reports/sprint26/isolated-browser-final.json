@@ -1,0 +1,16 @@
+{
+  "passed": 10,
+  "duration": "1.6m",
+  "environment": "isolated s26qa real backend; source49b5a050",
+  "viewports": [
+    360,
+    390,
+    768,
+    1024,
+    1440,
+    844
+  ],
+  "physical_device": false,
+  "layout_followup": "10 passed (1.8m) on fresh isolated18264 after c3 layout changes",
+  "admin_panels_followup": "1 passed (32.0s) including manual access/transition/audit at6viewports"
+}

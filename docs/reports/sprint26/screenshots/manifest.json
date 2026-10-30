@@ -1,0 +1,1282 @@
+{
+  "generated_at": "2026-10-30T14:50:00.844068+00:00",
+  "image_count": 182,
+  "final_published_profiles": 42,
+  "physical_device": false,
+  "files": [
+    {
+      "file": "admin-journey-detail-1024.png",
+      "width": 1024,
+      "height": 768,
+      "sha256": "ce1314bb39bcc8d3dfd6791bd7665c9da139a753e39ea67d07e12bc89e4c53ae",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-journey-detail-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "181bccd753b3d7c80781001b1e0b51348915fe173c80362008fa5dbe7af8f0bf",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-journey-detail-360.png",
+      "width": 360,
+      "height": 800,
+      "sha256": "43c9c9d47f92b6936076d2a5747ca8bc4528128243700992471e81ec2685b0eb",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-journey-detail-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "be76e68aa59d0ad949214a08e20a3d2668a2ab16af3a33a595b37fafec6182fa",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-journey-detail-768.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "123ef790f2063cc48a3b3f3e7a818ec0c09060b8ee1069b4e955702dfa4424cc",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-journey-detail-844.png",
+      "width": 844,
+      "height": 390,
+      "sha256": "f759cb4ca9d4f3d2c5d554f64462cc6f376a738e9e848e5a4cd08f2190553c18",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-journeys-1024.png",
+      "width": 1024,
+      "height": 768,
+      "sha256": "cbfa47865f9bda647187383bd7ab0dd10e7f08b40a56a2304e7d51a6fe4f6058",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-journeys-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "8096cd629aae2e5ea8f8ba2e1f6d9d2d1a1de3bc720172a5efe123833ff1b114",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-journeys-360.png",
+      "width": 360,
+      "height": 800,
+      "sha256": "73124ad458631961d70c7cfced7f60052a6daa6b0b199e29636a9121c82e75fa",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-journeys-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "4d8f38343f04d6f8a6533196b2401cf2ac98b43cf93e752bd47dba7b75fbaac2",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-journeys-768.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "53b0f35073e3be3b720b895f32e9c406ae199d1bd9924d3ec1d6a5f33b75381f",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-journeys-844.png",
+      "width": 844,
+      "height": 390,
+      "sha256": "723aa627543095a8953a0c81fbacb511daa6fbd3f5249d883b12716d449b79fa",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-legacy-transition-1024.png",
+      "width": 1024,
+      "height": 768,
+      "sha256": "cd5e1b36430c90c7d1b391542c474b99ebd3a37e38d8a2977c91ab4d642482a3",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-legacy-transition-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "0202ee5547fb69a26f389b722630f165d065077c05612b2fef466455b0247adb",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-legacy-transition-360.png",
+      "width": 360,
+      "height": 800,
+      "sha256": "c136a30508c2c37afce3c02f3e9f86b136c3c590028a831ddae105adf8a5014a",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-legacy-transition-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "93caa3469ce1012fa49ed99ced678489f8bf38e20ad23ea3ed77495edbf7764e",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-legacy-transition-768.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "689fd06caa3bafb3ba689e28892608d2c8c7722aaf2dd5d34485d4fa6669394f",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-legacy-transition-844.png",
+      "width": 844,
+      "height": 390,
+      "sha256": "56feebff217f0006479f374f666be4c10f10f6314c04206e0de4da0272a02ead",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-manual-access-1024.png",
+      "width": 1024,
+      "height": 768,
+      "sha256": "6db319411aded687123d884429f585e83a5e88eff0b08eb26d054fb220c133bf",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-manual-access-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "c77051fbd4ce4f1150ff0f6b528d66939bcd614629efd65f449822850e44f4e4",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-manual-access-360.png",
+      "width": 360,
+      "height": 800,
+      "sha256": "c92f79d1894583f533c0d44b1d8a7dfab834a23654568a67a59f849de9732941",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-manual-access-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "44d8539ec5fb8f7df6d1d60476ebb4a71faa38da3d6ed193a33fdb3c75bb6869",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-manual-access-768.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "287f319be8ea84318a9cea5cac81bf16c5cb15a19b7739208932ac6376f2f0c5",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-manual-access-844.png",
+      "width": 844,
+      "height": 390,
+      "sha256": "3509e0e96b2a1ca7f049a38d6a87e80e4b7a5bedc57a5ab444c26499a0e5ee39",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-plan-form-1024.png",
+      "width": 1024,
+      "height": 768,
+      "sha256": "35bde4f3bc4130d9f1a43406f9f1dfb3b6a9a01cc4a915d947314182766a1f8f",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-plan-form-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "599549865af1ec95a94be2d5165cc1827bfc2d7855293b290e2ffb6d122e6a4b",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-plan-form-360.png",
+      "width": 360,
+      "height": 800,
+      "sha256": "61f8fd456d919c32a03d3bd57d9fa85b24f5038fbf6611adaa28b57d7991d20d",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-plan-form-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "8dd74532da4e05a079f8eca2f81654b30e34403d789df7a1c88f2ac5c1c0a4d5",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-plan-form-768.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "88c72eb17ed145fe9a7ab3073ce1553bad041b972e22559eb50b4a6915859a68",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-plan-form-844.png",
+      "width": 844,
+      "height": 390,
+      "sha256": "a224c6be98483fb33e15e58a600e4ee2c19115ce4733908bc07967b6ca7eb2fc",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-subscription-audit-1024.png",
+      "width": 1024,
+      "height": 768,
+      "sha256": "0bb7dceb08cd47cf1e89027e94c912690027d543f35a5ace9a64bb438ea10d4b",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-subscription-audit-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "8bf442e29af4a95b9ba9fdf73de6fc52371041111a2bf1d1d76a808cdf55661e",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-subscription-audit-360.png",
+      "width": 360,
+      "height": 800,
+      "sha256": "db3b92a7bbd243912099131041704f2e3e07f54c28ddfedc3a3b79eb39c94d89",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-subscription-audit-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "763b94e6c3b7d813233e83e9c2a71dbcdd0a67057c092307e5a6ad819d728c71",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-subscription-audit-768.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "805df96ead763d9d9456dd698b6a682c3a4906c6803fb4b6d395fd9ad76d1792",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-subscription-audit-844.png",
+      "width": 844,
+      "height": 390,
+      "sha256": "ea0a8e44e1d30a63982a983c2c01ca6fae869a46b664ef9076d804e87c17f6b8",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-subscription-payments-1024.png",
+      "width": 1024,
+      "height": 768,
+      "sha256": "4a61fe623707081ad3061b96b24164f3b332b4ae70b53eeda0b4dd471da54f0e",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-subscription-payments-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "57cbfa8b16219f79c8fcd38f663c2df902ba1ab3ce0d6bcb3ed4c33f097b9fc4",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-subscription-payments-360.png",
+      "width": 360,
+      "height": 800,
+      "sha256": "0bb3c450497b72e4269032a6df6b87c4cedc2993b7df44c1dec72626b59feb2a",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-subscription-payments-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "acf835c14d025f926dadfdd364dc9f284f259a4c53d1306778fbe460f5b32d08",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-subscription-payments-768.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "6f46dc968bd83a44131000aceb814d9b5ceb9b5ffa720323c11b1d1fab702ea8",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-subscription-payments-844.png",
+      "width": 844,
+      "height": 390,
+      "sha256": "4f29a75d35a975b77f4ca08b036499a5851afa57e5229d9f17eb5a222f0a04b8",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-subscription-settings-1024.png",
+      "width": 1024,
+      "height": 768,
+      "sha256": "001d803456a6a7f578a4fd098d36e5c9198a047f3d10078c1f539731a18598d4",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-subscription-settings-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "76ae237c3884062f58a3e1fecb77ab6137631e55e344f8db02af73e22c353cf7",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-subscription-settings-360.png",
+      "width": 360,
+      "height": 800,
+      "sha256": "d5a50b093bee1014d7b7fb60769e9427c3fc6696f9410c8540da4d56b894a683",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-subscription-settings-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "de210d71d331ccf80287aece37de207fd97cbc9af13cc46c5156483fdc038012",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-subscription-settings-768.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "c3b05c7168dde856941bbae438d6b2fe6baf88a0cde7c1517e844287e3030524",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "admin-subscription-settings-844.png",
+      "width": 844,
+      "height": 390,
+      "sha256": "d2c44ded7b4ac7839e330666f0f762de746877475a38d473de9460e30433f01f",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "chat-expired-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "d7937d083a4240dc258542c6153a81640f315fb19d1f1f6d872f778a4b517f98",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "chat-moderation-1024.png",
+      "width": 1024,
+      "height": 768,
+      "sha256": "7d44b6093e8b174f159c1a52693f4b2647d479ddd59193559710716c53c51815",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "chat-moderation-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "c561782c556e72a634b602c672daf8d7681883cc80d070f3523dcca23184835e",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "chat-moderation-360.png",
+      "width": 360,
+      "height": 800,
+      "sha256": "82cae64e6542922ade9665bf6791c38b8d78445e13764600f8918a2bdc027f46",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "chat-moderation-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "366a93bfecbbd665b138d16d8355d1c58c4ca2061d036f71884640e3a0fa77bf",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "chat-moderation-768.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "bb690dccfa94944c82664f5884cc8bb312fe41e791f49cc8f8974910bb2e09d4",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "chat-moderation-844.png",
+      "width": 844,
+      "height": 390,
+      "sha256": "ef22d59871a65d222bb70d11e291b4739cc4f17c496bdc684389851178a36214",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "chat-short-keyboard-viewport-390.png",
+      "width": 390,
+      "height": 420,
+      "sha256": "6a89a0e5161db2a572e2eb6a630ecb99e8eca7838480b7741561f8e5a3e3e50b",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "client-receipt-review-1024.png",
+      "width": 1024,
+      "height": 768,
+      "sha256": "3e399fd16cf380156dc20e976a7cf6012c850ca80492bf50ec79e28cf443b4eb",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "client-receipt-review-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "9c0ec1ddf58c2a6c0281c958f1143af843209090b1a2540d05ced086caa589ea",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "client-receipt-review-360.png",
+      "width": 360,
+      "height": 800,
+      "sha256": "68739cedfb00a92bdc5130b989f573c8b95527f6d33251822510ab38fc7353d5",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "client-receipt-review-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "a67cd0ad5b92e75b3e8883d344977fae92d6ccf0922fe9643958f0eec204a8b5",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "client-receipt-review-768.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "f0cfe398185bb52770c298a70d18ec165725fdb38d84d020379876bd513e5a40",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "client-receipt-review-844.png",
+      "width": 844,
+      "height": 390,
+      "sha256": "e4067590f7c411a7c2a562c3fb4280443fc8a0938f05ff0c778290981062111a",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "driver-notice-fixed-1024.png",
+      "width": 1024,
+      "height": 768,
+      "sha256": "662fc37f706c9e1658974f6dec613f9398dae615bcca81f7c31f3ce53a6c7083",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "driver-notice-fixed-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "c3024ec657877442db5308f19bb45eb36a0dd0459f6e9baeb4e201a5c70d8465",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "driver-notice-fixed-360.png",
+      "width": 360,
+      "height": 800,
+      "sha256": "c2ba38a1490e77c83ecb4f405c8c5a3957c6c56caeaf14a01db0684dda85ea51",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "driver-notice-fixed-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "cba62bfc662250cb8b6e9dd30687341ea85df7e31ddaa8d4de98a61bdbfb4e34",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "driver-notice-fixed-768.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "14b9db8e0c4a5a24f827d30df7ecb7d3c9cee5923659c109eaa011251e2c78b6",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "driver-notice-fixed-844.png",
+      "width": 844,
+      "height": 390,
+      "sha256": "db0e1d1fa29687b59f0423d7a2cdce816ed9edc8049284a03b3a9330749b4ba4",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "driver-public-map-Вода-1024.png",
+      "width": 1024,
+      "height": 768,
+      "sha256": "31253479b4abf1d8c4fe675ed498341d1fde2bc1a8b15b8d8de98515fd9bafc1",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "driver-public-map-Вода-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "ceee9c31f9c94aee77e56b0549ba9a73922bdd91444c48e28128bfdad84e38e2",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "driver-public-map-Вода-360.png",
+      "width": 360,
+      "height": 800,
+      "sha256": "c173f7d82776b674041f1896c2487f696061caec36da511bc12e9ddc19bc2e4f",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "driver-public-map-Вода-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "15f8554850887c1cb529277f0b043e18716280352f680fc5ce5e08eca2f45b25",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "driver-public-map-Вода-768.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "1477642de352efec162443560023346c96efdff1bfe4554014f9054904162622",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "driver-public-map-Вода-844.png",
+      "width": 844,
+      "height": 390,
+      "sha256": "3b6b70ad5e76790a1c13fdc2175755b2f96a84d019477697e60f7d1784728df8",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "driver-public-map-Материалы-1024.png",
+      "width": 1024,
+      "height": 768,
+      "sha256": "35d22e095f787ffee97bc90f304db3288f6c7ed362de15cf9f96c9e8eed4a26c",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "driver-public-map-Материалы-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "2ecf63a0ce790427fc69d153053947304dc5418fcbae4bd8df1a7ecb0091a55a",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "driver-public-map-Материалы-360.png",
+      "width": 360,
+      "height": 800,
+      "sha256": "89cf938cb5801986c6ae9ffd163af4e4f4c0a70ba66a937db41793e8ef8724ea",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "driver-public-map-Материалы-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "71c62269771f29888ba2d6dab30425258f340fc8a20b12e3c57614bcbdbb7804",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "driver-public-map-Материалы-768.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "7fd8c14ced9438c743037890a15eb5afcf45b35c4a269cc909b3424eb3f36940",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "driver-public-map-Материалы-844.png",
+      "width": 844,
+      "height": 390,
+      "sha256": "0fb5ef42c5acd714548c50002284ae0468bef300f044b311fb26a6856d1fadc1",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "driver-public-map-Септики-1024.png",
+      "width": 1024,
+      "height": 768,
+      "sha256": "7459db2290f8dc24b1a7451990adc9b4882945420a00426405a530daaedf01e3",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "driver-public-map-Септики-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "80e9f190cd90a807133c8136ce02f300514d3e678ca183416dfb54b52e87cf11",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "driver-public-map-Септики-360.png",
+      "width": 360,
+      "height": 800,
+      "sha256": "19166713b4c2374076d67fefa357e2a15b3974bacc006a220330a34fbb8d0383",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "driver-public-map-Септики-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "1400e63a74f214f550452cd032eaf4b0898007db4adaf34da78f8b602b60eada",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "driver-public-map-Септики-768.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "b125122354ef872885679ae0ab26dca09c185441ac662373ee50375c67099169",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "driver-public-map-Септики-844.png",
+      "width": 844,
+      "height": 390,
+      "sha256": "20b2b51055e3da2625a7771bd4096e05310b2de90cd685311da12ff34479bbc8",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "driver-subscriptions-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "82baa3ecdb4debacae2641b0d992b81548fafc8eeb4b117c5d3b7bc48d00ab1b",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "equipment_owner-subscriptions-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "1d6ed93c4d9f43fcc8c80840ff03df7ea83756f5ae81385d885b3c0ce22c9e13",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "general-chat-1024.png",
+      "width": 1024,
+      "height": 768,
+      "sha256": "34701833da783856e8dbd2ce200683aed08817436bff3182c21e9d3cbce06536",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "general-chat-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "607fd70e30417269bba099d7f95d18cbceea8b369eb3cab01a7650c8d097e211",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "general-chat-360.png",
+      "width": 360,
+      "height": 800,
+      "sha256": "d1af548ef599cdceb3f8f1cb91ebbb634be32f3c43b860f903dbb8d5d6c8999f",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "general-chat-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "3375ecf06a362d2660996665f259fff36ffbb139ae327b6ce4dde61692f49baa",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "general-chat-768.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "3bb0576e250cf34ad81be20d8e4bf3442c8a6431ebc9760b8a27ad47ec1726dc",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "general-chat-844.png",
+      "width": 844,
+      "height": 390,
+      "sha256": "6825b4ca64420956c40a986e33b7a86cb0921b888f8e425a5ecde4fcea19c7af",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "live-client-receipt-review-1024.png",
+      "width": 1024,
+      "height": 768,
+      "sha256": "aecf353ef2035f9bed4e0372feaa7911d7468151167a09050080b6cd3fce38e6",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "live-client-receipt-review-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "627dfa3e59a7e5dbeb89851e27691cf8ac5efe6c3d189e8d053de4727c70f9cf",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "live-client-receipt-review-360.png",
+      "width": 360,
+      "height": 800,
+      "sha256": "4e890c02f653cc73da4e679954114bf7ad02bfbc43c1a8bf4e4ff68ea90b66aa",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "live-client-receipt-review-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "540ef0babcf309f10168c0d05cd5e54087e6ab9d5d57d54ea1b09266f7f6fe8f",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "live-client-receipt-review-768.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "ec4258468b3048d2694b17b556f5e7e8d0a80566f808ffc85cb86caa1186eba7",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "live-client-receipt-review-844.png",
+      "width": 844,
+      "height": 390,
+      "sha256": "80f420dd8247af0eb4bb7b0ffd5aba512062b04fe73834ee0a2292d53142d8c2",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "live-client-review-short-keyboard-390.png",
+      "width": 390,
+      "height": 420,
+      "sha256": "5e8fe7a09c62233ae0ed6f3807780470cce4785848afe3a5d3f346504b2d4c90",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "live-driver-subscription-notice-1024.png",
+      "width": 1024,
+      "height": 768,
+      "sha256": "1d450fef315013f2a983281154e108b198f750ef2eeed06c067ecb6d557d6d6e",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-driver-subscription-notice-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "5ad0daa2db457c1d20451d04690a97c860536e5be5070348f601e762aca70e7d",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-driver-subscription-notice-360.png",
+      "width": 360,
+      "height": 800,
+      "sha256": "be7f4232cb7d1e5ed6a5b2ca46fad09ae7037b37ebc8a4326af8344ae970356d",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-driver-subscription-notice-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "e002822c4b2a351ec4fd5675ab74b42a46f078331a306a460a322b2802a894e2",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-driver-subscription-notice-768.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "7cd85523450da04dc20690bcfcd5300ea6252c5b26ed8d3207d60a0e7b76a422",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-driver-subscription-notice-844.png",
+      "width": 844,
+      "height": 390,
+      "sha256": "3bedfa37740877b0cf7e59037f9c164da2074032cf6cd8b91075950a4979d3aa",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-general-chat-1024.png",
+      "width": 1024,
+      "height": 768,
+      "sha256": "4bf10ab748e92e2097f5c86f0590adfc16d7bae0793d3df04fe401aa5722daf6",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "live-general-chat-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "23631efe3e6a4cbc2a59ada5abbd9f14d65049a74f89cc3b473d546d6c95a53a",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "live-general-chat-360.png",
+      "width": 360,
+      "height": 800,
+      "sha256": "e0cfcf44762f7bc29fee239c159c5b3b28041b87a3df8f3311319ee113244452",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "live-general-chat-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "2ded4665f35ad0bd188421a2b8690e84e538237121904260658aa55e2ac2873a",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "live-general-chat-768.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "3717ee3a7809aab32e308ca479d49a2019c7e698816e8d3fb8be2ff5242db2a7",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "live-general-chat-844.png",
+      "width": 844,
+      "height": 390,
+      "sha256": "28ed51d89ea28ba80e67f259928005e196b568083865b346b38f0951acd08cda",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "live-journey-verified-history-1024.png",
+      "width": 1024,
+      "height": 768,
+      "sha256": "ecf290689914891d36c29b94a87d2e0b40ceaf407ce449666270504a9be31b82",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "live-journey-verified-history-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "f93aa5edb41f0f7523bc38dbadebc029fbeaae9a3c662e32c09fc386d7a2ec78",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "live-journey-verified-history-360.png",
+      "width": 360,
+      "height": 800,
+      "sha256": "b0d9632e70d500c733b9b74f2e91f37515e8160bf363d7141dbee44d9bddf0d4",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "live-journey-verified-history-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "38f42dbe466aadc03f9aaddb1321185a32d1ef58624e9861a2da2675236af4ea",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "live-journey-verified-history-768.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "fd5802d39ff89aae5628d57df7d6d20e1b71bbf25ca88c3cec5291e405c85153",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "live-journey-verified-history-844.png",
+      "width": 844,
+      "height": 390,
+      "sha256": "94f9b6900b31a00fefabed1669ce878d0cd07d9445266bffec0e559b55d7b651",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "live-owner-notification-target-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "3d885d417d9b9e91be693e648e435efaa25a94ba8273bce0a20c2e4b4c4bfac9",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "live-owner-notification-target-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "fc325120f44741d2e9d879c079e981c3f9edd6992aa77b8ec7180a80d905d6b2",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "live-public-map-materials-1024.png",
+      "width": 1024,
+      "height": 768,
+      "sha256": "b3404ec99de2dc5348f83ee62295d7ecb3b1e7f178e1742c2e9bd94d8566d3b3",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-map-materials-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "eb4783e8a378f41971b68fe8d01e07012a911d4e2eb45eb70233940abf9585bb",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-map-materials-360.png",
+      "width": 360,
+      "height": 800,
+      "sha256": "b0504eeb71a191878c2c3de033ac6b19255c631962d633b701701d50d9c5ea12",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-map-materials-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "76b61f1a95251ecf98e91a6351ece167236d879ef563906fba67f138670e4f7e",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-map-materials-768.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "1586b960b89c5d310db9180b46b046559bc569c2668a62a8eb21b0e92328d06c",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-map-materials-844.png",
+      "width": 844,
+      "height": 390,
+      "sha256": "1538b080cd27f602643bd1ee4aa57f0ec1e89f24807bc930cb609e5cb2ba5337",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-map-septic-1024.png",
+      "width": 1024,
+      "height": 768,
+      "sha256": "3e430a3b11eb102965fb36e1a13d1951b5703241665f4d9265580414a58f945d",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-map-septic-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "7b8c05f669eaacf876f9502fc4d16d5ea16cc929537cb7500cbf9cd1cce9d87e",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-map-septic-360.png",
+      "width": 360,
+      "height": 800,
+      "sha256": "cbcac6ec6de2dc5b18e521e25dc05c72af65e44653bfaffaa0119af4372ebcde",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-map-septic-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "25cdc27e50fa42f5a7b998103e54a9b912326279233c07ceab4043eff91ab914",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-map-septic-768.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "208d321efad270048e9bc3e058ddb372adec077188457fdb87e77088a53b9219",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-map-septic-844.png",
+      "width": 844,
+      "height": 390,
+      "sha256": "166e875634874c091bf9db234b27bb3541f4dd098de2d4139c7a00042d16494f",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-map-water-1024.png",
+      "width": 1024,
+      "height": 768,
+      "sha256": "86db1d6d72284a74647fd148f964928596779ec34d63c898f16b92ad46d5a496",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-map-water-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "b580713571936afc772a16cb0048f980964221a390aaa211d900ac1940097502",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-map-water-360.png",
+      "width": 360,
+      "height": 800,
+      "sha256": "35d0e506ee72fcd64aebd98858b640ca478773d69e7be570166c51754171613d",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-map-water-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "2cb9ba8f726eb179945ae4e0e135b126be0f4779a239ec74d39528c381d3d0c8",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-map-water-768.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "339e1103489ba66a015edef53ee6ba402b960a6fa3ef52dc8248563de487356f",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-map-water-844.png",
+      "width": 844,
+      "height": 390,
+      "sha256": "b5d0123e7895f1adef5845884050e5d5777001ac335c608637c3ddd5cb609b13",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-point-card-septic-1024.png",
+      "width": 1024,
+      "height": 768,
+      "sha256": "2901efb67c81beee5a82013e29bb734eb5c4e23cf629557797ecb03f7007837c",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-point-card-septic-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "11649a0a589c8be6c94ef2ba42b57981c98c01ff81899a13c4b931899856c178",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-point-card-septic-360.png",
+      "width": 360,
+      "height": 800,
+      "sha256": "afab055a76b2a0603fc62cab0d6f31b4169738c38cc3654146324258f81c7a32",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-point-card-septic-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "b4293e35fda114b2597295ddd07474d5a8b9eea1cf56279dde2aaf02844d3f2b",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-point-card-septic-768.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "b935368839917c28b4a651795075c9d9bc7330192662616f5abfc692dbdac0d7",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-point-card-septic-844.png",
+      "width": 844,
+      "height": 390,
+      "sha256": "05e508e646ade80a2a161fa666ab7ef41cbf51ee6a6aca3a8a4a62e56788f8aa",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-point-card-storage-1024.png",
+      "width": 1024,
+      "height": 768,
+      "sha256": "6ab7f3123fe934b9234f2f3e44c3c9e55e40ee3f8da120fc5ec21435d0d2f927",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-point-card-storage-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "b7b9d8fed7c6d5b77f3b8d49868548b263e496b1bf7288ff630b1d2399f8609c",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-point-card-storage-360.png",
+      "width": 360,
+      "height": 800,
+      "sha256": "306da7124e8855d7c68df8c1eaa5db3f327bc2888fbcd2c64ac5cc584c4ab465",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-point-card-storage-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "bd2740f435fe1d4eb24f00fca57a0e6fb2c882dce632e70f2fa467c95f146daf",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-point-card-storage-768.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "4fed4d86d27720ada316464dcc8f8a8fe91d997bc6438668f9cacabf687a170e",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-point-card-storage-844.png",
+      "width": 844,
+      "height": 390,
+      "sha256": "4681f482e4dd49c3e3e36d5844e687435abe6174ed19f1042a8c2be07e35c446",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-point-card-water-1024.png",
+      "width": 1024,
+      "height": 768,
+      "sha256": "1fcf92ef0832d9a294635116e7bfce4b171088db92fc9805fe7fb45e87543ae0",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-point-card-water-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "35bf6719f2984be3327f9d0d1405a49a71e77e502a249a7432c6331264885b3c",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-point-card-water-360.png",
+      "width": 360,
+      "height": 800,
+      "sha256": "72a71154c0d8edcb32dc06b3a9388282f42abc55bd6dd371b0f830389116072e",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-point-card-water-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "06a8cc005c3689ec2dc0ff0515a8ace31653713ba6e567dab43b92e1b869b1c8",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-point-card-water-768.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "0fccdd5ad290f34f74a45de7d565b1f7d389e78b3de5643bd9058f80b97b7565",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-public-point-card-water-844.png",
+      "width": 844,
+      "height": 390,
+      "sha256": "19f504f5cc05e9418bf229f3b085e38b01d0a415013b10866ace48ece40f5dc2",
+      "scope": "published c3a8a294 notice/maps/cards"
+    },
+    {
+      "file": "live-subscription-pending-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "838c6d1afb10e05e58833df6dd8bc72b731a038c8652facdb4b1e0d8ae31bfbe",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "live-subscription-refund-confirmed-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "b638226b6bb96b7b8f3d3303a365adfa272bc46542de534790a4ed60a5c595b6",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "live-subscription-refund-form-1024.png",
+      "width": 1024,
+      "height": 768,
+      "sha256": "b28b0771d0b4840840cb19638bea930befb3e85eadf0ca0a88c26d0ea6c2e8b9",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "live-subscription-refund-form-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "91ab4fa612d78748cb7b768a196a2f35572691d5f925782f9d1f12926c6054d9",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "live-subscription-refund-form-360.png",
+      "width": 360,
+      "height": 800,
+      "sha256": "144136dd78f86f07894357dcd39af31308a933c0712677fdce6e8050d51a5f03",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "live-subscription-refund-form-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "c1b03b830136b877c5997d42abb8aaf05c0f79330c5be438822dea1c22624023",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "live-subscription-refund-form-768.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "f5037291d0d591ea9c553cbf5f0e9768d5c35ae51e7902b904d6c482444ee4a4",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "live-subscription-refund-form-844.png",
+      "width": 844,
+      "height": 390,
+      "sha256": "545b1e2956335748665f60acffd227a77b1dc95c267ed24acbf4f5aa7f5196da",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "paid-water-form-1024.png",
+      "width": 1024,
+      "height": 768,
+      "sha256": "903d0af22fd0005816184063a053a5e5125e8e8b1b578d3fdd47fb366a345ca5",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "paid-water-form-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "a28fcc2a3530e5cf087b01fd9f82fe1df1a685e1daf5fba6054f928257989655",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "paid-water-form-360.png",
+      "width": 360,
+      "height": 800,
+      "sha256": "25673cf35962f9d38285ffcbc2a8745566a46c81fd0669f976cd9d204c7fb13a",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "paid-water-form-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "e4954b776e85381589487799acb7f9f3081ee9022cbac37d1e2bdc4b893b7edc",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "paid-water-form-768.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "b3098272077d53c9f92a00361ce7f7ffc6f6e9215ae12b8ecdaf338a9ed08061",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "paid-water-form-844.png",
+      "width": 844,
+      "height": 390,
+      "sha256": "1852f980ac16f3b980985f7f6f59ab66ace3e5ea768cd3116ab9bc55b8544da0",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "paid-water-price-fields-390.png",
+      "width": 844,
+      "height": 390,
+      "sha256": "efbb870a0ce8f45e5a392611e9d60341b8e1e36724c8883b2f1d1d9363e18b35",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "qa-admin-journeys-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "49c9d066496833fc765605150ec69812a00a72e7faa9dc0d54a9a5e14247a684",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "qa-admin-plan-form-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "36ada906cd6980d2554e1c70645fcb9353884d45dfa6ec65005d68cf414c3c6a",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "qa-admin-subscriptions-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "ac84d156fb226842b38fc0c2c9d5ed2c75ce711fbed2f8a69186e20ea1ebbe2f",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "supplier-subscriptions-1024.png",
+      "width": 1024,
+      "height": 768,
+      "sha256": "058dad87d673030f2a7e83ed621c6f91c2d61971b122a4a401677db45d29bdfe",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "supplier-subscriptions-1440.png",
+      "width": 1440,
+      "height": 900,
+      "sha256": "1b911cef02664d0c415dcef15e9e21c49158e83800a567646c3e4f325dbc09d8",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "supplier-subscriptions-360.png",
+      "width": 360,
+      "height": 800,
+      "sha256": "8dcf430a33492294b2a2fa5b2a289e3d223835cdf65d28739c5a0cbc3230ad29",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "supplier-subscriptions-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "b39e4a03f575be70af913883accc3761da43139479b4bc98695ed6990005723c",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "supplier-subscriptions-768.png",
+      "width": 768,
+      "height": 1024,
+      "sha256": "5e9eb881422afae2dde0ec2d99dbe0c6c1b92f265a0673f46eff6ffec5c41b0c",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "supplier-subscriptions-844.png",
+      "width": 844,
+      "height": 390,
+      "sha256": "451a1b4d51e1a79756e5f3afc11ad83b7f9543901fdace20c48f9e449a7982f6",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    },
+    {
+      "file": "water_septic_partner-subscriptions-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "1dca4b812d1d6435c899a610c27b2f7b0119a742ebd5ddc42855467ac08724f8",
+      "scope": "other QA captures; see scenario reports/README for provenance"
+    }
+  ]
+}

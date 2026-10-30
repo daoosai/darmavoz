@@ -1,10 +1,33 @@
 {
-  "checked_at": "2026-10-30T09:26:35.606533+00:00",
-  "source_commit": "c07d678e2fcfbd997a1dc71283db9c9c53ccb7c4",
-  "runtime_commit": "c07d678e2fcfbd997a1dc71283db9c9c53ccb7c4",
-  "image": "sha256:5efc0f0d4df0a32425ffa2bdae8f71936bcf2c81f4be9e27ec82ed8e1c3f62f6",
-  "started_at": "2026-10-30T09:18:40.099786718Z",
-  "build_commit": null,
+  "verified_at": "2026-10-30T14:51:13.161051+00:00",
+  "code_commit": "c3a8a29431fc247417b593fa6c34a391d5a7ca50",
+  "source_head": "c3a8a29431fc247417b593fa6c34a391d5a7ca50",
+  "runtime_head": "c3a8a29431fc247417b593fa6c34a391d5a7ca50",
+  "web_build": {
+    "commit": "c3a8a29431fc247417b593fa6c34a391d5a7ca50",
+    "environment": "test"
+  },
+  "health": {
+    "status": "online",
+    "project": "Darmavoz Core API",
+    "version": "3.3.3",
+    "message": "Server is running",
+    "llm_configured": true
+  },
+  "backend_image": "sha256:7544b2bf6b2de6165e2722961dbf564eb04ed7c2cae1e8b9ae727dfb1f54c27b",
+  "backend_started_at": "2026-10-30T14:34:11.068276742Z",
+  "backend_restart_count": 0,
+  "running_sources_match_release": true,
+  "source_hashes": {
+    "app/services/subscriptions.py": "71a7792ce0faeaa6e0d55901da68da03c3392da4bcc1c834841bedb802729812",
+    "app/services/subscription_billing.py": "eb9df7be24bb26ab5531710548b990255fa805abc70437ea68292fc354612116",
+    "app/services/journey.py": "46766175666ece03621c7148bcc9ddb427adda60f7164da56a06574e77c2d191",
+    "app/services/pickup_points.py": "1f1cc8ef705757e16d050cf5ba97a1060f3de1ba29e65c8739f554a11f772000",
+    "app/schemas/equipment.py": "a1ac594be9805cc1681579361dcab92c2a3ea54d89be31279abd5291122a46fb",
+    "alembic/versions/s26_subscription_platform.py": "7741a6bad5feede94b4306a4f7fc86066f690838ce352e9e829e5daa08a652cd"
+  },
+  "database": "darmavoz_test",
+  "migration": "s26_subscription_platform",
   "features": {
     "enabled": true,
     "direct_orders": true,
@@ -12,8 +35,19 @@
     "chat_enabled": true,
     "journey_enabled": true
   },
-  "frontend_build": {
-    "commit": "c07d678e2fcfbd997a1dc71283db9c9c53ccb7c4",
-    "environment": "test"
+  "test_shop": true,
+  "owner_alerts": "QA admin only",
+  "free_water_points": 0,
+  "inactive_water_staging": 52,
+  "historical_order_payments": 9,
+  "historical_order_refunds": 2,
+  "env_files_unchanged": {
+    "/opt/darmavoz_test_deploy/.env": true,
+    "/opt/darmavoz_deploy/.env": true
+  },
+  "production_unchanged": {
+    "image": "sha256:7e21a6d9cafb4c95400fb685dceed1196266b27ec85acfba171666ce17d3203f",
+    "started_at": "2026-10-22T01:13:22.261178205Z",
+    "restart_count": 0
   }
 }

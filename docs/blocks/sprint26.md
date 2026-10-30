@@ -1,36 +1,24 @@
-# Спринт 26
+# Спринт 26: подписки, прямые расчёты и контроль пути
 
-Подписная модель, прямые расчеты заказов, доступ по категориям, платная вода, общий чат, путь посетителя.
+Актуальная передача/решения/checklist/продолжение: [SPRINT_26.md](../SPRINT_26.md). [Отчёт тестового выпуска](../reports/sprint26/TEST_RELEASE.md), [ручная приёмка](../reports/sprint26/MANUAL_ACCEPTANCE.md), [скриншоты](../reports/sprint26/screenshots/README.md). Старый [план](../sprint26-plan.md) и progress сохранены как история.
 
-План: [sprint26-plan](../sprint26-plan.md). Состояние: [sprint26-progress](../sprint26-progress.md).
+На test опубликован app release **c3a8a294**: backend/web/прямой Android APK, версия3.3.3/code391 без повышения. Только develop/test; production/main/.env не изменялись. Полная приёмка открыта: физического устройства/SMS QA-получателя нет, commercial условия требуют утверждения.
 
-Реализация начата 30.10.2026, только develop/test. Production, .env и version/build не изменять. Полная приемка пока не выполнена.
+## Что реализовано
 
-Единый документ передачи и актуального состояния: [SPRINT_26.md](../SPRINT_26.md). Читать перед продолжением; промежуточные отчёты не заменяют его.
+- Account/category подписки для8существующих категорий, явные14дней, реестр контакта/каждой машины, сохранение прежних сроков, driver↔carrier/mixed fleet, тарифы/спорные случаи/ручной доступ/аудит.
+- Только подписная онлайн-оплата; новые заказы с прямыми расчётами, старые платежи/возвраты сохранены. Durable jobs/idempotence/provider GET/webhooks/recovery/renewal и технические refunds с отдельным source-grant решением.
+- Серверные gates новых заявок/контактов/manual assign/accept; принятый рейс можно завершить после expiry. Auto quarry/manual accumulator,120s handoff и60s retry. Approved expired точки остаются серыми без контактов/нового заказа; скрытые CRM не раскрываются.
+- Только платная вода: формы/API/DBcheck, backup/preview/dependencies/cleanup6точек, reparse52кандидатов в moderation до подтверждения цены. Legacy free-water материал и один0₽offer архивированы отдельно без удаления истории.
+- Общий чат по доступу, offline/retry/expiry и полная модерация/rules/pins/audit. Anonymous journey/verified link/server truth/contact RBAC/owner outbox/админская хронология, клиентское получение и отзыв.
+- Текущий дизайн сохранён.6размеров/поворот/короткийviewport; исправлены контраст и слои/landscape/прокрутка карточек карт.
 
+## Основные файлы и API
 
-## Sandbox follow-up 30.10.2026
+`app/models/subscriptions.py`, `alembic/versions/s26_subscription_platform.py`; services `subscriptions.py`, `subscription_billing.py`, `subscription_transition.py`, `sprint26_worker.py`, `journey.py`, `journey_middleware.py`; API `/api/v1/subscriptions`, `/api/v1/chat`, `/api/v1/admin/journeys` и gates существующих endpoints. Frontend: CommerceShell, SubscriptionsScreen, AdminSubscriptionsScreen, GeneralChatScreen, AdminJourneysScreen, OrderReviewPanel, DriverSubscriptionNotice/PublicCatalogMap, journey.ts.
 
-На опубликованном test web проверены покупка, сохранение pending после фактического пересоздания backend и выдача одного grant после подтверждения провайдера. Отдельный test-only тариф 10 ₽ / 3 месяца использован для частичного возврата **3 ₽**, provider succeeded, остаток **7 ₽**. В AdminSubscriptionsScreen отдельное решение keep применено только к исходному grant; это тест технического механизма, не коммерческая политика. [Sandbox report](../reports/sprint26/sandbox-refund.json).
+## Проверки и ограничения
 
-ЮKassa не принимает partial refund <1 ₽ или с остатком 0<остаток<1 ₽. Добавлена проверка `REFUND_PROVIDER_LIMITS` до создания job и подсказка формы. Первоначальная попытка вернуть 0,40 ₽ из 1 ₽ отклонена HTTP400/amount.value, без финансового результата; [безопасная диагностика](../reports/sprint26/sandbox-provider-limit.json). Никакие секреты/реквизиты/confirmation URLs в отчёты не включены.
+CI c3: **284 backend /172 Playwright passed**, lint(TypeScript)/build success. Отдельно10isolatedbrowserpass1.8m, расширенныйadmincase1pass32s,6resourcebackendpass. Изолированный migration roundtrip сохранил исторические данные. ActualtestAPIE2E2QAзаказов, live sandbox3покупки/2возврата/restart/replay, published chat/journey/owner/client и42map/card captures. Все отчёты связаны из release report.
 
-Проверки после исправления: subscription/billing **34 passed**, lint/TypeScript/frontend build pass. Единый opt-in isolated browser набор **8 passed**. CI релиза28a: **272 backend passed / 172 Playwright passed**; [CI counts](../reports/sprint26/ci-28a-counts.json). Новая проверка лимитов требует следующего develop/test deploy. Физическое устройство/PUSH пока не подтверждены.
-
-
-## Визуальная проверка и уведомления владельцу
-
-Реальный test UI: notice/maps/chat/anonymous history проверены в360/390/768/1024/1440 и844landscape. Исправлены контраст белой кнопки карты и перекрытие embedded toolbar стандартным SDK zoom. Только embedded карты получают zoomControl bottomLeft; enableTrackResize поддерживает поворот/изменение размеров. Адресный browser case прошёл. Реальный owner input grouping:3 неуспешных QA входа за одну попытку →1 in-app после5минут, ссылка открыла соответствующую хронологию. Получатель толькоQAadmin; физический PUSH не проверен. [Live UI report](../reports/sprint26/live-ui-profiles-chat-journey.json), [owner](../reports/sprint26/live-ui-owner.json).
-
-
-## Проверки при приёмке 30.10.2026
-
-Исправления по фактическим live проверкам:
-
-- Публичная спецтехника: скрытое description=None корректно разрешено только в output DTO; телефон/описание не раскрываются, после grant восстановление проверено. Owner/input формы не ослаблены.
-- Provider canceled с insufficient_funds и другими allowlisted причинами отличается от отмены пользователем. Доступ не выдаётся, отказ виден как failed attempt с понятной причиной; owner notify_events provider_rejected/user_cancelled работают раздельно, включая позднюю привязку и повторы.
-- Public pickup-point offers не включают inactive Material, которые могли снова появляться в фильтре карты; operator owner detail сохраняет архивные связи. Quarry-only автоподбор не менялся.
-
-Backend targeted после этих исправлений: **30 passed (30.67s)**, TS/lint/build pass. Реальный test DB/Redis полный путь двухQAзаказов: manual storage→10₽/delivery0→manual admission gate→trial→assignment→завершение после expiry→received/review, separate chains и idempotency. Notification transport этого CLI ограничен только QA;108non-QA отправок подавлены. [Order E2E](../reports/sprint26/live-orders.json), [sandbox ledger/replay](../reports/sprint26/live-sandbox-ledger.json). Реальный web UI оформления целиком этим CLI не доказан; интерактивные формы/карточки проверены отдельно браузером. Физического телефона/PUSH нет.
-
-Public client UI live: received/review на второмQAзаказе, direct notice и отсутствие онлайн-оплаты,6размеров +короткийkeyboardviewport — pass. Pending provider recovery не называется отказом банка; отдельный browser regression —1pass14.1s. [Client report](../reports/sprint26/live-ui-client.json).
+Live terminal bank canceled не получен (parentpending); эта ветка проверена isolated. Полный checkout кликами в publishedweb остаётся ручной проверкой; API flow выполнен наactualtestDB. APKbuild/browser/no_device не доказывают физический PUSH/WebView/keyboard. До production: утвердить тарифы/equipment/carrier/refund-access/legal/retention и модерацию52водных кандидатов. Тестовые цены отделены, carrier неизвестная цена `null`, не0. Автосписаний/storebilling нет.

@@ -13,9 +13,12 @@ async function api(route, body, actor = fixtures.admin) {
 }
 async function main() {
   if ((await api('/payments/config')).test_mode !== true) throw new Error('TEST_SHOP_REQUIRED');
+  const full = process.argv[2] === 'full';
+  const requested = full ? '1.00' : '3.00';
+  const expectedDecision = full ? 'revoke' : 'keep';
   const paymentId = fixtures.sandbox.payment_id;
   let payment = await api('/subscriptions/payments/' + paymentId);
-  if (payment.account_id !== fixtures.supplier.id || payment.status !== 'succeeded' || Number(payment.amount) !== 10) throw new Error('QA_SUCCEEDED_PAYMENT_ONLY');
+  if (payment.account_id !== fixtures.supplier.id || payment.status !== 'succeeded' || Number(payment.amount) !== (full ? 1 : 10)) throw new Error('QA_SUCCEEDED_PAYMENT_ONLY');
   if (!fixtures.refund_other_grant_id) {
     const grant = await api('/subscriptions/admin/grants', { account_id: fixtures.supplier.id, category: 'quarry', starts_at: new Date(Date.now() - 1000).toISOString(), ends_at: new Date(Date.now() + 3600000).toISOString(), reason: 'QA independent basis for source-only sandbox refund verification' });
     fixtures.refund_other_grant_id = grant.id;
@@ -32,8 +35,9 @@ async function main() {
     if (!payment.refunds.length) {
       await card.getByRole('button', { name: 'Оформить возврат подписки', exact: true }).click();
       const form = page.locator('form').filter({ has: page.getByRole('heading', { name: 'Возврат подписки', exact: true }) });
-      await form.getByLabel('Сумма, ₽', { exact: true }).fill('3.00');
-      await form.getByLabel('Причина возврата или решения', { exact: true }).fill('QA sandbox partial refund; commercial policy is not approved');
+      await form.getByLabel('Сумма, ₽', { exact: true }).fill(requested);
+      if (full) await form.getByRole('combobox').selectOption('revoke');
+      await form.getByLabel('Причина возврата или решения', { exact: true }).fill('QA sandbox ' + (full ? 'full' : 'partial') + ' refund; commercial policy is not approved');
       await form.getByRole('checkbox').check();
       for (const size of [{ width: 360, height: 800 }, { width: 390, height: 844 }, { width: 768, height: 1024 }, { width: 1024, height: 768 }, { width: 1440, height: 900 }, { width: 844, height: 390 }]) {
         await page.setViewportSize(size); await form.scrollIntoViewIfNeeded();
@@ -54,24 +58,24 @@ async function main() {
       await page.waitForTimeout(1000);
     }
     let refund = payment.refunds.find(r => r.id === fixtures.sandbox.refund_id);
-    if (!refund || refund.status !== 'succeeded' || Number(payment.refunded_amount) !== 3 || Number(payment.refundable_amount) !== 7) throw new Error('PARTIAL_REFUND_NOT_CONFIRMED');
+    if (!refund || refund.status !== 'succeeded' || Number(payment.refunded_amount) !== Number(requested) || Number(payment.refundable_amount) !== Number(payment.amount) - Number(requested)) throw new Error('PARTIAL_REFUND_NOT_CONFIRMED');
     if (refund.access_review_required) {
       await page.getByRole('button', { name: 'Обновить', exact: true }).click();
       await card.getByRole('button', { name: 'Указать решение', exact: true }).click();
       const form = page.locator('form').filter({ has: page.getByRole('heading', { name: 'Решение по сроку доступа', exact: true }) });
-      await form.getByRole('combobox').selectOption('keep');
-      await form.getByLabel('Причина возврата или решения', { exact: true }).fill('QA technical keep decision for this source grant only; not a commercial refund rule');
+      await form.getByRole('combobox').selectOption(expectedDecision);
+      await form.getByLabel('Причина возврата или решения', { exact: true }).fill('QA technical ' + expectedDecision + ' decision for this source grant only; not a commercial refund rule');
       await form.getByRole('checkbox').check();
       const response = page.waitForResponse(r => r.request().method() === 'POST' && new URL(r.url()).pathname.endsWith('/access-decision'));
       await form.getByRole('button', { name: 'Подтвердить', exact: true }).click();
       if ((await response).status() !== 200) throw new Error('ACCESS_DECISION_UI_FAILED');
     }
     payment = await api('/subscriptions/payments/' + paymentId); refund = payment.refunds.find(r => r.id === fixtures.sandbox.refund_id);
-    if (refund.access_review_required || refund.access_adjustment?.action !== 'keep') throw new Error('ACCESS_DECISION_NOT_SAVED');
+    if (refund.access_review_required || refund.access_adjustment?.action !== expectedDecision) throw new Error('ACCESS_DECISION_NOT_SAVED');
     await page.setViewportSize({ width: 390, height: 844 }); await card.scrollIntoViewIfNeeded();
     await page.screenshot({ path: reportPath + '/screenshots/live-subscription-refund-confirmed-390.png' });
     const summary = { payment_id: paymentId, refund_id: refund.id, payment_status: payment.status, refund_status: refund.status, amount: refund.amount, refunded_amount: payment.refunded_amount, refundable_amount: payment.refundable_amount, access_adjustment: refund.access_adjustment, review_required: refund.access_review_required, test_mode: true, ui: 'published test administrator UI', other_grant_id: fixtures.refund_other_grant_id };
-    fs.writeFileSync(reportPath + '/sandbox-refund.json', JSON.stringify(summary, null, 2) + '\n');
+    fs.writeFileSync(reportPath + (full ? '/sandbox-full-refund.json' : '/sandbox-refund.json'), JSON.stringify(summary, null, 2) + '\n');
     console.log(JSON.stringify(summary));
   } finally { await browser.close(); }
 }

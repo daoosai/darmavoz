@@ -6,10 +6,11 @@
     "source/independent/previous-payment grants unchanged by partial refund keep and replay",
     "all linked attempts succeeded; renewal has audit and journey event"
   ],
-  "successful_payments": 2,
-  "successful_refunds": 1,
+  "successful_payments": 3,
+  "successful_refunds": 2,
   "grants_unchanged_on_replay": true,
-  "payment_attempts": 2,
-  "renewals": 1,
-  "renewal_events": 1
+  "revoked_source_grants": 1,
+  "payment_attempts": 3,
+  "renewals": 2,
+  "renewal_events": 2
 }

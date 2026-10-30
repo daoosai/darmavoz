@@ -1,0 +1,15 @@
+{
+  "verified_at": "2026-10-30T14:51:13.161051+00:00",
+  "baseline": "baseline.json",
+  "production_unchanged": {
+    "image": "sha256:7e21a6d9cafb4c95400fb685dceed1196266b27ec85acfba171666ce17d3203f",
+    "started_at": "2026-10-22T01:13:22.261178205Z",
+    "restart_count": 0
+  },
+  "env_files_unchanged": {
+    "/opt/darmavoz_test_deploy/.env": true,
+    "/opt/darmavoz_deploy/.env": true
+  },
+  "production_mutations": false,
+  "production_workflows_started": false
+}

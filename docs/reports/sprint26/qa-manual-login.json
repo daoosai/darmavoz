@@ -1,0 +1,39 @@
+{
+  "environment": "test",
+  "new_passwords_only_for_QA_roles": [],
+  "login_checks": [
+    {
+      "role": "admin",
+      "ordinary_login": "HTTP 200",
+      "password_reported": false
+    },
+    {
+      "role": "logist",
+      "ordinary_login": "HTTP 200",
+      "password_reported": false
+    },
+    {
+      "role": "driver",
+      "ordinary_login": "password prepared; SMS verification requires a controlled QA phone",
+      "sms_requested_by_this_run": false
+    },
+    {
+      "role": "supplier",
+      "ordinary_login": "HTTP 200",
+      "password_reported": false
+    },
+    {
+      "role": "equipment_owner",
+      "ordinary_login": "HTTP 200",
+      "password_reported": false
+    },
+    {
+      "role": "water_septic_partner",
+      "ordinary_login": "HTTP 200",
+      "password_reported": false
+    }
+  ],
+  "client_sms": "not tested; requires a controlled QA phone",
+  "credentials": "private qa-auth.json, mode0600",
+  "driver_challenge_note": "An earlier QA-only probe observed the mandatory SMS challenge, not an authenticated session; no OTP or phone is included in this report."
+}

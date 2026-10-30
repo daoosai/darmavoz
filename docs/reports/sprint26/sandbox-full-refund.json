@@ -1,0 +1,16 @@
+{
+  "payment_id": "467b815f-662b-4c73-975c-2e4cd56a6cc7",
+  "refund_id": "571a394e-7f20-4d36-aee3-2e888467bae8",
+  "payment_status": "succeeded",
+  "refund_status": "succeeded",
+  "amount": "1.00",
+  "refunded_amount": "1.00",
+  "refundable_amount": "0.00",
+  "access_adjustment": {
+    "action": "revoke"
+  },
+  "review_required": false,
+  "test_mode": true,
+  "ui": "published test administrator UI",
+  "other_grant_id": "9b4ccaff-d455-4342-952c-d6a0ba2883a8"
+}

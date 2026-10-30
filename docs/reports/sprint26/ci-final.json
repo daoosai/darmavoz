@@ -1,0 +1,44 @@
+{
+  "environment": "test",
+  "release_commit": "c3a8a29431fc247417b593fa6c34a391d5a7ca50",
+  "checked_at": "2026-10-30T14:38:50.138977+00:00",
+  "deploy_run": 41071285103,
+  "apk_run": 41071285089,
+  "jobs": [
+    {
+      "job_id": 124115780631,
+      "count_lines": [
+        "2026-10-30T14:25:43.8257260Z 284 passed, 15 warnings in 88.60s (0:01:28)"
+      ],
+      "lint_tsc_build_lines": []
+    },
+    {
+      "job_id": 124116499545,
+      "count_lines": [
+        "2026-10-30T14:33:30.9279008Z   172 passed (6.9m)"
+      ],
+      "lint_tsc_build_lines": [
+        "2026-10-30T14:26:03.4192996Z npm run lint",
+        "2026-10-30T14:26:12.1090430Z > tsc --noEmit",
+        "2026-10-30T14:26:16.9479528Z > vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+        "2026-10-30T14:26:21.3884010Z ✓ built in 4.17s"
+      ]
+    }
+  ],
+  "41071285103": {
+    "status": "completed",
+    "conclusion": "success",
+    "head_sha": "c3a8a29431fc247417b593fa6c34a391d5a7ca50",
+    "html_url": "https://github.com/daoosai/darmavoz/actions/runs/41071285103",
+    "name": "Deploy Test Environment",
+    "updated_at": "2026-10-30T14:34:23Z"
+  },
+  "41071285089": {
+    "status": "completed",
+    "conclusion": "success",
+    "head_sha": "c3a8a29431fc247417b593fa6c34a391d5a7ca50",
+    "html_url": "https://github.com/daoosai/darmavoz/actions/runs/41071285089",
+    "name": "Build Test Android APK",
+    "updated_at": "2026-10-30T14:25:58Z"
+  }
+}

@@ -21,10 +21,7 @@ async function main() {
   const page = await context.newPage(); fs.mkdirSync(screenshots, { recursive: true });
   try {
     if (process.argv[2] === 'prepare') {
-      await page.addInitScript(({ actor, city }) => {
-        localStorage.setItem('auth-storage', JSON.stringify({ state: { token: actor.token, role: actor.role }, version: 0 }));
-        localStorage.setItem('selected-city', JSON.stringify({ state: { cityId: city }, version: 1 }));
-      }, { actor: fixture.supplier, city: fixture.city_id });
+      // Origin-scoped storageState already authenticates only the test application.
       const partial = process.argv[3] === 'partial';
       if (partial) {
         const plans = await api('/subscriptions/admin/plans', undefined, fixture.admin);

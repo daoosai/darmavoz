@@ -1,0 +1,17 @@
+{
+  "environment": "test",
+  "checks": [
+    "public contacts hidden before access and restored after explicit trial",
+    "trial activation idempotent in water/septic/equipment/accumulator/firewood",
+    "free water create rejected for partner and admin; staging hidden",
+    "automatic selection quarry-only; manual storage 10m3 x 1 RUB + zero delivery",
+    "old order-payment endpoint blocked; admin analytics/settings RBAC"
+  ],
+  "resource_initial": {
+    "equipment": "inactive contacts redacted"
+  },
+  "staging_water_hidden": 52,
+  "free_catalog_materials": [],
+  "manual_storage_total": "10.00",
+  "delivery": "0.00"
+}

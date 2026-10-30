@@ -20,6 +20,7 @@ async function context(browser, actor) {
 }
 async function capture(page, label, size) {
   await page.setViewportSize(size);
+  await page.waitForTimeout(350);
   const overflow = await page.evaluate(() => {
     const shell = [...document.querySelectorAll('section.fixed')].at(-1) || document.body;
     return [...shell.querySelectorAll('*')].filter(el => {
@@ -34,10 +35,10 @@ async function capture(page, label, size) {
   });
   expect(overflow, label + ' overflow at ' + size.width).toEqual([]);
   const file = label + '-' + size.width + '.png';
-  await page.screenshot({ path: root + '/screenshots/' + file }); result.screenshots.push(file);
+  await page.screenshot({ path: root + '/screenshots/' + file, animations: 'disabled' }); result.screenshots.push(file);
 }
-async function hitTarget(locator, label) {
-  await locator.scrollIntoViewIfNeeded();
+async function hitTarget(locator, label, scroll = true) {
+  if (scroll) await locator.scrollIntoViewIfNeeded();
   await expect(locator).toBeVisible();
   await expect.poll(() => locator.evaluate(el => {
     const r = el.getBoundingClientRect();
@@ -77,11 +78,26 @@ async function profiles(browser) {
       await hitTarget(close, label + ' close at ' + size.width);
       if (label === 'storage') await hitTarget(card.getByRole('button', { name: 'Построить маршрут', exact: true }), 'storage route at ' + size.width);
       await hitTarget(card.locator('a[href^="tel:"]').first(), label + ' contact after scrolling at ' + size.width);
-      await hitTarget(close, label + ' sticky close after scrolling at ' + size.width);
+      await hitTarget(close, label + ' sticky close after scrolling at ' + size.width, false);
       await capture(p, 'live-public-point-card-' + label, size);
     }
     await p.getByRole('button', { name: label === 'storage' ? 'Закрыть детали точки' : 'Закрыть детали точки воды', exact: true }).last().click();
   }
+  await tabs.getByRole('tab', { name: 'Септики', exact: true }).click();
+  const septic = (await api('/septic-providers?city_id=' + qa.city_id)).find(x => x.id === qa.septic_id);
+  if (!septic) throw new Error('QA_SEPTIC_POINT_REQUIRED');
+  await p.getByRole('button', { name: 'Списком', exact: true }).click();
+  await p.getByRole('button').filter({ has: p.getByRole('heading', { name: 'Откачка септика', exact: true }) }).filter({ hasText: septic.address }).click();
+  const septicCard = p.getByRole('dialog', { name: 'Информация об услуге септика', exact: true });
+  for (const size of sizes) {
+    await p.setViewportSize(size);
+    await expect.poll(() => septicCard.evaluate(el => { const r = el.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; })).toBe(true);
+    await hitTarget(septicCard.getByRole('button', { name: 'Закрыть детали септика', exact: true }), 'septic close at ' + size.width);
+    await hitTarget(septicCard.locator('a[href^="tel:"]').first(), 'septic contact at ' + size.width);
+    await hitTarget(septicCard.getByRole('button', { name: 'Закрыть детали септика', exact: true }), 'septic sticky close after scrolling at ' + size.width, false);
+    await capture(p, 'live-public-point-card-septic', size);
+  }
+  await septicCard.getByRole('button', { name: 'Закрыть детали септика', exact: true }).click();
   result.checks.push('unsubscribed driver retains public maps and subscription CTA at all target sizes; no legacy free-water filter; selected cards fit viewport, scroll contacts and receive pointer events above SDK controls');
   await c.close();
 }

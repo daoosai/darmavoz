@@ -1,10 +1,21 @@
 {
-  "commit": "c07d678e2fcfbd997a1dc71283db9c9c53ccb7c4",
-  "sha256": "5e029fb0699fc6c0c4e8f3a4dda5902b2cfc7e3bb143fcc4b0edd77e8ec5fa7c",
-  "artifact": "darmavoz-test-c07d678e2fcfbd997a1dc71283db9c9c53ccb7c4.apk",
+  "commit": "c3a8a29431fc247417b593fa6c34a391d5a7ca50",
   "environment": "test",
-  "bytes": 19869235,
-  "url": "https://test.darmavoz.ru/static/darmavoz-test-c07d678e2fcfbd997a1dc71283db9c9c53ccb7c4.apk",
+  "url": "https://test.darmavoz.ru/static/darmavoz-test-c3a8a29431fc247417b593fa6c34a391d5a7ca50.apk",
+  "bytes": 19870463,
+  "sha256": "a1c571b65ee957bae23aa4c262c51f29759db6f29e83e584b9f6d8007402c0d6",
+  "binary_manifest": {
+    "package": "ru.darmavoz.app.test",
+    "versionName": "3.3.3",
+    "versionCode": 391
+  },
+  "capacitor_app_id": "ru.darmavoz.app.test",
+  "capacitor_app_name": "Дармавоз ТЕСТ",
+  "test_api_only": true,
+  "server_secrets_absent": true,
   "download_hash_verified": true,
-  "physical_device_test": "not available: no adb/device connection on node"
+  "embedded_commit_marker": false,
+  "release_identity": "immutable artifact name + CI manifest commit + SHA256",
+  "physical_device_tested": false,
+  "manifest_url": "https://test.darmavoz.ru/static/darmavoz-test-build.json"
 }

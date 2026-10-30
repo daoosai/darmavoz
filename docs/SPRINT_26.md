@@ -2,7 +2,7 @@
 
 **Следующей сессии:** сначала прочитать этот файл, `/opt/darmavoz_test/AGENTS.md`, README и применимые `.github/workflows/` **на ноде**. Проверить `git status`, актуальные ветки и фактически запущенный тестовый контур. Затем продолжить с раздела **«Продолжить отсюда»**. Чужие и неизвестные изменения не перезаписывать, не сбрасывать и не включать в свои коммиты. История чата для продолжения не требуется.
 
-Обновлено: 2026-10-30 UTC. Общий статус: **реализация 26.1–26.7 написана; финальная проверка и доставка тестового выпуска в работе**. Этот документ — основной источник передачи работы. Старые `sprint26-plan.md` и `sprint26-progress.md` сохранены как контекст, но их промежуточные статусы могут отставать.
+Обновлено: 2026-10-30 UTC. Общий статус: **реализация 26.1–26.7 опубликована на тесте; полная приёмка остаётся открытой по перечисленным ниже ограничениям**. Этот документ — основной источник передачи работы. Старые `sprint26-plan.md` и `sprint26-progress.md` сохранены как контекст, но их промежуточные статусы могут отставать.
 
 ## 1. Цель и разрешённый объём
 
@@ -52,128 +52,108 @@
 
 ## 4. План 26.1–26.7 и фактический чек-лист
 
-Статусы: **не начато / в работе / реализовано без проверки / проверено / заблокировано**. Isolated, live web/API, фактическая публикация и физический телефон — разные виды проверки. Общую приёмку не объявлять завершённой при существенных остатках.
+Статусы: **не начато / в работе / реализовано без проверки / проверено / заблокировано**. Изолированные тесты, actual test API/DB, опубликованный web и физическое устройство — разные виды проверки. Техническая готовность не утверждает коммерческие условия.
 
 ### 26.1 — основание, миграция, безопасный переход — проверено
 
-- [проверено] Инструкции ноды/README/workflows, baseline, сохранность3чужихdirtydocs, работа только develop/test.
-- [проверено] Frozen additive migration `s26_subscription_platform`, parent `release_317_merge_heads`:18таблиц +vehicle plate_key/order settlement_mode/next_dispatch_at. Fresh isolated upgrade/downgrade/re-upgrade и round trip на приватном клоне test backup.
-- [проверено] Clone исторические строки не изменились:127orders,9payments,2refunds и digest связанных сущностей. [Migration report](reports/sprint26/migration-clone.json), воспроизводимый `scripts/sprint26_migration_smoke.py` разрешён только disposable DB.
-- [проверено] Transition preview/apply сохраняет подтверждённые даты, ownerless resource scopes и дедупликацию. На test перенесено17grants;17неподтверждённых ресурсов на review,68невалидных исторических тестовых номеров не получили придуманныйtrial.
-- [проверено] Эта миграция применена на test runtime, пять S26 flags включены. Production миграции не запускались.
+- [проверено] Прочитаны инструкции ноды/README/workflows, сохранены baseline и чужие изменения. Вся работа только develop/test.
+- [проверено] Frozen additive migration `s26_subscription_platform`, parent `release_317_merge_heads`: 18 новых таблиц и поля vehicle/order. Основные файлы: `app/models/subscriptions.py`, `alembic/versions/s26_subscription_platform.py`, `subscription_transition.py`.
+- [проверено] Fresh isolated upgrade/downgrade/re-upgrade и round trip на приватном клоне test backup. Исторические 127 orders, 9 payments, 2 refunds и связанные таблицы не изменились по digest. [Clone report](reports/sprint26/migration-clone.json); `scripts/sprint26_migration_smoke.py` допускает только disposable DB.
+- [проверено] Перенос сохраняет подтверждённые даты и object grants без владельца, не начинает новый trial. На test перенесено 17 grants; 17 неподтверждённых ресурсов оставлены для review, 68 невалидных исторических номеров не получили придуманный trial. Повтор переноса не создаёт дублей.
+- [проверено] Миграция применена на test runtime; пять S26 flags включены. Production миграции не запускались.
 
-### 26.2 — подписки, trial, тарифы, автопарк, админка — реализовано, финальная visual проверка в работе
+### 26.2 — подписки, trial, автопарк, тарифы и админка — проверено API/web
 
-- [проверено] Account+8categories, explicit14days, UTC boundaries, HMAC identity/normalized RU plate registry, concurrency/re-registration/mixed fleet/paid override. Driver↔carrier и новая машина не продлевают исходный deadline. Access focused23pass; последующая regressionCI.
-- [проверено] Draft коммерческие планы, null carrier, test-only plans отдельно; admin RBAC/manual grants/спорный номер/история/поиск аккаунта/settings/transition/audit. Новые auth роли не создавались.
-- [проверено] SubscriptionsScreen4профессиональных ролей, activation/history, uncertain idempotent retry и renewal. Admin plans/payments/refunds/source decision forms. Responsive6размеров и short keyboard viewports, текущий дизайн сохранён.
-- [проверено] DriverSubscriptionNotice/общая карта без доступа: найден и исправлен белый текст на белой кнопке, отдельный browser contrast/maps case1pass. SDK zoom перекрывал embedded toolbar — для новых embedded карт bottomLeft+trackResize, standalone положение сохранено.
-- [в работе] Финальные real-SDK screenshots после последнего deploy. QA водитель теперь имеет trial: для notice использовать scoped helper expire→browser→restore с private snapshot, не сбрасывать trial историю.
+- [проверено] Account + 8 categories, явные 14 дней, UTC boundaries, HMAC контакта, реестр нормализованного госномера; concurrency, повторная регистрация, смешанный парк, оплаченный доступ. Driver↔carrier и добавление машины не продлевают исходный срок. Проверено 23 focused access tests и последующей CI regression.
+- [проверено] Черновики коммерческих тарифов, `null` для carrier, отдельные test-only планы. Admin RBAC, ручные grants с причиной, спорный номер/история, поиск аккаунта, настройки, переход и аудит. Новых auth ролей нет.
+- [проверено] SubscriptionsScreen/AdminSubscriptionsScreen: активация, история, повтор неопределённого запроса и продление; планы, платежи, технические возвраты и отдельное решение по доступу исходного платежа. Все вкладки админки проверены браузером; дополнительные access/transition/audit снимки на 6 размерах.
+- [проверено] DriverSubscriptionNotice и общая карта при отсутствии доступа. Исправлены контраст кнопки, перекрытие toolbar контролом SDK, высота embedded карты в landscape, слои SDK/locator поверх карточки, обрезание water/septic sheets. Карточки используют внутреннюю прокрутку и доступное закрытие; текущий стиль сохранён.
+- [проверено] После layout fix: 10 isolated browser tests (1.8m), ещё один расширенный admin case (32.0s). Опубликованный web: 42 снимка notice/трёх карт/трёх карточек, bounds/scroll/hit-target checks, отсутствие legacy free-water фильтра. [Published profiles](reports/sprint26/live-ui-profiles.json), [visual index](reports/sprint26/screenshots/README.md).
 
-### 26.3 — деньги только за подписки, billing/refunds, совместимость — проверено, final deployed smoke в работе
+### 26.3 — подписные платежи/возвраты и совместимость — проверено API/web
 
-- [проверено] Durable jobs, immutable snapshot, stable request/idempotence keys, authenticated provider GET, webhook/replay, late binding, recovery/restart, 23h no-repeat POST boundary, receipts/history. Старые платежи/refunds обслуживаются, новый order-payment запрещён (в т.ч. прежний APK endpoint).
-- [проверено] Тестовый магазин/ключ (значения не выводились). Реальный pending пережил force-recreate backend_test с прежними provider/key IDs и grants0; после оплаты ровно1sourcegrant.
-- [проверено] Live sandbox3покупки; partial3₽из10₽, отдельный UI keep; full1₽из1₽, UI revoke только последнегоsourcegrant. [Partial](reports/sprint26/sandbox-refund.json), [full](reports/sprint26/sandbox-full-refund.json). Другие основания доступа сохранены. Коммерческую policy не придумывали.
-- [проверено] 0,40из1₽ отвергнут ЮKassaHTTP400 amount.value. Добавлены server/UI технические partial bounds (>=1₽, остаток0или>=1₽);6boundary cases. [Diagnostic](reports/sprint26/sandbox-provider-limit.json).
-- [проверено] Реальная SDK карточная попытка «Не хватает денег», parent **pending**, затем тот же payment успешно оплачен test wallet. Pending не failed; [card observation](reports/sprint26/sandbox-card-attempt.json). Реквизиты не логировались, автосписания отключены.
-- [проверено] Final provider canceled с allowlisted bank reason классифицируется failed attempt/provider_rejected, осознанная отмена canceled/user_cancelled; late binding/replay/owner selection покрыты backend tests. UI различает transient pending, банк и сверку. Browser regression1pass14.1s.
-- [проверено] Public webhook replay2payments/1refund не менял grants, повтор создания использовал ту же операцию, attempts succeeded/renewal audit+event. [Ledger](reports/sprint26/live-sandbox-ledger.json). Повторить финальный snapshot после3йпокупки/fullrefund.
-- [реализовано без проверки] Именно **окончательный live bank canceled** не был получен: hosted checkout оставил parentpending для retry. Этот исход проверен изолированно; не выдавать его за live webhook отказа.
+- [проверено] `subscription_billing.py`/`sprint26_worker.py`: immutable snapshot, idempotence, durable jobs, authenticated provider GET, webhook/replay, late binding, restart/recovery, 23h guard, чеки и история. Новый order payment запрещён, включая прежний APK endpoint; исторические платежи/возвраты обслуживаются.
+- [проверено] Реальный **тестовый** магазин ЮKassa без настоящих списаний: pending пережил force-recreate backend_test с прежними provider/idempotence IDs и без преждевременного grant. Подтверждение создало ровно один grant.
+- [проверено] 3 sandbox покупки; partial 3 ₽ из 10 ₽, остаток 7 ₽ и явное UI keep; full 1 ₽ из 1 ₽ и явное UI revoke только последнего source grant. Предыдущий и независимый доступ сохранён. [Partial](reports/sprint26/sandbox-refund.json), [full](reports/sprint26/sandbox-full-refund.json).
+- [проверено] Provider GET и повторные webhook/payment requests: 3 successful payments, 2 refunds, 1 revoked source; 3 succeeded attempts, 2 renewal audits/events. Replay не создаёт операции/grants и не меняет существующие основания доступа. [Ledger](reports/sprint26/live-sandbox-ledger.json).
+- [проверено] HTTP400 на попытку вернуть 0,40 ₽ из 1 ₽ диагностирован. Server/UI проверяют технические границы до постановки job: refund >=1 ₽, остаток 0 или >=1 ₽. 34 billing checks и boundary cases. Pending recovery, bank rejection и user cancellation различаются в UI/аналитике/owner filters; коммерческая политика не придумана.
+- [проверено] Реальная тестовая карточная попытка «Не хватает денег» оставила parent pending для retry; затем тот же payment успешно оплачен test wallet. [Card observation](reports/sprint26/sandbox-card-attempt.json).
+- [реализовано без проверки live] Окончательный bank canceled не получен: hosted checkout оставил pending. Terminal rejection/user cancel/late binding/replay/owner classification проверены изолированно. Не выдавать это за live webhook окончательного отказа.
 
-### 26.4 — capabilities, точки/контакты, заказы и dispatch — реализовано, live resources в работе
+### 26.4 — точки/контакты, заказы и dispatch — проверено API и затронутые web экраны
 
-- [проверено] Approved expired точки видны серыми; телефон/description/raw parsed_data скрыты; manual hidden/archive/internalCRM не раскрываются. Pricing/checkout/wholesale/equipment/water/septic/manual assign/offer accept gated сервером.
-- [проверено] Автоподбор толькоquarry, накопительmanual.120s offer/decline/timeout +60s retry без повторного no-driver notice. Новые S26 handoff tests с корректными city/category fixtures; обходы directAPI/manual закрыты.
-- [проверено] Actual test DB/Redis E2E двухQAзаказов: accumulator checkout10м³×1₽+delivery0, idem retry, order payment409, driver manual admission409, driver/carrier общийtrialdeadline, assigned trip после expiry прошёл6статусов до completed, водительfree. Separate order chains; received/review idem. [Order E2E](reports/sprint26/live-orders.json).
-- [проверено] ASGI E2E использовал реальные handlers+testDB/Redis. Notification transport CLI ограниченQA, external worker исключён per-order lock;108non-QA deliveries подавлены,68jobs толькоQA. Это не клики оформления в публичном web и не physicalPUSH.
-- [проверено] Live resource smoke выявил equipment500: descriptionNone при сокрытии контактов не принимался outputDTO. Исправлены nullable output/frontendtype; input/owner формы не ослаблены. List/detail redaction+restore tests passed.
-- [проверено] Public point offers исключают inactiveMaterial, чтобы архивный «Бесплатная вода» не возвращался через фильтр карты. Owner detail сохраняет архивные связи; global/detail test passed.
-- [в работе] После последнего deploy завершить live `resources`: equipment before/after access, accumulator/firewood, freeAPI refusal, publicstaginghidden, pricing/manualstorage/RBAC. Water/septic QA trials уже активированы, повтор не продлевает.
+- [проверено] Approved expired точки остаются серыми; phone/description/parsed_data скрыты. Manual hidden/archive/internal CRM не раскрываются. Серверные gates pricing/checkout/wholesale/equipment/water/septic/manual assign/offer accept. Nullable equipment output description исправляет 500 без ослабления input/owner форм.
+- [проверено] Автоподбор только quarry, accumulator выбирается вручную. Offer/decline/timeout 120s и retry 60s без повторного no-driver notice. Водитель без доступа не получает новые назначения, но завершает ранее назначенный/принятый рейс.
+- [проверено] Public payload исключает inactive Material, owner detail сохраняет архивные связи. Live resource smoke: redaction/restore, trial idempotence water/septic/equipment/accumulator/firewood, free422/staging hidden, manual storage 10м³×1 ₽ + delivery0 =10 ₽, order payment409 и admin RBAC403. [Resources](reports/sprint26/live-resources.json).
+- [проверено] Два полных QA-заказа на actual test DB/Redis и real ASGI handlers: idem checkout, manual gate, общий trial deadline driver/carrier, 6 статусов после expiry до completed, освобождение водителя, receipt/review и отдельные journey chains. [Orders](reports/sprint26/live-orders.json).
+- [проверено] В CLI уведомления ограничены QA: подавлено 108 non-QA отправок, 68 jobs только QA. Per-order Redis lock исключил внешний dispatcher во время прогона. Это **API E2E**, а не полное оформление кликами в опубликованном web и не физический PUSH.
+- [не начато] Полный published click-through checkout в отдельной ручной приёмке с QA получателями. Формы/карточки проверены browser tests, фактический business flow — API E2E.
 
-### 26.5 — только платные точки воды, cleanup/import — проверено, final API smoke в работе
+### 26.5 — только платная вода, cleanup/import — проверено на test
 
-- [проверено] Partner/admin формы без free choice, обязательные price>0/unit/contact/location; gate всех записывающихAPI и DB check. UI6размеров, прежний бесплатныйsubtitle убран.
-- [проверено] До удаления fullpg_dump +privateJSON.gz, SHA preview/dependencies checked. Удалено6free water_points+5media metadata, FK отсутствуют/audit0; S3objects сохранены для восстановления. [Preview](reports/sprint26/water-preview.json), [cleanup](reports/sprint26/water-cleanup.json), [backup](reports/sprint26/test-backup.json).
-- [проверено] Actual2GIS commercial reparse52создано; repeat0created/52updated.52unknown inactive/pending_moderation/auto_added не опубликованы, цена не выдумана. [Import](reports/sprint26/water-import.json), [repeat](reports/sprint26/water-import-repeat.json). Старые4paid валидны, free0; дополнительно отдельнаяQApaidточка.
-- [в работе] Final live free-rejection/staging invisibility через `resources`. Верификация цен52поставщиков перед публикацией — операционная работа, а не подстановка нуля.
+- [проверено] В формах нет free choice; обязательны price>0, unit, contact/location. Запрет на partner/admin API и DB constraint. Проверены required fields и responsive формы на 6 размерах.
+- [проверено] До удаления сохранены full pg_dump, private JSON.gz, preview SHA и зависимости. Удалены 6 free points и 5 media metadata; FK отсутствовали, audit0; S3 объекты сохранены для восстановления. [Preview](reports/sprint26/water-preview.json), [cleanup](reports/sprint26/water-cleanup.json), [backup](reports/sprint26/test-backup.json).
+- [проверено] Реальный 2GIS reparse: 52 created; повтор 0 created/52 updated. 52 поставщика с неизвестной ценой остаются inactive/pending_moderation/auto_added, отсутствуют в public API. Старые 4 валидные paid точки сохранены, добавлена отдельная QA-точка; free0. [Import](reports/sprint26/water-import.json), [repeat](reports/sprint26/water-import-repeat.json).
+- [проверено] Visual выявил активный legacy Material «Бесплатная вода»: catalog is_free=False/price120, один quarry offer0. Материал и его единственная связь архивированы по explicit UUID после backup/digest/dependency check; история и суммы не удалены/не пересчитаны. Public map/catalog больше его не возвращают. `scripts/sprint26_archive_legacy_water.py`, [report](reports/sprint26/legacy-water-material.json).
+- [не начато] Проверка цен/контактов 52 поставщиков перед публикацией — операционная модерация. Не заменять неизвестную цену нулём.
 
-### 26.6 — общий чат и модерация — проверено web/API
+### 26.6 — общий чат и модерация — проверено API/web
 
-- [проверено] Text/poll5s/cursor/history/change pagination/dedup/send throttle; доступ каждой операции, admin service bypass, moderator требует subscription, оплата не снимает sanction.
-- [проверено] Delete/tombstone/warn/mute/unmute/ban/unban/remove/restore/moderator/rules/pin/audit. Backend checks и browser moderation/send/offline recovery/expiry во время открытого чата.
-- [проверено] Published test chat send/pin/delete/offline draft и in-appwarn толькоQA. Responsive/landscape/shortkeyboard screenshots, messages очищаются после expiry, CTA/recovery работают.
-- [реализовано без проверки] Физический PUSH/keyboard/AndroidWebView не подтверждён — устройства нет; no_device не успех.
+- [проверено] `general_chat.py`/GeneralChatScreen: text/poll5s/cursor/history/change pagination/idempotence/throttle, gate каждой операции. Admin имеет служебный доступ, moderator требует подписку; оплата не снимает санкции.
+- [проверено] Delete/tombstone/warn/mute/unmute/ban/unban/remove/restore/moderator/rules/pin/audit/RBAC. Backend и browser checks send/offline draft/recovery/expiry во время открытого чата; переписка очищается после expiry.
+- [проверено] Опубликованный чат send/pin/delete/warn только QA, 6 размеров/landscape/short keyboard viewport. [Live UI](reports/sprint26/live-ui-profiles-chat-journey.json).
+- [заблокировано] Physical APK keyboard/PUSH: устройства и adb нет. Browser/no_device не доказательство.
 
-### 26.7 — путь посетителя, ошибки, owner alerts, получение/отзыв — проверено web/API
+### 26.7 — путь/ошибки, owner alerts, получение и отзыв — проверено API/web
 
-- [проверено] Visitor/session/attempt, anonymous contact attempt, verified account link только после backendlogin, server order/payment truth, retries/multi-order child chains и status catch-up. Masked/encrypted contacts/admin reveal audit; city header валидируется, неизвестный город не угадывается.
-- [проверено] Offline bounded queue/dedup/retry, запрещены client success/secret metadata, pending не ошибка, incidents/recovery/late success, retention/idle, owner outbox/inapp settings. Targeted observability/recovery passed.
-- [проверено] Admin list/filters/summary/transitions/chronology/attempts/orders/payments/delivery/settings/deeplinks. Live anonymous failure→verified login с сохранением истории/cityfilter, audited reveal, offline flush, no duplicates/secrets. [LiveUI](reports/sprint26/live-ui-profiles-chat-journey.json).
-- [проверено] Реальные5min inputgroup:3неуспешныхQAвхода→1inapp толькоQAadmin; notification link открывает нужную chronology. [Owner](reports/sprint26/live-ui-owner.json).
-- [проверено] Client received+one5starreview: backend/isolatedresponsive и **опубликованный web** на втором completedQAзаказе,6размеров+390×420keyboardviewport; direct notice/no order payment. [Client](reports/sprint26/live-ui-client.json).
-- [реализовано без проверки] Physical PUSH/APK и внешняя SMS/email доставка не проверялись на клиентах; требуется выделенное устройство/QAполучатель.
+- [проверено] `journey.py`/middleware/`journey.ts`: visitor/session/attempt, anonymous contact + verified link, серверная истина заказа/оплаты, повторные попытки/отдельные заказы/status catch-up, city validation, masked/encrypted contact и admin reveal audit.
+- [проверено] Offline bounded queue/dedup/retry, запрет client success/secret metadata, pending не ошибка, recovery/late success/retention/idle, owner outbox/in-app settings. Focused observability/recovery tests.
+- [проверено] AdminJourneysScreen: списки/фильтры/summary/transitions/chronology/attempts/orders/payments/notifications/settings/deeplinks. Published anonymous failure→verified login сохраняет историю; city filter, masked contact/reveal audit, offline flush/dedup. [Live UI](reports/sprint26/live-ui-profiles-chat-journey.json).
+- [проверено] 3 QA login failures одной попытки →1 in-app QA admin после реальных 5 минут; ссылка открывает нужную chronology. [Owner](reports/sprint26/live-ui-owner.json).
+- [проверено] OrderReviewPanel/Client Card: receipt и один отзыв1–5, idempotence/RBAC/backend; published web на completed QA order, 6 размеров +390×420, direct notice/no order payment. [Client](reports/sprint26/live-ui-client.json).
+- [заблокировано] Physical PUSH и обычный SMS-вход с выделенным телефоном не подтверждены. Для пяти QA ролей обычный password login даёт HTTP200; driver сохраняет обязательную SMS challenge, Client JWT не заменяет обычный вход. [QA login](reports/sprint26/qa-manual-login.json).
 
-## 5. Исходники и рабочее дерево
+## 5. Исходники, коммиты и рабочее дерево
 
-- Workdir `/opt/darmavoz_test`, branch **develop**, source/origin **49b5a050c41cb6c8cb59effe9e34c94267524e0f** (pushed). Main/production не менялись.
-- Коммиты:6a7b95f1foundation; c07d678efirstrelease/gates/water;28a7b5aeanalyticscity/retry/renewal;3adda8barefundlimits;0fd8dd19map/readability;a378dc58equipment/decline/archivedoffers;49b5a050pendingUXregression.
-- Собственные dirty: этот handover/block/report/screenshotupdates, `scripts/sprint26_live_api_smoke.py`, `scripts/sprint26_qa_visual_access.py`, sandbox-refund helper full-mode. Уточнять по gitstatus: приложение уже закоммичено, ops/report файлы могут дополняться до финальной проверки.
-- Чужие исходные dirty: **docs/README.md, docs/blocks/logist-drivers.md, docs/blocks/refunds.md**. Наши2READMElinks были staged частично, остальной foreigndiff сохранён. Старые untracked audit/screenshots/scripts не stage целиком, особенноdebug_b6a576_refund.py. [Baseline](reports/sprint26/baseline.json).
-- Основное: app/models/subscriptions.py; frozen migration; services subscriptions/subscription_billing/subscription_transition/sprint26_worker/journey/middleware; API subscriptions/general_chat/journeys и capabilities существующихэндпоинтов. UI использует CommerceShell/commerceApi. Tests test_sprint26_*.py +opt-in sprint26-isolated.spec.ts.
+- Workdir `/opt/darmavoz_test`, ветка **develop**. Последний коммит **приложения** и опубликованный release — **c3a8a29431fc247417b593fa6c34a391d5a7ca50**. Main/production не менялись.
+- Коммиты: `6a7b95f1` foundation; `c07d678e` first release; `28a7b5ae` city/retry/renewal; `3adda8ba` refund limits; `0fd8dd19` contrast/SDK; `a378dc58` equipment/decline/archived offers; `49b5a050` pending UX; `c3a8a294` map cards/landscape/archive helper.
+- Документы, отчёты/скриншоты и инструменты приёмки входят в заключительный docs/ops commit `[skip ci]`. Его SHA смотреть `git log -1`; он может быть новее app/runtime/APK SHA. Нового app кода после c3 нет, повторный deploy для одних отчётов не нужен.
+- Снимок собственных изменений перед заключительным commit: этот файл, block/release/manual/index, JSON/PNG отчёты, manual sandbox/live UI helpers, расширенный isolated admin case, guarded live API/release probe/APK verifier/QA visual/manual login tools; test setup сохраняет приватные QA пароли при повторе. После фиксации собственных незакоммиченных наработок не должно оставаться; проверить фактический `git status`.
+- Чужие исходные dirty **docs/README.md, docs/blocks/logist-drivers.md, docs/blocks/refunds.md** сохранены. Две наши README ссылки были закоммичены частично раньше. Старые untracked audits/screenshots/scripts не включать целиком; особенно `scripts/debug_b6a576_refund.py`. [Baseline](reports/sprint26/baseline.json).
+- История передачи: [initial](reports/sprint26/checkpoint-history.md), [live](reports/sprint26/checkpoint-live-20261030.md), [acceptance](reports/sprint26/checkpoint-acceptance-20261030.md). Старые SHA/незавершённые статусы в этих снимках не заменяют текущий документ.
 
-## 6. Развёртывание и QA инфраструктура
+## 6. Фактическое тестовое развёртывание
 
-**Снимок перед финальной CI:** runtime/public web **0fd8dd19**. Новый source49b5a050 CI в работе; a378dc58 промежуточный deploy тоже мог завершиться — сверить actual, не гадать по описанию.
+**Опубликованы backend/web/APK c3a8a294.** Source HEAD после docs/ops commit может быть новее; runtime намеренно остаётся на app release. Проверено runtime git, root web build-info, health, image и хеши 6 критических backend файлов. [Deployment](reports/sprint26/test-deployment.json).
 
-- Миграция **s26_subscription_platform**, flagsenabled/direct_orders/water_paid_only/chat_enabled/journey_enabled=true.17legacygrants/32draftcommercial/32QA1₽plans +отдельныйQA10₽3months; owner alerts толькоQAadmin.
-- Web https://test.darmavoz.ru/app. Root `/build-info.json` отдаёт SHA; `/app/build-info.json` — SPAHTML, не использовать для проверки.
-- Version **3.3.3/build391**, без повышения. APKCI делает отдельные appId **ru.darmavoz.app.test**/имя «Дармавоз ТЕСТ», testAPI/testS3/TestFirebase, source production appId не меняется. Проверить manifest/ZIP compiledtestAPI и HTTP SHA immutableartifact после последнегоCI.
-- Предыдущий проверенный APKc07 доступен immutableпоSHA, но **не отдавать его как финальный49release**. Final link/hash/report заменить послеCI: `/static/darmavoz-test-<fullSHA>.apk`, manifest `/static/darmavoz-test-build.json`.
-- Test Actions: latest [deploy49](https://github.com/daoosai/darmavoz/actions/runs/41041952339), [APK49](https://github.com/daoosai/darmavoz/actions/runs/41041952675); промежуточный [deploya378](https://github.com/daoosai/darmavoz/actions/runs/41041157088). Только test workflows, productionне запускался.
-- Private QA credentials/snapshots/backups **внеgit**, `/opt/darmavoz_test_backups/sprint26/`0700, файлы0600. Не печатать токены/пароли/confirmationURLs. Setup --enable идемпотентен и сохраняет private QA probe keys; без нужды не повторять.
-- Runtime runner `/tmp/s26-test-runtime-run.py` guarded testDB/testshop/sourcebind, CLI SMS/FCMoff. **Не запускать во время CI Dockerprune/recreate** — был NoSuchImage, без изменений данных.
-- Isolated: s26_qa_postgres/s26_qa_redis/s26_qa_backend port18026; Vite18260/18261, preview18262. Pytest собственная darmavoz_test_db_UUID. Clone s26_migration_test безappworkers. Не путать с actualtestDB.
+- Web: https://test.darmavoz.ru/app. Root `/build-info.json` отдаёт SHA; `/app/build-info.json` — SPA HTML.
+- Backend image `sha256:7544b2bf6b2de6165e2722961dbf564eb04ed7c2cae1e8b9ae727dfb1f54c27b`, started `2026-10-30T14:34:11.068276742Z`, restart count0. Health online3.3.3.
+- APK: [immutable file](https://test.darmavoz.ru/static/darmavoz-test-c3a8a29431fc247417b593fa6c34a391d5a7ca50.apk), 19,870,463 bytes, SHA256 `a1c571b65ee957bae23aa4c262c51f29759db6f29e83e584b9f6d8007402c0d6`. AppId `ru.darmavoz.app.test`, имя «Дармавоз ТЕСТ», версия3.3.3/code391, test API. [Artifact](reports/sprint26/android-artifact.json). Встроенного commit marker в JS нет: identity по имени/CI manifest/hash. Physical не проверен.
+- Схема **s26_subscription_platform**. `enabled/direct_orders/water_paid_only/chat_enabled/journey_enabled=true`. 17 legacy grants; 32 draft commercial/32 QA1₽ plans +QA10₽/3months. Owner alerts только QA admin. Исторические order payments9/refunds2 сохранены.
+- [Test deploy](https://github.com/daoosai/darmavoz/actions/runs/41071285103) и [Test APK](https://github.com/daoosai/darmavoz/actions/runs/41071285089) success. Проверены только test workflows, production не запускался.
+- Private backups/credentials `/opt/darmavoz_test_backups/sprint26/`0700, файлы0600. Не печатать password/OTP/tokens/confirmation URLs/.env. Provider inspection images хранятся приватно вне Git.
+- `scripts/sprint26_qa_manual_login.py --prepare` создаёт недостающие пароли только выделенных test QA профилей, сохраняет их приватно. Без флага проверяет пять password логинов; driver не запрашивает SMS автоматически. Для driver/client нужен контролируемый QA телефон, auth bypass не добавлен.
+- Actual test runner `/tmp/s26-test-runtime-run.py`: guarded test DB/test shop/source bind/private backup bind; CLI SMS/FCM off. Не запускать во время Docker prune/recreate из CI — ранее был NoSuchImage без изменения данных.
+- Isolated s26_qa_* /18026, pytest DB_UUID, clone s26_migration_test. Fresh Vite18264→isolated18026. Local visual18263→actual test API с placeholder SDK key (layout-only); его снимки перезаписаны опубликованными. Preview18262 без API proxy не подходит для build с relative API.
 
-## 7. Проверки, ограничения и вопросы
+## 7. Проверки, ограничения и вопросы до production
 
-- CI28a: **272backendpassed /172Playwrightpassed**. [Counts](reports/sprint26/ci-28a-counts.json). Поздние fix наборы:34refundlimits,30equipment/decline/observability,5resource; TS/lint/buildpassed. Новыеbrowsercontrast1pass13.6s/pending1pass14.1s.
-- Isolated основные8casespassed1.5min; ****финальный10case после всехfix:10passed(1.6min)****, лог `/tmp/s26-final-isolated-browser.log`. Screenshotsв reports/sprint26/screenshots/; финальный screenshot index/visual report ещё записать.
-- Fresh/clone migration roundtrip и transitionpreserved, screenshotreview обнаруженныеblankbutton/mapcontrols исправлены. Имена логов.log gitignored; сохранить безопасные counts/results вmd/json.
-- Исторический весьpytest **не объявлять зелёным**: sprint18relevance и старые dispatchflowfixtures воспроизведены на чистом907182ae. S26focused/currentCI зелёные, fullhistoricalbaselinefailures documented в checkpoint-history.md.
-- **Physical device нет (adbотсутствует)**: настоящий APKinstall/runtime/safearea/keyboard/PUSH не подтверждены; build/browser/no_device их не заменяют. Подготовить manual checklist и указать ограничение в финале.
-- Live parentpaymentcanceledbankdecline не получен, SDK предоставилretry; terminal rejection/ownerfilter проверены isolated. Реальная карточная попытка и recovery проверены без денег.
-- Коммерческие вопросы доproduction: подтверждение всех тарифов/equipment/carrier, полных/частичныхrefund и доступа, receipts/VAT/legal/privacy, disputedlegacyowners/номеров иantiabuseretention.52импортированныхsellerцен требуют проверки до публикации. Автосписания/storebilling не входят.
-- Production image/start/restarts и оба.env hashes совпали baseline: [unchanged](reports/sprint26/production-unchanged.json). Повторить read-only сверку в конце; не приписывать testCI какие-либо prodизменения.
+- Последняя CI c3: **284 backend passed (88.60s),172 Playwright passed (6.9m)**; npmrunlint(=TypeScript)/frontend build success. [CI](reports/sprint26/ci-final.json). Предыдущая CI49 сохранена отдельно.
+- После layout: **10 isolated browser passed (1.8m)**, расширенный admin case1passed32s; resource backend6passed15.65s; lint/TS/build pass. [Follow-up](reports/sprint26/map-layout-followup.json). Один запуск preview без API proxy вернул SPA HTML; окружение исправлено, ошибку не выдавали за дефект приложения.
+- Адресные наборы:23access/34billing/30equipment-decline-observability; fresh/clone migrations checked. Весь исторический pytest не объявляется зелёным: sprint18 relevance и старые dispatch fixtures воспроизведены на clean907182ae; S26/current CI проходят.
+- Опубликованный web:42 профиля/карты/карточки, live chat/journey/owner/client checks; representative screenshots просмотрены вручную, автоматические geometry/hit checks на 6 размерах. [Screenshot index](reports/sprint26/screenshots/README.md), [release report](reports/sprint26/TEST_RELEASE.md).
+- [заблокировано] Нет физического устройства/adb и контролируемого SMS-получателя: APK install/runtime/WebView/insets/реальная клавиатура/PUSH foreground-background-terminated не подтверждены. [Точная ручная приёмка](reports/sprint26/MANUAL_ACCEPTANCE.md).
+- [реализовано без проверки live] Terminal bank canceled; [не начато] полный published checkout click-through. Actual API E2E и отдельные UI проверки выполнены, ограничения отражены в отчёте.
+- [не начато, требует заказчика] Утверждение commercial тарифов (особенно equipment/carrier), правил полного/partial refund и изменения доступа, чеки/VAT/legal/privacy/retention/спорные владельцы и номера. Цены/контакты52water кандидатов проверить до публикации. Автосписания/store billing вне объёма.
+- Production image/start/restart count и оба .env совпадают baseline. Никаких production операций не разрешено. Версии не повышались, серверные .env не редактировались.
 
 ## 8. Продолжить отсюда
 
-**Следующая подзадача:** дождаться **49b5a050 testdeploy/APK** (и окончания промежуточногоa378deploy), затем выполнить final live resources/ledger и realSDKvisual. Не начинать заново реализацию/банкпокупки/cleanup.
+**Следующая подзадача — ручная приёмка на выделенном физическом Android/планшете и согласование коммерческих условий.** Реализацию заново не начинать. Не повторять покупки ЮKassa, миграции, water cleanup/import и уже прошедшие проверки без новой причины.
 
-1. Прочитатьgitstatus/actualruntime/Actions через node `/tmp/s26-actions.py`; source49 ужеpushed. Сверить frontendrootbuildinfo, runtimegitSHA/image/health/schema/settings. Не запускать параллельные миграции.
-2. Получить завершение10case isolatedbrowser log; при успехе сохранить точныйcount/duration. Если теступал, исправить причину и проверить, не прикрыватьrepeatуспехом.
-3. ПослеCIprune: guarded `python -m scripts.sprint26_live_api_smoke resources`, затем`sandbox`. СохранитьJSONотчёты. Сейчас live ресурсы остановились на equipment500старогоruntime; исходныйfix ужеunitpass/commit. Sandbox должен учесть3покупки/2refunds/1revokedsource, другиеgrantsнеизменны. Header/phone/RBAC/free checks.
-4. Final realSDKnotice/maps: scoped `scripts/sprint26_qa_visual_access.py expire` → `frontend/tests/manual/sprint26-live-ui.cjs profiles` → **restore вfinally**. Private snapshot переживает interruption; при его наличии сначалаrestore. ТолькоQA driver, безassignedorders/paidgrantизменений. Просмотреть screenshots с исправленным contrast и controls; сохранитьindex. Отдельныеpointcards проверить при возможности.
-5. Скачать immutable49APK, сверитьmanifest/fullSHA/SHA256/размер/appIdtest/testAPI/assets/version3.3.3code391. Записать android-artifact.json и final test-deployment.json, получить точныеCIcounts изjoblogs.
-6. Проверитьpreservedproductionimage/start/restart/envhashes read-only. Обновить этотфайл иblock/report по фактам. Своиops/scripts/reports/screenshots закоммитить; puredocs/ops `[skip ci]` допустим, **code release49/runtime/APK различать от docscommit**. Чужие3docs и исходныеuntracked не stage.
-7. Финал: этапы/остатки, web+immutableAPK, commits/migration/flags, auto/E2E/visual/screenshots, physical+commercial+providerobservabilityограничения, краткаяручнаяприёмка, productionнеизменялся. Не объявлятьобщуюприёмку завершённой безустройства/существенныхостатков.
-
-CI a378:backend/frontend tests успешны, deploy остановлен вCreateincrementalsourcebundle защитой от устаревшей сборки: sourceHEAD уже49, a378неявляетсяего потомком. Это не ошибка тестов. Ничего не коммитить до завершения49deploy, иначе та же проверка справедливо отклонит49.
-
-
-### Текущий промежуточный результат — 30.10.2026 14:10 UTC
-
-- Final CI49: **284 backend passed (98.96s), 172 Playwright passed (8.3m)**; lint/TypeScript/build success, testdeploy/APK success. Отчёт `reports/sprint26/ci-final.json`. Отдельный isolatedbrowser:10passed.
-- Actual runtime/web/APK49 проверены; APK package ru.darmavoz.app.test,3.3.3/code391,SHA2567ee90c74af33fdf657c82b4c1d9f37bff2ea8052e4c6523e4b04f7ab60ade3d9. Проба14:07UTC подтвердила обе .env и production image/start/restarts неизменными.
-- Finalresources smoke и providerledger завершены:3successfulQApayments/2refunds/1sourcegrant revoked, replay без дублей. RealSDK profiles helper формальноpass36captures, QAtrial snapshot восстановлен и удалён.
-- **Ручной просмотр снимков обнаружил остатки, поэтому visual приёмка ещё не закрыта:** в фильтре GlobalMap остался «Бесплатная вода» (publicAPI действительно ещё возвращает этот material — выяснить active/seed причину), SDKzoom/locator перекрывают выбранную storagecard, watercard на844×390 может быть обрезана родителем min-height480/overflowhidden. Проверить прокрутку/закрытие и исправить по фактам. Auto horizontal-overflow check этого не заметил; не выдавать helperpass за полную visual проверку.
-- **Продолжить отсюда сейчас:** разобраться с publicfreewater material; изолировать SDKcontrols в собственном stacking context, обеспечить видимый scrollable watercard на низком viewport; добавить адресные regression проверки hit-testing/scroll, обновить source/testrelease/APK если меняется приложение. Не повторять покупки/cleanup/миграции. Затем финальные отчёты и docs/opscommit.
-
-
-### Уточнение текущей подзадачи — 30.10.2026 14:24 UTC
-
-- Legacy материал `821cfe07-a343-4734-9f4f-9a9131ccdec7` был **активен**, is_free=False/catalogprice120, но единственное предложение0₽; поэтому предыдущий inactive-filter не мог его убрать. На test выполнено явное архивирование материала и его1предложения, без удаления/пересчёта истории. Preview SHA10bc439cde91..., backup verified0600, зависимости cart0/order_items0/wholesale0; publiccatalog/globalmap отсутствие проверено. Script `scripts/sprint26_archive_legacy_water.py`, отчёт `reports/sprint26/legacy-water-material.json`. Не запускать повторно без нового preview.
-- В исходниках исправлены CommerceShell fillHeight (только новая общая карта), embedded minheight/landscape headers и состояния; SDK canvas/controls ограничены собственным stacking context, locator ниже карточки, Water/Septic sheets fixed с viewportbound/внутренней прокруткой/stickyclose. Текущий стиль сохранён.
-- npmrunlint (TypeScript) + build pass;6resource backend tests15.65s pass. Полный isolatedbrowser повтор после layoutfix: **10 passed (1.8m)**. Fresh Vite18264 использует только disposable18026; прежний preview18262 безAPIproxy возвращалHTML, это исправленная конфигурация проверки.
-- Local actual SDK DOM/control layout:36captures +hit testing close/route/contact и scroll в6размерах pass; localplaceholderkey не даёт картографические tiles, это **не доказательство работы published SDK tiles**. После testCI повторить default published profiles helper, визуально просмотреть снимки с действующим webkey. QAtrial restored, snapshot отсутствует.
-- Сейчас **code49 ещё опубликован**, новые4UIфайла/helper/backupscript ожидают commit/testCI. Следующийшаг: commit/push develop после просмотра diff, дождаться только testdeploy/APK, затем обновить releaseSHA/CIcounts/probe/artifact/screenshots/финальныйдокумент. Коммиты во время deploy не делать (stale source guard).
+1. Прочитать инструкции и `git status`; сравнить app release c3 с runtime/web/APK и последующим docs/ops HEAD. Все отчёты находятся в `docs/reports/sprint26/`. Проверить отсутствие private `qa-visual-access.json`; если он есть после прерывания — сначала восстановить исходные даты guarded visual helper.
+2. Для физического теста — immutable APK выше, SHA256, выделенные QA аккаунты/телефон/FCM устройство; выполнить `MANUAL_ACCEPTANCE.md`, записать реальную модель/Android/версию/время/результат и снимки. `no_device` не отмечать успехом. Driver SMS остаётся обязательным; пароль не заменяет второй фактор.
+3. Отдельно пройти полный UI checkout с QA-only получателями. Прежний live API E2E уже завершён: не повторять его как замену пользовательских кликов. Не посылать уведомления настоящим клиентам/сотрудникам для проверки.
+4. Утвердить тарифы/возвраты/правила доступа и остальные commercial/legal вопросы; до этого сохранять draft/null, не придумывать цену carrier. 52 водных кандидата публиковать только после модерации цены/контактов.
+5. Если обнаружен дефект — исправлять только source develop/test, проверять нужный сценарий и вёрстку, обновлять этот документ вместе с кодом. Перед push перечитать workflows; во время deploy не менять source HEAD (stale-source guard). Production/main/.env/version не трогать.
+6. Если сессия прерывается — зафиксировать незакоммиченные файлы, результаты и конкретный следующий шаг здесь. Финальный docs/ops commit не требует пересборки приложения; не путать его с опубликованным c3 release.

@@ -59,6 +59,15 @@ test.describe('Sprint 26 isolated backend and responsive UI', () => {
       await capture(page, 'admin-subscription-settings', size.width);
       await page.getByRole('button', { name: 'Платежи', exact: true }).click();
     }
+    for (const [tab, title, label] of [
+      ['Доступ и спорные случаи', 'Ручное предоставление доступа', 'admin-manual-access'],
+      ['Переход', 'Подтверждённые прежние сроки', 'admin-legacy-transition'],
+      ['Журнал', '', 'admin-subscription-audit'],
+    ]) {
+      await page.getByRole('button', { name: tab, exact: true }).click();
+      if (title) await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
+      for (const size of viewports) { await page.setViewportSize(size); await capture(page, label, size.width); }
+    }
     await page.getByRole('button', { name: 'Назад', exact: true }).first().click();
     await page.getByText('Путь пользователя', { exact: true }).click();
     await expect(page.getByLabel('Сводка пути')).toBeVisible();

@@ -1,0 +1,24 @@
+{
+  "environment": "test",
+  "application_release": "c3a8a29431fc247417b593fa6c34a391d5a7ca50",
+  "screenshots": 182,
+  "published_profiles_captures": 42,
+  "viewport_sizes": [
+    "360x800",
+    "390x844",
+    "768x1024",
+    "1024x768",
+    "1440x900",
+    "844x390"
+  ],
+  "short_keyboard_viewport": "390x420; browser only",
+  "automated": [
+    "horizontal overflow checks",
+    "selected card bounds",
+    "scroll to contact",
+    "close/route/contact hit targets above SDK controls",
+    "sticky close remains available without auto-scroll"
+  ],
+  "manual_review": "Representative captures of all new screens plus affected map/order cards; SDK tile rendering observed on published test",
+  "physical_device": false
+}

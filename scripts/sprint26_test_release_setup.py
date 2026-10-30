@@ -45,9 +45,8 @@ async def run(args):
             user.role=role;users[role_name]=user
             await db.execute(insert(user_cities).values(user_id=user.id,city_id=city.id).on_conflict_do_nothing())
             result[role_name]={'id':str(user.id),'role':role_name,'token':create_access_token({'sub':username,'role':role_name})}
-            if role_name=='admin':
-                password=password or previous.get(role_name,{}).get('password')
-                if password:result[role_name]['password']=password
+            password=password or previous.get(role_name,{}).get('password')
+            if password:result[role_name]['password']=password
         if not await db.get(SprintSetting,'transition'):
             transfer=await subscription_transition.apply(db,users['admin'].id)
             transition={'resources':transfer['resources'],'copied_grants':transfer['copied_grants'],'needs_review':len(transfer['needs_review']),'invalid_vehicles':len(transfer['invalid_vehicle_ids'])}

@@ -6,7 +6,8 @@
   "resource_backend_tests": "6 passed (15.65s)",
   "isolated_browser": "10 passed (1.8m)",
   "real_sdk_local_layout": "36 captures; selected card bounds/scroll/close/contact/route hit targets passed at six viewports",
-  "published_visual": "pending test deploy of map layout fix",
+  "published_visual": "passed: c3a8a294,42 captures including storage/water/septic cards; strict sticky close and hit-target checks",
   "legacy_water_material": "archived with preview SHA and verified private backup; public catalog/map no longer include it; historical rows retained",
-  "test_harness_note": "First attempt used preview18262 without API proxy and received SPA HTML; rerun on fresh isolated Vite18264 with explicit localhost18026 API proxy succeeded; no app change to hide this failure"
+  "test_harness_note": "First attempt used preview18262 without API proxy and received SPA HTML; rerun on fresh isolated Vite18264 with explicit localhost18026 API proxy succeeded; no app change to hide this failure",
+  "extra_admin_case": "1 passed (32.0s), all6tabs captured"
 }

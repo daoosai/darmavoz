@@ -45,6 +45,8 @@ async def ingest(payload:BatchInput,request:Request,db=Depends(get_db)):
         from fastapi import HTTPException
         if isinstance(exc,HTTPException):raise
         policy.error("TELEMETRY_UNAVAILABLE","Повторите отправку событий позже",503)
+    try:city_id=UUID(request.headers.get("x-journey-city-id",""))
+    except ValueError:city_id=None
     accepted=[]
     for item in payload.events:
         if item.event not in service.CLIENT_EVENTS:policy.error("EVENT_NOT_ALLOWED","Событие подтверждается сервером",422)
@@ -55,7 +57,7 @@ async def ingest(payload:BatchInput,request:Request,db=Depends(get_db)):
         if any(k in item.details and (not isinstance(item.details[k],str) or item.details[k] not in values) for k,values in allowed.items()) or ("online" in item.details and not isinstance(item.details["online"],bool)):
             policy.error("EVENT_DETAILS_NOT_ALLOWED","Недопустимые значения события",422)
         await service.record(db,event_id=item.id,session_id=item.session_id,visitor_id=item.visitor_id,
-            attempt_id=item.attempt_id,kind=item.kind,event=item.event,source="client",at=item.occurred_at,details=item.details)
+            attempt_id=item.attempt_id,kind=item.kind,event=item.event,source="client",at=item.occurred_at,details=item.details,city_id=city_id)
         accepted.append(item.id)
     await db.commit();return {"accepted":accepted,"enabled":True}
 

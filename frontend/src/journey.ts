@@ -1,12 +1,14 @@
 /** Bounded, contact-free offline event queue. Success is recorded by the backend. */
 import { baseURL } from './utils';
 import { useAuthStore } from './store';
+import { useCityStore } from './cityStore';
 type Kind = 'auth' | 'order' | 'subscription' | 'navigation' | 'receipt' | 'review';
 interface Event { id: string; visitor_id: string; session_id: string; attempt_id: string | null; kind: Kind; event: string; occurred_at: string; details: Record<string, string | boolean> }
 const QUEUE = 'darmavoz.s26.events';
 const attempts: Partial<Record<Kind, string>> = {};
 let visitor = '', session = '', flushing = false, installed = false;
 let nativeFetch: typeof window.fetch;
+function cityHeaders(): Record<string, string> { const id = useCityStore.getState().cityId; return id && /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(id) ? { 'X-Journey-City-Id': id } : {}; }
 function stored(storage: Storage, key: string) { let id = storage.getItem(key); if (!id) { id = crypto.randomUUID(); storage.setItem(key, id); } return id; }
 function queue(): Event[] { try { const items = JSON.parse(localStorage.getItem(QUEUE) || '[]'); return Array.isArray(items) ? items.filter(x => x && typeof x.id === 'string' && Date.now() - Date.parse(x.occurred_at) < 7 * 86400000).slice(-200) : []; } catch { return []; } }
 function save(events: Event[]) { try { localStorage.setItem(QUEUE, JSON.stringify(events.slice(-200))); } catch { /* Analytics never blocks application use. */ } }
@@ -21,7 +23,7 @@ async function flush() {
   const batch = queue().slice(0, 30); if (!batch.length) return;
   flushing = true;
   try {
-    const response = await nativeFetch(`${baseURL}/telemetry/events`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ events: batch }) });
+    const response = await nativeFetch(`${baseURL}/telemetry/events`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...cityHeaders() }, body: JSON.stringify({ events: batch }) });
     if (!response.ok) { if ([400, 422].includes(response.status)) { const ids = new Set(batch.map(x => x.id)); save(queue().filter(x => !ids.has(x.id))); } return; }
     const result = await response.json(); const accepted = new Set<string>(result.accepted || []);
     if (result.enabled === false) save([]); else save(queue().filter(x => !accepted.has(x.id)));
@@ -64,6 +66,7 @@ export function installJourney() {
     }
     if (kind === 'order') { requestAttempt = checkoutAttempt(headers.get('Idempotency-Key') || crypto.randomUUID()); headers.set('X-Cart-Attempt-Id', attempts.order!); trackJourney('order', 'order_submitted', { screen: 'cart' }, false, requestAttempt); }
     headers.set('X-Visitor-Id', visitor); headers.set('X-Session-Id', session);
+    for (const [key, value] of Object.entries(cityHeaders())) headers.set(key, value);
     if (kind) { headers.set('X-Attempt-Id', requestAttempt || attempts[kind]!); headers.set('X-Attempt-Kind', kind); }
     try { return await nativeFetch(input, { ...init, headers }); }
     catch (error) { if (kind) trackJourney(kind, 'network_error', { online: navigator.onLine, error_code: 'NETWORK_UNAVAILABLE' }, false, requestAttempt); throw error; }
@@ -77,5 +80,7 @@ export function installJourney() {
     previous = state.token;
   });
   window.addEventListener('online', () => void flush()); window.setInterval(() => void flush(), 10000);
+  let lastCity = useCityStore.getState().cityId;
+  useCityStore.subscribe(state => { if (state.cityId !== lastCity) { lastCity = state.cityId; trackJourney('navigation', 'screen_opened', { screen: 'app' }); } });
   trackJourney('navigation', 'opened', { screen: 'app' });
 }

@@ -8,6 +8,7 @@ on:
 
 jobs:
   build-test-apk:
+    if: github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
     env:
       APK_REMOTE_DIR: /opt/daoos-kit/sites/darmavoz_test/static

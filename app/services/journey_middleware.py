@@ -19,6 +19,8 @@ async def observe(request,call_next):
         return await call_next(request)
     try:attempt=UUID(request.headers["x-attempt-id"])
     except (KeyError,ValueError):attempt=None
+    try:city_id=UUID(request.headers.get("x-journey-city-id",""))
+    except ValueError:city_id=None
     kind=request.headers.get("x-attempt-kind","navigation")
     if kind not in {"auth","order","subscription","navigation","receipt","review"}:kind="navigation"
     ctx={"visitor_id":visitor,"session_id":session_id,"attempt_id":attempt,"kind":kind,"db_provider":request.app.dependency_overrides.get(get_db,get_db)};token=journey.context.set(ctx);status=500;response=None
@@ -76,19 +78,19 @@ async def observe(request,call_next):
                         if kind=="auth" and contact:
                             await journey.record(db,event_id=uuid4(),session_id=session_id,visitor_id=visitor,attempt_id=attempt,
                                 kind=kind,event="auth_contact_submitted",source="server",actor=actor,contact=contact,
-                                details={"field":"email" if "@" in contact else "phone"})
+                                details={"field":"email" if "@" in contact else "phone"},city_id=city_id)
                         await journey.record(db,event_id=uuid4(),session_id=session_id,visitor_id=visitor,attempt_id=attempt,
                             kind=kind,event=event,source="server",actor=actor,contact=contact,
                             order_id=UUID(ctx["order_id"]) if ctx.get("order_id") else None,
                             payment_id=UUID(ctx["payment_id"]) if ctx.get("payment_id") else None,
-                            state=state,details={"error_code":code} if status>=400 else {})
+                            state=state,details={"error_code":code} if status>=400 else {},city_id=city_id)
                         if kind=="order" and ctx.get("order_id") and status<400:
                             try:parent_id=UUID(request.headers.get("x-cart-attempt-id",""))
                             except ValueError:parent_id=None
                             if parent_id and parent_id!=attempt:
                                 from uuid import uuid5,NAMESPACE_URL
                                 await journey.record(db,event_id=uuid5(NAMESPACE_URL,f"s26-cart:{parent_id}:{ctx['order_id']}"),
-                                    session_id=session_id,visitor_id=visitor,attempt_id=parent_id,kind="order",event="cart_submitted",source="server",actor=actor,state="succeeded")
+                                    session_id=session_id,visitor_id=visitor,attempt_id=parent_id,kind="order",event="cart_submitted",source="server",actor=actor,state="succeeded",city_id=city_id)
                         await db.commit()
                 finally:await generator.aclose()
         except Exception as exc:

@@ -1,0 +1,19 @@
+{
+  "checked_at": "2026-10-30T09:26:35.606533+00:00",
+  "source_commit": "c07d678e2fcfbd997a1dc71283db9c9c53ccb7c4",
+  "runtime_commit": "c07d678e2fcfbd997a1dc71283db9c9c53ccb7c4",
+  "image": "sha256:5efc0f0d4df0a32425ffa2bdae8f71936bcf2c81f4be9e27ec82ed8e1c3f62f6",
+  "started_at": "2026-10-30T09:18:40.099786718Z",
+  "build_commit": null,
+  "features": {
+    "enabled": true,
+    "direct_orders": true,
+    "water_paid_only": true,
+    "chat_enabled": true,
+    "journey_enabled": true
+  },
+  "frontend_build": {
+    "commit": "c07d678e2fcfbd997a1dc71283db9c9c53ccb7c4",
+    "environment": "test"
+  }
+}

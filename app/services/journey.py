@@ -83,7 +83,7 @@ async def attempt(db,attempt_id,session_id,kind,stage):
 
 
 async def record(db,*,event_id,session_id,visitor_id,event,source,at=None,attempt_id=None,kind=None,
-    details=None,actor=None,contact=None,order_id=None,payment_id=None,state=None):
+    details=None,actor=None,contact=None,order_id=None,payment_id=None,state=None,city_id=None):
     cfg=await policy.config(db)
     if not cfg["journey_enabled"]:return
     # Idempotence first: replaying an older event must not regress the current attempt.
@@ -92,6 +92,13 @@ async def record(db,*,event_id,session_id,visitor_id,event,source,at=None,attemp
     if not at.tzinfo:at=at.replace(tzinfo=UTC)
     if at>received+timedelta(minutes=5) or at<received-timedelta(days=7):at=received
     sess=await session(db,session_id,visitor_id)
+    from app.models.models import City,Order
+    if order_id:
+        order=await db.get(Order,order_id)
+        if order:city_id=order.city_id
+    if city_id and await db.get(City,city_id):
+        # Selected market/order city only; never infer location or merge devices.
+        if source!="client" or sess.city_id is None or at>=sess.last_at:sess.city_id=city_id
     row=None
     if attempt_id:
         row=await attempt(db,attempt_id,session_id,kind or "navigation",event)
@@ -138,18 +145,27 @@ async def incident(db,row,event,reason,abandoned=False):
 
 
 async def payment_event(db,payment,event,state):
-    row=await db.scalar(select(JourneyAttempt).where(JourneyAttempt.payment_id==payment.id).order_by(JourneyAttempt.last_at.desc()).limit(1))
-    if not row:return
-    sess=await db.get(JourneySession,row.session_id)
-    # Stable event ID ensures worker polling creates one logical transition.
+    rows=list((await db.scalars(select(JourneyAttempt).where(JourneyAttempt.payment_id==payment.id).order_by(JourneyAttempt.last_at.desc(),JourneyAttempt.id))).all())
+    if not rows:return
     from uuid import uuid5,NAMESPACE_URL
     sequence=f":{payment.attempts}" if event in {"subscription_provider_error","subscription_provider_recovered"} else ""
+    # Preserve the original release event ID; additional retry attempts get their own stable IDs.
+    canonical_id=uuid5(NAMESPACE_URL,f"s26:{payment.id}:{event}{sequence}")
+    canonical=await db.get(JourneyEvent,canonical_id)
+    primary=canonical.attempt_id if canonical else rows[0].id
     details={"error_code":"PAYMENT_CANCELED" if state=="canceled" else payment.last_error or "PROVIDER_REJECTED"} if state in {"failed","canceled"} or event=="subscription_provider_error" else {}
-    await record(db,event_id=uuid5(NAMESPACE_URL,f"s26:{payment.id}:{event}{sequence}"),session_id=sess.id,visitor_id=sess.visitor_id,
-        attempt_id=row.id,kind=row.kind,event=event,source="worker",payment_id=payment.id,state=state,
-        details=details)
-    if event=="subscription_provider_recovered":
-        await db.execute(update(JourneyIncident).where(JourneyIncident.attempt_id==row.id,JourneyIncident.reason=="provider_unavailable").values(resolved=True))
+    for row in rows:
+        sess=await db.get(JourneySession,row.session_id)
+        event_id=canonical_id if row.id==primary else uuid5(NAMESPACE_URL,f"s26:{payment.id}:{row.id}:{event}{sequence}")
+        await record(db,event_id=event_id,session_id=sess.id,visitor_id=sess.visitor_id,
+            attempt_id=row.id,kind=row.kind,event=event,source="worker",payment_id=payment.id,state=state,details=details)
+        if event=="subscription_provider_recovered":
+            await db.execute(update(JourneyIncident).where(JourneyIncident.attempt_id==row.id,JourneyIncident.reason=="provider_unavailable").values(resolved=True))
+    if event=="subscription_payment_succeeded":
+        from app.models.subscriptions import SubscriptionAudit
+        renewed=await db.scalar(select(SubscriptionAudit.id).where(SubscriptionAudit.action=="subscription_renewed",
+            SubscriptionAudit.details["payment_id"].astext==str(payment.id)).limit(1))
+        if renewed:await payment_event(db,payment,"subscription_renewed","succeeded")
 
 
 async def maintenance(db):

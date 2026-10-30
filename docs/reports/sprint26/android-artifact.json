@@ -1,0 +1,10 @@
+{
+  "commit": "c07d678e2fcfbd997a1dc71283db9c9c53ccb7c4",
+  "sha256": "5e029fb0699fc6c0c4e8f3a4dda5902b2cfc7e3bb143fcc4b0edd77e8ec5fa7c",
+  "artifact": "darmavoz-test-c07d678e2fcfbd997a1dc71283db9c9c53ccb7c4.apk",
+  "environment": "test",
+  "bytes": 19869235,
+  "url": "https://test.darmavoz.ru/static/darmavoz-test-c07d678e2fcfbd997a1dc71283db9c9c53ccb7c4.apk",
+  "download_hash_verified": true,
+  "physical_device_test": "not available: no adb/device connection on node"
+}

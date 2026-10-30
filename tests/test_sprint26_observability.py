@@ -167,3 +167,55 @@ async def test_two_checkout_items_and_retry_keep_separate_attempt_links(platform
         assert all(row.state=='succeeded' for row in rows)
         cart=await db.get(JourneyAttempt,parent);assert cart.state=='succeeded' and cart.order_id is None
         assert await db.scalar(select(func.count()).select_from(JourneyEvent).where(JourneyEvent.attempt_id==parent,JourneyEvent.event=='cart_submitted'))==2
+
+@pytest.mark.asyncio
+async def test_known_city_is_recorded_and_unknown_city_remains_in_general_list(platform,client,session_factory,admin_token,monkeypatch):
+    from app.models.models import City
+    from app.services import redis_client
+    class RateStore:
+        async def incr(self,key):return 1
+        async def expire(self,key,seconds):return True
+    monkeypatch.setattr(redis_client,'get_redis',lambda:RateStore())
+    async with session_factory() as db:
+        row=await db.get(SprintSetting,'platform');row.value={**row.value,'journey_enabled':True};await db.commit()
+        city=await db.scalar(select(City).where(City.code=='tyumen'));cid=city.id
+    sid,vid=uuid4(),uuid4()
+    payload={'events':[{'id':str(uuid4()),'session_id':str(sid),'visitor_id':str(vid),'kind':'navigation','event':'opened','occurred_at':s.now().isoformat(),'details':{'screen':'app'}}]}
+    response=await client.post('/api/v1/telemetry/events',headers={'X-Journey-City-Id':str(cid)},json=payload);assert response.status_code==200,response.text
+    async with session_factory() as db:assert (await db.get(JourneySession,sid)).city_id==cid
+    # Invalid/unconfigured city IDs are ignored, not guessed or used to reject valid history.
+    sid2,vid2=uuid4(),uuid4();payload['events'][0].update(id=str(uuid4()),session_id=str(sid2),visitor_id=str(vid2))
+    assert (await client.post('/api/v1/telemetry/events',headers={'X-Journey-City-Id':str(uuid4())},json=payload)).status_code==200
+    async with session_factory() as db:assert (await db.get(JourneySession,sid2)).city_id is None
+    headers={'Authorization':'Bearer '+admin_token}
+    result=await client.get('/api/v1/admin/journeys',params={'city_id':str(cid)},headers=headers)
+    assert result.status_code==200 and any(x['id']==str(sid) for x in result.json()['items'])
+    assert all(x['id']!=str(sid2) for x in result.json()['items'])
+    result=await client.get('/api/v1/admin/journeys',headers=headers)
+    assert any(x['id']==str(sid2) for x in result.json()['items'])
+
+@pytest.mark.asyncio
+async def test_payment_success_and_renewal_resolve_late_retry_attempts_once(platform,session_factory):
+    from tests.test_sprint26_subscriptions import paid_case
+    from app.services import subscription_billing as billing
+    from app.models.subscriptions import AccessGrant
+    async with session_factory() as db:
+        setting=await db.get(SprintSetting,'platform');setting.value={**setting.value,'journey_enabled':True};await db.commit()
+        user,plan,first,_=await paid_case(db)
+        renewed=await billing.create(db,user,plan.id,uuid4(),'qa@example.invalid');await db.commit()
+        sid,vid,aid=uuid4(),uuid4(),uuid4()
+        await j.record(db,event_id=uuid4(),session_id=sid,visitor_id=vid,attempt_id=aid,kind='subscription',event='subscription_payment_created',source='server',state='pending',payment_id=renewed.id);await db.commit()
+        from app.core.config import settings
+        data={'id':uuid4().hex,'status':'succeeded','amount':{'value':'10.00','currency':'RUB'},'test':True,
+            'recipient':{'account_id':settings.YOOKASSA_SHOP_ID},'metadata':renewed.body['metadata']}
+        await billing.apply_payment(db,renewed,data);await db.commit()
+        # A retried create request can be observed after the authoritative provider success.
+        aid2=uuid4()
+        await j.record(db,event_id=uuid4(),session_id=sid,visitor_id=vid,attempt_id=aid2,kind='subscription',event='subscription_payment_created',source='server',state='pending',payment_id=renewed.id);await db.commit()
+        for _ in range(2):await j.reconcile_payments(db);await db.commit()
+        for attempt_id in [aid,aid2]:
+            row=await db.get(JourneyAttempt,attempt_id);assert row.state=='succeeded' and not row.abandoned
+            events=(await db.scalars(select(JourneyEvent).where(JourneyEvent.attempt_id==attempt_id))).all()
+            assert len([x for x in events if x.event=='subscription_payment_succeeded'])==1
+            assert len([x for x in events if x.event=='subscription_renewed'])==1
+        assert await db.scalar(select(func.count()).select_from(AccessGrant).where(AccessGrant.source_key=='payment:'+str(renewed.id)))==1

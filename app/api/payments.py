@@ -19,6 +19,8 @@ from app.schemas.commerce import PaymentInput, QuoteInput, RefundInput
 from app.security.auth import OrderAccessActor, get_current_admin_user, get_current_client, get_current_logist_user, get_current_order_actor
 from app.services import payments as service
 
+from app.services.subscriptions import config as subscription_config
+
 router = APIRouter(tags=["payments"])
 
 
@@ -49,6 +51,9 @@ async def config(actor: OrderAccessActor = Depends(get_current_order_actor)):
 @router.post("/orders/{order_id}/payment-quote")
 async def quote(order_id: UUID, payload: QuoteInput, user: User = Depends(get_current_logist_user), db: AsyncSession = Depends(get_db)):
     order = await service.locked_order(db, order_id)
+    from app.services.subscriptions import config as subscription_config, error as subscription_error
+    if order.settlement_mode == "direct" or (await subscription_config(db))["direct_orders"]:
+        subscription_error("ORDER_ONLINE_PAYMENT_DISABLED", "Для новых заказов действуют прямые расчеты", 409)
     if order.is_deleted or order.status in service.CANCELED_ORDERS:
         raise HTTPException(409, "Заказ недоступен для оплаты")
     active = await db.scalar(select(Payment.id).where(Payment.order_id == order.id, Payment.status.in_(service.ACTIVE)))
@@ -72,8 +77,8 @@ async def order_payments(order_id: UUID, actor: OrderAccessActor = Depends(get_c
     order = await authorized_order(db, order_id, actor)
     quote = await service.latest_quote(db, order_id)
     rows = (await db.scalars(select(Payment).where(Payment.order_id == order_id).order_by(Payment.created_at.desc()))).all()
-    return {"order_id": order_id, "quote": {"amount": str(quote.amount), "version": quote.version, "items": quote.items} if quote else None,
-            "can_pay": bool(service.configured() and quote and not order.is_deleted and order.status not in service.CANCELED_ORDERS
+    return {"order_id": order_id, "settlement_mode": "direct" if order.settlement_mode=="direct" or ((await subscription_config(db))["direct_orders"] and not rows) else "legacy", "quote": {"amount": str(quote.amount), "version": quote.version, "items": quote.items} if quote else None,
+            "can_pay": bool(order.settlement_mode != "direct" and not (await subscription_config(db))["direct_orders"] and service.configured() and quote and not order.is_deleted and order.status not in service.CANCELED_ORDERS
                             and not any(p.status == "succeeded" for p in rows)),
             "requires_refund_review": any(p.needs_review for p in rows) and (order.is_deleted or order.status in service.CANCELED_ORDERS),
             "items": [await payment_out(p, db) for p in rows]}
@@ -133,6 +138,12 @@ async def webhook(request: Request, db: AsyncSession = Depends(get_db)):
         provider_id = obj["id"]
     except (ValueError, KeyError, TypeError, AttributeError):
         raise HTTPException(400, "Некорректное уведомление")
+    from app.services import subscription_billing
+    try:
+        if await subscription_billing.handle_webhook(db,event or "",obj):
+            return {"ok":True}
+    except service.ProviderError:
+        raise HTTPException(503, "Повторите доставку уведомления")
     if event in {"payment.succeeded", "payment.canceled", "payment.waiting_for_capture"}:
         payment = await db.scalar(select(Payment).where(Payment.provider_id == provider_id))
         if not payment:

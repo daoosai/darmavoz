@@ -6,6 +6,8 @@ from app.core.config import settings
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    from app.services.journey import mark_authenticated
+    mark_authenticated(data)
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta

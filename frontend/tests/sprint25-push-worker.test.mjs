@@ -45,3 +45,14 @@ test('FCM click opens the correct order and city and consumes the SDK click', as
   assert.equal(params.get('notification_order'), order);
   assert.equal(params.get('notification_city'), 'city-qa');
 });
+
+test('journey alert opens the admin session; chat warning opens subscription-gated chat', async () => {
+  const session = '22222222-2222-4222-8222-222222222222';
+  for (const data of [{ journey_session_id: session }, { section: 'chat' }]) {
+    const state = worker(); let work;
+    state.listeners.notificationclick({ stopImmediatePropagation() {}, notification: { close() {}, data }, waitUntil(p) { work = p; } });
+    await work; const url = new URL(state.opened[0], 'https://qa.invalid');
+    if (data.journey_session_id) { assert.equal(url.pathname, '/admin/journeys'); assert.equal(url.searchParams.get('session'), session); }
+    else assert.equal(url.searchParams.get('notification_chat'), '1');
+  }
+});

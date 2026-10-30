@@ -23,7 +23,7 @@ from app.services.expiration_notification_worker import (
 )
 from app.services.redis_client import close_redis
 from app.api import wholesale, payments
-from app.services import commerce_worker, notification_outbox
+from app.services import commerce_worker, notification_outbox, sprint26_worker
 
 logger = logging.getLogger(__name__)
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -55,9 +55,11 @@ async def lifespan(app: FastAPI):
     expiration_stop_event, expiration_task = await start_expiration_notification_worker()
     commerce_stop, commerce_task = await commerce_worker.start()
     push_stop, push_task = await notification_outbox.start()
+    s26_stop, s26_task = await sprint26_worker.start()
     try:
         yield
     finally:
+        await sprint26_worker.shutdown(s26_stop, s26_task)
         await notification_outbox.shutdown(push_stop, push_task)
         await commerce_worker.shutdown(commerce_stop, commerce_task)
         await stop_expiration_notification_worker(expiration_stop_event, expiration_task)
@@ -91,6 +93,8 @@ async def http_exception_handler(
     request: Request,
     exc: StarletteHTTPException,
 ) -> JSONResponse:
+    from app.services.journey import note_error
+    note_error(exc)
     del request
     if exc.status_code == status.HTTP_404_NOT_FOUND:
         return JSONResponse(
@@ -234,3 +238,24 @@ else:
             "message": "Server is running",
         }
 from starlette.exceptions import HTTPException as StarletteHTTPException
+
+# Sprint 26 routers are additive; policy flags preserve legacy behavior until migration review.
+from app.api import subscriptions as subscription_api
+app.include_router(subscription_api.router)
+
+from app.api import general_chat
+app.include_router(general_chat.router)
+
+from app.api import journeys
+app.include_router(journeys.router)
+from app.services.journey_middleware import observe as observe_journey
+app.middleware("http")(observe_journey)
+
+
+@app.middleware("http")
+async def subscription_privacy_headers(request: Request,call_next):
+    response=await call_next(request)
+    if request.url.path.startswith(("/api/v1/chat/","/api/v1/subscriptions/","/api/v1/admin/journeys","/api/v1/admin/journey-attempts")):
+        response.headers["Cache-Control"]="no-store, private"
+        response.headers["Vary"]="Authorization"
+    return response

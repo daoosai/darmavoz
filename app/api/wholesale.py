@@ -22,7 +22,7 @@ def today():
     return datetime.now(ZoneInfo(settings.PAYMENT_REPORT_TIMEZONE)).date()
 
 
-async def board_user(actor: OrderAccessActor = Depends(get_current_order_actor)):
+async def board_user(actor: OrderAccessActor = Depends(get_current_order_actor), db=Depends(get_db)):
     user = actor.user if isinstance(actor, OrderAccessActor) else actor
     if user is None:
         raise HTTPException(403, "Раздел доступен только партнёрам")
@@ -39,6 +39,14 @@ async def board_user(actor: OrderAccessActor = Depends(get_current_order_actor))
             raise HTTPException(403, "Для просмотра оптовых заявок необходимо завершить оформление профиля и пройти модерацию администратором.")
     if role in {"admin", "logist"}:
         return user
+    from app.services import subscriptions as policy
+    if await policy.enabled(db):
+        categories=policy.TRANSPORT if role=="driver" else ("quarry","accumulator","firewood")
+        active=False
+        for category in categories:
+            if (await policy.access(db,user.id,category,vehicle=user.driver_profile.vehicle if role=="driver" and user.driver_profile else None))["active"]:
+                active=True;break
+        if not active:policy.error("SUBSCRIPTION_REQUIRED","Новые оптовые заявки доступны при активной подписке или пробном периоде")
     if role not in PARTNER_ROLES:
         raise HTTPException(403, "Раздел доступен только водителям и поставщикам")
     return user

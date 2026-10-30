@@ -24,6 +24,7 @@ water_septic_partner_router = APIRouter()
 async def _serialize_septic_profile(
     profile: SepticProviderProfile,
     db: AsyncSession,
+    *, public=False,
 ) -> SepticProfileOut:
     media_files = list(
         (
@@ -43,19 +44,26 @@ async def _serialize_septic_profile(
         .scalars()
         .all()
     )
-    return SepticProfileOut.model_validate(profile).model_copy(
+    payload=SepticProfileOut.model_validate(profile).model_copy(
         update={
             "primary_image_url": media_files[0].public_url if media_files else None,
             "media_files": [SepticMediaOut.model_validate(media_file) for media_file in media_files],
         }
     )
 
+    if public:
+        from app.services import subscriptions as policy
+        allowed=await policy.resource_access(db,profile,"septic","septic_profile")
+        payload=payload.model_copy(update={"can_order":allowed,"access_reason":None if allowed else "SUBSCRIPTION_REQUIRED",**({"phone":None} if not allowed else {})})
+    return payload
+
 
 async def _serialize_septic_profiles(
     profiles: list[SepticProviderProfile],
     db: AsyncSession,
+    *, public=False,
 ) -> list[SepticProfileOut]:
-    return [await _serialize_septic_profile(profile, db) for profile in profiles]
+    return [await _serialize_septic_profile(profile, db,public=public) for profile in profiles]
 
 
 async def _hard_delete_septic_profile(
@@ -103,7 +111,7 @@ async def list_septic_providers(
     response.headers["Cache-Control"] = "no-store, max-age=0"
     stmt = select(SepticProviderProfile).where(SepticProviderProfile.city_id == selected_city.id).where(SepticProviderProfile.moderation_status == "approved", SepticProviderProfile.is_active.is_(True), SepticProviderProfile.is_deleted.is_(False))
     profiles = (await db.execute(stmt.order_by(SepticProviderProfile.created_at.desc()))).scalars().all()
-    return await _serialize_septic_profiles(list(profiles), db)
+    return await _serialize_septic_profiles(list(profiles), db,public=True)
 
 
 @router.get("/admin/septic-providers", response_model=list[SepticProfileOut])

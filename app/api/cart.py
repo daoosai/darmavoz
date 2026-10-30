@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.db.database import get_db
 from app.models.models import CartItem, CrmStatus, Material, Quarry, quarry_materials
 from app.schemas.catalog import CartItemCreate, CartItemUpdate, CartItemOut
-from app.services.pickup_points import is_pickup_point_publicly_available
+from app.services.pickup_points import pickup_point_orderable
 
 router = APIRouter()
 
@@ -55,7 +55,7 @@ async def add_cart_item(
         quarry = await db.get(Quarry, item.quarry_id)
         if (
             quarry is None
-            or not is_pickup_point_publicly_available(quarry)
+            or not await pickup_point_orderable(db,quarry)
         ):
             raise HTTPException(status_code=409, detail="POINT_NOT_AVAILABLE")
         unit_price = await db.scalar(

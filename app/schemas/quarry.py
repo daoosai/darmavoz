@@ -210,6 +210,8 @@ class QuarryUpdate(BaseModel):
 
 
 class QuarryOut(QuarryBase):
+    can_order: bool = True
+    access_reason: str | None = None
     city_id: UUID | None = None
     id: UUID
     min_delivery_price: Optional[float] = None
@@ -256,6 +258,8 @@ class AdminPickupPointOut(QuarryOut):
 
 
 class PickupPointMarkerOut(BaseModel):
+    can_order: bool = True
+    access_reason: str | None = None
     city_id: UUID | None = None
     id: UUID
     name: str
@@ -281,6 +285,8 @@ class GlobalPickupPointMaterialOut(BaseModel):
 
 
 class GlobalPickupPointOut(BaseModel):
+    can_order: bool = True
+    access_reason: str | None = None
     city_id: UUID | None = None
     id: UUID
     name: str

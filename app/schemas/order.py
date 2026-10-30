@@ -518,6 +518,7 @@ class OrderHistoryOut(BaseModel):
 
 
 class OrderOut(BaseModel):
+    settlement_mode: str = "legacy"
     refundable_amount: Decimal = Decimal("0")
     requires_manual_refund: bool = False
     has_financial_transactions: bool = False

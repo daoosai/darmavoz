@@ -42,7 +42,7 @@ type AddressSuggestion = {
 };
 
 const EMPTY_FORM = {
-  water_type: "free" as WaterType,
+  water_type: "paid" as WaterType,
   name: "",
   source: "",
   address: "",
@@ -133,7 +133,7 @@ const readWaterPointDraft = (storageKey: string): typeof EMPTY_FORM | null => {
     if (!draft || typeof draft !== "object") return null;
 
     return {
-      water_type: draft.water_type === "paid" ? "paid" : "free",
+      water_type: "paid",
       name: typeof draft.name === "string" ? draft.name : "",
       source: typeof draft.source === "string" ? draft.source : "",
       address: typeof draft.address === "string" ? draft.address : "",
@@ -407,7 +407,7 @@ export default function SupplierWaterPointsScreen({
   const openEditForm = (point: WaterPoint) => {
     setEditingPoint(point);
     setForm({
-      water_type: point.water_type === "paid" ? "paid" : "free",
+      water_type: "paid",
       name: optionalText(point.name),
       source: optionalText(point.source),
       address: optionalText(point.address),
@@ -599,7 +599,7 @@ export default function SupplierWaterPointsScreen({
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const pointBeingEdited = editingPoint;
-    const isPaid = form.water_type === "paid";
+    const isPaid = true;
     const address = optionalText(form.address).trim();
     const phone = normalizePhoneForApi(form.phone);
     let lat = parseCoordinate(form.lat);
@@ -646,7 +646,7 @@ export default function SupplierWaterPointsScreen({
     setSaving(true);
     try {
       const payload = {
-        water_type: form.water_type,
+        water_type: "paid",
         name: optionalText(form.name).trim() || null,
         source: optionalText(form.source).trim(),
         address: address || null,
@@ -748,7 +748,7 @@ export default function SupplierWaterPointsScreen({
     }
   };
 
-  const isPaid = form.water_type === "paid";
+  const isPaid = true;
   const isEditing = Boolean(editingPoint);
   return (
     <div className="space-y-4 px-4 pb-24 pt-[max(env(safe-area-inset-top),2.5rem)]">
@@ -768,7 +768,7 @@ export default function SupplierWaterPointsScreen({
             <X className="h-5 w-5" />
           </button>
         </div>
-        <label className="block text-sm font-bold">Тип воды<select value={form.water_type} onChange={(event) => update("water_type", event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 p-3"><option value="free">Бесплатная вода</option><option value="paid">Платная вода</option></select></label>
+        <p className="rounded-xl bg-sky-50 p-3 text-sm text-sky-900">Добавление поставщика платной воды. Укажите цену, объём и контакты.</p>
         <label className="block text-sm font-bold">Название {isPaid ? <span className="text-red-500">*</span> : <span className="font-normal text-slate-400">(необязательно)</span>}<input required={isPaid} value={form.name} onChange={(event) => update("name", event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 p-3" /></label>
         <label className="block text-sm font-bold">Источник <span className="text-red-500">*</span><input required value={form.source} onChange={(event) => update("source", event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 p-3" /></label>
         <label className="block text-sm font-bold">Телефон {isPaid ? <span className="text-red-500">*</span> : <span className="font-normal text-slate-400">(необязательно)</span>}<input required={isPaid} type="tel" inputMode="tel" autoComplete="tel" maxLength={18} value={form.phone} onChange={(event) => update("phone", event.target.value)} placeholder="+7 (999) 999-99-99" className="mt-1 w-full rounded-xl border border-slate-200 p-3" /></label>

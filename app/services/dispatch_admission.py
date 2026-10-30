@@ -10,6 +10,13 @@ async def admit_driver(session, order, driver_id, *, automatic=True):
     driver = await session.scalar(select(Driver).options(selectinload(Driver.vehicle).selectinload(Vehicle.delivery_option)).where(Driver.id == driver_id).execution_options(populate_existing=True))
     if driver is None:
         raise HTTPException(404, 'Водитель не найден')
+    from app.services import subscriptions as policy
+    if await policy.enabled(session) and order.quarry_id:
+        from app.models.models import Quarry
+        from app.services.pickup_points import pickup_point_orderable
+        point=await session.get(Quarry,order.quarry_id)
+        if not await pickup_point_orderable(session,point):
+            raise HTTPException(409,{"code":"PICKUP_SUBSCRIPTION_REQUIRED","message":"Точка погрузки недоступна для новой доставки. Выберите другую точку"})
     await resolve_city(session, order.city_id)
     await ensure_driver_city(session, order, driver_id)
     if not await session.scalar(select(Driver.id).join(Driver.vehicle).where(Driver.id == driver_id, driver_constraints(order, automatic=automatic))):

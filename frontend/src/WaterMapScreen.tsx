@@ -12,6 +12,7 @@ import { baseURL, formatPhoneNumber, resolveMediaUrl } from "./utils";
 type WaterType = "free" | "paid" | "unknown";
 
 interface WaterPoint {
+  can_order?: boolean;
   id: string;
   water_type: WaterType;
   name?: string | null;
@@ -32,6 +33,7 @@ interface WaterPoint {
 }
 
 interface SepticProfile {
+  can_order?: boolean;
   id: string;
   phone: string;
   address: string;
@@ -51,6 +53,7 @@ const isFreePoint = (point: WaterPoint) =>
 const isPointReady = (point: WaterPoint) =>
   (point.crm_status === "activated" || point.crm_status === "agreed")
   && point.is_active
+  && point.can_order !== false
   && (isFreePoint(point) || (point.price !== null && point.price !== undefined && point.price > 0));
 
 const hasMapCoordinates = ({ lat, lon }: { lat: number | string; lon: number | string }) =>
@@ -69,7 +72,7 @@ export default function WaterMapScreen({ initialTab = "water" }: { initialTab?: 
   const [points, setPoints] = useState<WaterPoint[]>([]);
   const [septicProfiles, setSepticProfiles] = useState<SepticProfile[]>([]);
   const [serviceTab, setServiceTab] = useState<ServiceTab>(initialTab);
-  const [filter, setFilter] = useState<"" | WaterType>("");
+  const filter: WaterType = "paid";
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showList, setShowList] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -82,7 +85,7 @@ export default function WaterMapScreen({ initialTab = "water" }: { initialTab?: 
   const markerRefs = useRef<any[]>([]);
 
   const visiblePoints = useMemo(
-    () => points.filter((point) => !filter || point.water_type === filter),
+    () => points.filter((point) => point.water_type === "paid" && !point.is_free),
     [filter, points],
   );
 
@@ -207,7 +210,7 @@ export default function WaterMapScreen({ initialTab = "water" }: { initialTab?: 
           element.appendChild(labelTail);
 
           const pin = document.createElement("span");
-          pin.className = "water-map-marker__pin water-map-marker__pin--septic";
+          pin.className = `water-map-marker__pin water-map-marker__pin--${profile.can_order === false ? "muted" : "septic"}`;
           pin.textContent = "🚛";
           element.appendChild(pin);
           element.addEventListener("click", () => setSelectedId(profile.id));
@@ -309,18 +312,7 @@ export default function WaterMapScreen({ initialTab = "water" }: { initialTab?: 
           <button type="button" role="tab" aria-selected={serviceTab === "water"} onClick={() => { setServiceTab("water"); setSelectedId(null); setShowList(false); }} className={`rounded-lg px-3 py-2 text-sm font-bold transition ${serviceTab === "water" ? "bg-white text-sky-600 shadow-sm" : "text-slate-500"}`}>Вода</button>
           <button type="button" role="tab" aria-selected={serviceTab === "septic"} onClick={() => { setServiceTab("septic"); setSelectedId(null); setShowList(false); }} className={`rounded-lg px-3 py-2 text-sm font-bold transition ${serviceTab === "septic" ? "bg-white text-sky-600 shadow-sm" : "text-slate-500"}`}>Откачка септиков</button>
         </div>
-        {serviceTab === "water" ? <div className="mt-3 flex gap-2" role="group" aria-label="Фильтр типа воды">
-          {(["", "free", "paid"] as const).map((value) => (
-            <button
-              key={value || "all"}
-              type="button"
-              onClick={() => { setFilter(value); setSelectedId(null); }}
-              className={`rounded-full px-3 py-2 text-sm font-bold ${filter === value ? "bg-sky-500 text-white" : "bg-white text-slate-700 shadow-sm"}`}
-            >
-              {value === "" ? "Все" : value === "free" ? "Бесплатная" : "Платная"}
-            </button>
-          ))}
-        </div> : null}
+        {serviceTab === "water" && <p className="mt-3 text-xs text-slate-500">Поставщики платной воды</p>}
         </div>
       </header>
 
@@ -381,7 +373,7 @@ export default function WaterMapScreen({ initialTab = "water" }: { initialTab?: 
             <p className="flex gap-2 text-sm leading-relaxed text-slate-600"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" />{selectedPoint.address || "Адрес не указан — точка задана координатами"}</p>
               {isFreePoint(selectedPoint) ? <p className="text-lg font-black text-emerald-600">Бесплатно</p> : selectedPoint.price !== null && selectedPoint.price !== undefined ? <p className="text-lg font-black text-slate-900">{Number(selectedPoint.price).toLocaleString("ru-RU")} ₽/{selectedPoint.price_unit || "ед."}</p> : null}
               {selectedPoint.description ? <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-600">{selectedPoint.description}</p> : null}
-              {selectedPoint.phone ? <a className="flex items-center gap-2 rounded-2xl bg-sky-50 px-4 py-3 text-sm font-bold text-sky-700" href={`tel:${selectedPoint.phone}`}><Phone className="h-4 w-4" />{formatPhoneNumber(selectedPoint.phone)}</a> : null}
+              {selectedPoint.can_order === false && <p className="rounded-xl bg-slate-100 p-3 text-xs text-slate-500">Поставщик временно недоступен. Контакты и новые заявки откроются после продления его подписки.</p>}{selectedPoint.phone ? <a className="flex items-center gap-2 rounded-2xl bg-sky-50 px-4 py-3 text-sm font-bold text-sky-700" href={`tel:${selectedPoint.phone}`}><Phone className="h-4 w-4" />{formatPhoneNumber(selectedPoint.phone)}</a> : null}
             </div>
             </>}
           </div>
@@ -395,7 +387,7 @@ export default function WaterMapScreen({ initialTab = "water" }: { initialTab?: 
         sheetClassName="pointer-events-auto z-[9999] max-h-[70vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:mb-4 sm:rounded-2xl"
         showOverlay={false}
       >
-        {selectedSeptic ? <div className="hide-scrollbar max-h-[70vh] overflow-y-auto px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"><div className="flex items-start justify-between gap-3 pb-4"><div><p className="text-xs font-bold uppercase tracking-wide text-sky-600">Услуга</p><h2 className="mt-1 text-xl font-black text-slate-900">Откачка септика</h2></div><button type="button" onClick={() => setSelectedId(null)} className="shrink-0 rounded-full bg-slate-100 p-2 text-slate-500 transition hover:bg-slate-200" aria-label="Закрыть детали септика"><X className="h-5 w-5" /></button></div>{selectedSeptic.primary_image_url ? <div className="overflow-hidden rounded-2xl bg-slate-100"><img src={resolveMediaUrl(selectedSeptic.primary_image_url)} alt={`Откачка септика: ${selectedSeptic.address}`} className="aspect-[16/9] w-full object-cover" /></div> : null}<div className="mt-4 space-y-3"><p className="flex gap-2 text-sm leading-relaxed text-slate-600"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" />{selectedSeptic.address}</p><div className="grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-4 text-sm"><p><span className="block text-xs text-slate-400">Объём цистерны</span><strong className="mt-1 block text-slate-800">{Number(selectedSeptic.tank_volume_m3).toLocaleString("ru-RU")} м³</strong></p><p><span className="block text-xs text-slate-400">Стоимость услуги</span><strong className="mt-1 block text-slate-800">{Number(selectedSeptic.service_price).toLocaleString("ru-RU")} ₽</strong></p></div>{selectedSeptic.phone ? <a href={`tel:${selectedSeptic.phone.replace(/[^+\d]/g, "")}`} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-sky-500 px-5 py-4 text-base font-black text-white shadow-sm transition hover:bg-sky-600"><Phone className="h-5 w-5" />Позвонить</a> : null}</div></div> : null}
+        {selectedSeptic ? <div className="hide-scrollbar max-h-[70vh] overflow-y-auto px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"><div className="flex items-start justify-between gap-3 pb-4"><div><p className="text-xs font-bold uppercase tracking-wide text-sky-600">Услуга</p><h2 className="mt-1 text-xl font-black text-slate-900">Откачка септика</h2></div><button type="button" onClick={() => setSelectedId(null)} className="shrink-0 rounded-full bg-slate-100 p-2 text-slate-500 transition hover:bg-slate-200" aria-label="Закрыть детали септика"><X className="h-5 w-5" /></button></div>{selectedSeptic.primary_image_url ? <div className="overflow-hidden rounded-2xl bg-slate-100"><img src={resolveMediaUrl(selectedSeptic.primary_image_url)} alt={`Откачка септика: ${selectedSeptic.address}`} className="aspect-[16/9] w-full object-cover" /></div> : null}<div className="mt-4 space-y-3"><p className="flex gap-2 text-sm leading-relaxed text-slate-600"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" />{selectedSeptic.address}</p><div className="grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-4 text-sm"><p><span className="block text-xs text-slate-400">Объём цистерны</span><strong className="mt-1 block text-slate-800">{Number(selectedSeptic.tank_volume_m3).toLocaleString("ru-RU")} м³</strong></p><p><span className="block text-xs text-slate-400">Стоимость услуги</span><strong className="mt-1 block text-slate-800">{Number(selectedSeptic.service_price).toLocaleString("ru-RU")} ₽</strong></p></div>{selectedSeptic.can_order === false && <p className="rounded-xl bg-slate-100 p-3 text-xs text-slate-500">Исполнитель временно недоступен. Контакты откроются после продления его подписки.</p>}{selectedSeptic.phone ? <a href={`tel:${selectedSeptic.phone.replace(/[^+\d]/g, "")}`} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-sky-500 px-5 py-4 text-base font-black text-white shadow-sm transition hover:bg-sky-600"><Phone className="h-5 w-5" />Позвонить</a> : null}</div></div> : null}
       </SwipeableBottomSheet>
     </section>
   );

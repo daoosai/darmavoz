@@ -46,7 +46,7 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt -c requirements.lock
       - name: Verify migration and city isolation in disposable CI database
-        run: python -m pytest -q tests/test_security_audit.py tests/test_auth_hotfix.py tests/test_driver_auth_otp.py tests/test_sprint22_unit.py tests/test_sprint22_api.py tests/test_sprint24.py tests/test_sprint24_api.py tests/test_sprint25_api.py tests/test_sprint25_unit.py tests/test_dispatch_volume_matching.py tests/test_smart_matching_unit.py tests/test_client_order_media.py tests/test_admin_point_contacts.py tests/test_driver_account_visibility.py tests/test_driver_order_route_fields.py tests/test_admin_order_hard_delete.py tests/test_refunds.py tests/test_release_migration_heads.py tests/test_system_and_order_delete.py::test_logist_can_delete_order_with_items_offers_and_events tests/test_system_and_order_delete.py::test_logist_order_list_supports_is_deleted_filter
+        run: python -m pytest -q tests/test_security_audit.py tests/test_auth_hotfix.py tests/test_driver_auth_otp.py tests/test_sprint22_unit.py tests/test_sprint22_api.py tests/test_sprint24.py tests/test_sprint24_api.py tests/test_sprint25_api.py tests/test_sprint25_unit.py tests/test_dispatch_volume_matching.py tests/test_smart_matching_unit.py tests/test_client_order_media.py tests/test_admin_point_contacts.py tests/test_driver_account_visibility.py tests/test_driver_order_route_fields.py tests/test_admin_order_hard_delete.py tests/test_refunds.py tests/test_sprint26_subscriptions.py tests/test_sprint26_chat_journey.py tests/test_sprint26_resource_gates.py tests/test_sprint26_billing_recovery.py tests/test_sprint26_water_and_admin.py tests/test_sprint26_observability.py tests/test_release_migration_heads.py tests/test_system_and_order_delete.py::test_logist_can_delete_order_with_items_offers_and_events tests/test_system_and_order_delete.py::test_logist_order_list_supports_is_deleted_filter
 
   deploy-test:
     needs: sprint22-checks
@@ -76,6 +76,7 @@ jobs:
         working-directory: frontend
         env:
           VITE_APP_VERSION: ${{ env.VITE_APP_VERSION }}
+          VITE_BUILD_COMMIT: ${{ github.sha }}
           VITE_2GIS_KEY: ${{ secrets.VITE_2GIS_KEY }}
         run: |
           set -euo pipefail

@@ -1,0 +1,18 @@
+{
+  "created_at": "2026-10-30T03:08:09.439398+00:00",
+  "source_head": "907182aebdace81c270d0757ad26381f5ccf941b",
+  "existing_tracked_changes": [
+    "docs/README.md",
+    "docs/blocks/logist-drivers.md",
+    "docs/blocks/refunds.md"
+  ],
+  "env_sha256": {
+    "/opt/darmavoz_test_deploy/.env": "45f183f856cb346fc3a412ce3a72edfcd8479d26e6771e71f0d3c3f597d750bc",
+    "/opt/darmavoz_deploy/.env": "157dc111c7138c5901c342e6e6bebc09dfc82cb53d93f21b6958fa24e2779874"
+  },
+  "production": {
+    "image": "sha256:7e21a6d9cafb4c95400fb685dceed1196266b27ec85acfba171666ce17d3203f",
+    "started_at": "2026-10-22T01:13:22.261178205Z",
+    "restart_count": 0
+  }
+}

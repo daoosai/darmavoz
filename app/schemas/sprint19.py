@@ -108,6 +108,13 @@ class WaterPointAdminUpdate(WaterPointIn):
 
 
 class WaterPointOut(WaterPointIn):
+    @model_validator(mode="after")
+    def validate_type(self):
+        # Output may intentionally redact contacts; creation rules belong to WaterPointIn.
+        return self
+
+    can_order: bool = True
+    access_reason: str | None = None
     city_id: UUID | None = None
     id: UUID
     owner_user_id: UUID | None = None
@@ -153,6 +160,9 @@ class SepticMediaOut(BaseModel):
 
 
 class SepticProfileOut(SepticProfileIn):
+    phone: str | None = None
+    can_order: bool = True
+    access_reason: str | None = None
     city_id: UUID | None = None
     id: UUID
     owner_user_id: UUID | None = None

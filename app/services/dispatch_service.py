@@ -63,6 +63,7 @@ from app.services.order_pricing import calculate_client_order_pricing, resolve_m
 from app.services.pickup_points import (
     is_pickup_point_publicly_available,
     public_pickup_point_filters,
+    pickup_point_orderable,
 )
 from app.services.redis_client import enqueue_dispatch_order
 from app.services.smart_matching import smart_matching_service
@@ -347,6 +348,7 @@ async def add_event(
     if order_status is not None:
         session.add(
             OrderEvent(
+                id=event_id,
                 order_id=order_id,
                 status=order_status,
                 event_type=event_type,
@@ -355,6 +357,9 @@ async def add_event(
         )
     await session.flush()
     order = await session.get(Order, order_id)
+    if order is not None and order.status in {"driver_assigned","driver_accepted","heading_to_pickup","arrived_at_pickup","loading","heading_to_client","delivered","completed","cancelled"}:
+        from app.services.journey import order_event
+        await order_event(session,order,event_id)
     if order is not None and notify:
         await enqueue_order_event(session, order, event_id, event_type)
 
@@ -458,7 +463,10 @@ async def build_order(
     if auto_dispatch and (pickup_lat is None or pickup_lon is None): clarification_reasons.append("pickup_coordinates_missing")
     should_dispatch = auto_dispatch and not clarification_reasons
     delivery_address_value = delivery_address or address
+    from app.services.subscriptions import config as subscription_config
+    settlement_mode = "direct" if (await subscription_config(session))["direct_orders"] else "legacy"
     order = Order(
+        settlement_mode=settlement_mode,
         city_id=city.id,
         client_id=client.id,
         delivery_option_id=delivery_option.id,
@@ -523,6 +531,8 @@ async def build_order(
         schedule_logist_requires_clarification_notification(order)
     if should_dispatch:
         await add_event(session, order.id, "dispatch_started", "Automatic dispatch started")
+    from app.services.journey import mark_order
+    mark_order(order.id)
     return order
 
 
@@ -622,9 +632,7 @@ async def create_checkout_order(
 
     if quarry_id is not None:
         selected_quarry = await session.get(Quarry, quarry_id)
-        if selected_quarry is None or not is_pickup_point_publicly_available(
-            selected_quarry
-        ):
+        if selected_quarry is None or not await pickup_point_orderable(session,selected_quarry):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Quarry not found")
 
         pricing = await calculate_client_order_pricing(
@@ -1597,10 +1605,15 @@ async def create_offer_for_driver(session: AsyncSession, order: Order, driver: D
 
 
 async def mark_no_driver_found(session: AsyncSession, order: Order) -> Order:
+    first=order.status != OrderStatus.no_driver_found.value
     order.status = OrderStatus.no_driver_found.value
     order.current_offer_id = None
-    await add_event(session, order.id, "no_driver_found", "No suitable drivers found")
-    schedule_logist_no_driver_found_notification(order)
+    from app.services import subscriptions as policy
+    cfg=await policy.config(session)
+    if cfg["enabled"]:order.next_dispatch_at=utcnow()+timedelta(seconds=cfg["dispatch_retry_seconds"])
+    if first:
+        await add_event(session, order.id, "no_driver_found", "No suitable drivers found")
+        schedule_logist_no_driver_found_notification(order)
     return order
 
 
@@ -1626,6 +1639,13 @@ async def advance_dispatch_for_order(
         if pending_offer.expires_at and pending_offer.expires_at > utcnow():
             return order
 
+    from app.services import subscriptions as policy
+    if await policy.enabled(session):
+        if order.quarry_id and not await pickup_point_orderable(session,await session.get(Quarry,order.quarry_id)):
+            return await mark_no_driver_found(session,order)
+        if order.status==OrderStatus.no_driver_found.value:
+            # Penalties remain enforced; an old attempted offer must not ban a driver forever.
+            exclude_attempted_drivers=False
     candidates = await get_matching_drivers(
         session,
         order,
@@ -2224,6 +2244,7 @@ async def build_order_status_history(session: AsyncSession, order_id: UUID) -> O
 
 
 async def get_orders_needing_dispatch(session: AsyncSession, limit: int = 50) -> list[UUID]:
+    from app.services.subscriptions import platform_enabled_clause
     now = utcnow()
     reminder_due_before = now - timedelta(seconds=settings.DRIVER_ORDER_REMINDER_DELAY_SECONDS)
     reminder_sent_subquery = (
@@ -2240,6 +2261,10 @@ async def get_orders_needing_dispatch(session: AsyncSession, limit: int = 50) ->
             or_(
                 Order.status == OrderStatus.created.value,
                 Order.status == OrderStatus.searching_driver.value,
+                (Order.status == OrderStatus.no_driver_found.value)
+                & platform_enabled_clause()
+                & Order.next_dispatch_at.is_not(None)
+                & (Order.next_dispatch_at<=now),
                 (
                     Order.status == OrderStatus.offered_to_driver.value
                 )

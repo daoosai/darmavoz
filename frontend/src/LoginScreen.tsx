@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import { trackJourney } from './journey';
+import React, { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Eye, EyeOff, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -27,6 +28,8 @@ export default function LoginScreen({
   onSelectWaterSepticPartnerRegister,
   onSelectDriverRegister,
 }: LoginScreenProps) {
+  const journeyStarted = useRef(false);
+  useEffect(() => { if (!journeyStarted.current) { journeyStarted.current = true; trackJourney("auth", "auth_started", { screen: "login" }, true); } }, []);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);

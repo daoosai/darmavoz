@@ -120,6 +120,9 @@ async def checkout_order(
         existing_order = await get_order_by_id(db, reservation.existing_order_id)
         if existing_order.client_id != current_client.id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        # A retried request can be the first observation after a lost response.
+        from app.services.journey import mark_order
+        mark_order(existing_order.id)
         return existing_order
     try:
         order = await create_checkout_order(

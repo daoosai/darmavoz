@@ -41,7 +41,7 @@ def _public_stmt():
     )
 
 
-async def _serialize_point(point: WaterPoint, db: AsyncSession) -> WaterPointOut:
+async def _serialize_point(point: WaterPoint, db: AsyncSession, *, public=False) -> WaterPointOut:
     """Return the point together with its primary photo stored in S3/MinIO."""
     primary_image_url = await db.scalar(
         select(MediaFile.public_url)
@@ -56,16 +56,23 @@ async def _serialize_point(point: WaterPoint, db: AsyncSession) -> WaterPointOut
         )
         .limit(1)
     )
-    return WaterPointOut.model_validate(point).model_copy(
+    payload = WaterPointOut.model_validate(point).model_copy(
         update={
             "primary_image_url": primary_image_url,
             "is_ready": _is_water_point_ready(point),
         }
     )
 
+    if public:
+        from app.services import subscriptions as policy
+        allowed=await policy.resource_access(db,point,"water","water_point")
+        payload=payload.model_copy(update={"can_order":allowed,"access_reason":None if allowed else "SUBSCRIPTION_REQUIRED",
+            **({"phone":None,"description":None,"parsed_data":None,"crm_comment":None,"is_ready":False} if not allowed else {})})
+    return payload
 
-async def _serialize_points(points: list[WaterPoint], db: AsyncSession) -> list[WaterPointOut]:
-    return [await _serialize_point(point, db) for point in points]
+
+async def _serialize_points(points: list[WaterPoint], db: AsyncSession, *, public=False) -> list[WaterPointOut]:
+    return [await _serialize_point(point, db,public=public) for point in points]
 
 
 async def _hard_delete_water_point(point: WaterPoint, db: AsyncSession) -> None:
@@ -110,7 +117,7 @@ async def list_water_points(water_type: str | None = None, city_id: UUID | None 
     if water_type in {"free", "paid"}:
         stmt = stmt.where(WaterPoint.water_type == water_type)
     points = (await db.execute(stmt.order_by(WaterPoint.created_at.desc()))).scalars().all()
-    return await _serialize_points(list(points), db)
+    return await _serialize_points(list(points), db,public=True)
 
 
 @router.get("/water-points/map", response_model=list[WaterPointOut])
@@ -131,7 +138,7 @@ async def list_water_points_for_map(
     if water_type in {"free", "paid", "unknown"}:
         stmt = stmt.where(WaterPoint.water_type == water_type)
     points = (await db.execute(stmt.order_by(WaterPoint.created_at.desc()))).scalars().all()
-    return await _serialize_points(list(points), db)
+    return await _serialize_points(list(points), db,public=True)
 
 
 @router.get("/admin/water-points", response_model=list[WaterPointOut])
@@ -167,6 +174,7 @@ async def create_water_point_by_admin(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_logist_user),
 ):
+    await _validate_paid_water(db,payload)
     selected_city = await resolve_city(db, payload.city_id, require_active=False)
     await ensure_owner_city(db, None, selected_city.id)
     await initialize_service_cities(db, user_id=current_user.id, city_ids=[selected_city.id], require_active=False)
@@ -189,7 +197,7 @@ async def get_water_point(point_id: UUID, city_id: UUID | None = None, db: Async
     selected_city = await resolve_city(db, city_id)
     point = await db.scalar(_public_stmt().where(WaterPoint.city_id == selected_city.id).where(WaterPoint.id == point_id))
     if point is None: raise HTTPException(status_code=404, detail="Точка воды не найдена")
-    return await _serialize_point(point, db)
+    return await _serialize_point(point, db,public=True)
 
 
 @water_septic_partner_router.get("/water-points", response_model=list[WaterPointOut])
@@ -200,6 +208,7 @@ async def my_water_points(db: AsyncSession = Depends(get_db), current_user: User
 
 @water_septic_partner_router.post("/water-points", response_model=WaterPointOut, status_code=status.HTTP_201_CREATED)
 async def create_water_point(payload: WaterPointIn, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_water_septic_partner_user)):
+    await _validate_paid_water(db,payload)
     # City binding is performed by an administrator after moderation.
     payload.city_id = None
     point = WaterPoint(**payload.model_dump(), owner_user_id=current_user.id, moderation_status="pending_moderation")
@@ -219,6 +228,7 @@ async def create_water_point(payload: WaterPointIn, db: AsyncSession = Depends(g
 
 @water_septic_partner_router.patch("/water-points/{point_id}", response_model=WaterPointOut)
 async def update_water_point(point_id: UUID, payload: WaterPointIn, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_water_septic_partner_user)):
+    await _validate_paid_water(db,payload)
     point = await db.scalar(select(WaterPoint).where(WaterPoint.id == point_id, WaterPoint.owner_user_id == current_user.id, WaterPoint.is_deleted.is_(False)))
     if point is None: raise HTTPException(status_code=404, detail="Точка воды не найдена")
     payload.city_id = point.city_id
@@ -251,6 +261,7 @@ async def update_water_point_by_admin(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_logist_user),
 ):
+    await _validate_paid_water(db,payload)
     point = await db.get(WaterPoint, point_id)
     if point is None or point.is_deleted:
         raise HTTPException(status_code=404, detail="Точка воды не найдена")
@@ -364,3 +375,9 @@ async def restore_water_point(point_id: UUID, db: AsyncSession = Depends(get_db)
     await db.commit()
     await db.refresh(point)
     return await _serialize_point(point, db)
+
+
+async def _validate_paid_water(db,payload):
+    from app.services import subscriptions as policy
+    if (await policy.config(db))["water_paid_only"] and (payload.water_type!="paid" or payload.is_free or payload.price is None or payload.price<=0):
+        policy.error("PAID_WATER_REQUIRED","Можно создавать только платные точки воды с указанной ценой",422)

@@ -52,6 +52,13 @@ async def provider(method, path, body=None, key=None):
             response = await client.request(method, settings.YOOKASSA_API_BASE_URL.rstrip("/") + path,
                                             json=body, headers={"Idempotence-Key": key} if key else {})
         if response.status_code >= 400:
+            import logging
+            try:
+                provider_code = str(response.json().get("code", "http_error"))
+                import re
+                provider_code = provider_code if re.fullmatch(r"[a-z_]{1,64}", provider_code) else "http_error"
+            except (ValueError, AttributeError): provider_code = "http_error"
+            logging.getLogger(__name__).warning("payment_provider_error status=%s code=%s operation=%s", response.status_code, provider_code, path.split("/")[1])
             raise ProviderError(definitive=response.status_code == 400)
         return response.json()
     except (httpx.HTTPError, ValueError):
@@ -196,6 +203,9 @@ async def create_payment(db, order_id, client, email=None):
     if existing:
         await db.commit()
         return existing
+    from app.services.subscriptions import config as subscription_config, error as subscription_error
+    if order.settlement_mode == "direct" or (await subscription_config(db))["direct_orders"]:
+        subscription_error("ORDER_ONLINE_PAYMENT_DISABLED", "Материалы и доставка оплачиваются напрямую водителю. В приложении оплачиваются только подписки", 409)
     quote = await latest_quote(db, order.id)
     if not quote:
         raise HTTPException(409, "Логист ещё не подтвердил стоимость")

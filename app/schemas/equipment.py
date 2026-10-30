@@ -167,6 +167,8 @@ class EquipmentListingUpdate(BaseModel):
 
 
 class EquipmentListingOut(BaseModel):
+    can_order: bool = True
+    access_reason: str | None = None
     city_id: UUID | None = None
     id: UUID
     equipment_type: str

@@ -5,7 +5,7 @@ from typing import TypeAlias
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -82,7 +82,16 @@ def public_placement_filters(model: type[Quarry] | type[SpecialEquipmentListing]
     ]
     if model is SpecialEquipmentListing:
         filters.append(model.is_deleted.is_(False))
-    return tuple(filters)
+    # Subscription expiry must not remove previously published resources from the map.
+    # Explicit moderation, manual hiding and archiving still take priority.
+    from app.services.subscriptions import platform_enabled_clause
+    published = [model.moderation_status.in_(tuple(sorted(PUBLIC_MODERATION_STATUSES))),
+        or_(model.placement_status.in_(tuple(sorted(PUBLIC_PLACEMENT_STATUSES | {PlacementStatus.expired.value}))),
+            and_(model.placement_status==PlacementStatus.pending_moderation.value,model.placement_started_at.is_(None))),
+        or_(model.is_active.is_(True), model.placement_status==PlacementStatus.expired.value)]
+    if model is SpecialEquipmentListing:published.append(model.is_deleted.is_(False))
+    flag=platform_enabled_clause()
+    return (or_(and_(~flag,*filters),and_(flag,*published)),)
 
 
 def is_publicly_available(entity: PlacementEntity, *, now: datetime | None = None) -> bool:
@@ -407,3 +416,9 @@ def placement_payload_fields(entity: PlacementEntity) -> dict:
         "can_confirm_relevance": can_confirm_relevance(entity),
     }
 
+
+
+async def publicly_visible(db,entity):
+    from sqlalchemy import select
+    model=type(entity)
+    return bool(await db.scalar(select(model.id).where(model.id==entity.id,*public_placement_filters(model))))

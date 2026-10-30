@@ -88,6 +88,7 @@ export default function OrderPaymentsPanel({ orderId, materialAmount = 0, delive
   const showRetainedAmount = !staff && ['cancelled', 'canceled'].includes(orderStatus || '')
     && refundCompleted && !refundInProgress && retainedCents > 0;
 
+  if (data?.settlement_mode === 'direct' && !latest) return <section aria-label="Расчёты по заказу" className="mt-3 rounded-2xl border border-sky-100 bg-sky-50/60 p-3"><h3 className="text-sm font-bold text-slate-800">Прямые расчёты</h3><p className="mt-2 text-xs leading-relaxed text-slate-600">Оплатите материал и доставку непосредственно водителю наличными или переводом. Водитель самостоятельно рассчитывается с поставщиком. Через приложение оплачиваются только подписки.</p></section>;
   return <>
     {staff && requiresManualRefund && <div role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-bold text-amber-900">
       <p>Требуется ручное решение по возврату средств!</p>

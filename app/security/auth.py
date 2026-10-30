@@ -78,6 +78,8 @@ async def get_current_user(
 
     if user is None or not user.is_active or user.is_deleted or token_data.auth_version != user.auth_version:
         raise credentials_exception
+    from app.services.journey import mark_verified_actor
+    mark_verified_actor("user",user.id)
     return user
 
 
@@ -107,6 +109,8 @@ async def get_current_client(
     client = await db.get(Client, token_data.client_id)
     if client is None or client.is_deleted or token_data.auth_version != client.auth_version:
         raise credentials_exception
+    from app.services.journey import mark_verified_actor
+    mark_verified_actor("client",client.id)
     return client
 
 

@@ -19,13 +19,15 @@ def config():
 
 def test_release_has_one_head_and_preserves_production_ancestry():
     scripts = ScriptDirectory.from_config(config())
-    assert scripts.get_heads() == ["release_317_merge_heads"]
+    assert scripts.get_heads() == ["s26_subscription_platform"]
     assert scripts.get_revision("s23_transport_tariffs").down_revision == "de1cd3718448"
     assert scripts.get_revision("s23_parser_material_in_progress").down_revision == "s22_publish_parser_cities"
 
 
 @pytest.mark.asyncio
 async def test_existing_staging_transport_is_preserved_on_branch_merge(session_factory):
+    # Reproduce the former staging schema, rather than leaving new S26 tables with an old marker.
+    await asyncio.to_thread(command.downgrade, config(), "release_317_merge_heads")
     async with session_factory() as db:
         before = (await db.execute(text("SELECT id, slug FROM transport_categories ORDER BY slug"))).all()
         assert {r.slug for r in before} >= {"small", "medium", "large"}
@@ -36,4 +38,4 @@ async def test_existing_staging_transport_is_preserved_on_branch_merge(session_f
     async with session_factory() as db:
         after = (await db.execute(text("SELECT id, slug FROM transport_categories ORDER BY slug"))).all()
         assert after == before
-        assert (await db.scalars(text("SELECT version_num FROM alembic_version"))).all() == ["release_317_merge_heads"]
+        assert (await db.scalars(text("SELECT version_num FROM alembic_version"))).all() == ["s26_subscription_platform"]

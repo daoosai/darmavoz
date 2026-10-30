@@ -430,7 +430,7 @@ async def search_places(payload: ParserRunRequest) -> PlacesSearchResult:
     page_size = max(1, min(10, settings.TWOGIS_PLACES_MAX_RESULTS))
     base_params = {
         "key": settings.TWOGIS_API_KEY,
-        "q": payload.keyword,
+        "q": ("Доставка технической воды" if "техническ" in payload.keyword.lower() else "Продажа питьевой воды") if payload.target=="water" else payload.keyword,
         "type": "branch",
         "point": f"{payload.center_lon},{payload.center_lat}",
         "radius": payload.radius_m,

@@ -9,7 +9,7 @@ export async function commerceApi(path: string, options: RequestInit = {}) {
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     const error = new Error(typeof body.detail === 'string' ? body.detail : body.detail?.message || 'Не удалось выполнить запрос');
-    Object.assign(error, { status: response.status });
+    Object.assign(error, { status: response.status, code: typeof body.detail?.code === 'string' ? body.detail.code : undefined });
     throw error;
   }
   return response.json();

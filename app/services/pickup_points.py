@@ -39,8 +39,14 @@ DEFAULT_MIN_DELIVERY_PRICE = {
 }
 
 
-def public_pickup_point_filters():
-    return (*public_placement_filters(Quarry), Quarry.crm_status == CrmStatus.activated.value)
+def public_pickup_point_filters(*, orderable=True):
+    from app.services.subscriptions import pickup_access_clause
+    return (*public_placement_filters(Quarry), Quarry.crm_status == CrmStatus.activated.value,
+        *([pickup_access_clause()] if orderable else []))
+
+
+async def pickup_point_orderable(db, point):
+    return bool(point and await db.scalar(select(Quarry.id).where(Quarry.id==point.id,*public_pickup_point_filters())))
 
 
 def is_pickup_point_publicly_available(
@@ -331,6 +337,14 @@ async def pickup_point_payload(
         "updated_at": point.updated_at,
         **placement_payload_fields(point),
     }
+    if not include_owner_contacts:
+        from app.services import subscriptions as policy
+        if await policy.enabled(db):
+            allowed=await pickup_point_orderable(db,point)
+            payload.update(can_order=allowed,is_ready=allowed,is_active=allowed,
+                access_reason=None if allowed else "SUBSCRIPTION_REQUIRED")
+            if not allowed:
+                payload.update(contact_phone=None,parsed_data=None,description=None)
     if include_owner_contacts:
         payload["owner_name"] = owner.display_name if owner else None
         payload["owner_phone"] = owner_phone

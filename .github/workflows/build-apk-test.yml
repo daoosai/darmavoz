@@ -14,6 +14,7 @@ jobs:
       APK_REMOTE_NAME: darmavoz-test.apk
       APK_BUILD_PATH: frontend/android/app/build/outputs/apk/debug/app-debug.apk
       VITE_2GIS_KEY: ${{ secrets.VITE_2GIS_KEY }}
+      VITE_BUILD_COMMIT: ${{ github.sha }}
 
     steps:
       - name: Checkout code
@@ -47,7 +48,6 @@ jobs:
         run: |
           set -euo pipefail
           npm ci
-          npm run version:sync
 
       - name: Prepare test environment (Vite & Capacitor)
         working-directory: frontend
@@ -180,6 +180,21 @@ jobs:
           host: ${{ secrets.HOST || secrets.SSH_HOST }}
           username: ${{ secrets.USERNAME || secrets.SSH_USER }}
           key: ${{ secrets.PRIVATE_KEY || secrets.SSH_PRIVATE_KEY }}
+          envs: VITE_BUILD_COMMIT
           script: |
             set -euo pipefail
-            mv /opt/daoos-kit/sites/darmavoz_test/static/app-debug.apk /opt/daoos-kit/sites/darmavoz_test/static/darmavoz-test.apk
+            test "${#VITE_BUILD_COMMIT}" -eq 40
+            cd /opt/daoos-kit/sites/darmavoz_test/static
+            mv app-debug.apk darmavoz-test.apk
+            cp darmavoz-test.apk "darmavoz-test-${VITE_BUILD_COMMIT}.apk"
+            export S26_APK_SHA256="$(sha256sum darmavoz-test.apk | cut -d ' ' -f 1)"
+            python3 - <<'PYMETA'
+            import json, os
+            from pathlib import Path
+            Path('darmavoz-test-build.json').write_text(json.dumps({
+                'commit': os.environ['VITE_BUILD_COMMIT'],
+                'sha256': os.environ['S26_APK_SHA256'],
+                'artifact': 'darmavoz-test-' + os.environ['VITE_BUILD_COMMIT'] + '.apk',
+                'environment': 'test',
+            }, indent=2) + '\n')
+            PYMETA

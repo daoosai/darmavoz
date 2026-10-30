@@ -23,6 +23,7 @@ export interface EquipmentTariff {
 }
 
 export interface EquipmentListing extends PlacementFields {
+  can_order?: boolean;
   id: string;
   equipment_type: string;
   equipment_type_id?: string | null;
@@ -237,7 +238,7 @@ export default function EquipmentCatalogScreen({ onOpenAuth }: Props) {
                 disabled
                 className="mt-4 w-full rounded-2xl bg-slate-300 px-5 py-4 font-bold text-slate-600"
               >
-                Телефон не указан
+                {selected.can_order === false ? "Контакты временно недоступны" : "Телефон не указан"}
               </button>
             )}
 

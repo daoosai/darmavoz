@@ -6,7 +6,10 @@ self.addEventListener('notificationclick', function(event) {
   if (data.city_id) params.set("notification_city", data.city_id);
   if (/^[0-9a-f-]{36}$/i.test(data.order_id || '')) params.set('notification_order', data.order_id);
   if (/^[0-9a-f-]{36}$/i.test(data.entity_id || '')) { params.set('notification_entity', data.entity_id); params.set('entity_type', data.entity_type || ''); }
-  event.waitUntil(clients.openWindow('/?' + params.toString()));
+  let path = '/';
+  if (/^[0-9a-f-]{36}$/i.test(data.journey_session_id || '')) { path = '/admin/journeys'; params.set('session', data.journey_session_id); }
+  else if (data.section === 'chat') params.set('notification_chat', '1');
+  event.waitUntil(clients.openWindow(path + '?' + params.toString()));
 });
 
 importScripts('https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js');

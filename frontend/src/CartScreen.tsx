@@ -1,3 +1,4 @@
+import { trackJourney } from './journey';
 import { cityFetch } from './cityStore';
 import React, { useState, useEffect, useRef } from "react";
 import {
@@ -164,6 +165,16 @@ export default function CartScreen({
   const calculationVersionRef = useRef(0);
   const processedManualCalculationRevisionRef = useRef(0);
 
+  const journeyStarted = useRef(false);
+  useEffect(() => { if (!journeyStarted.current) { journeyStarted.current = true; trackJourney('order', 'order_started', { screen: 'cart' }, true); } }, []);
+  const formSnapshot = JSON.stringify({ address: globalAddress, coords: deliveryCoords, items: cartItems.map(item => [item.id, item.quantity, item.volume, item.preferredPointId]), drafts: draftVolumes });
+  const previousFormSnapshot = useRef(formSnapshot);
+  useEffect(() => {
+    if (previousFormSnapshot.current === formSnapshot) return;
+    previousFormSnapshot.current = formSnapshot;
+    const timer = window.setTimeout(() => trackJourney('order', 'order_form_changed', { screen: 'cart' }), 1000);
+    return () => window.clearTimeout(timer);
+  }, [formSnapshot]);
   useEffect(() => {
     if (!token || role !== "client") {
       onOpenAuth();

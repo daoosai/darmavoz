@@ -33,6 +33,7 @@ interface GlobalPickupPoint {
   crm_status: string;
   is_active: boolean;
   is_ready: boolean;
+  can_order?: boolean;
   twogis_id?: string | null;
 }
 
@@ -54,6 +55,7 @@ const hasOrderableMaterialOffer = (point: GlobalPickupPoint) =>
 const isPointReady = (point: GlobalPickupPoint) =>
   (point.crm_status === "activated" || point.crm_status === "agreed")
   && point.is_active
+  && point.can_order !== false
   && hasOrderableMaterialOffer(point);
 
 const getCrmMarkerStatus = (point: GlobalPickupPoint) =>

@@ -147,7 +147,7 @@ const statusClass = (status?: string | null) => {
 };
 
 const createWaterEditForm = (point: WaterPoint) => ({
-  water_type: point.water_type === "paid" ? "paid" : "free",
+  water_type: "paid",
   name: optionalText(point.name),
   source: optionalText(point.source),
   address: optionalText(point.address),
@@ -155,7 +155,7 @@ const createWaterEditForm = (point: WaterPoint) => ({
   lon: String(point.lon ?? ""),
   phone: formatPhoneNumber(point.phone || ""),
   price: point.price == null ? "" : String(point.price),
-  is_free: Boolean(point.is_free),
+  is_free: false,
   price_unit: point.price_unit || "литр",
   description: optionalText(point.description),
 });
@@ -192,7 +192,7 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
   const [editMedia, setEditMedia] = useState<MediaFile[]>([]);
   const [mediaActionId, setMediaActionId] = useState<string | null>(null);
   const [waterEditForm, setWaterEditForm] = useState(() => createWaterEditForm({
-    id: "", water_type: "free", source: "", address: "", lat: 0, lon: 0, moderation_status: "", is_active: true,
+    id: "", water_type: "paid", source: "", address: "", lat: 0, lon: 0, moderation_status: "", is_active: true,
   }));
   const [waterCrmForm, setWaterCrmForm] = useState<WaterCrmForm>({
     status: "auto_added",
@@ -581,16 +581,16 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
       const resource = isWater ? "/admin/water-points" : "/admin/septic-providers";
       const payload = isWater
         ? {
-            water_type: waterEditForm.water_type,
+            water_type: "paid",
             name: optionalText(waterEditForm.name).trim() || null,
             source: optionalText(waterEditForm.source).trim(),
             address: optionalText(waterEditForm.address).trim() || null,
             lat: Number(waterEditForm.lat),
             lon: Number(waterEditForm.lon),
             phone: normalizePhoneForApi(waterEditForm.phone) || null,
-            price: waterEditForm.water_type === "paid" ? (waterEditForm.is_free ? 0 : Number(waterEditForm.price)) : null,
-            is_free: waterEditForm.is_free,
-            price_unit: waterEditForm.water_type === "paid" && !waterEditForm.is_free ? waterEditForm.price_unit.trim() : null,
+            price: Number(waterEditForm.price),
+            is_free: false,
+            price_unit: waterEditForm.price_unit.trim(),
             description: optionalText(waterEditForm.description).trim() || null,
           }
         : {
@@ -729,12 +729,7 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
 
             {modalKind === "water" ? (
               <div className="mt-4 space-y-3">
-                <label className="block text-sm font-bold">Тип воды
-                  <select value={waterEditForm.water_type} onChange={(event) => setWaterEditForm((current) => ({ ...current, water_type: event.target.value as "free" | "paid" | "unknown" }))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal">
-                    <option value="free">Бесплатная</option>
-                    <option value="paid">Платная</option>
-                  </select>
-                </label>
+                <p className="rounded-xl bg-sky-50 p-3 text-sm text-sky-900">Только платная вода. Цена и объём подтверждаются поставщиком.</p>
                 <label className="block text-sm font-bold">Название
                   <input value={waterEditForm.name} onChange={(event) => setWaterEditForm((current) => ({ ...current, name: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal" />
                 </label>
@@ -759,14 +754,11 @@ export default function WaterSepticModerationPanel({ token }: { token: string | 
                 {waterEditForm.water_type === "paid" ? (
                   <div className="grid grid-cols-2 gap-3">
                     <label className="text-sm font-bold">Цена
-                      <input required={!waterEditForm.is_free} disabled={waterEditForm.is_free} type="number" min={waterEditForm.is_free ? "0" : "0.01"} step="0.01" value={waterEditForm.is_free ? "0" : waterEditForm.price} onChange={(event) => setWaterEditForm((current) => ({ ...current, price: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal disabled:bg-slate-100" />
-                      <span className="mt-2 flex items-center gap-2 text-sm font-semibold text-emerald-700">
-                        <input type="checkbox" checked={waterEditForm.is_free} onChange={(event) => setWaterEditForm((current) => ({ ...current, is_free: event.target.checked, price: event.target.checked ? "0" : current.price }))} />
-                        Бесплатно
-                      </span>
+                      <input required type="number" min="0.01" step="0.01" value={waterEditForm.price} onChange={(event) => setWaterEditForm((current) => ({ ...current, price: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal disabled:bg-slate-100" />
+
                     </label>
-                    <label className="text-sm font-bold">Единица
-                      <input required={!waterEditForm.is_free} disabled={waterEditForm.is_free} value={waterEditForm.price_unit} onChange={(event) => setWaterEditForm((current) => ({ ...current, price_unit: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal disabled:bg-slate-100" />
+                    <label className="text-sm font-bold">Объём и единица цены
+                      <input required value={waterEditForm.price_unit} onChange={(event) => setWaterEditForm((current) => ({ ...current, price_unit: event.target.value }))} className="mt-1 w-full rounded-xl border border-slate-200 p-3 font-normal disabled:bg-slate-100" />
                     </label>
                   </div>
                 ) : null}

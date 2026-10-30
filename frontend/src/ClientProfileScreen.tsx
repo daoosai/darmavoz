@@ -1,3 +1,4 @@
+import CommerceMenu from './CommerceMenu';
 import React, { useEffect, useState } from "react";
 import {
   User,
@@ -221,6 +222,7 @@ export default function ClientProfileScreen({
         </div>
       </div>
 
+      <div className="px-4 mt-6"><CommerceMenu /></div>
       {/* Useful Actions */}
       <div className="px-4 mt-6 flex flex-col gap-3">
         <button

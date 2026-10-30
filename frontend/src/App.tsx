@@ -1,3 +1,6 @@
+import GeneralChatScreen from './GeneralChatScreen';
+import SubscriptionsScreen from './SubscriptionsScreen';
+import AdminJourneysScreen from './AdminJourneysScreen';
 import React, { useState, useEffect, useCallback } from "react";
 import {
   Home,
@@ -98,6 +101,8 @@ export default function App() {
     typeof window !== "undefined" ? window.location.pathname : "/",
   );
   const { role, token } = useAuthStore();
+  const [chatReturn, setChatReturn] = useState(() => new URLSearchParams(window.location.search).has("notification_chat"));
+  const [subscriptionReturn, setSubscriptionReturn] = useState(() => new URLSearchParams(window.location.search).has("subscription_payment"));
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const orderId = params.get("notification_order");
@@ -318,6 +323,10 @@ export default function App() {
       />
     );
 
+    if (currentPath === "/admin/journeys") {
+      return role === "admin" ? <AdminJourneysScreen onClose={() => navigateToPath("/admin/profile")} /> : renderPartnerLogin();
+    }
+
     if (currentPath === "/admin/orders") {
       return role === "admin" ? <AdminOrdersListScreen role="admin" /> : renderPartnerLogin();
     }
@@ -476,6 +485,8 @@ export default function App() {
       <InstallPWA />
       <AdminNotificationToastListener />
       {renderContent()}
+      {subscriptionReturn && token && role !== "client" && <SubscriptionsScreen onClose={() => { setSubscriptionReturn(false); const url = new URL(window.location.href); url.searchParams.delete('subscription_payment'); window.history.replaceState({}, '', url.pathname + url.search + url.hash); }} />}
+      {chatReturn && token && <GeneralChatScreen onClose={() => { setChatReturn(false); const url = new URL(window.location.href); url.searchParams.delete('notification_chat'); window.history.replaceState({}, '', url.pathname + url.search + url.hash); }} />}
       <PaymentReturn onOpenOrder={openClientOrder} />
     </>
   );

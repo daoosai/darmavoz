@@ -305,6 +305,7 @@ class Vehicle(Base):
     brand: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     model: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     plate_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    plate_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     vehicle_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     body_volume_m3: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     cubature_min: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
@@ -1220,6 +1221,9 @@ class OrderOfferStatus(str, Enum):
 
 class Order(CityScoped, Base):
     __tablename__ = "orders"
+
+    settlement_mode: Mapped[str] = mapped_column(String(16), default="legacy", server_default="legacy")
+    next_dispatch_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     client_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clients.id"))

@@ -16,7 +16,11 @@ export function openNotificationTarget(data?: Record<string, unknown> | null) {
   const role = useAuthStore.getState().role;
   const params = new URLSearchParams();
   let path = '/';
-  if (validId(data.wholesale_request_id)) {
+  if (role === 'admin' && validId(data.journey_session_id)) {
+    path = '/admin/journeys'; params.set('session', data.journey_session_id);
+  } else if (data.section === 'chat') {
+    params.set('notification_chat', '1');
+  } else if (validId(data.wholesale_request_id)) {
     params.set('notification_wholesale', data.wholesale_request_id);
     if (role === 'admin') path = '/admin/wholesale';
   } else if (validId(data.order_id)) {

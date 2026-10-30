@@ -21,6 +21,8 @@ def send_auth_email_code(*, to_email: str, code: str) -> None:
     masked_email = mask_auth_email(to_email)
     if not settings.SMTP_HOST:
         logger.warning("auth_email_code_not_sent email=%s smtp_configured=false", masked_email)
+        from app.services.journey import observe_auth_delivery_failure
+        observe_auth_delivery_failure("EMAIL_NOT_CONFIGURED")
         return
 
     message = EmailMessage()
@@ -50,8 +52,12 @@ def send_auth_email_code(*, to_email: str, code: str) -> None:
                 if smtp_user:
                     smtp.login(smtp_user, smtp_password)
                 smtp.send_message(message)
-    except (OSError, smtplib.SMTPException):
-        logger.exception("auth_email_code_send_failed email=%s", masked_email)
-        raise
+    except (OSError, smtplib.SMTPException) as exc:
+        logger.error("auth_email_code_send_failed email=%s type=%s", masked_email,type(exc).__name__)
+        from app.services.journey import observe_auth_delivery_failure
+        observe_auth_delivery_failure("EMAIL_DELIVERY_FAILED")
+        # The HTTP response has already been sent by BackgroundTasks. Keep the
+        # failure in the bounded journey journal rather than exposing SMTP data.
+        return
 
     logger.warning("auth_email_code_sent email=%s", masked_email)

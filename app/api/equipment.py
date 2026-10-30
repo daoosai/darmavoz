@@ -65,6 +65,7 @@ from app.services.relevance import (
     initialize_trial,
     hide_placement,
     is_publicly_available,
+    publicly_visible,
     placement_payload_fields,
     public_placement_filters,
     recalculate_status,
@@ -191,9 +192,10 @@ async def _listing_payload(
     listing: SpecialEquipmentListing,
     *,
     include_pending_changes: bool = False,
+    public: bool = False,
 ) -> dict:
     media = await _listing_media(db, listing.id)
-    return {
+    payload = {
         "id": listing.id,
         "city_id": listing.city_id,
         "equipment_type": listing.equipment_type,
@@ -222,6 +224,14 @@ async def _listing_payload(
         "updated_at": listing.updated_at,
         **placement_payload_fields(listing),
     }
+
+    if public:
+        from app.services.subscriptions import resource_access
+        allowed=await resource_access(db,listing,"equipment","equipment")
+        payload.update(can_order=allowed,access_reason=None if allowed else "SUBSCRIPTION_REQUIRED")
+        if not allowed:
+            payload.update(contact_phone=None,owner_phone=None,description=None)
+    return payload
 
 
 async def _application_payload(
@@ -502,7 +512,7 @@ async def list_public_equipment(
             SpecialEquipmentListing.created_at.desc(),
         )
     )
-    return [await _listing_payload(db, item) for item in result.scalars().unique().all()]
+    return [await _listing_payload(db, item,public=True) for item in result.scalars().unique().all()]
 
 
 @router.get("/equipment/{listing_id}", response_model=EquipmentListingOut)
@@ -516,14 +526,14 @@ async def get_public_equipment(listing_id: UUID, city_id: UUID | None = None, db
     listing = await _get_listing(db, listing_id)
     ensure_same_city(selected_city.id, listing)
     if (
-        not is_publicly_available(listing)
+        not await publicly_visible(db,listing)
         or (
             listing.equipment_type_ref is not None
             and not listing.equipment_type_ref.is_active
         )
     ):
         raise HTTPException(status_code=404, detail="Объявление спецтехники не найдено")
-    return await _listing_payload(db, listing)
+    return await _listing_payload(db, listing,public=True)
 
 
 @router.get("/admin/equipment-types", response_model=list[EquipmentTypeOut])
@@ -1310,13 +1320,16 @@ async def create_equipment_application(
     listing = await _get_listing(db, payload.listing_id)
     ensure_same_city(selected_city.id, listing)
     if (
-        not is_publicly_available(listing)
+        not await publicly_visible(db,listing)
         or (
             listing.equipment_type_ref is not None
             and not listing.equipment_type_ref.is_active
         )
     ):
         raise HTTPException(status_code=400, detail="Объявление больше не активно")
+    from app.services import subscriptions as subscription_policy
+    if not await subscription_policy.resource_access(db,listing,"equipment","equipment"):
+        subscription_policy.error("SUBSCRIPTION_REQUIRED","Подписка владельца спецтехники закончилась. Новые заявки недоступны")
     if payload.requested_date < date.today():
         raise HTTPException(status_code=400, detail="Дата работ не может быть в прошлом")
     active_application_id = await db.scalar(

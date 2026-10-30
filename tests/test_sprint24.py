@@ -220,7 +220,10 @@ def test_report_inclusive_end_and_timezone():
 
 @pytest.mark.parametrize("role", sorted(PARTNER_ROLES))
 @pytest.mark.asyncio
-async def test_partner_access_ignores_legacy_whitelist(role):
+async def test_partner_access_ignores_legacy_whitelist(role,monkeypatch):
+    from app.services import subscriptions
+    async def legacy_mode(db):return False
+    monkeypatch.setattr(subscriptions,"enabled",legacy_mode)
     u = SimpleNamespace(role=SimpleNamespace(name=role), wholesale_access_enabled=False, is_active=True, is_deleted=False, driver_profile=None)
     if role == "driver":
         u.driver_profile = SimpleNamespace(moderation_status="approved", is_active=True,

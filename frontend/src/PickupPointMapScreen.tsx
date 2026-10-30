@@ -24,6 +24,8 @@ import { useAddressStore } from "./store";
 import SwipeableBottomSheet from "./SwipeableBottomSheet";
 
 export interface PickupPointMarker {
+  can_order?: boolean;
+  access_reason?: string | null;
   id: string;
   name: string;
   short_name: string;
@@ -104,7 +106,7 @@ const isFreeOffer = (isFree: boolean | undefined, price: number | null | undefin
   isFree === true || Number(price) === 0;
 
 const isPointReady = (point: PickupPointMarker | PickupPointSelection) =>
-  point.crm_status === "activated";
+  point.crm_status === "activated" && point.can_order !== false;
 
 const TYPE_LABELS: Record<string, string> = {
   quarry: "Карьер",

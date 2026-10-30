@@ -456,7 +456,7 @@ export default function GlobalMapScreen({
   };
 
   return (
-    <div className="flex h-full flex-col bg-slate-100">
+    <div className="flex h-full min-h-0 flex-col bg-slate-100">
       <style>{`
         .global-pickup-marker {
           width: 44px;
@@ -514,8 +514,8 @@ export default function GlobalMapScreen({
         }
       `}</style>
 
-      <div className="relative min-h-[480px] flex-1 w-full overflow-hidden rounded-t-[28px] bg-slate-100 sm:rounded-[28px]">
-        <div ref={mapContainerRef} className="absolute inset-0 h-full w-full flex-1" />
+      <div className={`relative ${embedded ? "min-h-0" : "min-h-[480px]"} flex-1 w-full overflow-hidden rounded-t-[28px] bg-slate-100 sm:rounded-[28px]`}>
+        <div ref={mapContainerRef} className="absolute inset-0 z-0 h-full w-full flex-1" />
         {isMapUnavailable ? (
           <MapWebGLFallback
             className="absolute inset-0 h-full w-full"
@@ -525,13 +525,13 @@ export default function GlobalMapScreen({
         ) : null}
 
         {selectedPoint === null && (
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-10 p-4">
-            <div className="pointer-events-auto rounded-[28px] bg-white/95 p-4 shadow-xl backdrop-blur">
-              <h2 className="text-2xl font-black text-slate-900">{embedded ? "Карьеры и накопители" : "Активные точки"}</h2>
-              <p className="mt-1 text-sm text-slate-500">
+          <div className={`pointer-events-none absolute inset-x-0 top-0 z-10 p-4 ${embedded ? "[@media(max-height:500px)]:p-2" : ""}`}>
+            <div className={`pointer-events-auto rounded-[28px] bg-white/95 p-4 shadow-xl backdrop-blur ${embedded ? "[@media(max-height:500px)]:p-2" : ""}`}>
+              <h2 className={`text-2xl font-black text-slate-900 ${embedded ? "[@media(max-height:500px)]:text-lg" : ""}`}>{embedded ? "Карьеры и накопители" : "Активные точки"}</h2>
+              <p className={`mt-1 text-sm text-slate-500 ${embedded ? "[@media(max-height:500px)]:hidden" : ""}`}>
                 {embedded ? "Серые точки временно не принимают новые заказы" : "Все активные карьеры и накопители на одной карте"}
               </p>
-              <div className="mt-4 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+              <div className={`mt-4 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden ${embedded ? "[@media(max-height:500px)]:mt-2" : ""}`}>
                 <button
                   type="button"
                   onClick={() => setSelectedMaterials([])}
@@ -567,13 +567,13 @@ export default function GlobalMapScreen({
           type="button"
           onClick={() => void handleLocateMe()}
           aria-label={selectedAddress.trim() ? "Адрес доставки" : "Моё местоположение"}
-          className="absolute bottom-24 right-4 z-[50] flex h-12 w-12 items-center justify-center rounded-full bg-white shadow-lg transition hover:bg-slate-50"
+          className="absolute bottom-24 right-4 z-20 flex h-12 w-12 items-center justify-center rounded-full bg-white shadow-lg transition hover:bg-slate-50"
         >
           <LocateFixed className="h-5 w-5 text-sky-600" />
         </button>
 
         {(loading || error) && (
-          <div className="absolute inset-x-4 top-40 z-10 rounded-2xl bg-white p-4 shadow-xl">
+          <div className={`absolute inset-x-4 z-20 rounded-2xl bg-white p-4 shadow-xl ${embedded ? "bottom-4 max-h-[calc(100%-2rem)] overflow-y-auto" : "top-40"}`}>
             <div className="flex items-center gap-3 text-sm font-medium text-slate-600">
               {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <MapPin className="h-5 w-5" />}
               {loading ? "Загружаем точки..." : error}
@@ -582,7 +582,7 @@ export default function GlobalMapScreen({
         )}
 
         {!loading && !error && visiblePoints.length === 0 && (
-          <div className="absolute inset-x-4 top-40 z-10 rounded-2xl bg-white p-4 text-sm font-medium text-slate-600 shadow-xl">
+          <div className={`absolute inset-x-4 z-20 rounded-2xl bg-white p-4 text-sm font-medium text-slate-600 shadow-xl ${embedded ? "bottom-4 max-h-[calc(100%-2rem)] overflow-y-auto" : "top-40"}`}>
             Для выбранных материалов активных точек пока нет.
           </div>
         )}
@@ -592,10 +592,10 @@ export default function GlobalMapScreen({
             <button
               type="button"
               aria-label="Закрыть детали точки"
-              className="absolute inset-0 z-10 bg-transparent"
+              className="absolute inset-0 z-30 bg-transparent"
               onClick={clearSelectedPoint}
             />
-            <div className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom,0px))] left-1/2 z-40 w-[calc(100%-2.5rem)] max-w-sm -translate-x-1/2">
+            <div role="dialog" aria-label="Информация о точке" className={`fixed ${embedded ? "bottom-[max(1rem,env(safe-area-inset-bottom,0px))]" : "bottom-[calc(5rem+env(safe-area-inset-bottom,0px))]"} left-1/2 z-40 w-[calc(100%-2.5rem)] max-w-sm -translate-x-1/2`}>
               <div className="relative flex max-h-[75dvh] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
                 <div className="flex shrink-0 items-start gap-3 border-b border-slate-100 px-4 py-4">
                   <button
@@ -618,7 +618,7 @@ export default function GlobalMapScreen({
                 </div>
 
                 {!isPointReady(selectedPoint) ? (
-                  <div className="flex-1 overflow-y-auto px-4 py-4">
+                  <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                       <p className="text-sm font-bold text-slate-900">Временно нет доставки через Дармавоз</p>
                       <p className="mt-1 text-sm text-slate-600">Точка ещё не готова принимать заказы.</p>
@@ -635,7 +635,7 @@ export default function GlobalMapScreen({
                     </div>
                   </div>
                 ) : (
-                <div className="flex-1 overflow-y-auto px-4 py-4">
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
                   <div className="grid gap-4 sm:grid-cols-[160px,1fr]">
                     <div className="mt-2 overflow-hidden rounded-2xl bg-slate-100">
                       {selectedPoint.primary_image_url ? (

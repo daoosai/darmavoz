@@ -1,13 +1,15 @@
 /* Published TEST UI only; private QA identities, never customer credentials. */
 const fs = require('node:fs');
 const { chromium, expect } = require('@playwright/test');
-const base = 'https://test.darmavoz.ru';
+const apiBase = 'https://test.darmavoz.ru';
+const base = process.env.SPRINT26_UI_ORIGIN || apiBase;
+if (![apiBase, 'http://127.0.0.1:18263'].includes(base)) throw new Error('TEST_UI_ONLY');
 const qa = JSON.parse(fs.readFileSync('/opt/darmavoz_test_backups/sprint26/qa-auth.json'));
 const root = '/opt/darmavoz_test/docs/reports/sprint26';
 const sizes = [{ width: 360, height: 800 }, { width: 390, height: 844 }, { width: 768, height: 1024 }, { width: 1024, height: 768 }, { width: 1440, height: 900 }, { width: 844, height: 390 }];
-const result = { environment: 'test', checks: [], screenshots: [], physical_device: false };
+const result = { environment: 'test', ui_origin: base, checks: [], screenshots: [], physical_device: false };
 async function api(route, body, actor = qa.admin) {
-  const r = await fetch(base + '/api/v1' + route, { method: body ? 'POST' : 'GET', headers: { Authorization: 'Bearer ' + actor.token, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+  const r = await fetch(apiBase + '/api/v1' + route, { method: body ? 'POST' : 'GET', headers: { Authorization: 'Bearer ' + actor.token, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
   if (!r.ok) throw new Error('QA_API_' + r.status + '_' + route);
   return r.json();
 }
@@ -34,6 +36,16 @@ async function capture(page, label, size) {
   const file = label + '-' + size.width + '.png';
   await page.screenshot({ path: root + '/screenshots/' + file }); result.screenshots.push(file);
 }
+async function hitTarget(locator, label) {
+  await locator.scrollIntoViewIfNeeded();
+  await expect(locator).toBeVisible();
+  await expect.poll(() => locator.evaluate(el => {
+    const r = el.getBoundingClientRect();
+    if (r.left < 0 || r.top < 0 || r.right > innerWidth || r.bottom > innerHeight) return false;
+    const target = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return target === el || el.contains(target);
+  }), { message: label + ' must receive pointer events without map/header overlap' }).toBe(true);
+}
 async function profiles(browser) {
   const c = await context(browser, qa.driver); const p = await c.newPage();
   await p.goto(base + '/app');
@@ -45,9 +57,32 @@ async function profiles(browser) {
   await expect(p.getByRole('heading', { name: 'Общая карта', exact: true })).toBeVisible();
   for (const name of ['Материалы', 'Вода', 'Септики']) {
     await p.getByRole('tab', { name, exact: true }).click(); await p.waitForTimeout(1800);
+    if (name === 'Материалы') await expect(p.getByRole('button', { name: 'Бесплатная вода', exact: true })).toHaveCount(0);
     for (const size of sizes) await capture(p, 'live-public-map-' + ({ Материалы: 'materials', Вода: 'water', Септики: 'septic' }[name]), size);
   }
-  result.checks.push('unsubscribed driver retains public maps and subscription CTA at all target sizes');
+  const tabs = p.getByRole('tablist', { name: 'Раздел карты', exact: true });
+  for (const [tab, marker, heading, label] of [
+    ['Материалы', 'QA Спринт 26 · Накопитель', 'QA Спринт 26 · Накопитель', 'storage'],
+    ['Вода', 'QA Спринт 26 · платная вода', 'QA Спринт 26 · платная вода', 'water'],
+  ]) {
+    await tabs.getByRole('tab', { name: tab, exact: true }).click();
+    const point = p.getByRole('button', { name: marker, exact: true });
+    await point.waitFor({ state: 'attached', timeout: 20000 }); await point.dispatchEvent('click');
+    const title = p.getByRole('heading', { name: heading, exact: true }); await expect(title).toBeVisible();
+    for (const size of sizes) {
+      await p.setViewportSize(size); await title.scrollIntoViewIfNeeded();
+      const card = p.getByRole('dialog', { name: label === 'storage' ? 'Информация о точке' : 'Информация о точке воды', exact: true });
+      await expect.poll(() => card.evaluate(el => { const r = el.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; })).toBe(true);
+      const close = card.getByRole('button', { name: label === 'storage' ? 'Закрыть детали точки' : 'Закрыть детали точки воды', exact: true });
+      await hitTarget(close, label + ' close at ' + size.width);
+      if (label === 'storage') await hitTarget(card.getByRole('button', { name: 'Построить маршрут', exact: true }), 'storage route at ' + size.width);
+      await hitTarget(card.locator('a[href^="tel:"]').first(), label + ' contact after scrolling at ' + size.width);
+      await hitTarget(close, label + ' sticky close after scrolling at ' + size.width);
+      await capture(p, 'live-public-point-card-' + label, size);
+    }
+    await p.getByRole('button', { name: label === 'storage' ? 'Закрыть детали точки' : 'Закрыть детали точки воды', exact: true }).last().click();
+  }
+  result.checks.push('unsubscribed driver retains public maps and subscription CTA at all target sizes; no legacy free-water filter; selected cards fit viewport, scroll contacts and receive pointer events above SDK controls');
   await c.close();
 }
 async function chat(browser) {
@@ -150,6 +185,6 @@ async function owner(browser) {
   if ((await api('/payments/config')).test_mode !== true) throw new Error('TEST_SHOP_REQUIRED');
   const b = await chromium.launch({ headless: true, args: ['--disable-dev-shm-usage', '--enable-unsafe-swiftshader'] });
   try { for (const task of process.argv.slice(2).length ? process.argv.slice(2) : ['profiles', 'chat', 'journey']) await ({ profiles, chat, journey, owner, client }[task])(b); result.ok = true; }
-  finally { fs.writeFileSync(root + '/live-ui-' + (process.argv.slice(2).join('-') || 'all') + '.json', JSON.stringify(result, null, 2) + '\n'); await b.close(); }
+  finally { fs.writeFileSync(root + '/live-ui-' + (process.argv.slice(2).join('-') || 'all') + (base === apiBase ? '' : '-local') + '.json', JSON.stringify(result, null, 2) + '\n'); await b.close(); }
   console.log(JSON.stringify(result));
 })().catch(e => { console.error(String(e.message).replace(/https?:\/\/\S+/g, '[URL]')); process.exit(1); });

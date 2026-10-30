@@ -1,0 +1,19 @@
+{
+  "environment": "test",
+  "material_id": "821cfe07-a343-4734-9f4f-9a9131ccdec7",
+  "preview_sha256": "10bc439cde91a062b22c292ef3586511a5b2a9d22eb2a942ceb89f65f600341a",
+  "material_was_active": true,
+  "offer_count": 1,
+  "active_offer_count": 1,
+  "positive_active_offers": 0,
+  "dependencies_preserved": {
+    "cart_items": 0,
+    "order_items": 0,
+    "quarry_materials": 1,
+    "wholesale_requests": 0
+  },
+  "applied": true,
+  "backup_path": "/opt/darmavoz_test_backups/sprint26/20261030T141631Z-legacy-water-10bc439cde91.json.gz",
+  "backup_sha256": "14fe248df3166bee5ceb466fd1d4d5f0afaca4083bb12d9c816905f545c4ac9b",
+  "history_deleted": false
+}

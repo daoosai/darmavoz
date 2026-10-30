@@ -279,25 +279,25 @@ export default function WaterMapScreen({ initialTab = "water", embedded = false 
   };
 
   return (
-    <section className="relative flex h-full min-h-[480px] flex-1 overflow-hidden rounded-t-[28px] bg-slate-100 sm:rounded-[28px]">
-      <div className="absolute inset-0 bg-slate-100">
+    <section className={`relative flex h-full ${embedded ? "min-h-0" : "min-h-[480px]"} flex-1 overflow-hidden rounded-t-[28px] bg-slate-100 sm:rounded-[28px]`}>
+      <div className="absolute inset-0 z-0 bg-slate-100">
         <div ref={mapContainerRef} className="h-full w-full" aria-label="Карта точек воды" />
         {mapUnavailable ? <MapWebGLFallback className="absolute inset-0" /> : null}
       </div>
 
       {showList ? (
-        <div className="absolute inset-0 z-[5] overflow-y-auto bg-slate-100 px-4 pb-6 pt-44">
+        <div className={`absolute inset-0 z-[5] overflow-y-auto bg-slate-100 px-4 pb-6 ${embedded ? "pt-32 [@media(max-height:500px)]:pt-20" : "pt-44"}`}>
           <div className="space-y-3">{serviceTab === "water" ? visiblePoints.map(renderPointSummary) : septicProfiles.map(renderSepticSummary)}</div>
         </div>
       ) : null}
 
       <header className="pointer-events-none absolute inset-x-0 top-0 z-10 pt-[max(env(safe-area-inset-top),0.5rem)]">
-        <div className={`pointer-events-auto bg-white/95 backdrop-blur ${showList ? "m-0 w-full rounded-none border-b border-gray-200 px-4 py-3 shadow-sm" : "mx-4 mb-4 rounded-xl p-4 shadow-lg"}`}>
+        <div className={`pointer-events-auto bg-white/95 backdrop-blur ${showList ? "m-0 w-full rounded-none border-b border-gray-200 px-4 py-3 shadow-sm" : `mx-4 mb-4 rounded-xl p-4 shadow-lg ${embedded ? "[@media(max-height:500px)]:mx-2 [@media(max-height:500px)]:p-2" : ""}`}`}>
         <div className="flex items-center gap-3">
           <span className="rounded-2xl bg-sky-100 p-3 text-sky-600"><Droplets /></span>
           <div className="min-w-0 flex-1">
-            <h1 className="text-xl font-black text-slate-900">Вода и Септики</h1>
-              <p className="text-sm text-slate-500">{showList ? "Выберите предложение из списка" : "Выберите метку на карте"}</p>
+            <h1 className="text-xl font-black text-slate-900">{embedded ? serviceTab === "water" ? "Поставщики воды" : "Откачка септиков" : "Вода и Септики"}</h1>
+              <p className={`text-sm text-slate-500 ${embedded ? "[@media(max-height:500px)]:hidden" : ""}`}>{showList ? "Выберите предложение из списка" : "Выберите метку на карте"}</p>
           </div>
           <button
             type="button"
@@ -308,27 +308,27 @@ export default function WaterMapScreen({ initialTab = "water", embedded = false 
             {showList ? "На карте" : "Списком"}
           </button>
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1" role="tablist" aria-label="Тип точек на карте">
+        {!embedded && <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1" role="tablist" aria-label="Тип точек на карте">
           <button type="button" role="tab" aria-selected={serviceTab === "water"} onClick={() => { setServiceTab("water"); setSelectedId(null); setShowList(false); }} className={`rounded-lg px-3 py-2 text-sm font-bold transition ${serviceTab === "water" ? "bg-white text-sky-600 shadow-sm" : "text-slate-500"}`}>Вода</button>
           <button type="button" role="tab" aria-selected={serviceTab === "septic"} onClick={() => { setServiceTab("septic"); setSelectedId(null); setShowList(false); }} className={`rounded-lg px-3 py-2 text-sm font-bold transition ${serviceTab === "septic" ? "bg-white text-sky-600 shadow-sm" : "text-slate-500"}`}>Откачка септиков</button>
-        </div>
-        {serviceTab === "water" && <p className="mt-3 text-xs text-slate-500">Поставщики платной воды</p>}
+        </div>}
+        {serviceTab === "water" && <p className={`mt-3 text-xs text-slate-500 ${embedded ? "[@media(max-height:500px)]:hidden" : ""}`}>Поставщики платной воды</p>}
         </div>
       </header>
 
-      {loading ? <div className="pointer-events-none absolute inset-x-4 top-[calc(max(env(safe-area-inset-top),0.5rem)+15rem)] z-10 rounded-2xl bg-white p-4 text-sm font-medium text-slate-600 shadow-xl">Загружаем {serviceTab === "water" ? "точки воды" : "услуги откачки"}…</div> : null}
-      {!loading && loadError ? <div className="absolute inset-x-4 top-[calc(max(env(safe-area-inset-top),0.5rem)+15rem)] z-10 rounded-2xl bg-white p-4 text-sm font-medium text-slate-600 shadow-xl"><p>Не удалось загрузить данные карты.</p><button type="button" onClick={() => setReloadVersion((value) => value + 1)} className="mt-3 rounded-xl bg-sky-500 px-3 py-2 font-bold text-white">Повторить попытку</button></div> : !loading && (serviceTab === "water" ? visiblePoints.length : septicProfiles.length) === 0 ? <div className="pointer-events-none absolute inset-x-4 top-[calc(max(env(safe-area-inset-top),0.5rem)+15rem)] z-10 rounded-2xl bg-white p-4 text-sm font-medium text-slate-600 shadow-xl">{serviceTab === "water" ? "Подходящих точек пока нет." : "Одобренных предложений пока нет."}</div> : null}
+      {loading ? <div className={`pointer-events-none absolute inset-x-4 z-20 rounded-2xl bg-white p-4 text-sm font-medium text-slate-600 shadow-xl ${embedded ? "bottom-4 max-h-[calc(100%-2rem)] overflow-y-auto" : "top-[calc(max(env(safe-area-inset-top),0.5rem)+15rem)]"}`}>Загружаем {serviceTab === "water" ? "точки воды" : "услуги откачки"}…</div> : null}
+      {!loading && loadError ? <div className={`absolute inset-x-4 z-20 rounded-2xl bg-white p-4 text-sm font-medium text-slate-600 shadow-xl ${embedded ? "bottom-4 max-h-[calc(100%-2rem)] overflow-y-auto" : "top-[calc(max(env(safe-area-inset-top),0.5rem)+15rem)]"}`}><p>Не удалось загрузить данные карты.</p><button type="button" onClick={() => setReloadVersion((value) => value + 1)} className="mt-3 rounded-xl bg-sky-500 px-3 py-2 font-bold text-white">Повторить попытку</button></div> : !loading && (serviceTab === "water" ? visiblePoints.length : septicProfiles.length) === 0 ? <div className={`pointer-events-none absolute inset-x-4 z-20 rounded-2xl bg-white p-4 text-sm font-medium text-slate-600 shadow-xl ${embedded ? "bottom-4 max-h-[calc(100%-2rem)] overflow-y-auto" : "top-[calc(max(env(safe-area-inset-top),0.5rem)+15rem)]"}`}>{serviceTab === "water" ? "Подходящих точек пока нет." : "Одобренных предложений пока нет."}</div> : null}
 
       <SwipeableBottomSheet
         isOpen={serviceTab === "water" && Boolean(selectedPoint)}
         onClose={() => setSelectedId(null)}
-        containerClassName="pointer-events-none absolute inset-0 z-[9999] flex items-end justify-center"
-        sheetClassName="pointer-events-auto z-[9999] max-h-[70vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:mb-4 sm:rounded-2xl"
+        containerClassName="pointer-events-none fixed inset-0 z-[9999] flex items-end justify-center pb-[env(safe-area-inset-bottom)] sm:p-4"
+        sheetClassName="pointer-events-auto relative flex max-h-[70dvh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl"
         showOverlay={false}
       >
         {selectedPoint ? (
-          <div className="hide-scrollbar max-h-[70vh] overflow-y-auto px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-            <div className="flex items-start justify-between gap-3 pb-4">
+          <div role="dialog" aria-label="Информация о точке воды" className="hide-scrollbar min-h-0 overflow-y-auto overscroll-contain px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+            <div className="sticky top-0 z-10 flex items-start justify-between gap-3 bg-white pb-4">
               <div className={`min-w-0 ${isPointReady(selectedPoint) ? "" : "water-map-card--muted"}`}>
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-xl font-black text-slate-900">{selectedPoint.name || selectedPoint.source}</h2>
@@ -383,11 +383,11 @@ export default function WaterMapScreen({ initialTab = "water", embedded = false 
       <SwipeableBottomSheet
         isOpen={serviceTab === "septic" && Boolean(selectedSeptic)}
         onClose={() => setSelectedId(null)}
-        containerClassName="pointer-events-none absolute inset-0 z-[9999] flex items-end justify-center"
-        sheetClassName="pointer-events-auto z-[9999] max-h-[70vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:mb-4 sm:rounded-2xl"
+        containerClassName="pointer-events-none fixed inset-0 z-[9999] flex items-end justify-center pb-[env(safe-area-inset-bottom)] sm:p-4"
+        sheetClassName="pointer-events-auto relative flex max-h-[70dvh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl"
         showOverlay={false}
       >
-        {selectedSeptic ? <div className="hide-scrollbar max-h-[70vh] overflow-y-auto px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"><div className="flex items-start justify-between gap-3 pb-4"><div><p className="text-xs font-bold uppercase tracking-wide text-sky-600">Услуга</p><h2 className="mt-1 text-xl font-black text-slate-900">Откачка септика</h2></div><button type="button" onClick={() => setSelectedId(null)} className="shrink-0 rounded-full bg-slate-100 p-2 text-slate-500 transition hover:bg-slate-200" aria-label="Закрыть детали септика"><X className="h-5 w-5" /></button></div>{selectedSeptic.primary_image_url ? <div className="overflow-hidden rounded-2xl bg-slate-100"><img src={resolveMediaUrl(selectedSeptic.primary_image_url)} alt={`Откачка септика: ${selectedSeptic.address}`} className="aspect-[16/9] w-full object-cover" /></div> : null}<div className="mt-4 space-y-3"><p className="flex gap-2 text-sm leading-relaxed text-slate-600"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" />{selectedSeptic.address}</p><div className="grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-4 text-sm"><p><span className="block text-xs text-slate-400">Объём цистерны</span><strong className="mt-1 block text-slate-800">{Number(selectedSeptic.tank_volume_m3).toLocaleString("ru-RU")} м³</strong></p><p><span className="block text-xs text-slate-400">Стоимость услуги</span><strong className="mt-1 block text-slate-800">{Number(selectedSeptic.service_price).toLocaleString("ru-RU")} ₽</strong></p></div>{selectedSeptic.can_order === false && <p className="rounded-xl bg-slate-100 p-3 text-xs text-slate-500">Исполнитель временно недоступен. Контакты откроются после продления его подписки.</p>}{selectedSeptic.phone ? <a href={`tel:${selectedSeptic.phone.replace(/[^+\d]/g, "")}`} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-sky-500 px-5 py-4 text-base font-black text-white shadow-sm transition hover:bg-sky-600"><Phone className="h-5 w-5" />Позвонить</a> : null}</div></div> : null}
+        {selectedSeptic ? <div role="dialog" aria-label="Информация об услуге септика" className="hide-scrollbar min-h-0 overflow-y-auto overscroll-contain px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"><div className="sticky top-0 z-10 flex items-start justify-between gap-3 bg-white pb-4"><div><p className="text-xs font-bold uppercase tracking-wide text-sky-600">Услуга</p><h2 className="mt-1 text-xl font-black text-slate-900">Откачка септика</h2></div><button type="button" onClick={() => setSelectedId(null)} className="shrink-0 rounded-full bg-slate-100 p-2 text-slate-500 transition hover:bg-slate-200" aria-label="Закрыть детали септика"><X className="h-5 w-5" /></button></div>{selectedSeptic.primary_image_url ? <div className="overflow-hidden rounded-2xl bg-slate-100"><img src={resolveMediaUrl(selectedSeptic.primary_image_url)} alt={`Откачка септика: ${selectedSeptic.address}`} className="aspect-[16/9] w-full object-cover" /></div> : null}<div className="mt-4 space-y-3"><p className="flex gap-2 text-sm leading-relaxed text-slate-600"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" />{selectedSeptic.address}</p><div className="grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-4 text-sm"><p><span className="block text-xs text-slate-400">Объём цистерны</span><strong className="mt-1 block text-slate-800">{Number(selectedSeptic.tank_volume_m3).toLocaleString("ru-RU")} м³</strong></p><p><span className="block text-xs text-slate-400">Стоимость услуги</span><strong className="mt-1 block text-slate-800">{Number(selectedSeptic.service_price).toLocaleString("ru-RU")} ₽</strong></p></div>{selectedSeptic.can_order === false && <p className="rounded-xl bg-slate-100 p-3 text-xs text-slate-500">Исполнитель временно недоступен. Контакты откроются после продления его подписки.</p>}{selectedSeptic.phone ? <a href={`tel:${selectedSeptic.phone.replace(/[^+\d]/g, "")}`} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-sky-500 px-5 py-4 text-base font-black text-white shadow-sm transition hover:bg-sky-600"><Phone className="h-5 w-5" />Позвонить</a> : null}</div></div> : null}
       </SwipeableBottomSheet>
     </section>
   );

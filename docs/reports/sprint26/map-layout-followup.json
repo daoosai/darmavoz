@@ -1,0 +1,12 @@
+{
+  "checked_at": "2026-10-30T14:22:32.940343+00:00",
+  "environment": "test and isolated QA only",
+  "lint_typescript": "passed (npm run lint = tsc --noEmit)",
+  "frontend_build": "passed",
+  "resource_backend_tests": "6 passed (15.65s)",
+  "isolated_browser": "10 passed (1.8m)",
+  "real_sdk_local_layout": "36 captures; selected card bounds/scroll/close/contact/route hit targets passed at six viewports",
+  "published_visual": "pending test deploy of map layout fix",
+  "legacy_water_material": "archived with preview SHA and verified private backup; public catalog/map no longer include it; historical rows retained",
+  "test_harness_note": "First attempt used preview18262 without API proxy and received SPA HTML; rerun on fresh isolated Vite18264 with explicit localhost18026 API proxy succeeded; no app change to hide this failure"
+}
